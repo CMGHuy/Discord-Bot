@@ -18,7 +18,7 @@ describe('route title service', () => {
         provideRouter([
           { path: 'dashboard', component: Blank, title: 'Dashboard',
             data: { subtitle: "What's happening right now" } },
-          { path: 'versions', component: Blank, title: 'Versions',
+          { path: 'system/versions', component: Blank, title: 'Versions',
             data: { subtitle: "What's deployed, and when it changed" } },
           { path: 'bare', component: Blank, title: 'Bare' },
           { path: 'trades/:id', component: Blank, title: 'Trade detail',
@@ -39,7 +39,7 @@ describe('route title service', () => {
 
   it('updates both on navigation', async () => {
     await router.navigateByUrl('/dashboard');
-    await router.navigateByUrl('/versions');
+    await router.navigateByUrl('/system/versions');
     expect(titles.title()).toBe('Versions');
     expect(titles.subtitle()).toBe("What's deployed, and when it changed");
   });

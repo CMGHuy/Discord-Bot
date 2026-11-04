@@ -7,7 +7,9 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter, map } from 'rxjs';
 
 import { ApiClient } from '../api/api-client';
 import { Killswitch } from '../api/models';
@@ -35,8 +37,10 @@ import { KillswitchChip } from './killswitch-chip';
 import { MoreSheet } from './more-sheet';
 import { CommandPalette, isPaletteShortcut, shortcutLabel } from './palette/command-palette';
 import { PhoneTabBar } from './phone-tab-bar';
+import { RefresherBanner } from './refresher-banner';
 import { ConnectionStatus } from './connection-status';
-import { NAV_GROUPS } from './nav';
+import { NAV_GROUPS, navEntryFor } from './nav';
+import { SectionTabs } from './section-tabs';
 import { ScanProgressStrip } from './scan-progress';
 import { Tape } from './tape/tape';
 import { ToastHost } from './toast-host';
@@ -70,7 +74,7 @@ const ZOOM_DEFAULT = 100;
   imports: [
     RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
     ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, FreshnessChip, ProfileMenu, NavIndicator, Tape,
-    Button, PhoneTabBar, MoreSheet, CommandPalette,
+    Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
@@ -113,6 +117,19 @@ export class Shell {
    * gallery is deliberately absent: a developer surface, reachable by URL.
    */
   protected readonly navGroups = NAV_GROUPS;
+
+  private readonly router = inject(Router);
+  private readonly url = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      map(() => this.router.url),
+    ),
+    { initialValue: this.router.url },
+  );
+
+  /** The destination and section the current URL belongs to (v202 §1):
+   *  the section tabs read it, and the rail (V203-1) lights its entry. */
+  protected readonly navHere = computed(() => navEntryFor(this.url()));
 
   /** The rail foot's version hint: the words the old footer block showed,
    *  on one line. Empty until the first /health answer; the template

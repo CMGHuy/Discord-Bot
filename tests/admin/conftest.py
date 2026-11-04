@@ -126,7 +126,7 @@ def admin_app(tmp_path, monkeypatch):
     # account currency" -- identity, no rate, no network -- so each route's
     # existing figures stand. tests/admin/test_api_v1_money.py fakes real rates.
     from swingbot.core.marketdata import fx
-    monkeypatch.setattr(fx, "quote_currency_code", lambda ticker: fx.account_currency_code())
+    monkeypatch.setattr(fx, "quote_currency_code", lambda ticker, **_kw: fx.account_currency_code())
 
     app = mod.app if hasattr(mod, "app") else importlib.import_module("swingbot.admin.app").app
     app.config.update(TESTING=True)
@@ -142,6 +142,14 @@ def client(admin_app):
 def auth():
     token = base64.b64encode(b"admin:admin").decode("ascii")
     return {"Authorization": f"Basic {token}"}
+
+
+@pytest.fixture(autouse=True)
+def _pin_admin_refresher_off(monkeypatch):
+    """v201: the admin suite keeps covering today's request-time paths; the
+    refresher-on paths are tested in tests/admin_market/."""
+    from swingbot import config
+    monkeypatch.setattr(config, "ADMIN_REFRESHER", "off")
 
 
 @pytest.fixture(autouse=True)

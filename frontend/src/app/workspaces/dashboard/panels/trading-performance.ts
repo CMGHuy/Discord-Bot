@@ -6,6 +6,9 @@ import { ViewportService } from '../../../ui/breakpoints';
 import { Button } from '../../../ui/button';
 import { Select, SelectOption } from '../../../ui/form-controls';
 import { ControlRow, Panel } from '../../../ui/layout';
+import { IncompleteNote } from '../../../ui/incomplete-note';
+import { MarketValue } from '../../../ui/market-value';
+import { MarketMeta } from '../../../api/models';
 import { MetricCard } from '../../../ui/metric-card';
 import { MIN_SAMPLE_N, PERFORMANCE_CAVEAT, StatTile } from '../../../ui/stat-tile';
 import { Spinner } from '../../../ui/spinner';
@@ -103,7 +106,7 @@ export const PERF_BASIS = {
 @Component({
   selector: 'sb-trading-performance',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue, Select, Spinner, StatStrip, StatTile, RouterLink],
+  imports: [Panel, MetricCard, ControlRow, Button, PortfolioValue, Select, Spinner, StatStrip, StatTile, RouterLink, MarketValue, IncompleteNote],
   template: `
     <sb-panel heading="Trading performance" [description]="about">
       <div panel-actions class="scope">
@@ -156,7 +159,17 @@ export const PERF_BASIS = {
             <sb-metric-card label="Realised in period" [description]="basis.realized" [value]="realizedAmount()" [tint]="realizedTone()"
                             [unit]="currencyUnit()" [sub]="periodSub()" [loading]="loading()" />
           }
-          <sb-metric-card label="Open P&L" [description]="basis.openPnl" [value]="openPnlPct()" [tint]="openPnlTone()" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
+          <div class="open-pnl">
+            <sb-metric-card label="Open P&L" [description]="basis.openPnl" [value]="openPnlPct()" [tint]="openPnlTone()" unit="%" [sub]="openPnlSub()" [subPnl]="openPnlAmount()" />
+            <!-- v201: how fresh the server's open-P&L total is, and what it left out.
+                 Nothing renders without a meta (an older server). -->
+            @if (openMeta(); as meta) {
+              <div class="open-pnl-meta">
+                <sb-market-value [asOf]="meta.as_of" [refreshing]="meta.refreshing" [error]="meta.error" />
+                <sb-incomplete-note [missing]="meta.missing_count" />
+              </div>
+            }
+          </div>
           <!-- A link, so no About hint: an sb-hint is a button, and a button
                cannot sit inside a link. The visible line says where it goes. -->
           <a class="risk-link" routerLink="/risk">
@@ -226,6 +239,9 @@ export const PERF_BASIS = {
     .mobile-summary { display: none; }
     /* The open-risk tile is a link to Risk: the tile fills the cell, the link
        adds only the hover and the focus ring. */
+    .open-pnl { display: flex; flex-direction: column; min-width: 0; }
+    .open-pnl > sb-metric-card { flex: 1; }
+    .open-pnl-meta { display: flex; flex-wrap: wrap; gap: var(--space-4); padding: 0 var(--space-6) var(--space-6); }
     .risk-link { display: block; min-width: 0; color: inherit; text-decoration: none; }
     .risk-link:hover { background: var(--surface-raised); }
     .risk-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -273,6 +289,8 @@ export class TradingPerformance {
   readonly openPnlPct = input<number | null>(null);
   /** Money equivalent of the open P&L %, shown beneath it. */
   readonly openPnlAmount = input<number | null>(null);
+  /** v201: freshness of the server's open-P&L totals; null from an older server. */
+  readonly openMeta = input<MarketMeta | null>(null);
   readonly winRate = input<number | null>(null);
   readonly expectancyR = input<number | null>(null);
   readonly winRateN = input<number | null>(null);

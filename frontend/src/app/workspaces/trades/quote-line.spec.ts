@@ -37,14 +37,12 @@ describe('quoteLine (v171 D2/D5)', () => {
 const src = (path: string) => readFileSync(join(process.cwd(), 'src/app', path), 'utf8');
 
 describe('v171 page wiring', () => {
-  it('dashboard live P&L carries a 15 s age hint', () => {
-    const text = src('workspaces/dashboard/dashboard.ts');
-    expect(text).toMatch(/<sb-age-hint \[ageS\]="row\.price_age_s \?\? null" \[windowS\]="dashboardWindowS"/);
-    expect(text).toContain('DASHBOARD_PRICE_WINDOW_S');
+  it('dashboard live P&L carries its price age through sb-market-value (v201)', () => {
+    expect(src('workspaces/dashboard/dashboard.ts')).toMatch(/<sb-market-value \[asOf\]="row\.price_as_of \?\? null"/);
   });
-  it('watchlist price and the trade detail price tile carry a 60 s age hint', () => {
-    expect(src('workspaces/watchlist/watchlist.ts')).toMatch(/<sb-age-hint \[ageS\]="row\.price_age_s \?\? null" \[windowS\]="pageWindowS"/);
-    expect(src('workspaces/trades/outcome-strip.ts')).toMatch(/<sb-age-hint \[ageS\]="tile\.ageS" \[windowS\]="pageWindowS"/);
+  it('watchlist price and the trade detail price tile carry their age through sb-market-value (v201)', () => {
+    expect(src('workspaces/watchlist/watchlist.ts')).toMatch(/<sb-market-value \[asOf\]="row\.price_as_of \?\? null"/);
+    expect(src('workspaces/trades/outcome-strip.ts')).toMatch(/<sb-market-value \[asOf\]="tile\.asOf"/);
   });
   it('trade detail and plan page show the alert price line', () => {
     expect(src('workspaces/trades/trade-detail.ts')).toContain('alertPrice: quoteLine(this.store.detail()?.quote ?? null)');

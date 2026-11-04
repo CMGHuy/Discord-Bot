@@ -1,9 +1,11 @@
 """Categorical cuts of the closed trades (spec section 1).
 
 Each cut is (name, key): the key returns the trade's cell value, or None when
-it cannot place the trade (counted as uncovered, in neither arm). Every input is
-frozen at issuance (risk_features) or a calendar fact; the one exception is
-sector_today, today's mapping, labelled not point-in-time in CUT_NOTES.
+it cannot place the trade (counted as uncovered, in neither arm). Inputs are
+frozen at issuance (risk_features) or are calendar facts, except weekend_hold and
+fomc_proximity, which read exit_date and are tagged outcome in CATEGORICAL_DEFINED_AT
+(v200: a cut's defined_at says when its value is known -- entry, fill or outcome);
+sector_today is today's mapping, labelled not point-in-time in CUT_NOTES.
 """
 from __future__ import annotations
 
@@ -22,6 +24,16 @@ CATEGORICAL_CUT_NAMES = (
     "friday_entry", "weekend_hold", "earnings_proximity", "opex_week", "fomc_proximity",
     "atr_pct_bucket", "session_bucket", "alert_hour",
 )
+DEFINED_AT_TAGS = ("entry", "fill", "outcome")
+CATEGORICAL_DEFINED_AT = {
+    "strategy_horizon": "entry", "direction": "entry", "ticker": "entry",
+    "sector_today": "entry", "regime": "entry", "weekday": "entry",
+    "friday_entry": "entry",
+    "weekend_hold": "outcome",        # reads exit_date
+    "earnings_proximity": "entry", "opex_week": "entry",
+    "fomc_proximity": "outcome",      # reads exit_date
+    "atr_pct_bucket": "entry", "session_bucket": "entry", "alert_hour": "entry",
+}
 WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 #: (exclusive upper bound, label); a value at or past the last bound gets the top label.
 EARNINGS_BUCKETS = ((0, "past"), (6, "le_5d"), (21, "6_20d"))

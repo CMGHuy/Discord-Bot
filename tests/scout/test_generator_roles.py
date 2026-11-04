@@ -23,7 +23,7 @@ SECTIONS = ("## Generator lens", "## Checklist", "## Red flags", "## Out of scop
 BOUNDARIES = ("never decide", "never lower a gate", "`pooled-numbers`", "`backtest-gate`",
               "at most 5 rows", "exploratory: yes", "`SCREEN-PASS`",
               "`docs/claude/skills-tools.md` § Generator roles (v161)")
-ROW_KEYS = ("idea", "claim", "evidence", "exploratory", "edge", "mechanism", "order_form",
+ROW_KEYS = ("idea", "claim", "evidence", "exploratory", "edge", "direction", "mechanism", "order_form",
             "manual_actions", "pairs_with", "divergence", "route")
 RED_FLAGS = {
     "exit-harvester": ("v129", "arm Z", "arm B", "v139", "`DATA_DRIVEN_STOPS_ENABLED`",
@@ -120,3 +120,19 @@ def test_agents_md_names_the_scout_tooling_and_stays_under_the_codex_cap():
     # Codex reads the LF blob; a Windows checkout (core.autocrlf=true) adds one
     # byte per line, which pushed a 32,766-byte file to 33,305 and failed here.
     assert len(AGENTS_MD.read_bytes().replace(b"\r\n", b"\n")) < CODEX_CAP_BYTES
+
+
+@pytest.mark.parametrize("name", GENERATORS)
+def test_row_format_explains_direction_and_the_known_at_entry_rule(name):
+    block = _section(_body(name), "## Row format")
+    flat = " ".join(block.split())
+    assert "  direction: exploit | avoid" in block
+    for phrase in ("Δ lower bound is above 0", "Δ upper bound is below 0", "q ≤ 0.10",
+                   "not known at entry"):
+        assert phrase in flat, phrase
+
+
+@pytest.mark.parametrize("name", GENERATORS)
+def test_codex_copy_carries_the_direction_key(name):
+    copy = (ROOT / ".agents" / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+    assert "  direction: exploit | avoid" in copy

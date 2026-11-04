@@ -32,7 +32,7 @@ spa = Blueprint("spa", __name__)
 #: Where the Dockerfile's frontend stage lands the bundle.
 APP_DIR = os.path.join(os.path.dirname(__file__), "static", "app")
 
-#: The seven workspaces. Detail views live under their workspace's prefix, so
+#: The destinations and their sections (v202). Detail views live under their workspace's prefix, so
 #: `/trades/abc` and `/watchlist/AAPL` are covered by `trades` and `watchlist`.
 #:
 #: `cockpit` and `universe` are the pre-SR4/SR5 names, kept as prefixes on
@@ -41,12 +41,21 @@ APP_DIR = os.path.join(os.path.dirname(__file__), "static", "app")
 #: a bookmark or an open tab 404 at the server before Angular ever loaded,
 #: which a client-side redirect cannot rescue. They come out at NG57.
 #:
+#: v202: `insights` is the Insights destination (`/insights/analytics` etc.);
+#: Trades' and System's sections live under `trades` and `system`. The six
+#: pre-v202 names -- calendar, cancels, analytics, research, reports,
+#: versions -- stay on purpose, like cockpit/universe above: a reload of an
+#: old bookmark must reach Angular's redirect. They come out at Phase 4's
+#: close-out, together with cockpit and universe.
+#:
 #: A route added to `app.routes.ts` and NOT added here works when reached by
 #: clicking, and 404s when reached by reload or bookmark — the failure looks
 #: like a routing bug in the SPA and is not one.
 WORKSPACES = (
-    "dashboard", "trades", "analytics", "calendar", "watchlist", "risk",
-    "system", "versions", "research", "reports", "cancels", "ui", "plans",
+    "dashboard", "trades", "insights", "watchlist", "risk", "system", "ui", "plans",
+    # pre-v202 names, redirected client-side; removed at Phase 4's close-out
+    "analytics", "calendar", "versions", "research", "reports", "cancels",
+    # pre-SR4/SR5 names, redirected client-side; removed at Phase 4's close-out
     "cockpit", "universe",
 )
 

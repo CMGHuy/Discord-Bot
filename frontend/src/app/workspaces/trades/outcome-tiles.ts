@@ -37,12 +37,16 @@ export interface OutcomeTile {
   costCaption: boolean;
   stale: boolean;
   indicator: StripIndicator | null;
-  /** v171 D2: age of the price this tile shows; null for tiles that show none. */
-  ageS: number | null;
+  /** v201: when the price behind this tile was taken; null for tiles that show none. */
+  asOf: string | null;
+  /** v201: a refresh of that price is pending. */
+  refreshing: boolean;
+  /** v201: the last refresh of that price was not answered. */
+  error: string | null;
 }
 
 function tile(id: string, label: string, value: string, extras: Partial<OutcomeTile> = {}): OutcomeTile {
-  return { id, label, value, sub: null, tone: null, costCaption: false, stale: false, indicator: null, ageS: null, ...extras };
+  return { id, label, value, sub: null, tone: null, costCaption: false, stale: false, indicator: null, asOf: null, refreshing: false, error: null, ...extras };
 }
 
 function joined(parts: (string | null)[]): string | null {
@@ -86,13 +90,14 @@ function openTiles(ctx: StripContext): OutcomeTile[] {
   const current = t.current_price ?? null;
   const days = daysUntil(ctx.timeExitOn, ctx.now.getTime());
   const stale = t.current_price_stale === true;
+  const quote = { asOf: t.price_as_of ?? null, refreshing: t.price_refreshing ?? false, error: t.price_error ?? null };
   const targetWord = t.status === 'PARTIAL' ? 'T2' : 'T1';
   const tiles = [
     tile('price', 'Price', num(current), {
-      stale, ageS: t.price_age_s ?? null, sub: `to stop ${pct(pctFrom(current, t.stop_loss ?? null))} · to ${targetWord} ${pct(pctFrom(current, t.target ?? null))}`,
+      stale, ...quote, sub: `to stop ${pct(pctFrom(current, t.stop_loss ?? null))} · to ${targetWord} ${pct(pctFrom(current, t.target ?? null))}`,
     }),
     tile('unrealised', 'Unrealised', signed(t.realized_pnl_amount), {
-      stale, tone: outcomeTone(t.r_multiple ?? null), costCaption: true,
+      stale, ...quote, tone: outcomeTone(t.r_multiple ?? null), costCaption: true,
       sub: `${pct(t.pnl_pct)} ${t.status === 'PARTIAL' ? 'on open shares' : 'on position'}`,
     }),
     tile('progress', 'Progress', ABSENT, { indicator: {

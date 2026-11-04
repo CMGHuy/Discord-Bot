@@ -74,6 +74,10 @@ paths = ["tests/admin/test_api*.py"]
 description = "Flask admin internals: lifecycle commands, jobs, listeners, settings, SPA serving"
 paths = ["tests/admin/test_[b-z]*.py", "tests/admin/test_a[!p]*.py"]
 
+[suites.live-api]
+description = "v202 GET /api/v1/live: heat, plans awaiting order, killswitch, activity feed"
+paths = ["tests/live_api/"]
+
 [suites.discord]
 description = "slash commands, embeds/presentation, infra"
 paths = ["tests/commands/", "tests/presentation/", "tests/infra/"]
@@ -101,3 +105,7 @@ paths = ["tests/history_store/"]
 [suites.scout]
 description = "v161 trade scout: book export, autopsy, merge, generator roles"
 paths = ["tests/scout/"]
+
+[suites.refresher]
+description = "v201 admin market refresher: contract, process, quote cycle, never-fetch request door"
+paths = ["tests/refresher/", "tests/admin_market/"]

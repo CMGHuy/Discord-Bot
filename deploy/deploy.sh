@@ -196,7 +196,17 @@ echo "==> Starting services"
 # exits non-zero if one fails to become healthy within its start_period +
 # retries window), so the SSH step in CI fails loudly instead of returning
 # while a container is still crash-looping.
-docker compose up -d --no-build --wait
+# v201: an image older than the refresher (a rollback via SWING_BOT_IMAGE) has no
+# swingbot.refresher module: starting the refresher service on it would exit and
+# fail --wait, and the verify loop below would fail too. Same guard as
+# scripts/ops/rollback_to.sh.
+SERVICES="bot admin"
+if docker run --rm --entrypoint python "$IMAGE" -c "import swingbot.refresher" </dev/null >/dev/null 2>&1; then
+  SERVICES="bot admin refresher"
+else
+  echo "NOTICE: rolling back past v201 -- image $IMAGE has no swingbot.refresher; not starting or verifying the refresher service." >&2
+fi
+docker compose up -d --no-build --wait $SERVICES
 
 # Schema migrations are NOT run by the bot at startup, so a deploy that ships a
 # new Alembic revision must apply it here. Skipping this left production on
@@ -281,7 +291,7 @@ fi
 echo "==> Verifying the containers run the image this deploy pulled"
 WANT=$(docker image inspect --format '{{.Id}}' "$IMAGE")
 MISMATCH=""
-for svc in bot admin; do
+for svc in $SERVICES; do
   GOT=$(docker inspect --format '{{.Image}}' "$(docker compose ps -q "$svc")")
   if [ "$GOT" != "$WANT" ]; then
     echo "  FAIL $svc is running $GOT" >&2
@@ -292,7 +302,7 @@ for svc in bot admin; do
 done
 
 if [ -z "$MISMATCH" ]; then
-  echo "==> Both services run the pulled image."
+  echo "==> All services () run the pulled image."
 else
   echo "" >&2
   echo "DEPLOY VERIFICATION FAILED --$MISMATCH did not adopt the pulled image." >&2

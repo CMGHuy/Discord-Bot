@@ -23,6 +23,8 @@ import {
 } from '../../api/interceptors';
 import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
+import { FakeLiveValues } from '../../testing/fake-live-values';
+import { LiveValuesStore } from '../../stores/live-values.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { RouteTitleService } from '../../routing/route-title.service';
@@ -141,6 +143,7 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -292,6 +295,7 @@ describe('TradeDetail — identity line (v166 TD6)', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -359,7 +363,7 @@ describe('TradeDetail — identity line (v166 TD6)', () => {
     ['PENDING', ['Cancel plan', 'Delete']], ['CLOSED', ['Delete']],
   ])('offers the %s commands in the header', (status, labels) => {
     const { el } = mount(status as string, {}, 3, 'live');
-    const buttons = [...el.querySelectorAll<HTMLButtonElement>('sb-page [page-actions] button[sb-button]')];
+    const buttons = [...el.querySelectorAll<HTMLButtonElement>('sb-page [page-actions] button[sb-button]:not(sb-market-refresh button)')];
     expect(buttons.map(button => button.textContent?.trim())).toEqual(labels);
     expect(buttons.at(-1)?.classList).toContain('danger-quiet');
     expect([...el.querySelectorAll('sb-panel')].some(panel => panel.getAttribute('heading') === 'Actions')).toBe(false);
@@ -367,7 +371,7 @@ describe('TradeDetail — identity line (v166 TD6)', () => {
 
   it('offers Close on a live position (SR48, through the real component)', () => {
     const { fixture, el } = mount();
-    const close = el.querySelector<HTMLButtonElement>('sb-page [page-actions] button');
+    const close = el.querySelector<HTMLButtonElement>('sb-page [page-actions] button:not(sb-market-refresh button)');
     expect(close?.textContent).toContain('Close');
     close!.click();
     fixture.detectChanges();
@@ -388,6 +392,7 @@ describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -492,6 +497,7 @@ describe('TradeDetail — banked leg and open runner', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -558,6 +564,7 @@ describe('TradeDetail states', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -600,6 +607,7 @@ describe('TradeDetail — the shared Why components (v151)', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -656,6 +664,29 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     const strip = el.querySelector('sb-outcome-strip')!;
     expect(strip.querySelector('[data-tile="price"] .stale-flag')?.textContent).toContain('delayed');
     expect(strip.querySelector('[data-tile="unrealised"] .stale-flag')?.textContent).toContain('delayed');
+  });
+
+  it('stop and target proximity carry the price age', () => {
+    const el = mount('overview', DETAIL, 'ACTIVE', { price_as_of: new Date().toISOString() });
+    const tile = el.querySelector('sb-outcome-strip [data-tile="price"]')!;
+    expect(tile.querySelector('sb-market-value .tile-sub')?.textContent).toContain('to stop');
+    expect(tile.querySelector('sb-market-value .tile-value')).not.toBeNull();
+    expect(el.querySelector('sb-outcome-strip [data-tile="unrealised"] sb-market-value')).not.toBeNull();
+    expect(el.querySelector('sb-outcome-strip [data-tile="held"] sb-market-value')).toBeNull();
+  });
+
+  it('offers Refresh for the ticker while the trade is live', () => {
+    const el = mount('overview', DETAIL, 'ACTIVE');
+    const refresh = el.querySelector<HTMLButtonElement>('sb-page [page-actions] sb-market-refresh button');
+    expect(refresh).not.toBeNull();
+    refresh!.click();
+    const live = TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues;
+    expect(live.requestRefresh).toHaveBeenCalledWith(['AAPL']);
+  });
+
+  it('no Refresh on a closed trade', () => {
+    const el = mount('overview', DETAIL, 'CLOSED');
+    expect(el.querySelector('sb-page [page-actions] sb-market-refresh')).toBeNull();
   });
 
   it('does not flag a fresh current price in the outcome strip', () => {
@@ -909,6 +940,7 @@ describe('TradeDetail — arrival banner from the plan page (v151)', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -1098,6 +1130,7 @@ describe('TradeDetail on sb-page (v195 Phase 4, §5.2, §1.4)', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -1148,12 +1181,12 @@ describe('TradeDetail on sb-page (v195 Phase 4, §5.2, §1.4)', () => {
     expect(el.querySelectorAll('sb-page [page-actions] button')).toHaveLength(0);
     backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(DETAIL, 'ACTIVE'));
     fixture.detectChanges();
-    expect(el.querySelectorAll('sb-page [page-actions] button')).toHaveLength(2);
+    expect(el.querySelectorAll('sb-page [page-actions] button:not(sb-market-refresh button)')).toHaveLength(2);
   });
 
   it('opens the delete confirm from the header', () => {
     const { fixture, el } = mount('CLOSED');
-    const buttons = [...el.querySelectorAll<HTMLButtonElement>('sb-page [page-actions] button[sb-button]')];
+    const buttons = [...el.querySelectorAll<HTMLButtonElement>('sb-page [page-actions] button[sb-button]:not(sb-market-refresh button)')];
     const del = buttons.at(-1)!;
     expect(del.textContent!.trim()).toBe('Delete');
     expect(del.classList).toContain('danger-quiet');

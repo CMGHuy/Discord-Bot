@@ -11,7 +11,8 @@ import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { Observable } from 'rxjs';
 import { routeRequest } from '../routing/route-request';
-import { ClearHistoryResult, TradeCollection, TradeQuery, TradeRow } from '../api/models';
+import { ClearHistoryResult, MarketMeta, RowQuoteFields, TradeCollection, TradeQuery, TradeRow } from '../api/models';
+import { LiveValuesStore } from './live-values.store';
 import { PageSpec, SortSpec } from '../ui/data-table/data-table.types';
 
 export const DEFAULT_PER_PAGE = 10;
@@ -53,6 +54,26 @@ interface TradesSlice {
   /** v189 A6: the reset was refused because the kill switch is tripped.
    *  Not an error: nothing failed, and the page offers a confirmed force. */
   clearRefusal: string | null;
+}
+
+/**
+ * v201: the server's meta, with the live rows' say on freshness. `as_of` is
+ * the oldest row price (the figure only as fresh as its stalest input) and
+ * `refreshing` follows any row; `missing_count` stays the server's because
+ * it includes FX misses the rows cannot show.
+ */
+export function liveMeta(meta: MarketMeta | null | undefined, rows: RowQuoteFields[]): MarketMeta | null {
+  if (!meta) return null;
+  const stamps = rows.map((r) => r.price_as_of).filter((s): s is string => !!s);
+  const oldest = stamps.length ? stamps.reduce((a, b) => (Date.parse(b) < Date.parse(a) ? b : a)) : meta.as_of;
+  return { ...meta, as_of: oldest, refreshing: meta.refreshing || rows.some((r) => r.price_refreshing === true) };
+}
+
+const LIVE_STATUSES = new Set(['PENDING', 'ACTIVE', 'PARTIAL']);
+
+/** v201: the unique tickers of rows whose price still moves (Refresh asks for these). */
+export function liveTickers(rows: readonly { ticker: string; status: string }[]): string[] {
+  return [...new Set(rows.filter((r) => LIVE_STATUSES.has(r.status)).map((r) => r.ticker))];
 }
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -120,8 +141,12 @@ export const TradesStore = signalStore(
     clearNotice: null,
     clearRefusal: null,
   }),
-  withComputed(({ data, query }) => ({
-    rows: computed(() => data()?.items ?? []),
+  withComputed(({ data, query }, live = inject(LiveValuesStore)) => {
+    // v201: live prices patch the rows in place, for every consumer.
+    const rows = computed(() => live.patchRows(data()?.items ?? [], (r) => r.ticker));
+    return {
+    rows,
+    meta: computed(() => liveMeta(data()?.market_meta, rows())),
     pricesAsOf: computed(() => data()?.prices_as_of ?? null),
 
     /** True until the first response and never again: a skeleton belongs on
@@ -159,7 +184,8 @@ export const TradesStore = signalStore(
         ).length + rangeActive
       );
     }),
-  })),
+    };
+  }),
   withMethods((store, api = inject(ApiClient)) => {
     let latestRequest = 0;
     return {

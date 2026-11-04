@@ -24,6 +24,8 @@ import {
 } from '../../api/interceptors';
 import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
+import { FakeLiveValues } from '../../testing/fake-live-values';
+import { LiveValuesStore } from '../../stores/live-values.store';
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { RouteTitleService } from '../../routing/route-title.service';
 import { PlanDetail, looksLikePlanId, redirectFor, shortOrderNotes, timingLines } from './plan-detail';
@@ -173,6 +175,7 @@ describe('PlanDetail', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -364,6 +367,7 @@ describe('PlanDetail on sb-page (v195 Phase 4, §5.2, §1.4)', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },

@@ -21,20 +21,21 @@ GOOD_EVIDENCE = "cell regime=risk_on; N 40; weeks 12; Δ net ExpR 0.200 [0.050, 
 def _row(**kw):
     base = {f.name: "" for f in fields(merge.ScoutRow)}
     base.update(role="setup-scout", idea="idea-a", claim="A claim.", evidence=GOOD_EVIDENCE,
-                exploratory="yes", edge="expectancy", mechanism="Why it pays.",
+                exploratory="yes", edge="expectancy", direction="exploit", mechanism="Why it pays.",
                 order_form="stop-buy above the signal high, day order", manual_actions="none",
                 pairs_with="n/a", divergence="no", route="/prereg")
     base.update(kw)
     return merge.ScoutRow(**base)
 
 
-def _cell(cid, *, n=40, weeks=12, lo=0.05, hi=0.35, thin=False):
+def _cell(cid, *, n=40, weeks=12, lo=0.05, hi=0.35, thin=False, defined_at="entry"):
     cut, value = cid.split("=", 1)
     ci = None if lo is None else [lo, hi]
     delta = None if lo is None else (lo + hi) / 2
     return {"id": cid, "cut": cut, "value": value, "n": n, "weeks": weeks, "win_rate": 0.5,
             "net_expr": 0.2, "gross_expr": 0.22, "delta": delta, "ci": ci, "p": 0.01,
-            "q": 0.04, "thin": thin, "bar_covered_n": None, "extra": {}}
+            "q": 0.04, "thin": thin, "bar_covered_n": None, "extra": {},
+            "defined_at": defined_at}
 
 
 CELLS = {c["id"]: c for c in (
@@ -226,7 +227,8 @@ def test_a_playbook_row_sorts_last_in_its_edge_class():
 
 HEADER = {"window": ["2026-01-05", "2026-10-09"], "n": 212, "pooled_net_expr": 0.11,
           "pooled_win_rate": 0.52, "net_of_frictions": "modelled", "cells_tested": 147,
-          "bar_covered_n": 190, "resamples": 10000, "seed": 42, "notes": []}
+          "bar_covered_n": 190, "resamples": 10000, "seed": 42, "notes": [],
+          "autopsy_schema": 2}
 
 
 def test_the_slate_copies_the_header_and_carries_both_boundaries():
@@ -268,12 +270,14 @@ def test_a_pinned_row_says_so_in_its_heading():
 
 # ---- CLI, against the real ledger and the real closed table ----------------
 
-def _block(idea, evidence=GOOD_EVIDENCE, route="/prereg", edge="expectancy"):
+def _block(idea, evidence=GOOD_EVIDENCE, route="/prereg", edge="expectancy",
+           direction="exploit"):
     return (f"- idea: {idea}\n"
             f"  claim: One sentence.\n"
             f"  evidence: {evidence}\n"
             f"  exploratory: yes\n"
             f"  edge: {edge}\n"
+            f"  direction: {direction}\n"
             f"  mechanism: Why a trader expects it to pay.\n"
             f"  order_form: stop-buy above the signal high, day order\n"
             f"  manual_actions: none\n"

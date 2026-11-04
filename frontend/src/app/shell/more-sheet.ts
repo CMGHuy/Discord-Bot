@@ -4,23 +4,38 @@ import { RouterLink } from '@angular/router';
 import { FocusTrap } from '../ui/focus-trap';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
-import { NAV_GROUPS, NavEntry, NavGroup, PHONE_TABS } from './nav';
+import { NAV_ENTRIES, NavEntry, PHONE_TABS } from './nav';
 
-/** The rail's groups minus the pages already on the phone's tab bar, in rail
- *  order; a group left with no page is dropped (Monitor, today). */
-export function morePageGroups(
-  groups: readonly NavGroup[] = NAV_GROUPS,
-  tabs: readonly NavEntry[] = PHONE_TABS,
-): NavGroup[] {
-  const onBar = new Set(tabs.map((tab) => tab.path));
-  return groups
-    .map((group) => ({ ...group, entries: group.entries.filter((entry) => !onBar.has(entry.path)) }))
-    .filter((group) => group.entries.length > 0);
+/** One group of the More sheet: a destination, and the pages it links to. */
+export interface MoreGroup {
+  id: string;
+  label: string;
+  links: { label: string; path: string }[];
 }
 
 /**
- * The phone's More sheet -- v195 Phase 3: every page the tab bar does not
- * hold, grouped as on the rail, and the search field.
+ * The destinations the phone's tab bar does not hold, in rail order (v202
+ * §3), each with its sections as links; a single page links to itself.
+ * Today: Insights (Analytics, Research, Reports) and System (Health,
+ * Versions). Trades' sections are reached from its section tabs.
+ */
+export function morePageGroups(
+  entries: readonly NavEntry[] = NAV_ENTRIES,
+  tabs: readonly NavEntry[] = PHONE_TABS,
+): MoreGroup[] {
+  const onBar = new Set(tabs.map((tab) => tab.path));
+  return entries
+    .filter((entry) => !onBar.has(entry.path))
+    .map((entry) => ({
+      id: `more-${entry.path.slice(1)}`,
+      label: entry.label,
+      links: (entry.sections ?? [entry]).map(({ label, path }) => ({ label, path })),
+    }));
+}
+
+/**
+ * The phone's More sheet -- v195 Phase 3: every destination the tab bar does
+ * not hold, with its sections (v202 §3), and the search field.
  *
  * A modal bottom sheet: scrim, `role=dialog`, focus trapped while open and
  * returned to the More tab on close (FocusTrap restores what had focus).
@@ -46,14 +61,11 @@ export function morePageGroups(
           <span>Search or jump…</span>
         </button>
         @for (group of groups; track group.id) {
-          <p class="group-label" [id]="'more-' + group.id">{{ group.label }}</p>
-          <ul class="pages" [attr.aria-labelledby]="'more-' + group.id">
-            @for (entry of group.entries; track entry.path) {
+          <p class="group-label" [id]="group.id">{{ group.label }}</p>
+          <ul class="pages" [attr.aria-labelledby]="group.id">
+            @for (link of group.links; track link.path) {
               <li>
-                <a class="page" [routerLink]="entry.path" (click)="closed.emit()">
-                  <span class="glyph" aria-hidden="true"><sb-icon [name]="entry.icon" /></span>
-                  <span>{{ entry.label }}</span>
-                </a>
+                <a class="page" [routerLink]="link.path" (click)="closed.emit()">{{ link.label }}</a>
               </li>
             }
           </ul>

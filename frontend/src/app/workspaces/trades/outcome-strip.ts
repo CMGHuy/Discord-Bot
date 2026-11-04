@@ -1,28 +1,42 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { AgeHint, PAGE_PRICE_WINDOW_S } from '../../ui/age-hint';
+import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
+import { LiveValuesStore } from '../../stores/live-values.store';
+import { marketAgeLabel } from '../../ui/age-hint';
+import { CLOCK } from '../../ui/clock';
+import { MarketValue } from '../../ui/market-value';
 import { StatusIndicator } from '../../ui/status-indicator';
 import { COST_CAPTION, OutcomeTile, PAPER_FILLS_LINE, STALE_FLAG } from './outcome-tiles';
 
 @Component({
   selector: 'sb-outcome-strip',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StatusIndicator, AgeHint],
+  imports: [StatusIndicator, MarketValue],
   template: `
     <div class="strip">
       @for (tile of tiles(); track tile.id) {
         <div class="tile" [attr.data-tile]="tile.id">
           <div class="sb-label">{{ tile.label }}</div>
-          <div class="tile-value num" [class.pos]="tile.tone === 'pos'" [class.neg]="tile.tone === 'neg'">
-            @if (tile.indicator; as indicator) {
-              <sb-status-indicator [status]="indicator.status" [current]="indicator.current"
-                [entry]="indicator.entry" [stop]="indicator.stop" [target]="indicator.target" />
-            } @else {
-              {{ tile.value }}
-            }
-            <sb-age-hint [ageS]="tile.ageS" [windowS]="pageWindowS" />
-            @if (tile.stale) { <span class="stale-flag">{{ staleFlag }}</span> }
-          </div>
-          @if (tile.sub) { <div class="tile-sub">{{ tile.sub }}</div> }
+          @if (tile.asOf || tile.refreshing) {
+            <!-- v201: the value and its to-stop / to-target line are both derived
+                 from the price, so both sit under its age and refresh spinner. -->
+            <sb-market-value [asOf]="tile.asOf" [refreshing]="tile.refreshing" [error]="tile.error">
+              <div class="tile-value num" [class.pos]="tile.tone === 'pos'" [class.neg]="tile.tone === 'neg'">
+                {{ tile.value }}
+                @if (staleFlagShown(tile)) { <span class="stale-flag">{{ staleFlag }}</span> }
+              </div>
+              @if (tile.sub) { <div class="tile-sub">{{ tile.sub }}</div> }
+            </sb-market-value>
+          } @else {
+            <div class="tile-value num" [class.pos]="tile.tone === 'pos'" [class.neg]="tile.tone === 'neg'">
+              @if (tile.indicator; as indicator) {
+                <sb-status-indicator [status]="indicator.status" [current]="indicator.current"
+                  [entry]="indicator.entry" [stop]="indicator.stop" [target]="indicator.target" />
+              } @else {
+                {{ tile.value }}
+              }
+              @if (staleFlagShown(tile)) { <span class="stale-flag">{{ staleFlag }}</span> }
+            </div>
+            @if (tile.sub) { <div class="tile-sub">{{ tile.sub }}</div> }
+          }
           @if (tile.costCaption) { <div class="tile-caption">{{ costCaption }}</div> }
         </div>
       }
@@ -49,5 +63,12 @@ export class OutcomeStrip {
   protected readonly costCaption = COST_CAPTION;
   protected readonly paperFillsLine = PAPER_FILLS_LINE;
   protected readonly staleFlag = STALE_FLAG;
-  protected readonly pageWindowS = PAGE_PRICE_WINDOW_S;
+  private readonly clock = inject(CLOCK);
+  private readonly live = inject(LiveValuesStore);
+
+  /** The flag shows when the server marks the price stale (refresher off) or
+   *  when the cell's own age has gone past the limit. */
+  protected staleFlagShown(tile: OutcomeTile): boolean {
+    return tile.stale || marketAgeLabel(tile.asOf, this.clock(), this.live.status()).tone === 'stale';
+  }
 }

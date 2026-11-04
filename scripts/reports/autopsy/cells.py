@@ -54,6 +54,9 @@ class CellStats:
     thin: bool
     bar_covered_n: int | None = None
     extra: dict = field(default_factory=dict)
+    eras: dict | None = None
+    notes: list[str] = field(default_factory=list)
+    defined_at: str | None = None
 
     def to_json(self) -> dict:
         return {
@@ -64,6 +67,9 @@ class CellStats:
             "ci": None if self.ci is None else [_raw(self.ci[0]), _raw(self.ci[1])],
             "p": _raw(self.p), "q": _raw(self.q), "thin": self.thin,
             "bar_covered_n": self.bar_covered_n, "extra": dict(self.extra),
+            "eras": None if self.eras is None else {k: dict(v) for k, v in self.eras.items()},
+            "notes": list(self.notes),
+            "defined_at": self.defined_at,
         }
 
 

@@ -244,6 +244,44 @@ services:
       db:
         condition: service_healthy
 
+  refresher:
+    # v201: the admin's market refresher. A process of its own, so a slow
+    # batch can neither hold the admin's gunicorn threads nor share a
+    # yfinance download lock with the scan and the stop monitor (each process
+    # has its own _DOWNLOAD_LOCK). It fetches quotes, quote-currency codes and
+    # FX pairs as the tier-5 ADMIN_REFRESH asker, and NOTIFYs `market`. The
+    # admin pages only read what it stored. Kill switch: ADMIN_REFRESHER=off
+    # puts the admin back on request-time fetching (docs/deploy/DEPLOY_HETZNER.md).
+    image: ${SWING_BOT_IMAGE:-swing-bot:latest}
+    command: ["python", "-m", "swingbot.refresher"]
+    container_name: swing-refresher
+    restart: unless-stopped
+    # Hard cap, like the bot's: the box has two vCPUs and the admin worker is
+    # the one someone is waiting on.
+    cpus: "0.5"
+    mem_limit: 1g
+    env_file:
+      - .env
+    # Exactly the bot's state mounts (see its comment): the daily-bar cache
+    # (for v204's snapshot job), the FX pair files it refreshes, and .env for
+    # hot reload.
+    volumes:
+      - ./data:/app/data                 # trades.json, account.json, state.json, watchlist.json
+      - ./logs:/app/logs
+      - ./exports:/app/exports           # generated charts
+      - ./market_data:/app/market_data   # OHLCV cache (MARKET_DATA_AUTO_REFRESH)
+      - ./.env:/app/.env
+      - ./.env.bak:/app/.env.bak
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1 2>/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+
   cloudflared:
     # Cloudflare Tunnel: gives the admin UI real public hostnames
     # (https://www.bomeo-capital.com and https://bomeo-capital.com) with no

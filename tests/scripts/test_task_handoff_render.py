@@ -65,7 +65,7 @@ def test_needs_db_and_needs_frontend_match_by_prefix_only():
 
 def test_test_db_facts_come_from_testrun_and_match_compose():
     assert task_handoff.TEST_DB_URL == testrun.TEST_DB_URL_DEFAULT
-    assert ":55432/" in task_handoff.TEST_DB_URL
+    assert ":56789/" in task_handoff.TEST_DB_URL
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8").replace("\r\n", "\n")
     assert f"container_name: {task_handoff.TEST_DB_CONTAINER}" in compose
     assert f"\n  {task_handoff.TEST_DB_SERVICE}:\n" in compose
@@ -87,8 +87,8 @@ def test_environment_block_always_carries_the_base_facts():
 
 def test_environment_block_adds_database_lines_only_for_db_paths():
     block = task_handoff.environment_block(WT, "b", ["swingbot/core/db/models.py"], ATTRIBUTION)
-    assert f"TEST_DATABASE_URL={task_handoff.TEST_DB_URL}" in block
-    assert "swing-db-test" in block and "`db-test`" in block
+    assert "TEST_DATABASE_URL" not in block and task_handoff.TEST_DB_URL not in block
+    assert "`swing-db`" in block and "`db`" in block and "swing-db-test" not in block
     assert "never create a container" in block
     assert "BLOCKED:" in block
     assert "ng-test.mjs" not in block

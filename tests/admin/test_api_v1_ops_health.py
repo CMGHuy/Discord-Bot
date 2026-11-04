@@ -83,7 +83,7 @@ def test_requires_auth(client):
 def test_nothing_recorded_yet_is_empty_not_an_error(logged_in, telemetry_rows):
     body = _health(logged_in)
     assert_shape(body, {"providers": list, "thresholds": dict, "swallowed": list,
-                        "bot_counts_since": NULLABLE_STR,
+                        "bot_counts_since": NULLABLE_STR, "refresher": dict,
                         "notifications": (dict, type(None))})
     assert_shape(body["thresholds"], {"fallback_pct": NUMBER, "empty_pct": NUMBER},
                  where="thresholds")

@@ -5,12 +5,21 @@
 #   bash scripts/ops/replicate_prod_db.sh                       # -> swingbot_prod_replica
 #   bash scripts/ops/replicate_prod_db.sh my_copy               # -> my_copy
 #   bash scripts/ops/replicate_prod_db.sh swingbot --i-mean-it  # -> the live LOCAL db
+#   bash scripts/ops/replicate_prod_db.sh --full                # drop and rebuild instead of topping up
 #   bash scripts/ops/replicate_prod_db.sh --dry-run             # print the plan, touch nothing
+#
+# DEFAULT IS INCREMENTAL: when the target already exists on the same alembic
+# revision as production, only the rows it LACKS are inserted (a data-only dump
+# replayed with ON CONFLICT DO NOTHING); nothing local is dropped, so a sibling
+# task mid-test keeps its database. It rebuilds from scratch (the old behaviour)
+# when the target is absent, on another revision, or --full is given. Rows
+# production deleted or changed since the last sync are NOT touched by a top-up:
+# use --full when that matters.
 #
 # Production is only ever READ: one pg_dump (a single consistent snapshot) and
 # one read-only count query. Nothing is written, restarted or deleted there.
-# The local target is dropped and recreated by restore_db.sh, so the default is
-# a separate replica database that never collides with the working local one.
+# A FULL rebuild drops and recreates the target via restore_db.sh, so the default
+# is a separate replica database that never collides with the working local one.
 #
 # The dump travels base64-encoded: ssh-hetzner.sh goes through `wsl ssh`, and a
 # raw binary stream through wsl.exe is not something to bet a backup on.
@@ -20,11 +29,13 @@ cd "$(dirname "$0")/../.."
 TARGET="swingbot_prod_replica"
 FORCE=""
 DRY=""
+MODE_FLAG=""
 for arg in "$@"; do
   case "$arg" in
     --i-mean-it) FORCE="--i-mean-it" ;;
     --dry-run) DRY=1 ;;
-    -*) echo "replicate_prod_db: unknown flag '$arg' (--dry-run, --i-mean-it)" >&2; exit 2 ;;
+    --full) MODE_FLAG="full" ;;
+    -*) echo "replicate_prod_db: unknown flag '$arg' (--dry-run, --full, --i-mean-it)" >&2; exit 2 ;;
     *) TARGET="$arg" ;;
   esac
 done
@@ -60,12 +71,28 @@ docker compose exec -T db pg_isready -U swingbot -d postgres >/dev/null \
 bash "$SSH_HETZNER" "true" >/dev/null 2>&1 \
   || { echo "replicate_prod_db: FAIL cannot reach the VM through $SSH_HETZNER" >&2; exit 1; }
 
+# Incremental only when the target exists on production's revision; otherwise rebuild.
+LOCAL_PSQL=(docker compose exec -T db psql -U swingbot -At)
+PROD_REV="$(bash "$SSH_HETZNER" "cd /opt/swing-bot && docker compose exec -T db psql -U swingbot -d swingbot -At -c 'select version_num from alembic_version'" 2>/dev/null | tr -d '\r')"
+HAVE_TARGET="$("${LOCAL_PSQL[@]}" -d postgres -c "select 1 from pg_database where datname='$TARGET'" | tr -d '\r')"
+LOCAL_REV=""
+[ "$HAVE_TARGET" = "1" ] && LOCAL_REV="$("${LOCAL_PSQL[@]}" -d "$TARGET" -c 'select version_num from alembic_version' 2>/dev/null | tr -d '\r' || true)"
+MODE="full"
+if [ "$MODE_FLAG" != "full" ] && [ -n "$PROD_REV" ] && [ "$PROD_REV" = "$LOCAL_REV" ]; then MODE="incremental"; fi
+echo "replicate_prod_db: mode=$MODE (prod alembic=${PROD_REV:-?} local=${LOCAL_REV:-none})"
+if [ "$MODE" = "incremental" ]; then
+  # Top up: data only, one INSERT per row that does nothing on a key conflict.
+  DUMP_FLAGS="--data-only --column-inserts --on-conflict-do-nothing --disable-triggers"
+else
+  DUMP_FLAGS="--clean --if-exists"
+fi
+
 mkdir -p "$OUT_DIR"
 TMP="$OUT.partial"
 trap 'rm -f "$TMP"' EXIT
 
 echo "replicate_prod_db: dumping production (read-only)"
-bash "$SSH_HETZNER" "cd /opt/swing-bot && docker compose exec -T db pg_dump -U swingbot -d swingbot --no-owner --no-privileges --clean --if-exists -Fp | gzip -9 | base64 -w0" 2>/dev/null \
+bash "$SSH_HETZNER" "cd /opt/swing-bot && docker compose exec -T db pg_dump -U swingbot -d swingbot --no-owner --no-privileges $DUMP_FLAGS -Fp | gzip -9 | base64 -w0" 2>/dev/null \
   | base64 -d > "$TMP"
 
 if [ ! -s "$TMP" ] || ! gzip -t "$TMP" 2>/dev/null; then
@@ -84,8 +111,13 @@ echo "replicate_prod_db: dump ok: $OUT ($(du -h "$OUT" | cut -f1))"
 
 PROD_COUNTS="$(bash "$SSH_HETZNER" "cd /opt/swing-bot && docker compose exec -T db psql -U swingbot -d swingbot -At -F '|' -c \"$COUNTS_SQL\"" 2>/dev/null | tr -d '\r')"
 
+LOCAL_BEFORE=""
+if [ "$MODE" = "incremental" ]; then
+  LOCAL_BEFORE="$(docker compose exec -T db psql -U swingbot -d "$TARGET" -At -F '|' -c "$COUNTS_SQL" | tr -d '\r')"
+  # One transaction: a failed replay leaves the replica exactly as it was.
+  gunzip -c "$OUT" | docker compose exec -T db psql -U swingbot -d "$TARGET" -q -1 -v ON_ERROR_STOP=1 >/dev/null     || { echo "replicate_prod_db: FAIL top-up rolled back; replica unchanged (try --full)" >&2; exit 1; }
 # restore_db.sh owns the drop/create/replay and its own live-db refusal.
-if [ "$FORCE" = "--i-mean-it" ]; then
+elif [ "$FORCE" = "--i-mean-it" ]; then
   bash scripts/ops/restore_db.sh "$OUT" "$TARGET" --i-mean-it >/dev/null
 else
   bash scripts/ops/restore_db.sh "$OUT" "$TARGET" >/dev/null
@@ -112,7 +144,13 @@ while IFS='|' read -r tbl pcount; do
 done <<< "$PROD_COUNTS"
 
 N_TABLES="$(printf '%s\n' "$LOCAL_COUNTS" | grep -c '|' || true)"
-echo "replicate_prod_db: $VERDICT target=$TARGET tables=$N_TABLES alembic=$REV dump=$OUT"
+ADDED=""
+if [ "$MODE" = "incremental" ]; then
+  ADDED=" added=$(paste -d'|' <(printf '%s
+' "$LOCAL_BEFORE") <(printf '%s
+' "$LOCAL_COUNTS") | awk -F'|' '{a+=$4-$2} END{print a+0}')"
+fi
+echo "replicate_prod_db: $VERDICT mode=$MODE target=$TARGET tables=$N_TABLES alembic=$REV$ADDED dump=$OUT"
 [ -z "$DIFFS" ] || printf '%s' "$DIFFS"
 
 # Keep the newest few dumps; each is the whole trading history.

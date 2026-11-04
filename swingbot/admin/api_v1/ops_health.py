@@ -80,6 +80,7 @@ def _notification_health() -> dict | None:
 @api_v1.route("/system/health", methods=["GET"])
 @require_auth
 def get_system_health():
+    from . import market_updates
     bot = _bot_block()
     rows = (_swallowed_rows("bot", bot.get("counts"))
             + _swallowed_rows("admin", swallowed_mod.snapshot()))
@@ -92,4 +93,5 @@ def get_system_health():
         "swallowed": rows,
         "bot_counts_since": since if isinstance(since, str) else None,
         "notifications": _notification_health(),
+        "refresher": market_updates.refresher_health(),
     })

@@ -28,7 +28,54 @@ export interface Collection<T> {
   page: number;
   per_page: number;
 }
-export interface TradeCollection extends Collection<TradeRow> { prices_as_of?: string | null; }
+/* -- v201: live market values ------------------------------------------ */
+
+/** The per-response summary of how fresh a payload's prices are. */
+export interface MarketMeta {
+  as_of: string | null;
+  refreshing: boolean;
+  stale_count: number;
+  missing_count: number;
+  incomplete: boolean;
+  computed_at?: string | null;
+  stale_inputs?: boolean;
+  source: 'request' | 'snapshot';
+  error: string | null;
+}
+
+/** One symbol's latest price from `GET /market/updates`. */
+export interface QuoteUpdate {
+  symbol: string;
+  price: number | null;
+  as_of: string | null;
+  refreshing: boolean;
+  error: string | null;
+}
+
+export interface MarketStatus {
+  session: 'regular' | 'extended' | 'closed';
+  last_close_at: string | null;
+  stale_price_s: number | null;
+  heartbeat: { beat_at: string | null; cadence_s: number; stalled: boolean };
+}
+
+export interface MarketUpdates {
+  cursor: string;
+  quotes: QuoteUpdate[];
+  status: MarketStatus;
+}
+
+/** The price fields a row carries. All optional so an older server and every
+ *  existing literal still type-check. */
+export interface RowQuoteFields {
+  current_price?: number | null;
+  price_as_of?: string | null;
+  price_age_s?: number | null;
+  price_refreshing?: boolean;
+  price_error?: string | null;
+}
+
+export interface TradeCollection extends Collection<TradeRow> { prices_as_of?: string | null; market_meta?: MarketMeta; }
 
 /** The one error body. `code` is stable and may be branched on; `message` is
  *  for humans and may change freely. */
@@ -66,7 +113,7 @@ export interface Versions {
 
 /** A row in the trades list. The union of plan-backed and legacy positions:
  *  `origin` says which, and every field either side lacks is null. */
-export interface TradeRow {
+export interface TradeRow extends RowQuoteFields {
   id: string;
   origin: string;
   status: string;
@@ -326,6 +373,7 @@ export interface TradeDetailFields {
 /** `GET /trades/:id` -- a list row plus the heavy fields. */
 export interface TradeDetail extends TradeRow {
   detail: TradeDetailFields;
+  market_meta?: MarketMeta;
 }
 
 export interface TradeNote {
@@ -436,6 +484,7 @@ export interface EquitySeries {
 }
 
 export interface Dashboard {
+  market_meta?: MarketMeta;
   account_balance: number | null;
   open_pnl_pct: number | null;
   /** Sum of shares x (price - entry) over open positions; null when none has a share count. */
@@ -1323,7 +1372,7 @@ export interface TickerSignal {
   strategy: string | null;
 }
 
-export interface Ticker {
+export interface Ticker extends RowQuoteFields {
   symbol: string;
   company_name: string | null;
   open_trades: number;
@@ -2264,7 +2313,7 @@ export interface CalendarDaySparklines {
 /** One Lane B tile. `price`/`change_pct` are null when the feed had no answer
  *  for this symbol — a different fact from a flat move, and rendered
  *  differently, so a flagged name never silently vanishes from the tape. */
-export interface TapeRow {
+export interface TapeRow extends RowQuoteFields {
   symbol: string;
   price: number | null;
   change_pct: number | null;

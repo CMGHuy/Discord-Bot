@@ -13,6 +13,7 @@ import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
 import { routeRequest } from '../routing/route-request';
 import { Ticker, TickerSuggestion } from '../api/models';
+import { LiveValuesStore } from './live-values.store';
 
 interface WatchlistSlice {
   tickers: Ticker[];
@@ -89,7 +90,9 @@ export const WatchlistStore = signalStore(
     removeError: null,
     suggestions: [],
   }),
-  withComputed(({ tickers, loaded }) => ({
+  withComputed(({ tickers, loaded }, live = inject(LiveValuesStore)) => ({
+    // v201: live prices patch the rows in place.
+    rows: computed(() => live.patchRows(tickers(), (r) => r.symbol)),
     /** True until the first response, and never again — distinct from "the
      *  watchlist is empty", which is a real and different state. */
     empty: computed(() => !loaded()),

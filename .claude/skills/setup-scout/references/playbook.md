@@ -12,6 +12,12 @@ Left out on purpose: post-earnings drift (needs point-in-time estimates and a
 `fundamental-analyst` review); 52-week-high and 20-EMA-pullback variants (too
 close to `screen-high52w` and `screen-uptrend_pullback`).
 
+Gap sign: open_gap_pct compares the fill-day open with the planned entry and
+is positive when the open was worse for the trade (higher for a long, lower
+for a short), so open_better is an open more than 0.25% on the trade's side of
+the planned entry, flat is within 0.25%, open_worse_small is worse by up to
+1.0% and open_worse_large is worse by more than 1.0%.
+
 ## `gap-and-hold`
 
 - **Rule:** the stock gaps up above the prior session's high and closes in the upper part of the day's range without filling the gap.

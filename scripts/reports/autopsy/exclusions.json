@@ -1,0 +1,55 @@
+{
+  "stall_2026_08": {
+    "reason": "stop monitor stalled 2026-08-03..08-05: stops were enforced only by the 08-04 and 08-05 catch-up batches, so every trade open then carries the stall in its exit",
+    "rule": "exclude a trade when opened_at < window.end and closed_at >= window.start (open at any moment in a window), whatever its close reason; rebuilt by scripts/reports/autopsy/exclusions.py",
+    "windows": [
+      {
+        "start": "2026-08-03T16:18:02Z",
+        "end": "2026-08-04T18:55:15Z"
+      },
+      {
+        "start": "2026-08-05T14:40:57Z",
+        "end": "2026-08-05T15:34:01Z"
+      }
+    ],
+    "trade_ids": [
+      "0adbeECffIH1iXlG",
+      "2kCSkfNdkhWgXBMf",
+      "3Wguf0DOfOW4Msv8",
+      "3zLJ6g6xheSgoVVP",
+      "5QpoZvl27sIChi46",
+      "5cqNr7nSXOp6GzqP",
+      "5cuTOPazpjTh9sOF",
+      "66YOT3EudCE6iR0E",
+      "81hlTge6j1iJAeUV",
+      "8sqgkIW21ATnANLf",
+      "CRIo0L6Bar2U0wdx",
+      "DEjZbkGuJ4JfznAz",
+      "FsPUoxvUAqKHbyns",
+      "GczRGsh5eLsIQbyC",
+      "I7nXbHJoR1APljvO",
+      "JrlbqoqEix4Cqoud",
+      "KYU0hIb7XUYyIgbY",
+      "L7UwQE76mH7dWOzw",
+      "NqrBW2RurKaDzqV6",
+      "PtPZy5x8iqS45ykA",
+      "Q9EEuTuGGIqmDniH",
+      "U2mHC2mshc6XHxq9",
+      "UUtWvns09OMTwCcS",
+      "UeukolWAbIXoEFVr",
+      "XSmTbWQ2xeKMLKTS",
+      "b7YT5N4vcoUnZ1kM",
+      "dshyA9q5TSVsSS0K",
+      "htvrof8dteQy4DKg",
+      "jrvUT8pDLNhDqpS1",
+      "kx8QlV2x8PbnLXmT",
+      "o0wtFFvOsioMk78h",
+      "p5LTtQ06pltwMMce",
+      "sCpD4WaqvgaekVtO",
+      "tItOdI4aRphj8yw6",
+      "wUly0V7o6yw61Hsj",
+      "wdQ5b2BTYQy47WIV",
+      "xmZ3aRiQrIZ14fTM"
+    ]
+  }
+}

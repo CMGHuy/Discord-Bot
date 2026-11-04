@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { EventStream } from '../api/event-stream';
 import { authInterceptor, errorInterceptor, loadingInterceptor } from '../api/interceptors';
 import { REFUSED, RESET } from './trades-clear.fixture';
+import { FakeLiveValues } from '../testing/fake-live-values';
+import { LiveValuesStore } from './live-values.store';
 import { TradesStore } from './trades.store';
 
 /* v189 A6/A7: what the bulk clears now answer. Clear open names the plans it
@@ -27,6 +29,7 @@ describe('TradesStore bulk clears (v189)', () => {
         provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor])),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: { changes: () => signal(0) } },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradesStore,
       ],
     });

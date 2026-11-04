@@ -12,7 +12,7 @@ from swingbot.core.db import events, notify
 FRONTEND = pathlib.Path(__file__).resolve().parents[2] / "frontend"
 
 EXPECTED_EVENTS = {"trades", "account", "analytics", "scan", "journal",
-                   "bot", "risk", "watchlist", "jobs", "settings"}
+                   "bot", "risk", "watchlist", "jobs", "settings", "market"}
 
 
 def test_the_event_names_are_exactly_what_they_were():

@@ -26,6 +26,9 @@ import { Flash } from '../../ui/flash';
 import { held, money, num, pct, rMultiple, signed } from '../../ui/format';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
 import { AgeHint } from '../../ui/age-hint';
+import { IncompleteNote } from '../../ui/incomplete-note';
+import { MarketRefresh } from '../../ui/market-refresh';
+import { MarketValue } from '../../ui/market-value';
 import { Freshness } from '../../ui/freshness';
 import { Gauge } from '../../ui/gauge';
 import { HeatCell, HeatGrid } from '../../ui/heat-grid';
@@ -134,6 +137,9 @@ interface ContractRow {
     Flash,
     Freshness,
     AgeHint,
+    MarketValue,
+    IncompleteNote,
+    MarketRefresh,
     Gauge,
     HeatGrid,
     Hint,
@@ -559,6 +565,14 @@ interface ContractRow {
       <sb-timeline [items]="timelineItems" />
       <sb-freshness [at]="'2026-09-11T14:29:30Z'" [now]="null" />
       <span class="num">187.42 <sb-age-hint [ageS]="42" [windowS]="15" /></span>
+      <!-- v201: the live-value cell -- value + age, refreshing, failed, never priced. -->
+      <sb-market-value [asOf]="marketAsOf">187.42</sb-market-value>
+      <sb-market-value [asOf]="marketAsOf" [refreshing]="true">187.42</sb-market-value>
+      <sb-market-value [asOf]="marketAsOf" error="no quote">187.42</sb-market-value>
+      <sb-market-value [asOf]="null" [refreshing]="true">187.42</sb-market-value>
+      <sb-market-value [asOf]="'2026-10-30T19:59:58Z'">187.42</sb-market-value>
+      <sb-incomplete-note [missing]="2" />
+      <sb-market-refresh [symbols]="['AAPL', 'MSFT']" />
       <sb-control-bar [activeCount]="2">
         <button filters sb-button variant="ghost" type="button">Open</button>
         <sb-select scope label="Range" placeholder="YTD" [options]="selectOptions" />
@@ -1069,6 +1083,7 @@ export class Gallery {
 
   /** v85 R2-04 -- sb-matrix demo. */
   protected readonly matrixLabels = ['AAPL', 'MSFT', 'XOM'];
+  protected readonly marketAsOf = new Date(Date.now() - 12_000).toISOString();
   protected readonly matrixValues: (number | null)[][] = [
     [1, 0.68, 0.12],
     [0.68, 1, null],

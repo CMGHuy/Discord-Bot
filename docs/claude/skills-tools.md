@@ -102,10 +102,14 @@ Referenced from the root `CLAUDE.md`.
   **Always replicate into this project's single local `swing-db` container**
   (default target `swingbot_prod_replica`); never start another Postgres
   container or a per-task/per-worktree database for it. Parallel tasks and
-  worktrees share that one replica and just point `DATABASE_URL` at it; the
-  replicate script is idempotent, so a task re-syncs only per the rule above
-  and never drops it from under a sibling task mid-run (check nothing else is
-  mid-test first).
+  worktrees share that one replica and just point `DATABASE_URL` at it.
+  The script is **incremental by default**: on the same alembic revision it
+  inserts only the rows the replica lacks (`ON CONFLICT DO NOTHING`), dropping
+  nothing, so it is safe beside a sibling task; it rebuilds only when the
+  replica is absent, on another revision, or with `--full` (check nothing else
+  is mid-test first). One container, port 56789, credentials from `.env`
+  (`scripts/dev/swing_db.py`); any worktree or agent may read those values,
+  none may print, log or quote them.
 
 ## The v96 skills layer
 
@@ -270,7 +274,7 @@ read-only VM export `scripts/ops/export_book_rows.sh`); then
   drops a row that cites one.
 - A row's cell needs a Δ interval (cell minus its complement, week-cluster
   bootstrap) that excludes zero and a Benjamini–Hochberg **q ≤ 0.10** across
-  every cell tested. The merge drops any row whose Δ lower bound is ≤ 0;
+  every cell tested. On a schema-2 autopsy the merge keeps an `exploit` row only when the cell's Δ lower bound is above 0, and an `avoid` row only when its Δ upper bound is below 0. It drops a row citing a `fill`- or `outcome`-defined cell as not known at entry, and it keeps one row per rule on a two-value cut. A schema-1 autopsy keeps the old one-sided rule (Δ lower bound above 0) and is marked legacy on the slate;
   the q cut-off is the roles' filter, and `quant-researcher` checks it on the
   slate.
 - Every autopsy-derived row carries `exploratory: yes`: the live-book window
