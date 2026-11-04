@@ -18,7 +18,9 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   (fetching and caching: both OHLCV caches, the v162 Alpaca history store
   `history_store.py`, the training-data switch `training_data.py`, and since
   v190 the PIT store's integrity reader `pit_integrity.py`; instrument v3
-  selects that store through `training_data.select(name, store, until)`), `core/market/`
+  selects that store through `training_data.select(name, store, until)`;
+  v205 `fx_daily.py`, the admin's one FX rate per pair per Berlin day: the
+  rule `rate_before` and the `fx_daily_rates` memo), `core/market/`
   (everything computed from bars — indicators, levels, strategies, entry
   filters), `core/planning/` (plan construction, lifecycle and sizing —
   `plan_engine.py`, `plan_manager.py`, `plan_store.py`), `core/backtesting/`
