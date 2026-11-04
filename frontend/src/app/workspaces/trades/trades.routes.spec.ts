@@ -24,6 +24,8 @@ import { Preferences } from '../../api/models';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { SessionStore } from '../../stores/session.store';
 import { TradesStore } from '../../stores/trades.store';
+import { FakeLiveValues } from '../../testing/fake-live-values';
+import { LiveValuesStore } from '../../stores/live-values.store';
 import { ViewportService } from '../../ui/breakpoints';
 import { ALL_PER_PAGE, API_MAX_PER_PAGE } from '../../ui/table-prefs';
 import { queryFor, tradesRoutes } from './trades.routes';
@@ -75,6 +77,7 @@ describe('the Trades route resolver', () => {
         { provide: PreferencesStore, useValue: { resolve: () => of(undefined), values: () => prefs } },
         { provide: SessionStore, useValue: { expire: () => undefined } },
         { provide: ViewportService, useValue: { isNarrow: signal(narrow) } },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradesStore,
       ],
     });

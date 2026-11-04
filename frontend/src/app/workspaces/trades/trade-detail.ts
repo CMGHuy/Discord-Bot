@@ -17,6 +17,7 @@ import { RouteTitleService } from '../../routing/route-title.service';
 import { detailCrumb } from '../../shell/nav';
 import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
+import { liveTickers } from '../../stores/trades.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Chip, ChipTone, QualityChip } from '../../ui/chip';
@@ -42,6 +43,7 @@ import { hasLevelSources, LevelSourcesCard } from './level-sources-card';
 import { StrategyRecordCard } from './strategy-record-card';
 import { CardAreas, OVERVIEW_AREAS, WhyCard, whyAreas } from './why-areas';
 import { OutcomeStrip } from './outcome-strip';
+import { MarketRefresh } from '../../ui/market-refresh';
 import { outcomeTiles } from './outcome-tiles';
 import { sideLabel, statusGroup, StatusGroup } from './trade-figures';
 
@@ -138,6 +140,7 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
     WhyPanel,
     PlanChart,
     OutcomeStrip,
+    MarketRefresh,
     PlanCard,
     PositionCard,
     OutcomeCard,
@@ -156,6 +159,10 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
            any delete lives here). None until the trade has loaded. -->
       <div page-actions class="page-actions">
         @if (store.trade(); as trade) {
+          <!-- v201: only while the price still moves (not on a closed trade). -->
+          @if (refreshSymbols().length > 0) {
+            <sb-market-refresh [symbols]="refreshSymbols()" />
+          }
           @for (kind of actionsFor(trade.status); track kind) {
             <button
               sb-button
@@ -614,6 +621,11 @@ export class TradeDetail {
   private readonly router = inject(Router);
   private readonly api = inject(ApiClient);
   protected readonly store = inject(TradeDetailStore);
+  /** v201: the ticker to refresh, empty once the trade is terminal. */
+  protected readonly refreshSymbols = computed(() => {
+    const trade = this.store.trade();
+    return trade ? liveTickers([trade]) : [];
+  });
   protected readonly chart = inject(ChartStore);
   private readonly titles = inject(RouteTitleService);
 

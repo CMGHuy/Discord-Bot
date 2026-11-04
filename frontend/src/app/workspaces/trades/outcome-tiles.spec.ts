@@ -14,14 +14,24 @@ function context(status = 'CLOSED', overrides: Partial<TradeRow> = {}): StripCon
   };
 }
 
-describe('outcomeTiles price age (v171 D2)', () => {
-  it('the open Price tile carries the price age, other tiles none', () => {
-    const tiles = outcomeTiles(context('ACTIVE', { price_age_s: 42 }));
-    expect(tiles[0].ageS).toBe(42);
-    expect(tiles[1].ageS).toBeNull();
+describe('outcomeTiles price age (v201)', () => {
+  const A = '2026-10-29T14:00:00Z';
+  it('the open price and unrealised tiles carry the price as-of, spinner and error', () => {
+    const tiles = outcomeTiles(context('ACTIVE', { price_as_of: A, price_refreshing: true }));
+    for (const tile of [tiles[0], tiles[1]]) {
+      expect(tile.asOf).toBe(A);
+      expect(tile.refreshing).toBe(true);
+      expect(tile.error).toBeNull();
+    }
+    expect(tiles[0].id).toBe('price');
+    expect(tiles[1].id).toBe('unrealised');
   });
-  it('an absent age reads null', () => {
-    expect(outcomeTiles(context('ACTIVE'))[0].ageS).toBeNull();
+  it('the other open tiles carry no price age', () => {
+    const tiles = outcomeTiles(context('ACTIVE', { price_as_of: A }));
+    expect(tiles.slice(2).every((t) => t.asOf === null && !t.refreshing && t.error === null)).toBe(true);
+  });
+  it('an absent as-of reads null', () => {
+    expect(outcomeTiles(context('ACTIVE'))[0].asOf).toBeNull();
   });
 });
 
