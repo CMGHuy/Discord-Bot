@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-04 11:42:23 UTC",
+  "generated_at": "2026-11-04 12:30:02 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.37.4",
-    "bot": "2.15.11"
+    "ui": "1.37.5",
+    "bot": "2.16.0"
   },
   "releases": [
     {
@@ -2293,6 +2293,20 @@
         "bot": "2.15.11"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-04",
+      "last_seen": "2026-11-04",
+      "commit": "10fd0b43",
+      "subject": "release(ui,bot): ui 1.37.5 / bot 2.16.0 -- shared market-data fetch layer (v171)",
+      "versions": {
+        "ui": "1.37.5",
+        "bot": "2.16.0"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }
