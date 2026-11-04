@@ -357,3 +357,12 @@ for it by name, since each case is a billed child `claude` run; a skill
 `description:` edit is checked against its trigger table and
 `tests/hooks/test_role_skills.py` (free). Subagents
 on the subscription (`Agent`, `/panel`) are not extra cost.
+
+## Permissions follow every worktree
+
+`.claude/settings.local.json` is git-ignored, so a new worktree used to start
+without the allow rules granted on the main checkout. The `SessionStart` hook
+`.claude/hooks/sync-local-settings.py` copies it when missing and otherwise adds
+the rules main has and the worktree lacks (never removes a worktree-only rule);
+`.worktreeinclude` covers worktrees Claude Code creates itself. Claude-only, so
+it has no Codex mirror (like the usage watcher).
