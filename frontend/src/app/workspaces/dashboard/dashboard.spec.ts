@@ -33,6 +33,8 @@ import { fxMissingText } from '../analytics/scope-bar';
 import { tradeDrawerFields } from './trade-drawer';
 import { partialOpenTitle } from '../../ui/status-cell';
 import { DashboardStore } from '../../stores/dashboard.store';
+import { LiveValuesStore } from '../../stores/live-values.store';
+import { FakeLiveValues } from '../../testing/fake-live-values';
 import { ToastService } from '../../shell/toast.service';
 import { EquityCandlesStore } from '../../stores/equity-candles.store';
 import { equityCandlesStoreStub } from '../../testing/equity-candles-store.stub';
@@ -121,6 +123,7 @@ function seed(): { fixture: ComponentFixture<Dashboard>; backend: HttpTestingCon
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
       DashboardStore,
+      { provide: LiveValuesStore, useClass: FakeLiveValues },
       { provide: ConnectionStore, useValue: connectionStub },
       { provide: PreferencesStore, useValue: preferencesStub },
       { provide: EquityCandlesStore, useValue: equityCandlesStoreStub(CANDLES) },
@@ -690,8 +693,8 @@ describe('DASHBOARD_COLUMNS', () => {
   });
 });
 
-describe('Dashboard v171 price age hint', () => {
-  /** Open rows carry a live pnl_pct from the server, so the hint has to sit
+describe('Dashboard price age (v201)', () => {
+  /** Open rows carry a live pnl_pct from the server, so the age has to sit
    *  on that branch of the P&L cell, not only on the projected one a
    *  PENDING row falls through to (found by the V171-33 Playwright pass). */
   async function withActiveRow(row: Partial<TradeRow>) {
@@ -704,16 +707,27 @@ describe('Dashboard v171 price age hint', () => {
     backend.expectOne('/api/v1/dashboard?mode=today').flush(payload({ lifecycle: { ACTIVE: 1 } as never }));
     await fixture.whenStable();
     fixture.detectChanges();
-    return (fixture.nativeElement as HTMLElement).querySelectorAll('.age-hint');
+    return fixture.nativeElement as HTMLElement;
   }
 
-  it('shows the age beside a live P&L older than the dashboard window', async () => {
-    const hints = await withActiveRow({ price_age_s: 75 });
-    expect([...hints].map((h) => h.textContent?.trim())).toEqual(['1 min ago']);
+  it('the open P&L cell renders through sb-market-value with its age', async () => {
+    const asOf = new Date(Date.now() - 75_000).toISOString();
+    const el = await withActiveRow({ price_as_of: asOf });
+    const cell = el.querySelector('sb-positions-table tbody sb-market-value');
+    expect(cell).not.toBeNull();
+    expect(cell!.querySelector('.mv-age')?.textContent?.trim()).toBe('1 min ago');
+    expect(el.querySelector('sb-age-hint')).toBeNull();
   });
 
-  it('stays silent inside the window', async () => {
-    expect((await withActiveRow({ price_age_s: 5 })).length).toBe(0);
+  it('a projected (pending) P&L cell also renders through sb-market-value', async () => {
+    const asOf = new Date(Date.now() - 75_000).toISOString();
+    const el = await withActiveRow({ pnl_pct: null, price_as_of: asOf, current_price: 101 });
+    expect(el.querySelector('sb-positions-table tbody .pnl-plan sb-market-value')).not.toBeNull();
+  });
+
+  it('the open-positions panel has a Refresh control for the open tickers', async () => {
+    const el = await withActiveRow({});
+    expect(el.querySelector('.positions-panel sb-market-refresh')).not.toBeNull();
   });
 });
 
@@ -761,6 +775,7 @@ async function routed(url: string) {
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
       DashboardStore,
+      { provide: LiveValuesStore, useClass: FakeLiveValues },
       { provide: ConnectionStore, useValue: connectionStub },
       { provide: PreferencesStore, useValue: preferencesStub },
       { provide: EquityCandlesStore, useValue: equityCandlesStoreStub(CANDLES) },
