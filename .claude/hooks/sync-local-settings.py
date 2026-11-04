@@ -3,7 +3,8 @@
 `.claude/settings.local.json` is git-ignored, so a fresh worktree starts with
 none of the allow rules the partner granted on the main checkout. This copies
 the file when missing and otherwise adds any allow/deny/ask rule main has and
-the worktree lacks (never removes a worktree-only rule).
+the worktree lacks (never removes a worktree-only allow rule); deny/ask
+mirror main exactly, so lifting a restriction on main lifts it everywhere.
 Contract: never fails a session start; always exits 0.
 """
 import json
@@ -27,7 +28,11 @@ def _main_checkout():
 def _merge(src: dict, dst: dict) -> bool:
     changed = False
     sperm, dperm = src.get("permissions", {}), dst.setdefault("permissions", {})
-    for key in LISTS:
+    for key in ("deny", "ask"):  # restrictions mirror main, so a lifted one lifts here too
+        if dperm.get(key, []) != sperm.get(key, []) and (key in dperm or key in sperm):
+            dperm[key] = list(sperm.get(key, []))
+            changed = True
+    for key in ("allow",):
         have = dperm.setdefault(key, []) if sperm.get(key) else dperm.get(key, [])
         for rule in sperm.get(key, []):
             if rule not in have:

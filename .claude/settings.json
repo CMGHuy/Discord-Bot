@@ -58,7 +58,6 @@
       "Skill(superpowers:brainstorming)"
     ],
     "deny": [
-      "Read(./.env)",
       "Read(./.env.bak)"
     ]
   },
