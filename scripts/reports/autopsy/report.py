@@ -24,6 +24,8 @@ NOTES = (
     f"bar cuts read only --bars-dir; anchor lag is at most {bars.MAX_ANCHOR_LAG_DAYS} "
     f"calendar days (weekends/holidays included); its close must lie within "
     f"{bars.SPLIT_GUARD:.0%} of its planned entry",
+    "alert hour comes only from issued_at (the live stamp or the v200 Discord backfill); "
+    "a plan without one is unknown, never a bar-date or fill hour",
     "alert hour has hour granularity: 09:00-09:29 ET counts as the regular session",
     "every row drawn from this report is exploratory: the window overlaps the 2026 holdout "
     "(spec v161 boundary 5)",
@@ -84,6 +86,14 @@ def _sector_snapshot(rows: list) -> dict:
     return {ticker: sector_of.get(ticker) for ticker in tickers}
 
 
+def _with_hour_coverage(items: list[dict], coverage: dict) -> list[dict]:
+    """Stamp the alert-hour coverage onto every alert_hour cell or tally."""
+    for item in items:
+        if item["cut"].startswith("alert_hour"):
+            item["hour_coverage"] = dict(coverage)
+    return items
+
+
 def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resamples: int,
                  seed: int, balance: float, frictions: dict | None = None,
                  input_fingerprints: dict | None = None, invocation: dict | None = None) -> dict:
@@ -99,9 +109,12 @@ def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resam
     header = _header(trades, covered_n, tested, n_resamples=n_resamples, seed=seed, balance=balance)
     header.update(frictions=dict(frictions if frictions is not None else friction_settings()),
                   input_fingerprints=inputs, invocation=invocation, sector_map=sector_of)
+    coverage = {"trades": exits.hour_coverage(trades),
+                "plans": exits.hour_coverage(exits.issued_rows(rows))}
+    header["alert_hour_coverage"] = coverage
     return {"header": header,
-            "cells": [c.to_json() for c in cells],
-            "tallies": [t.to_json() for t in tallies],
+            "cells": _with_hour_coverage([c.to_json() for c in cells], coverage["trades"]),
+            "tallies": _with_hour_coverage([t.to_json() for t in tallies], coverage["plans"]),
             "giveback": exits.giveback_summary(trades)}
 
 
@@ -134,6 +147,11 @@ def _provenance_lines(h: dict) -> list[str]:
             f"- Invocation: {command}"]
 
 
+def _coverage_line(label: str, cov: dict) -> str:
+    return (f"- alert-hour coverage ({label}): live {cov['live']}, "
+            f"discord {cov['discord']}, unknown {cov['unknown']}")
+
+
 def _header_lines(h: dict) -> list[str]:
     w0, w1 = h["window"]
     lines = [f"# Book autopsy, {w0} to {w1}", "",
@@ -144,6 +162,8 @@ def _header_lines(h: dict) -> list[str]:
              f"- Net of frictions: {h['net_of_frictions']}",
              f"- Cells tested: {h['cells_tested']} (one BH pass over all of them); "
              f"bootstrap resamples {h['resamples']}, seed {h['seed']}"]
+    if h.get("alert_hour_coverage"):
+        lines.append(_coverage_line("trades", h["alert_hour_coverage"]["trades"]))
     return lines + _provenance_lines(h) + [f"- Note: {note}" for note in h["notes"]] + [""]
 
 
@@ -205,10 +225,13 @@ def _tally_extra(t: dict) -> str:
     return " (" + ", ".join(f"{k} {v}" for k, v in t["extra"].items()) + ")"
 
 
-def _tally_lines(tallies: list) -> list[str]:
+def _tally_lines(tallies: list, coverage: dict | None = None) -> list[str]:
     rejections = [t for t in tallies if t["cut"] == "rejection_reason"]
     kept = [t for t in tallies if t["cut"] != "rejection_reason"] + rejections[:REJECTION_LINES]
-    lines = ["## Tallies", ""] + [f"- {t['id']}: {t['count']}{_tally_extra(t)}" for t in kept]
+    lines = ["## Tallies", ""]
+    if coverage:
+        lines.append(_coverage_line("plans", coverage))
+    lines += [f"- {t['id']}: {t['count']}{_tally_extra(t)}" for t in kept]
     if len(rejections) > REJECTION_LINES:
         lines.append(f"- {len(rejections) - REJECTION_LINES} more rejection reasons in the JSON")
     return lines + [""]
@@ -218,6 +241,7 @@ def render_markdown(report: dict) -> str:
     """Header, the non-thin cell table cut to the line budget, thin counts, give-back, tallies."""
     head = _header_lines(report["header"])
     tail = (_thin_lines(report["cells"]) + _giveback_lines(report["giveback"])
-            + _tally_lines(report["tallies"]))
+            + _tally_lines(report["tallies"],
+                           report["header"].get("alert_hour_coverage", {}).get("plans")))
     body = _cell_lines(report["cells"], MD_MAX_LINES - len(head) - len(tail))
     return "\n".join((head + body + tail)[:MD_MAX_LINES]) + "\n"

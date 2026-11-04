@@ -139,3 +139,16 @@ def test_alert_supply_sums_and_sorts_sanitized_rejections(supply_tallies):
         "rejection_reason=risk_cap", "rejection_reason=a,b"]
     assert by["rejection_reason=risk_cap"].count == 5
     assert by["rejection_reason=risk_cap"].extra == {"days": 2}
+
+
+def test_hour_coverage_counts_every_source_and_keeps_zeros():
+    rows_ = [_row(hour_source="live"), _row(hour_source="live"),
+             _row(hour_source="discord"), _row(hour_source="unknown"), _row()]
+    assert exits.hour_coverage(rows_) == {"live": 2, "discord": 1, "unknown": 2}
+    assert exits.hour_coverage([]) == {"live": 0, "discord": 0, "unknown": 0}
+    assert tuple(exits.HOUR_SOURCES) == ("live", "discord", "unknown")
+
+
+def test_issued_rows_are_the_rows_with_a_plan_date():
+    with_date = _row(row_kind="plan", plan_date="2026-03-02")
+    assert exits.issued_rows([with_date, _row(row_kind="trade", plan_date=None)]) == [with_date]

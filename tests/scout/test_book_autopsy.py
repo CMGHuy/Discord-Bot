@@ -261,3 +261,37 @@ def test_sector_snapshot_records_exact_mapping_used_once_for_the_cuts(
     md = report.render_markdown(data)
     assert f"Sector map snapshot SHA-256: {digest}" in md
     assert len(md.splitlines()) <= report.MD_MAX_LINES
+
+
+def test_alert_hour_coverage_is_reported_by_source(tmp_path):
+    out = _build(tmp_path)
+    cov = out["header"]["alert_hour_coverage"]
+    assert cov == {"trades": {"live": 48, "discord": 0, "unknown": 0},
+                   "plans": {"live": 48, "discord": 0, "unknown": 1}}
+    assert set(out) == {"header", "cells", "tallies", "giveback"}
+    hour_cells = [c for c in out["cells"] if c["cut"] == "alert_hour"]
+    assert hour_cells and all(c["hour_coverage"] == cov["trades"] for c in hour_cells)
+    assert all("hour_coverage" not in c for c in out["cells"] if not c["cut"].startswith("alert_hour"))
+    sessions = [t for t in out["tallies"] if t["cut"] == "alert_hour_session"]
+    assert sessions and all(t["hour_coverage"] == cov["plans"] for t in sessions)
+    assert all("hour_coverage" not in t for t in out["tallies"] if not t["cut"].startswith("alert_hour"))
+
+
+def test_alert_hour_coverage_lines_sit_above_the_cells_and_the_tallies(tmp_path):
+    md = report.render_markdown(_build(tmp_path))
+    trades_line = "- alert-hour coverage (trades): live 48, discord 0, unknown 0"
+    plans_line = "- alert-hour coverage (plans): live 48, discord 0, unknown 1"
+    assert trades_line in md and plans_line in md
+    assert md.index(trades_line) < md.index("## Cells")
+    assert md.index("## Tallies") < md.index(plans_line)
+    assert len(md.splitlines()) <= report.MD_MAX_LINES
+
+
+def test_a_report_without_coverage_still_renders():
+    """An autopsy JSON written before v200 has no alert_hour_coverage key."""
+    built = {"header": {"window": [None, None], "n": 0, "bar_covered_n": 0, "pooled_net_expr": None,
+                        "pooled_win_rate": None, "net_of_frictions": "modelled", "cells_tested": 0,
+                        "resamples": 200, "seed": 42, "notes": []},
+             "cells": [], "tallies": [], "giveback": {"n": 0, "mean": None, "median": None}}
+    md = report.render_markdown(built)
+    assert "alert-hour coverage" not in md
