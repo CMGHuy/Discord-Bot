@@ -242,7 +242,8 @@ def _load_sources(loaders: Mapping[str, Callable[[], Any]]) -> dict:
         try:
             sources[name] = load()
         except Exception as exc:
-            swallowed(log, f"ops.live.events.{name}", exc, level=logging.WARNING)
+            swallowed(log, "ops.live.load_sources", exc, "live events source %s failed", name,
+                      level=logging.WARNING)
     return sources
 
 
@@ -253,7 +254,7 @@ def _build(kind: EventKind, sources: dict) -> list[dict] | None:
     try:
         return kind.build(sources)
     except Exception as exc:
-        swallowed(log, f"ops.live.events.{kind.kind}", exc, level=logging.WARNING)
+        swallowed(log, "ops.live.build", exc, "live events kind %s failed", kind.kind, level=logging.WARNING)
         return None
 
 

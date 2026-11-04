@@ -54,7 +54,7 @@ def _guarded(name: str, read, empty: dict, now: datetime) -> dict:
     try:
         return _section(as_of, read())
     except Exception as exc:
-        swallowed(log, f"ops.live.{name}", exc, level=logging.WARNING)
+        swallowed(log, "ops.live.guarded", exc, "live section %s failed", name, level=logging.WARNING)
         return _section(as_of, empty, f"{name}_unavailable")
 
 
