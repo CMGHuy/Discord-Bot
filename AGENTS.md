@@ -90,7 +90,7 @@ default changes, update `.env.example` too. Never expose or read `.env` or
 `.env.bak` unless the user expressly authorizes it.
 
 Entry points: `python bot.py` and `python admin_ui.py` (a Flask API plus an
-Angular SPA from `frontend/`). One Docker image builds the frontend; bot/admin
+Angular SPA from `frontend/`). One Docker image builds the frontend; bot/admin/refresher
 run as separate containers. Configuration is schema-driven through
 `swingbot/config.py` and hot-reloaded by SIGHUP.
 
