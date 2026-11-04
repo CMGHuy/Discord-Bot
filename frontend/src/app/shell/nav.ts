@@ -195,11 +195,27 @@ export function isSectionUrl(url: string): boolean {
  *  landing page reads as Home on a 64 px tab (v202 §3). */
 const PHONE_TAB_LABELS: Readonly<Record<string, string>> = { '/dashboard': 'Home' };
 
-/** The phone bottom bar's four page tabs, in order; PhoneTabBar adds More
- *  as the fifth. Paths and icons are the destinations' own. */
-export const PHONE_TABS: readonly NavEntry[] = ['/dashboard', '/watchlist', '/trades', '/risk']
-  .map((path) => navEntryFor(path)!.entry)
+/** The phone bottom bar's four tabs, in order; PhoneTabBar adds More as the
+ *  fifth. Three are destinations (paths and icons their own); Calendar is the
+ *  one section promoted to a tab, so the P&L view is a single tap away. Risk
+ *  lives in the More sheet. */
+const PHONE_TAB_ENTRIES: readonly NavEntry[] = [
+  ...['/dashboard', '/watchlist'].map((path) => navEntryFor(path)!.entry),
+  { path: '/trades/calendar', label: 'Calendar', icon: 'calendar' },
+  navEntryFor('/trades')!.entry,
+];
+
+export const PHONE_TABS: readonly NavEntry[] = PHONE_TAB_ENTRIES
   .map((entry) => ({ ...entry, label: PHONE_TAB_LABELS[entry.path] ?? entry.label }));
+
+/** The phone tab a URL lights: its section's own tab when the section is one
+ *  (Calendar), else its destination's; null off the nav. */
+export function phoneTabPathFor(url: string): string | null {
+  const found = navEntryFor(url);
+  if (!found) return null;
+  const sectionTab = PHONE_TABS.find((tab) => tab.path === found.section?.path);
+  return sectionTab?.path ?? found.entry.path;
+}
 
 /** `Destination / Section` ('Trades / Calendar'), the destination alone on a
  *  single page ('Risk'), plus the detail segment a detail route supplies

@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { ActivatedRouteSnapshot, Routes } from '@angular/router';
 
 import { RefreshPredicate, routeData } from '../../routing/route-metadata';
-import { resolveRoute } from '../../routing/route-resolver';
+import { startRoute } from '../../routing/route-resolver';
 import { SystemStore, SystemTab, systemTabFrom } from '../../stores/system.store';
 
 const systemTab = (route: ActivatedRouteSnapshot): SystemTab =>
@@ -23,6 +23,6 @@ export const refreshOnSystem: RefreshPredicate = (event, route) => {
 export const systemRoutes: Routes = [{
   path: '', providers: [SystemStore], runGuardsAndResolvers: 'always',
   data: routeData('System', refreshOnSystem),
-  resolve: { ready: resolveRoute((route) => inject(SystemStore).resolveTab(systemTab(route))) },
+  resolve: { ready: startRoute((route) => inject(SystemStore).resolveTab(systemTab(route))) },
   loadComponent: () => import('./system').then((m) => m.System),
 }];

@@ -19,6 +19,8 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
+import { FakeLiveValues } from '../testing/fake-live-values';
+import { LiveValuesStore } from './live-values.store';
 import { TradeDetailStore } from './trade-detail.store';
 
 /* NG46 — the Notes and Strategy tabs' half of the detail store.
@@ -98,6 +100,7 @@ describe('TradeDetailStore — notes and strategy', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
       ],
     });
@@ -127,6 +130,22 @@ describe('TradeDetailStore — notes and strategy', () => {
       .expectOne(`/api/v1/trades/${ID}/journal`)
       .flush({ journaled: journal !== null, entry: journal });
   };
+
+  it('trade takes a newer live quote in place', () => {
+    open(null);
+    expect(store.trade()?.current_price).toBeUndefined();
+
+    (TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues)
+      .set('AAPL', { price: 412, as_of: '2026-10-29T14:01:00Z', refreshing: true });
+
+    expect(store.trade()?.current_price).toBe(412);
+    expect(store.trade()?.price_as_of).toBe('2026-10-29T14:01:00Z');
+    expect(store.trade()?.price_refreshing).toBe(true);
+  });
+
+  it('trade is null before the first response', () => {
+    expect(store.trade()).toBeNull();
+  });
 
   it('shows the stored note before anything is typed', () => {
     open('bought the retest');
@@ -344,6 +363,7 @@ describe('TradeDetailStore — original risk and plan figures', () => {
         provideZonelessChangeDetection(),
         provideHttpClient(),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
       ],
     });

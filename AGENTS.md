@@ -89,8 +89,8 @@ code fix if the incident exposed a real defect. When a production configuration
 default changes, update `.env.example` too. Never expose or read `.env` or
 `.env.bak` unless the user expressly authorizes it.
 
-Entry points: `python bot.py` and `python admin_ui.py` (a Flask API plus an
-Angular SPA from `frontend/`). One Docker image builds the frontend; bot/admin
+Entry points: `python bot.py` and `python admin_ui.py` (Flask API plus
+Angular SPA from `frontend/`). One image builds the frontend; bot/admin/refresher
 run as separate containers. Configuration is schema-driven through
 `swingbot/config.py` and hot-reloaded by SIGHUP.
 
@@ -280,16 +280,17 @@ skills or agents: the claude.ai-synced knowledge-work plugins (`small-business`,
 the marketplace `skill-creator`. Codex has no counterpart; never name their skills
 or agents as a next step.
 
-Drive any browser, including production at bomeo-capital.com, with Playwright
-(`node frontend/scripts/browse.mjs shots|api ...`, persistent profile so one
-sign-in lasts; paths without a leading slash). Log in to bomeo-capital.com or a
+Drive any browser, production bomeo-capital.com included, with Playwright
+(`node frontend/scripts/browse.mjs shots|api ...`, persistent profile; paths
+without a leading slash). Log in to bomeo-capital.com or a
 local testing instance with `.env`'s `ADMIN_USERNAME`/`ADMIN_PASSWORD`, loaded
-inside the script and never printed, echoed, passed as arguments or written
-elsewhere; build any local test instance from those same `.env` values, never
-the `admin`/`admin` default. Reading `.env` (and scripts loading it) is
-partner-allowed; never print, echo, log or quote its values. Before database
-tests, run `replicate-prod-db` and point `DATABASE_URL` at the replica in the
-shared `swing-db` container; never make a per-task container.
+inside the script and never printed, echoed or passed as arguments; build any
+local test instance from those same `.env` values, never the `admin`/`admin`
+default. Reading `.env` (and scripts loading it) is partner-allowed; never
+print, echo or quote its values. Before database
+tests, run `replicate-prod-db` (incremental) and point `DATABASE_URL` at
+the replica in the one shared `swing-db` container (port 56789, `.env`
+credentials); never make a per-task container.
 
 ## Efficient repository navigation
 

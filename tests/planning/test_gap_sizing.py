@@ -225,7 +225,8 @@ def test_attach_plan_v2_stamps_a_short_outside_entry_context(monkeypatch):
 def test_attach_plan_v2_leaves_a_long_unstamped(monkeypatch):
     plan = _attach(monkeypatch, _plan("bullish"), _signed_gaps())
     assert plan.gap_sizing is None
-    assert list(plan_to_dict(plan)) == PRE_V183_PLAN_KEYS
+    # v200: the live wall-clock stamp adds its source, omitted while None.
+    assert list(plan_to_dict(plan)) == PRE_V183_PLAN_KEYS + ["issued_at_source"]
 
 
 def test_strategy_plan_is_stamped_from_its_completed_frame(monkeypatch):

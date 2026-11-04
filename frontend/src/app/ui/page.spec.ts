@@ -144,6 +144,12 @@ describe('sb-page (v195 Phase 4)', () => {
     expect(pageSource()).toContain('.slot:empty { display: none; }');
   });
 
+  it('opts into two secondary columns on a landscape tablet (640px+) only when asked', () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/ui/page.ts'), 'utf8');
+    expect(source).toContain("'[class.secondary-tablet]': 'secondaryFromTablet()'");
+    expect(source).toMatch(/@media \(min-width: 640px\) and \(orientation: landscape\) \{\s*:host\(\.secondary-tablet\) \.secondary \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
+  });
+
   it('lays the secondary grid out in two columns from lg (1440px) and one below', () => {
     const source = pageSource();
     expect(source).toMatch(/\.secondary \{[^}]*grid-template-columns: minmax\(0, 1fr\);/);

@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { ActivatedRouteSnapshot, Routes } from '@angular/router';
 
 import { RefreshPredicate, routeData } from '../../routing/route-metadata';
-import { resolveRoute } from '../../routing/route-resolver';
+import { startRoute } from '../../routing/route-resolver';
 import { AnalyticsStore } from '../../stores/analytics.store';
 import { scopeFromParams, scopePatchFromParams } from './scope-url';
 
@@ -25,7 +25,7 @@ export const analyticsRoutes: Routes = [{
   path: '', providers: [AnalyticsStore], runGuardsAndResolvers: 'always',
   data: routeData('Analytics', refreshOnAnalytics),
   resolve: {
-    ready: resolveRoute((route) => {
+    ready: startRoute((route) => {
       const store = inject(AnalyticsStore);
       const { tab, scope, unit } = analyticsState(route);
       store.hydrate(scope, unit);          // sets state without firing a request

@@ -29,9 +29,12 @@ import {
   writeTableColumns,
   writeTableDensity,
 } from '../../ui/table-prefs';
-import { TradesStore, toSortParam } from '../../stores/trades.store';
+import { TradesStore, liveTickers, toSortParam } from '../../stores/trades.store';
 import { Button } from '../../ui/button';
 import { Page } from '../../ui/page';
+import { IncompleteNote } from '../../ui/incomplete-note';
+import { MarketRefresh } from '../../ui/market-refresh';
+import { MarketValue } from '../../ui/market-value';
 import { QualityChip } from '../../ui/chip';
 import { ColumnPickerComponent } from '../../ui/column-picker';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
@@ -176,6 +179,9 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
     QualityChip,
     RowLink,
     Icon,
+    MarketValue,
+    MarketRefresh,
+    IncompleteNote,
   ],
   template: `
     <sb-page>
@@ -184,6 +190,13 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
            danger-quiet and open the bulk confirm below; the result and the
            error read beside the buttons that sent them. -->
       <div page-actions class="page-actions">
+        <!-- v201: how fresh the prices on screen are, what a total left out,
+             and a Refresh for the live rows. -->
+        <span class="prices-meta">
+          <sb-market-value [asOf]="store.meta()?.as_of ?? null" [refreshing]="store.meta()?.refreshing ?? false" [error]="store.meta()?.error ?? null">Prices</sb-market-value>
+          <sb-incomplete-note [missing]="store.meta()?.missing_count ?? 0" />
+          <sb-market-refresh [symbols]="liveSymbols()" />
+        </span>
         @if (store.clearResult(); as message) {
           <!-- The count, not just "done": "cleared 0" and "cleared 40" are
                different answers and want different reactions. -->
@@ -433,6 +446,15 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
 
       <!-- cells ---------------------------------------------------------- -->
 
+      <!-- v201: price, age and refresh spinner through sb-market-value. -->
+      <ng-template #nowCell let-row>
+        @if (row.current_price !== null && row.current_price !== undefined) {
+          <sb-market-value [asOf]="row.price_as_of ?? null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null">{{ fmtNum(row.current_price) }}</sb-market-value>
+        } @else {
+          <sb-market-value [asOf]="null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null" />
+        }
+      </ng-template>
+
       <ng-template #numCell let-row>
         <sb-row-link [link]="['/trades', row.id]">
           {{ shortId(row) }}
@@ -619,6 +641,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
        their own row above the buttons. */
     /* contents: sb-page's actions slot is already the right-aligned wrapping row. */
     .page-actions { display: contents; }
+    .prices-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-6); }
     .page-actions p { flex: 1 0 100%; margin: 0; text-align: right; }
     .export-wrap { display: inline-flex; align-items: center; gap: var(--space-4); }
 
@@ -711,6 +734,8 @@ export class Trades {
   private readonly preferences = inject(PreferencesStore);
   private readonly viewport = inject(ViewportService);
   protected readonly store = inject(TradesStore);
+  /** v201: tickers of the rows whose price still moves, for Refresh. */
+  protected readonly liveSymbols = computed(() => liveTickers(this.store.rows()));
   /** For the currency symbol alone, same as the Dashboard's own use of it. */
   protected readonly connection = inject(ConnectionStore);
 
@@ -899,6 +924,7 @@ export class Trades {
   private readonly directionCell = viewChild.required<TemplateRef<unknown>>('directionCell');
   private readonly planCell = viewChild.required<TemplateRef<unknown>>('planCell');
   private readonly pnlCell = viewChild.required<TemplateRef<unknown>>('pnlCell');
+  private readonly nowCell = viewChild.required<TemplateRef<unknown>>('nowCell');
   private readonly rMultipleCell = viewChild.required<TemplateRef<unknown>>('rMultipleCell');
   private readonly tierCell = viewChild.required<TemplateRef<unknown>>('tierCell');
   private readonly confidenceCell =
@@ -917,6 +943,7 @@ export class Trades {
       status: this.statusCell(),
       direction: this.directionCell(),
       plan: this.planCell(),
+      now: this.nowCell(),
       pnl_pct: this.pnlCell(),
       r_multiple: this.rMultipleCell(),
       tier: this.tierCell(),

@@ -32,25 +32,34 @@ describe('PhoneTabBar (v195 Phase 3)', () => {
   const current = (el: HTMLElement) =>
     [...el.querySelectorAll('a.tab[aria-current="page"]')].map((a) => a.querySelector('.tab-label')!.textContent!.trim());
 
-  it('holds Home, Watchlist, Trades, Risk and More, in that order', async () => {
+  it('holds Home, Watchlist, Calendar, Trades and More, in that order', async () => {
     const { el } = await mount('/dashboard');
     expect(el.querySelector('nav')!.getAttribute('aria-label')).toBe('Main pages');
     expect([...el.querySelectorAll('.tab .tab-label')].map((n) => n.textContent!.trim()))
-      .toEqual(['Home', 'Watchlist', 'Trades', 'Risk', 'More']);
+      .toEqual(['Home', 'Watchlist', 'Calendar', 'Trades', 'More']);
     expect([...el.querySelectorAll('a.tab')].map((a) => a.getAttribute('href')))
       .toEqual(PHONE_TABS.map((tab) => tab.path));
   });
 
   it('marks the current tab, and the list tab for its detail pages', async () => {
-    expect(current((await mount('/risk')).el)).toEqual(['Risk']);
+    expect(current((await mount('/calendar')).el)).toEqual(['Calendar']);
     expect(current((await mount('/plans/7')).el)).toEqual(['Trades']);
     expect(current((await mount('/watchlist/NVDA')).el)).toEqual(['Watchlist']);
   });
 
-  it('lights Trades on each of its sections, old paths included', async () => {
-    for (const url of ['/trades/calendar', '/trades/cancels', '/trades/calendar/2026-10-01', '/calendar/2026-10-01']) {
+  it('lights Calendar on its section and Trades on the rest, old paths included', async () => {
+    for (const url of ['/trades/calendar', '/trades/calendar/2026-10-01', '/calendar/2026-10-01']) {
+      expect(current((await mount(url)).el), url).toEqual(['Calendar']);
+    }
+    for (const url of ['/trades', '/trades/cancels', '/trades/812', '/cancels']) {
       expect(current((await mount(url)).el), url).toEqual(['Trades']);
     }
+  });
+
+  it('lights More on Risk, which the bar no longer holds', async () => {
+    const { el } = await mount('/risk');
+    expect(current(el)).toEqual([]);
+    expect(el.querySelector('button.tab.more')!.classList).toContain('active');
   });
 
   it('lights More on a System section', async () => {

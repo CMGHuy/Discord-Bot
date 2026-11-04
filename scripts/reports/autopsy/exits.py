@@ -24,6 +24,7 @@ ALERTS_PER_DAY_TOP = "7_plus"
 REGULAR_OPEN_HOUR = 9         # hour granularity: 09:00-09:29 counts as regular
 REGULAR_CLOSE_HOUR = 16
 SESSIONS = ("premarket", "regular", "after_close", "unknown")
+HOUR_SOURCES = ("live", "discord", "unknown")
 _NEAR_TP = {"auto (near-tp stall)": "near_tp_stall", "auto (near-tp timeout)": "near_tp_timeout"}
 
 
@@ -71,6 +72,10 @@ def exit_cuts() -> tuple:
     """The four exit cuts, in ledger order: (name, key) pairs for ``cells.cut_cells``."""
     return (("exit_reason", _exit_reason), ("near_tp_close", _near_tp_close),
             ("gap_through_stop", _gap_through_stop), ("holding_bucket", _holding_bucket))
+
+
+EXIT_DEFINED_AT = {"exit_reason": "outcome", "near_tp_close": "outcome",
+                   "gap_through_stop": "outcome", "holding_bucket": "outcome"}
 
 
 def _overshoots(members: list) -> list[float]:
@@ -148,7 +153,18 @@ def _rejection_tallies(rejections: list) -> list[Tally]:
                   count=counts[r], extra={"days": len(days[r])}) for r in ordered]
 
 
+def issued_rows(rows: list) -> list:
+    """The rows with a plan date: the population the alert-supply tallies count."""
+    return [r for r in rows if r.plan_date]
+
+
+def hour_coverage(rows: list) -> dict[str, int]:
+    """Rows per alert-hour source; all three keys, zeros kept, an odd source counts as unknown."""
+    counts = Counter(r.hour_source if r.hour_source in HOUR_SOURCES else "unknown" for r in rows)
+    return {source: counts[source] for source in HOUR_SOURCES}
+
+
 def alert_supply_tallies(rows: list, rejections: list) -> list[Tally]:
     """Alerts per day, alert hour against the session, issued-before-the-open, rejections."""
-    issued = [r for r in rows if r.plan_date]
+    issued = issued_rows(rows)
     return _alerts_per_day(issued) + _hour_tallies(issued) + _rejection_tallies(rejections)

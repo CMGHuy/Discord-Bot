@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 CHANNELS: tuple[str, ...] = (
     "trades", "account", "analytics", "scan",
     "journal", "bot", "risk", "watchlist", "jobs", "settings",
+    "market",
 )
 
 _IDENT = re.compile(r"^[a-z_][a-z0-9_]*$")

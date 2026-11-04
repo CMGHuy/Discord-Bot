@@ -17,6 +17,9 @@ from swingbot.core.db.repositories.killswitch import KillswitchRepository
 from swingbot.core.db.repositories.market_data_state import MarketDataStateRepository
 from swingbot.core.db.repositories.market_shared import MarketSharedRepository
 from swingbot.core.db.repositories.notify_queue import NotifyQueueRepository
+from swingbot.core.db.repositories.market_refresh import (
+    QuoteCurrencyRepository, RefresherHeartbeatRepository, RefreshMarkRepository,
+    RefreshQueueRepository)
 from swingbot.core.db.repositories.plans import PlanRepository
 from swingbot.core.db.repositories.preferences import PreferencesRepository
 from swingbot.core.db.repositories.scan_progress import ScanProgressRepository
@@ -85,6 +88,16 @@ CASES = {
     "equity_samples": (EquitySampleRepository, {"at": TS, "realized_balance": 0.0, "unrealized_pnl": 0.0,
                                                 "equity": 0.0, "open_n": 0, "skipped_n": 0,
                                                 "source": "live", "kind": "point"}),
+    # v201: the admin refresher's tables.
+    "quote_currencies": (QuoteCurrencyRepository,
+                         {"symbol": "AAPL", "outcome": "known", "checked_at": TS}),
+    "market_refresh_queue": (RefreshQueueRepository,
+                             {"kind": "quote", "key": "AAPL", "priority": 1, "requested_at": TS}),
+    "market_refresh_marks": (RefreshMarkRepository,
+                             {"key": "AAPL", "started_at": TS, "expires_at": TS}),
+    "refresher_heartbeat": (RefresherHeartbeatRepository,
+                            {"key": "refresher", "beat_at": TS, "cadence_s": 60.0,
+                             "session": "regular"}),
 }
 
 #: Tables with no repository, and why. Anything else must be in CASES.

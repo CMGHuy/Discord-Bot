@@ -40,6 +40,14 @@ Write every role's rows to one scratchpad file, each role's blocks under a
 It drops closed, duplicate and unsupported rows with reasons and writes
 `docs/superpowers/results/<date>-scout-slate.md`.
 
+On a schema-2 autopsy (`"autopsy_schema": 2` in its JSON header), the merge is two-sided:
+- An `exploit` row needs the cell's Δ lower bound above 0, and an `avoid` row needs its upper bound below 0. Both need q ≤ 0.10.
+- A row citing a `fill`- or `outcome`-defined cell drops as not known at entry.
+- On a two-value cut, "avoid X" and "exploit not-X" count as one rule, so the second is dropped.
+- Rows rank by the bound nearest zero, and each shows its projected pooled change.
+
+A schema-1 autopsy re-merges under the old one-sided rule, and the slate opens with the legacy banner. A schema-2 cell without `defined_at` stops the merge with exit code 2 and writes no slate.
+
 ## Step 4 — Commit and panel
 
 Commit the autopsy pair and the slate on `main`. Run

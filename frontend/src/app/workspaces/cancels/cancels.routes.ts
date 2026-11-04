@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
 
 import { onEvents, routeData } from '../../routing/route-metadata';
-import { resolveRoute } from '../../routing/route-resolver';
+import { startRoute } from '../../routing/route-resolver';
 import { RouteRequestHandlers, routeRequest } from '../../routing/route-request';
 import { CancelsStore } from '../../stores/cancels.store';
 
@@ -19,6 +19,6 @@ export const cancelsRoutes: Routes = [{
   path: '',
   runGuardsAndResolvers: 'always',
   data: routeData('Cancels', onEvents()),
-  resolve: { ready: resolveRoute(() => routeRequest(inject(CancelsStore).load(), STORE_OWNS_STATE)) },
+  resolve: { ready: startRoute(() => routeRequest(inject(CancelsStore).load(), STORE_OWNS_STATE)) },
   loadComponent: () => import('./cancels').then((m) => m.Cancels),
 }];

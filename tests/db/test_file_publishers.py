@@ -65,3 +65,24 @@ def test_the_env_writer_publishes(db_engine, tmp_path, monkeypatch):
 def test_every_sse_event_has_a_table_or_a_file_publisher():
     raised = set(events.TABLE_CHANNELS.values()) | set(events.FILE_PUBLISHERS.values())
     assert raised == set(events.SSE_EVENTS)
+
+
+def test_the_refresher_cycle_publishes_market(db_engine, monkeypatch):
+    """v201: not a file, but the same rule -- a cycle that changed something
+    raises `market` itself through notify.publish (no table trigger)."""
+    from swingbot.refresher import loop
+    from swingbot.refresher.symbols import SymbolSet
+    from tests.refresher.test_loop import FakeBeat, FakeQueue
+
+    def changed(ctx):
+        ctx.report.changed = True
+    monkeypatch.setattr(loop, "refresh_queue_repo", FakeQueue)
+    monkeypatch.setattr(loop, "refresher_heartbeat_repo", FakeBeat)
+    monkeypatch.setattr(loop, "symbol_set", lambda: SymbolSet((), ()))
+    monkeypatch.setattr(loop, "_scan_running", lambda: False)
+    # The cycle idles under the ADMIN_REFRESHER / MARKETDATA_LAYER kill switch.
+    monkeypatch.setattr(loop.config, "ADMIN_REFRESHER", "on")
+    monkeypatch.setattr(loop.config, "MARKETDATA_LAYER", "on")
+    monkeypatch.setattr(loop, "STEPS", [changed])
+    assert "market" in events.FILE_PUBLISHERS.values()
+    assert _capture(db_engine, "market", loop.run_cycle) == ["market"]

@@ -263,6 +263,8 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("README.md", ("tests/dev/test_readme_paths.py",)),
     # The complexity ratchet's baseline is compared against the real tree.
     ("scripts/dev/complexity_baseline.json", ("tests/dev/test_complexity_gate.py",)),
+    # v200: the autopsy report loads the committed stall exclusion list.
+    ("scripts/reports/autopsy/exclusions.json", ("tests/scout/",)),
     # Codex mirror outputs, compared against a fresh render by test_codex_mirror.
     # v161: test_generator_roles pins the scout row, the .agents/ copies and
     # the 32 KiB Codex cap.

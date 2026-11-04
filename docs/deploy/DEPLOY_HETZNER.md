@@ -4,7 +4,7 @@
 
 A push-to-deploy pipeline: push to `main` on GitHub, GitHub Actions SSHs
 into your Hetzner server and runs `deploy/deploy.sh`, which pulls the
-latest code and restarts both Docker services (`bot` and `admin`). No
+latest code and restarts the Docker services (`bot`, `admin` and, since v201, `refresher`). No
 manual server work after the one-time setup below.
 
 ## How it works, in short
@@ -232,6 +232,14 @@ bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T db 
 Rolling forward again needs nothing: the first tick of a v184-or-later bot
 writes the key back.
 
+**Rolling back past v201: no refresher on the old image.** A pre-v201 image has no
+`swingbot.refresher` module, yet `main`'s compose starts the `refresher` service on
+whatever `SWING_BOT_IMAGE` says. `deploy.sh` probes the image and, when the module
+is missing, starts and verifies only `bot admin` and prints a `rolling back past
+v201` notice (`rollback_to.sh` does the same). The admin then runs on a pre-v201
+image too, so pages fetch at request time as before. Rolling forward again needs
+nothing: the next deploy of a v201 image starts the refresher.
+
 **The admin's server is chosen inside the image (v148).** Compose runs the
 admin as `python admin_ui.py`, and it must keep doing so. A v148+ image execs
 gunicorn from there (`deploy/gunicorn.conf.py`, one gthread worker); an older
@@ -282,6 +290,32 @@ If it failed, the remedy depends on the image now running:
 - **A rollback to a pre-v153 image:** that image has no resync script, so
   `docker compose restart bot` — `on_ready` re-syncs on every start. Clients
   may list the removed commands for up to an hour while Discord propagates.
+
+## The refresher service (v201)
+
+`refresher` is the admin's market refresher, a third container off the same
+image (`python -m swingbot.refresher`). It runs as a process of its own so a
+slow batch can neither hold the admin's gunicorn threads nor share a yfinance
+download lock with the scan and the stop monitor. It fetches quotes,
+quote-currency codes and FX pairs, stores them and NOTIFYs `market`; the admin
+pages only read what it stored.
+
+- A normal deploy starts it: `up -d --no-build --wait` creates it with the pulled
+  image and the digest loop verifies it. No manual step, and `.env` needs no edit
+  (`ADMIN_REFRESHER` defaults to `on`).
+- Its first cycles after a migration-bearing deploy may log a missing-table error
+  until the `alembic upgrade head` step runs; it retries on the next cadence and
+  recovers by itself.
+- Logs: `docker compose logs -f refresher`.
+- Health: the admin's `/system` page `refresher` line (`ok` / `stalled` / `off`).
+- Kill switch: `python3 scripts/ops/env_set.py ADMIN_REFRESHER off`, then
+  `docker compose restart admin refresher`. The admin pages go back to
+  request-time fetching exactly as before v201.
+  `MARKETDATA_LAYER=off` does the same. The refresher process stays up, holds its
+  lock and keeps beating, but fetches nothing and drains no queue; it picks a
+  flip back to `on` up from `.env` within one poll tick, with no restart needed.
+- `scripts/ops/rollback_to.sh` stops it with the other writers and starts it only
+  when the target image has `swingbot.refresher`.
 
 ## Accessing the admin UI
 
@@ -433,7 +467,9 @@ The CI pipeline above is for *code* changes.
 | `PLAN_REBUILD_ENABLED` | `true` | 2026-10-31 (V171-38 day C; read-back passed 2026-11-03: 11 plans stamped, max quote age 3.44 s, 0 misses) |
 | `TAPE_SHARED_ENABLED` | `true` | 2026-11-03 ~12:30 UTC (V171-38 day D, pre-open; four indices read back with prices; session read-back and 3-width screenshots pending) |
 
-Rollback order: (1) a flag off with `python3 scripts/ops/env_set.py <FLAG> off` (or `false`) plus `docker compose restart bot admin`;
+Success week: **skipped by the partner at close-out (2026-11-04); V171-39 never ran.** The report cron (21:15 UTC) and tape sampler (13:20 UTC) installed for 2026-11-04..11-10 stay on the VM, nobody reads them, and each removes itself after 2026-11-10 (`logs/v171_success_cron.log`, `logs/v171_tape_samples.jsonl`). Results: `docs/superpowers/results/2026-10-16-v171-success-week.md`.
+
+Rollback order: (1) a flag off with `python3 scripts/ops/env_set.py <FLAG> off` (or `false`) plus `docker compose restart bot admin refresher`;
 (2) the previous image per [Rolling back](#rolling-back);
 (3) `scripts/ops/rollback_to.sh` with `--dry-run` first, only for damaged data.
 The `v171_001` tables stay on every rollback.

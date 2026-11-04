@@ -1,9 +1,8 @@
-import { effect, inject } from '@angular/core';
-import { patchState, signalStore, withHooks, withMethods, withState } from '@ngrx/signals';
+import { computed, inject, signal } from '@angular/core';
+import { signalStore, withComputed, withHooks, withMethods } from '@ngrx/signals';
 
-import { ApiClient } from '../api/api-client';
-import { EventStream, MARKET_DATA_MIN_INTERVAL_MS } from '../api/event-stream';
 import { TapeRow } from '../api/models';
+import { TapeFeed } from './tape-feed';
 
 /** Lane A's fixed symbols, in the exact order the tape shows them.
  *
@@ -13,11 +12,6 @@ import { TapeRow } from '../api/models';
  * alias lookup of its own (`_tape_symbols` just upper-cases each part). */
 const INDEX_SYMBOLS = ['^GSPC', '^NDX', '^DJI', '^VIX'];
 
-interface MarketIndexSlice {
-  rows: TapeRow[];
-  asOf: string | null;
-}
-
 /**
  * Lane A of the shell tape — first-party replacement for the earlier
  * TradingView `ticker-tape` iframe.
@@ -25,45 +19,27 @@ interface MarketIndexSlice {
  * That widget was cross-origin: its scroll speed, its color theme and even
  * whether a given symbol (VIX included) painted at all were entirely up to
  * TradingView, not this app. This store prices the same four indices through
- * `/market/tape` — the same batched yfinance path Lane B already uses — so
- * Lane A renders through the exact same markup and CSS as Lane B (`tape.css`):
- * one scroll speed, one dark-theme palette, one place a missing price can be
- * fixed instead of two.
+ * `/market/tape` so Lane A renders through the exact same markup and CSS as
+ * Lane B (`tape.css`).
  *
- * Rows are NOT re-sorted (contrast `TapeStore`, which sorts by `sort_rank`):
- * `/market/tape` returns rows in the order its `symbols` query param listed
- * them, and Lane A's fixed display order (S&P, Nasdaq, Dow, VIX) IS that
- * request order.
+ * The request is the `TapeFeed`'s (v201): this store registers
+ * `INDEX_SYMBOLS` as owner `index` and reads its rows back in that fixed
+ * display order (S&P, Nasdaq, Dow, VIX); a symbol the feed lacks is skipped.
  */
 export const MarketIndexStore = signalStore(
   { providedIn: 'root' },
-  withState<MarketIndexSlice>({ rows: [], asOf: null }),
-  withMethods((store, api = inject(ApiClient)) => {
-    let latestRequest = 0;
-    const load = (): void => {
-      const request = ++latestRequest;
-      api.tape(INDEX_SYMBOLS).subscribe({
-        next: (response) => {
-          if (request !== latestRequest) return;
-          if (!response || !Array.isArray(response.rows)) return;
-          patchState(store, { rows: response.rows, asOf: response.as_of ?? null });
-        },
-        // Deliberately silent and non-destructive, matching TapeStore: a
-        // toast over the workspace someone is reading is not worth this
-        // strip going one refresh cycle stale.
-        error: () => undefined,
-      });
-    };
-    return { load };
-  }),
+  withComputed((_store, feed = inject(TapeFeed)) => ({
+    rows: computed(() => INDEX_SYMBOLS
+      .map((symbol) => feed.rows()[symbol])
+      .filter((row): row is TapeRow => !!row)),
+    asOf: feed.asOf,
+  })),
+  withMethods((_store, feed = inject(TapeFeed)) => ({
+    load: (): void => feed.refresh(),
+  })),
   withHooks({
-    onInit(store, events = inject(EventStream)) {
-      // v132: `scan` fires ~1/s during a scan and this refetch hits Yahoo.
-      const scan = events.changes('scan', { minIntervalMs: MARKET_DATA_MIN_INTERVAL_MS });
-      effect(() => {
-        scan();
-        store.load();
-      });
+    onInit(_store, feed = inject(TapeFeed)) {
+      feed.register('index', signal(INDEX_SYMBOLS).asReadonly());
     },
   }),
 );

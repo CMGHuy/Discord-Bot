@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path[:0] = [str(ROOT), str(ROOT / "scripts" / "reports")]
 
+from autopsy.exclusions import EXCLUSIONS_PATH  # noqa: E402
 from autopsy.report import DEFAULT_BALANCE, build_report, render_markdown  # noqa: E402
 from autopsy.rows import friction_settings, load_rejections, load_rows  # noqa: E402
 from swingbot.core.backtesting.instrument.stats import (  # noqa: E402
@@ -39,6 +40,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, default=WEEK_BOOTSTRAP_SEED)
     p.add_argument("--balance", type=float, default=DEFAULT_BALANCE,
                    help="account balance the stop cells' 2%% dollar view is priced at")
+    p.add_argument("--exclusions", type=Path, default=EXCLUSIONS_PATH,
+                   help="committed trade-id exclusion file (the August 2026 stall)")
+    p.add_argument("--no-exclusions", action="store_true", help="apply no exclusion")
     return p
 
 
@@ -54,7 +58,8 @@ def main(argv: list[str] | None = None) -> int:
     report = build_report(loaded, rejections,
                           bars_dir=args.bars_dir, n_resamples=args.resamples,
                           seed=args.seed, balance=args.balance, frictions=frictions,
-                          input_fingerprints=inputs, invocation=invocation)
+                          input_fingerprints=inputs, invocation=invocation,
+                          exclusions_path=None if args.no_exclusions else args.exclusions)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     json_path = args.out_dir / f"{args.date}-book-autopsy.json"
     md_path = args.out_dir / f"{args.date}-book-autopsy.md"
@@ -63,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
     h = report["header"]
     print(f"wrote {json_path}\nwrote {md_path}")
     print(f"N {h['n']}, bar-covered {h['bar_covered_n']}, cells tested {h['cells_tested']}")
+    for stall in h["stall_exclusions"]:
+        print(f"stall exclusion {stall['key']}: N {stall['n']}")
     return 0
 
 

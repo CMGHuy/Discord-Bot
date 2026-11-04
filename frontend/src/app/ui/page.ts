@@ -34,6 +34,7 @@ import { RouteTitleService } from '../routing/route-title.service';
 @Component({
   selector: 'sb-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.secondary-tablet]': 'secondaryFromTablet()' },
   template: `
     <header class="bar">
       <div class="heading">
@@ -69,9 +70,15 @@ import { RouteTitleService } from '../routing/route-title.service';
     @media (min-width: 1440px) {
       .secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
+    /* Opt-in (secondaryFromTablet): two columns on a landscape tablet only. */
+    @media (min-width: 640px) and (orientation: landscape) {
+      :host(.secondary-tablet) .secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
   `,
 })
 export class Page {
+  /** True: the secondary slot is two columns from tablet width, not only from lg. */
+  readonly secondaryFromTablet = input(false);
   /** Overrides the route title; empty or null falls back to it. */
   readonly heading = input<string | null>(null);
   /** Overrides the route subtitle; null falls back to it. */

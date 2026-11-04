@@ -145,6 +145,18 @@ def last_cached(kind: DataKind, symbols, params: str = "") -> dict[str, Entry]:
             for s, k in keys.items() if _has_fetched(rows.get(k))}
 
 
+def put(kind: DataKind, values: dict[str, Any], *, provider: str,
+        encode: Callable = identity) -> None:
+    """v201: write values fetched outside ``get`` (spot metals) so the never-fetch
+    reads find them; mode ``on`` only, best effort like every layer write."""
+    if config.MARKETDATA_LAYER != "on" or not values:
+        return
+    now = _now()
+    _write([{"key": cache_key(kind, s), "kind": kind.value, "symbol": s.upper(),
+             "fetched_at": now, "source": provider, "value": encode(v)}
+            for s, v in values.items() if v is not None])
+
+
 # -- modes off / count ------------------------------------------------------------
 
 

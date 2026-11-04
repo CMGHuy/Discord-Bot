@@ -854,3 +854,25 @@ def test_longest_hold_counts_only_the_requested_month_by_close_day():
     rows = [_held_row("JUL", "2026-07-31", "2026-01-01T00:00:00+00:00", "2026-07-31T00:00:00+00:00"),
             _held_row("AUG", "2026-08-01", "2026-07-31T00:00:00+00:00", "2026-08-01T00:00:00+00:00")]
     assert longest_hold(rows, "2026-08")["ticker"] == "AUG"
+
+
+def test_joined_rows_converts_every_part_in_one_call():
+    """`convert` memoises FX per call: one call per trade re-looked every rate up."""
+    from swingbot.core.analytics.pnl_calendar import joined_rows
+
+    calls = []
+
+    def convert(parts):
+        calls.append(len(parts))
+        return [{**p, "realized_pnl_amount": 1.0, "fx_missing": False} for p in parts]
+
+    trades = [_trade(f"{i:016d}", closed_at=f"2026-08-0{i}T20:00:00+00:00") for i in range(1, 5)]
+    rows = joined_rows(trades, [], convert=convert)
+    assert calls == [4]
+    assert [r["pnl_amount"] for r in rows] == [1.0] * 4
+
+
+def test_joined_rows_no_trades_never_calls_convert():
+    from swingbot.core.analytics.pnl_calendar import joined_rows
+
+    assert joined_rows([], [], convert=lambda parts: 1 / 0) == []

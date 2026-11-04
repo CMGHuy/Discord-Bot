@@ -98,3 +98,12 @@ def test_tables_stream_no_sse_and_the_accessor_is_a_singleton():
     for name in ("market_cache", "provider_budget", "market_fetch_counts"):
         assert name in schema.METADATA.tables and name not in events.TABLE_CHANNELS
     assert store.market_shared_repo() is store.market_shared_repo()
+
+
+def test_changed_since_returns_one_kinds_rows_after_the_cursor(repo, db_conn):
+    cursor = db_conn.execute(sa.text("select clock_timestamp()")).scalar()
+    repo.write_entries([_row(), {**_row("index:^GSPC:"), "kind": "index"}], conn=db_conn)
+    got = repo.changed_since("quote", cursor, conn=db_conn)
+    assert [(r["key"], r["symbol"]) for r in got] == [("quote:AAPL:", "AAPL")]
+    assert got[0]["fetched_at"] == T0 and got[0]["doc"]["value"] == {"price": 1.5}
+    assert repo.changed_since("quote", got[0]["updated_at"], conn=db_conn) == []

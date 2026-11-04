@@ -15,6 +15,7 @@ describe('morePageGroups (v202 §3)', () => {
 
   it('lists the destinations the tab bar does not hold, each with its sections, in rail order', () => {
     expect(shape(morePageGroups())).toEqual([
+      ['more-risk', 'Risk', [['Risk', '/risk']]],
       ['more-insights', 'Insights', [['Analytics', '/insights/analytics'], ['Research', '/insights/research'], ['Reports', '/insights/reports']]],
       ['more-system', 'System', [['Health', '/system'], ['Versions', '/system/versions']]],
     ]);
@@ -22,7 +23,7 @@ describe('morePageGroups (v202 §3)', () => {
 
   it('lists no destination the tab bar holds', () => {
     const ids = morePageGroups().map((group) => group.id);
-    for (const id of ['more-dashboard', 'more-watchlist', 'more-trades', 'more-risk']) expect(ids).not.toContain(id);
+    for (const id of ['more-dashboard', 'more-watchlist', 'more-trades']) expect(ids).not.toContain(id);
   });
 
   it('keeps every destination when no tab is given, a single page linking to itself', () => {
@@ -83,8 +84,9 @@ describe('MoreSheet (v195 Phase 3)', () => {
   it('lists the remaining destinations under their names, linking to each section', () => {
     open();
     expect([...el.querySelectorAll('.group-label')].map((n) => n.textContent!.trim()))
-      .toEqual(['Insights', 'System']);
+      .toEqual(['Risk', 'Insights', 'System']);
     expect([...el.querySelectorAll('a.page')].map((a) => [a.textContent!.trim(), a.getAttribute('href')])).toEqual([
+      ['Risk', '/risk'],
       ['Analytics', '/insights/analytics'], ['Research', '/insights/research'], ['Reports', '/insights/reports'],
       ['Health', '/system'], ['Versions', '/system/versions'],
     ]);

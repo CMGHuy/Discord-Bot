@@ -46,4 +46,8 @@ FILE_PUBLISHERS: dict[str, str] = {
     "data/scan_snapshots.json (scanning.snapshots._save_scan_snapshots)": "scan",
     "data/scan_telemetry.jsonl (scanning.telemetry.log_scan_telemetry)": "scan",
     ".env (admin.helpers._write_env_text, scripts/ops/env_set.py)": "settings",
+    # v201: not a file, but the same "raises its concern itself through
+    # notify.publish" rule; no table trigger. A cycle raises at most two
+    # events (marks set, values landed).
+    "admin market refresher cycle (swingbot.refresher.loop.run_cycle)": "market",
 }

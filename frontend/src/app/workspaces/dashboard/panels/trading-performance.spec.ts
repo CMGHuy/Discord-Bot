@@ -8,6 +8,8 @@ import { provideRouter } from '@angular/router';
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
+import { LiveValuesStore } from '../../../stores/live-values.store';
+import { FakeLiveValues } from '../../../testing/fake-live-values';
 import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.stub';
 import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
 import { ViewportService } from '../../../ui/breakpoints';
@@ -36,7 +38,36 @@ describe('trading performance panel', () => {
         provideRouter([]),
         { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
         { provide: ViewportService, useValue: { isPhone: signal(false) } },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
       ],
+    });
+  });
+
+  describe('open P&L freshness (v201)', () => {
+    const meta = (missing_count: number) => ({
+      as_of: new Date(Date.now() - 90_000).toISOString(), refreshing: false, stale_count: 0,
+      missing_count, incomplete: missing_count > 0, source: 'request' as const, error: null,
+    });
+
+    it('shows the open P&L as-of and an incomplete note', () => {
+      const el = render({ openPnlPct: 1.2, openMeta: meta(2) });
+      const block = el.querySelector('.open-pnl')!;
+      expect(block.querySelector('sb-market-value .mv-age')?.textContent?.trim()).toBe('1 min ago');
+      expect(block.textContent).toContain('incomplete: 2 positions unpriced');
+    });
+
+    it('says one position, not positions, for a single miss', () => {
+      expect(render({ openMeta: meta(1) }).querySelector('.open-pnl')!.textContent).toContain('incomplete: 1 position unpriced');
+    });
+
+    it('renders no label without a meta', () => {
+      const el = render({ openPnlPct: 1.2 });
+      expect(el.querySelector('.open-pnl sb-market-value')).toBeNull();
+      expect(el.querySelector('.open-pnl sb-incomplete-note')).toBeNull();
+    });
+
+    it('shows no incomplete note when nothing is missing', () => {
+      expect(render({ openMeta: meta(0) }).querySelector('.open-pnl')!.textContent).not.toContain('incomplete');
     });
   });
 
@@ -493,6 +524,7 @@ describe('trading performance KPI strip (v186 D3)', () => {
         provideRouter([]),
         { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
         { provide: ViewportService, useValue: { isPhone: signal(false) } },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
       ],
     });
   });
@@ -549,6 +581,7 @@ describe('trading performance leads with expectancy (v195 §5.2)', () => {
         provideRouter([]),
         { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
         { provide: ViewportService, useValue: { isPhone: signal(false) } },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
       ],
     });
   });
@@ -643,6 +676,7 @@ describe('trading performance Open risk card', () => {
         provideRouter([]),
         { provide: EquityCandlesStore, useValue: equityCandlesStoreStub() },
         { provide: ViewportService, useValue: { isPhone: signal(false) } },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
       ],
     });
   });

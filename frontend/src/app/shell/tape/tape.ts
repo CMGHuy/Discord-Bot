@@ -7,7 +7,7 @@ import { RouterLink } from '@angular/router';
 import { TapeRow } from '../../api/models';
 import { MarketIndexStore } from '../../stores/market-index.store';
 import { TapeStore } from '../../stores/tape.store';
-import { AgeHint, TAPE_WINDOW_S } from '../../ui/age-hint';
+import { MarketValue } from '../../ui/market-value';
 import { Hint } from '../../ui/hint';
 import { Flash } from '../../ui/flash';
 import { ABSENT, num, pct } from '../../ui/format';
@@ -37,7 +37,9 @@ interface Tile {
   context_label: string | null;
   context_kind: string | null;
   proxyLabel: string | null;
-  ageS: number | null;
+  asOf: string | null;
+  refreshing: boolean;
+  error: string | null;
 }
 
 /**
@@ -63,7 +65,7 @@ export const TAPE_PROXY_HINT = "Yahoo had no value; an ETF tracking this index s
 @Component({
   selector: 'sb-tape',
   standalone: true,
-  imports: [RouterLink, Flash, AgeHint, Hint],
+  imports: [RouterLink, Flash, MarketValue, Hint],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './tape.css',
   template: `
@@ -101,7 +103,8 @@ export const TAPE_PROXY_HINT = "Yahoo had no value; an ETF tracking this index s
                     {{ tile.context_label }}
                   </span>
                 }
-                <sb-age-hint [ageS]="tile.ageS" [windowS]="tapeWindowS" />
+                <!-- v201: the price's age and refresh spinner. -->
+                <sb-market-value [asOf]="tile.asOf" [refreshing]="tile.refreshing" [error]="tile.error" />
               </a>
             }
           }
@@ -116,7 +119,6 @@ export class Tape {
   protected readonly num = num;
   protected readonly pct = pct;
   protected readonly ABSENT = ABSENT;
-  protected readonly tapeWindowS = TAPE_WINDOW_S;
 
   private readonly trackRef = viewChild<ElementRef<HTMLElement>>('track');
   /** Measured from the track's own rendered width (after every render the
@@ -136,7 +138,9 @@ export class Tape {
       context_label: null,
       context_kind: null,
       proxyLabel: proxyLabel(r),
-      ageS: r.age_s ?? null,
+      asOf: r.price_as_of ?? null,
+      refreshing: r.price_refreshing ?? false,
+      error: r.price_error ?? null,
     }));
     const stocks: Tile[] = this.tape.rows().map((r) => ({
       key: `stk:${r.symbol}`,
@@ -147,7 +151,9 @@ export class Tape {
       context_label: r.context_label,
       context_kind: r.context_kind,
       proxyLabel: proxyLabel(r),
-      ageS: r.age_s ?? null,
+      asOf: r.price_as_of ?? null,
+      refreshing: r.price_refreshing ?? false,
+      error: r.price_error ?? null,
     }));
     return [...indices, ...stocks];
   });

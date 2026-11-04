@@ -4,7 +4,7 @@ import { routes } from '../app.routes';
 import { ICON_NAMES } from '../ui/icon';
 import {
   ALIASES, DESTINATION_LABEL_OVERRIDES, NAV_ENTRIES, PHONE_TABS, SECTION_LABEL_OVERRIDES, SECTION_WORDS,
-  breadcrumbFor, destinationFor, detailCrumb, isSectionUrl, navEntryFor,
+  breadcrumbFor, destinationFor, detailCrumb, isSectionUrl, navEntryFor, phoneTabPathFor,
 } from './nav';
 
 const paths = (entries: readonly { path: string }[]) => entries.map((entry) => entry.path);
@@ -99,9 +99,10 @@ describe('ALIASES (v202 §1)', () => {
 });
 
 describe('PHONE_TABS', () => {
-  it('is Dashboard, Watchlist, Trades and Risk, each drawn as its destination', () => {
-    expect(paths(PHONE_TABS)).toEqual(['/dashboard', '/watchlist', '/trades', '/risk']);
-    for (const tab of PHONE_TABS) {
+  it('is Home, Watchlist, Calendar and Trades, each drawn with its destination or section icon', () => {
+    expect(paths(PHONE_TABS)).toEqual(['/dashboard', '/watchlist', '/trades/calendar', '/trades']);
+    expect(PHONE_TABS.map((tab) => tab.label)).toEqual(['Home', 'Watchlist', 'Calendar', 'Trades']);
+    for (const tab of PHONE_TABS.filter((candidate) => candidate.path !== '/trades/calendar')) {
       expect(NAV_ENTRIES.find((entry) => entry.path === tab.path)?.icon).toBe(tab.icon);
     }
   });
@@ -142,6 +143,23 @@ describe('navEntryFor (v202 second-segment rule)', () => {
 
   it.each(['/ui', '/', '', '/nowhere', '/nowhere/calendar'])('finds nothing for %j', (url) => {
     expect(navEntryFor(url)).toBeNull();
+  });
+});
+
+describe('phoneTabPathFor', () => {
+  it.each([
+    ['/trades/calendar/2026-10-01', '/trades/calendar'],
+    ['/calendar', '/trades/calendar'],
+    ['/trades', '/trades'],
+    ['/trades/cancels', '/trades'],
+    ['/trades/812', '/trades'],
+    ['/plans/5', '/trades'],
+    ['/dashboard', '/dashboard'],
+    ['/risk', '/risk'],
+    ['/system/versions', '/system'],
+    ['/ui', null],
+  ])('lights %s on the %j tab', (url, expected) => {
+    expect(phoneTabPathFor(url)).toBe(expected);
   });
 });
 

@@ -58,12 +58,21 @@ class MarketSharedRepository:
         if not rows:
             return
         values = [{**dict.fromkeys(_CACHE_FIELDS), **self.cache._values(r),
-                   "lease_holder": None, "lease_until": None} for r in rows]
+                   "lease_holder": None, "lease_until": None, "updated_at": _now()} for r in rows]
         ins = pg_insert(market_cache).values(values)
         x = ins.excluded
         conn.execute(ins.on_conflict_do_update(index_elements=[market_cache.c.key], set_={
             "kind": x.kind, "symbol": x.symbol, "fetched_at": x.fetched_at, "source": x.source,
             "doc": x.doc, "lease_holder": None, "lease_until": None, "updated_at": _now()}))
+
+    def changed_since(self, kind: str, since: datetime, *, conn: sa.Connection) -> list[dict]:
+        """Rows of ``kind`` written after ``since`` (index market_cache_kind_updated_idx)."""
+        c = market_cache.c
+        rows = conn.execute(
+            sa.select(c.key, c.symbol, c.fetched_at, c.doc, c.updated_at)
+            .where(c.kind == kind, c.updated_at > since, c.fetched_at.is_not(None))
+            .order_by(c.updated_at)).all()
+        return [dict(row._mapping) for row in rows]
 
     def try_lease(self, key: str, holder: str, seconds: float, *, kind: str, symbol: str,
                   conn: sa.Connection) -> bool:
