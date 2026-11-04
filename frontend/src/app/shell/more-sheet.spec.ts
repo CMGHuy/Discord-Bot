@@ -4,26 +4,37 @@ import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { MoreSheet, morePageGroups } from './more-sheet';
-import { NAV_GROUPS } from './nav';
+import { NAV_ENTRIES } from './nav';
 
 @Component({ template: '' })
 class Blank {}
 
-describe('morePageGroups (v195 Phase 3)', () => {
-  it('keeps the pages the tab bar does not hold, grouped and in rail order', () => {
-    expect(morePageGroups().map((group) => [group.label, group.entries.map((entry) => entry.label)])).toEqual([
-      ['Review', ['Calendar', 'Cancels']],
-      ['Insights', ['Analytics', 'Research', 'Reports']],
-      ['System', ['System', 'Versions']],
+describe('morePageGroups (v202 §3)', () => {
+  const shape = (groups: ReturnType<typeof morePageGroups>) =>
+    groups.map((group) => [group.id, group.label, group.links.map((link) => [link.label, link.path])]);
+
+  it('lists the destinations the tab bar does not hold, each with its sections, in rail order', () => {
+    expect(shape(morePageGroups())).toEqual([
+      ['more-insights', 'Insights', [['Analytics', '/insights/analytics'], ['Research', '/insights/research'], ['Reports', '/insights/reports']]],
+      ['more-system', 'System', [['Health', '/system'], ['Versions', '/system/versions']]],
     ]);
   });
 
-  it('drops a group whose every page is already a tab', () => {
-    expect(morePageGroups().some((group) => group.id === 'nav-monitor')).toBe(false);
+  it('lists no destination the tab bar holds', () => {
+    const ids = morePageGroups().map((group) => group.id);
+    for (const id of ['more-dashboard', 'more-watchlist', 'more-trades', 'more-risk']) expect(ids).not.toContain(id);
   });
 
-  it('keeps every group when no tab is given', () => {
-    expect(morePageGroups(NAV_GROUPS, [])).toHaveLength(4);
+  it('keeps every destination when no tab is given, a single page linking to itself', () => {
+    const groups = morePageGroups(NAV_ENTRIES, []);
+    expect(groups).toHaveLength(6);
+    expect(shape(groups)[0]).toEqual(['more-dashboard', 'Dashboard', [['Dashboard', '/dashboard']]]);
+    expect(shape(groups)[2]).toEqual(['more-trades', 'Trades',
+      [['Book', '/trades'], ['Calendar', '/trades/calendar'], ['Cancels', '/trades/cancels']]]);
+  });
+
+  it('is empty for an empty model', () => {
+    expect(morePageGroups([], [])).toEqual([]);
   });
 });
 
@@ -69,21 +80,22 @@ describe('MoreSheet (v195 Phase 3)', () => {
     expect(el.querySelector('button.search')!.textContent!.trim()).toBe('Search or jump…');
   });
 
-  it('lists the remaining pages under their group names, linking to each', () => {
+  it('lists the remaining destinations under their names, linking to each section', () => {
     open();
     expect([...el.querySelectorAll('.group-label')].map((n) => n.textContent!.trim()))
-      .toEqual(['Review', 'Insights', 'System']);
+      .toEqual(['Insights', 'System']);
     expect([...el.querySelectorAll('a.page')].map((a) => [a.textContent!.trim(), a.getAttribute('href')])).toEqual([
-      ['Calendar', '/calendar'], ['Cancels', '/cancels'],
-      ['Analytics', '/analytics'], ['Research', '/research'], ['Reports', '/reports'],
-      ['System', '/system'], ['Versions', '/versions'],
+      ['Analytics', '/insights/analytics'], ['Research', '/insights/research'], ['Reports', '/insights/reports'],
+      ['Health', '/system'], ['Versions', '/system/versions'],
     ]);
     for (const list of el.querySelectorAll('ul.pages')) {
       expect(el.querySelector(`#${list.getAttribute('aria-labelledby')}`)).not.toBeNull();
     }
-    for (const icon of el.querySelectorAll('a.page sb-icon')) {
-      expect(icon.parentElement!.matches('.glyph[aria-hidden="true"]')).toBe(true);
-    }
+  });
+
+  it('draws no glyph in a section link', () => {
+    open();
+    expect(el.querySelectorAll('a.page sb-icon')).toHaveLength(0);
   });
 
   it('closes on Escape, on the scrim, on Close and on choosing a page', () => {

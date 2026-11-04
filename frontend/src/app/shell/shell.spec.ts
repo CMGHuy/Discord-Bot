@@ -730,7 +730,7 @@ describe('shell on a phone (v195 Phase 3)', () => {
 
   beforeEach(() => {
     phone = signal(true);
-    TestBed.configureTestingModule({ providers: shellProviders([{ path: 'calendar', component: Blank }]) });
+    TestBed.configureTestingModule({ providers: shellProviders([{ path: 'insights/research', component: Blank }]) });
     TestBed.overrideProvider(ViewportService, {
       useValue: { isPhone: phone, isNarrow: signal(true), viewport: signal('xs') },
     });
@@ -798,7 +798,7 @@ describe('shell on a phone (v195 Phase 3)', () => {
     expect(sheet(el)).toBeNull();
     moreTab(el).click();
     await settle(fixture);
-    el.querySelector<HTMLAnchorElement>('sb-more-sheet a.page[href="/calendar"]')!.click();
+    el.querySelector<HTMLAnchorElement>('sb-more-sheet a.page[href="/insights/research"]')!.click();
     await settle(fixture);
     expect(sheet(el)).toBeNull();
   });

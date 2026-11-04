@@ -191,10 +191,15 @@ export function isSectionUrl(url: string): boolean {
   return entry !== undefined && namedSection(entry, second) !== undefined;
 }
 
-/** The phone bottom bar's four page tabs (Phase 3), in order; PhoneTabBar
- *  adds More as the fifth. */
+/** The phone tab bar's own label where it differs from the rail's: the
+ *  landing page reads as Home on a 64 px tab (v202 §3). */
+const PHONE_TAB_LABELS: Readonly<Record<string, string>> = { '/dashboard': 'Home' };
+
+/** The phone bottom bar's four page tabs, in order; PhoneTabBar adds More
+ *  as the fifth. Paths and icons are the destinations' own. */
 export const PHONE_TABS: readonly NavEntry[] = ['/dashboard', '/watchlist', '/trades', '/risk']
-  .map((path) => navEntryFor(path)!.entry);
+  .map((path) => navEntryFor(path)!.entry)
+  .map((entry) => ({ ...entry, label: PHONE_TAB_LABELS[entry.path] ?? entry.label }));
 
 /** `Destination / Section` ('Trades / Calendar'), the destination alone on a
  *  single page ('Risk'), plus the detail segment a detail route supplies

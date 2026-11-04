@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { Ticker, TradeRow } from '../../api/models';
-import { NAV_GROUPS } from '../nav';
 import {
   PALETTE_GROUP_LABELS,
   PREFERENCE_ITEMS,
@@ -22,15 +21,30 @@ const trade = (id: string, symbol: string, status: string, created_at: string | 
   ({ id, ticker: symbol, status, strategy: 'RSI', created_at, opened_at: null, ...extra }) as TradeRow;
 
 const labels = (items: readonly PaletteItem[]) => items.map((item) => item.label);
-const RAIL = NAV_GROUPS.flatMap((group) => group.entries.map((entry) => entry.label));
+/** The nav model's pages in rail order: each section, or a single page. */
+const RAIL = ['Dashboard', 'Watchlist', 'Book', 'Calendar', 'Cancels', 'Risk',
+  'Analytics', 'Research', 'Reports', 'Health', 'Versions'];
 
 describe('palette items (v195 §3.1)', () => {
-  it('lists every rail entry as a page, in rail order, then the workspace tabs', () => {
+  it('lists every page of the nav model, in rail order, then the workspace tabs', () => {
     const pages = pageItems();
     expect(labels(pages.slice(0, RAIL.length))).toEqual(RAIL);
     expect(pages.slice(RAIL.length)).toEqual([...TAB_PAGES]);
     expect(pages.every((item) => item.group === 'pages')).toBe(true);
-    expect(pages.find((item) => item.label === 'Risk')).toMatchObject({ route: '/risk', sub: 'Monitor' });
+    expect(pages.find((item) => item.label === 'Risk')).toEqual({ key: 'page:/risk', group: 'pages', label: 'Risk', route: '/risk' });
+    expect(pages.find((item) => item.label === 'Calendar')).toMatchObject({ route: '/trades/calendar', sub: 'Trades' });
+    expect(pages.find((item) => item.label === 'Book')).toMatchObject({ route: '/trades', sub: 'Trades' });
+  });
+
+  it('routes every page to a path of the nav model, never a pre-v202 one', () => {
+    expect(pageItems().filter((item) => !item.queryParams).map((item) => item.route)).toEqual([
+      '/dashboard', '/watchlist', '/trades', '/trades/calendar', '/trades/cancels', '/risk',
+      '/insights/analytics', '/insights/research', '/insights/reports', '/system', '/system/versions',
+    ]);
+  });
+
+  it('is only the tabs for an empty model', () => {
+    expect(pageItems([])).toEqual([...TAB_PAGES]);
   });
 
   it('opens a workspace tab through its ?tab= value, never the default tab', () => {

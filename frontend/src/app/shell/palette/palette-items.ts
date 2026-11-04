@@ -1,6 +1,6 @@
 import { Ticker, TradeRow } from '../../api/models';
 import { RowDensity } from '../../ui/density.service';
-import { NAV_GROUPS, NavGroup, detailCrumb } from '../nav';
+import { NAV_ENTRIES, NavEntry, detailCrumb } from '../nav';
 
 /**
  * The command palette's items and ranking -- v195 §3.1.
@@ -81,18 +81,20 @@ export const PREFERENCE_ITEMS: readonly PaletteItem[] = [
   { key: 'pref:density:comfortable', group: 'preferences', label: 'Density: Comfortable', sub: '44px rows on desktop', route: null, density: 'comfortable' },
 ];
 
-/** Every rail entry, in rail order and labelled with its group, then the tabs. */
-export function pageItems(groups: readonly NavGroup[] = NAV_GROUPS): PaletteItem[] {
-  const entries = groups.flatMap((group) =>
-    group.entries.map((entry): PaletteItem => ({
-      key: `page:${entry.path}`,
-      group: 'pages',
-      label: entry.label,
-      sub: group.label,
-      route: entry.path,
-    })),
+function pageItem(label: string, route: string, sub?: string): PaletteItem {
+  return { key: `page:${route}`, group: 'pages', label, ...(sub ? { sub } : {}), route };
+}
+
+/** Every page of the nav model, in rail order: each section of a
+ *  destination (its `sub` the destination, 'Calendar · Trades') or the
+ *  destination itself on a single page; then the workspace tabs. */
+export function pageItems(entries: readonly NavEntry[] = NAV_ENTRIES): PaletteItem[] {
+  const pages = entries.flatMap((entry) =>
+    entry.sections
+      ? entry.sections.map((section) => pageItem(section.label, section.path, entry.label))
+      : [pageItem(entry.label, entry.path)],
   );
-  return [...entries, ...TAB_PAGES];
+  return [...pages, ...TAB_PAGES];
 }
 
 /** One item per watchlist symbol, opening its detail page. */
