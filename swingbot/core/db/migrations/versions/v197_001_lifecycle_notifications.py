@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from alembic import context, op
 
 revision = "v197_001"
-down_revision = "v201_001"
+down_revision = "v200_001"
 branch_labels = None
 depends_on = None
 FIELDS = ("event_id", "next_attempt_at", "lease_token", "lease_until", "delivered_at")
