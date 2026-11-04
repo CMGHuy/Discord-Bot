@@ -109,6 +109,13 @@
       <sb-tape />
     </div>
 
+    <!-- v203 (spec v202 §3, §4): below 1024px the dock never docks. This
+         40px line under the tape carries its state and opens it as a sheet. -->
+    @if (!dock.docked()) {
+      <sb-live-strip [warnings]="dockWarnings()" [heatText]="heatText()" [awaitingCount]="awaitingCount()"
+                     [lastSuccess]="connection.botLastSuccess()" [now]="liveNow()" (opened)="dock.openSheet()" />
+    }
+
     <!-- Engaged killswitch: the chip above is the state on every page; this
          strip is the alarm, full width and never truncated. -->
     @if (killswitchOn() === true) {
@@ -159,6 +166,12 @@
     <sb-phone-tab-bar [moreOpen]="moreOpen()" (moreRequested)="toggleMore()" />
     <sb-more-sheet [open]="moreOpen()" (closed)="closeMore()" (searchRequested)="onSearchRequested()" />
   }
+
+  <!-- v203: the Live dock as a sheet below 1024px -- from the right on a
+       tablet, from the bottom on a phone. DockState closes it on navigation
+       and when the window widens to docked; a docked window never shows it. -->
+  <sb-live-sheet [open]="dock.sheetOpen() && !dock.docked()" [side]="isPhone() ? 'bottom' : 'right'"
+                 (closed)="dock.closeSheet()" />
 
   <!-- v195 §3.1: the command palette. After the More sheet on purpose: when
        the sheet's search field opens it, the sheet's focus trap returns focus

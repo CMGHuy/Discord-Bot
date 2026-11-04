@@ -1046,6 +1046,7 @@ describe('section tabs in the shell (v202 §1)', () => {
 describe('shell live dock (v203)', () => {
   const NOW = Date.parse('2026-10-29T13:00:00Z');
   const narrow = signal(false);
+  const phone = signal(false);
   const at = '2026-10-29T12:59:00Z';
   const SNAPSHOT = {
     heat: { availability: 'ok', as_of: at, reason: null, open_pct: 5.1, cap_pct: 6, utilisation_pct: 85, open_amount: 2459,
@@ -1062,9 +1063,10 @@ describe('shell live dock (v203)', () => {
 
   beforeEach(() => {
     narrow.set(false);
+    phone.set(false);
     TestBed.configureTestingModule({ providers: shellProviders(['dashboard', 'trades', 'risk'].map((path) => ({ path, component: Blank }))) });
     TestBed.overrideProvider(CLOCK, { useValue: signal(NOW) });
-    TestBed.overrideProvider(ViewportService, { useValue: { isPhone: signal(false), isNarrow: narrow, viewport: signal('lg') } });
+    TestBed.overrideProvider(ViewportService, { useValue: { isPhone: phone, isNarrow: narrow, viewport: signal('lg') } });
   });
 
   async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }): Promise<void> {
@@ -1136,5 +1138,58 @@ describe('shell live dock (v203)', () => {
     for (const declaration of ['width: var(--dock-width);', 'position: sticky;', 'top: var(--topbar-h);', 'overflow-y: auto;']) {
       expect(rule('.live-column')).toContain(declaration);
     }
+  });
+
+  it('shows the strip under the tape below 1024 px, and opens the dock from the right on a tablet', async () => {
+    narrow.set(true);
+    const { fixture, el } = await mount('/trades');
+    const strip = el.querySelector<HTMLButtonElement>('.main > .tape-strip + sb-live-strip button.live-strip')!;
+    expect(strip).not.toBeNull();
+    expect(strip.classList).toContain('warn');                 // heat at 85 % of the cap
+    expect(el.querySelector('aside.live-column')).toBeNull();
+    strip.click();
+    await settle(fixture);
+    const dialog = el.querySelector('sb-live-sheet [role=dialog]')!;
+    expect(dialog.classList).toContain('right');
+    expect(dialog.querySelector('sb-live-dock')).not.toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle(fixture);
+    expect(el.querySelector('sb-live-sheet [role=dialog]')).toBeNull();
+  });
+
+  it('opens from the bottom on a phone, and the scrim closes it', async () => {
+    narrow.set(true);
+    phone.set(true);
+    const { fixture, el } = await mount('/trades');
+    el.querySelector<HTMLButtonElement>('button.live-strip')!.click();
+    await settle(fixture);
+    expect(el.querySelector('sb-live-sheet [role=dialog]')!.classList).toContain('bottom');
+    el.querySelector<HTMLElement>('sb-live-sheet .scrim')!.click();
+    await settle(fixture);
+    expect(el.querySelector('sb-live-sheet [role=dialog]')).toBeNull();
+  });
+
+  it('closes the sheet on navigation, and when the window widens to docked', async () => {
+    narrow.set(true);
+    const { fixture, el } = await mount('/trades');
+    el.querySelector<HTMLButtonElement>('button.live-strip')!.click();
+    await settle(fixture);
+    await TestBed.inject(Router).navigateByUrl('/risk');
+    await settle(fixture);
+    expect(el.querySelector('sb-live-sheet [role=dialog]')).toBeNull();
+    el.querySelector<HTMLButtonElement>('button.live-strip')!.click();
+    await settle(fixture);
+    expect(el.querySelector('sb-live-sheet [role=dialog]')).not.toBeNull();
+    narrow.set(false);
+    await settle(fixture);
+    expect(el.querySelector('sb-live-sheet [role=dialog]')).toBeNull();
+    expect(el.querySelector('sb-live-strip')).toBeNull();
+    expect(el.querySelector('aside.live-column > sb-live-dock')).not.toBeNull();   // Risk opens by default
+  });
+
+  it('shows no strip and no sheet at 1024 px and wider', async () => {
+    const { el } = await mount('/trades');
+    expect(el.querySelector('sb-live-strip')).toBeNull();
+    expect(el.querySelector('sb-live-sheet [role=dialog]')).toBeNull();
   });
 });

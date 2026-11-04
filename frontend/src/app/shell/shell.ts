@@ -45,6 +45,8 @@ import { LiveStore } from '../stores/live.store';
 import { DockState } from './live/dock-state';
 import { LiveDock } from './live/live-dock';
 import { LiveEdgeTab } from './live/live-edge-tab';
+import { LiveSheet } from './live/live-sheet';
+import { LiveStrip } from './live/live-strip';
 import { heatStripText, liveWarnings } from './live/live-state';
 import { Tape } from './tape/tape';
 import { ToastHost } from './toast-host';
@@ -79,7 +81,7 @@ const ZOOM_DEFAULT = 100;
     RouterOutlet, RouterLink, ConnectionStatus, ToastHost,
     ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, FreshnessChip, ProfileMenu, Tape,
     Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
-    LiveDock, LiveEdgeTab,
+    LiveDock, LiveEdgeTab, LiveStrip, LiveSheet,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
