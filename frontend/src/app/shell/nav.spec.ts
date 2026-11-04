@@ -48,8 +48,8 @@ describe('NAV_GROUPS (v195 §5.1)', () => {
 });
 
 describe('PHONE_TABS (v195 Phase 3)', () => {
-  it('is Dashboard, Watchlist, Trades and Risk, taken from the same model', () => {
-    expect(paths(PHONE_TABS)).toEqual(['/dashboard', '/watchlist', '/trades', '/risk']);
+  it('is Dashboard, Watchlist, Calendar and Trades, taken from the same model', () => {
+    expect(paths(PHONE_TABS)).toEqual(['/dashboard', '/watchlist', '/calendar', '/trades']);
     for (const tab of PHONE_TABS) expect(allEntries).toContain(tab);
   });
 });

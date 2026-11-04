@@ -12,14 +12,16 @@ class Blank {}
 describe('morePageGroups (v195 Phase 3)', () => {
   it('keeps the pages the tab bar does not hold, grouped and in rail order', () => {
     expect(morePageGroups().map((group) => [group.label, group.entries.map((entry) => entry.label)])).toEqual([
-      ['Review', ['Calendar', 'Cancels']],
+      ['Monitor', ['Risk']],
+      ['Review', ['Cancels']],
       ['Insights', ['Analytics', 'Research', 'Reports']],
       ['System', ['System', 'Versions']],
     ]);
   });
 
   it('drops a group whose every page is already a tab', () => {
-    expect(morePageGroups().some((group) => group.id === 'nav-monitor')).toBe(false);
+    const tabs = NAV_GROUPS[0].entries;
+    expect(morePageGroups(NAV_GROUPS, tabs).some((group) => group.id === 'nav-monitor')).toBe(false);
   });
 
   it('keeps every group when no tab is given', () => {
@@ -72,9 +74,9 @@ describe('MoreSheet (v195 Phase 3)', () => {
   it('lists the remaining pages under their group names, linking to each', () => {
     open();
     expect([...el.querySelectorAll('.group-label')].map((n) => n.textContent!.trim()))
-      .toEqual(['Review', 'Insights', 'System']);
+      .toEqual(['Monitor', 'Review', 'Insights', 'System']);
     expect([...el.querySelectorAll('a.page')].map((a) => [a.textContent!.trim(), a.getAttribute('href')])).toEqual([
-      ['Calendar', '/calendar'], ['Cancels', '/cancels'],
+      ['Risk', '/risk'], ['Cancels', '/cancels'],
       ['Analytics', '/analytics'], ['Research', '/research'], ['Reports', '/reports'],
       ['System', '/system'], ['Versions', '/versions'],
     ]);

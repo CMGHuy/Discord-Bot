@@ -88,7 +88,7 @@ export function navEntryFor(url: string): { group: NavGroup; entry: NavEntry } |
 
 /** The phone bottom bar's four page tabs (Phase 3), in order; PhoneTabBar
  *  adds More as the fifth. */
-export const PHONE_TABS: readonly NavEntry[] = ['/dashboard', '/watchlist', '/trades', '/risk']
+export const PHONE_TABS: readonly NavEntry[] = ['/dashboard', '/watchlist', '/calendar', '/trades']
   .map((path) => navEntryFor(path)!.entry);
 
 /** `Group / Page`, plus the detail segment a detail route supplies

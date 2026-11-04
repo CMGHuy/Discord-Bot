@@ -32,23 +32,23 @@ describe('PhoneTabBar (v195 Phase 3)', () => {
   const current = (el: HTMLElement) =>
     [...el.querySelectorAll('a.tab[aria-current="page"]')].map((a) => a.querySelector('.tab-label')!.textContent!.trim());
 
-  it('holds Dashboard, Watchlist, Trades, Risk and More, in that order', async () => {
+  it('holds Dashboard, Watchlist, Calendar, Trades and More, in that order', async () => {
     const { el } = await mount('/dashboard');
     expect(el.querySelector('nav')!.getAttribute('aria-label')).toBe('Main pages');
     expect([...el.querySelectorAll('.tab .tab-label')].map((n) => n.textContent!.trim()))
-      .toEqual(['Dashboard', 'Watchlist', 'Trades', 'Risk', 'More']);
+      .toEqual(['Dashboard', 'Watchlist', 'Calendar', 'Trades', 'More']);
     expect([...el.querySelectorAll('a.tab')].map((a) => a.getAttribute('href')))
       .toEqual(PHONE_TABS.map((tab) => tab.path));
   });
 
   it('marks the current tab, and the list tab for its detail pages', async () => {
-    expect(current((await mount('/risk')).el)).toEqual(['Risk']);
+    expect(current((await mount('/calendar')).el)).toEqual(['Calendar']);
     expect(current((await mount('/plans/7')).el)).toEqual(['Trades']);
     expect(current((await mount('/watchlist/NVDA')).el)).toEqual(['Watchlist']);
   });
 
   it('lights More for a page the bar does not hold', async () => {
-    const { el } = await mount('/calendar');
+    const { el } = await mount('/risk');
     expect(current(el)).toEqual([]);
     expect(el.querySelector('button.tab.more')!.classList).toContain('active');
   });

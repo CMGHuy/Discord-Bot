@@ -9,9 +9,9 @@ import { PHONE_TABS, navEntryFor } from './nav';
 /**
  * The phone's bottom tab bar -- v195 Phase 3.
  *
- * Dashboard · Watchlist · Trades · Risk, then More. Risk is a tab so the
- * halt is two taps from anywhere: the killswitch chip in the top bar shows
- * the state, Risk's page header holds the control. The current tab comes
+ * Dashboard · Watchlist · Calendar · Trades, then More. Risk lives in the
+ * More sheet; the killswitch chip in the top bar shows the halt state and
+ * Risk's page header holds the control. The current tab comes
  * from the nav model, not RouterLinkActive, so a plan detail lights Trades
  * and a page the bar does not hold lights More.
  *
