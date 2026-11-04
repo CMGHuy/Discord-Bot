@@ -671,7 +671,7 @@ describe('Calendar URL (v165 D6)', () => {
         provideLocationMocks(),
         provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
         provideHttpClientTesting(),
-        // The real one would first ask /api/v1/preferences inside resolveRoute.
+        // The real one would first ask /api/v1/preferences inside startRoute.
         { provide: PreferencesStore, useValue: {
           resolve: () => of(undefined), values: () => ({}), update: () => undefined,
         } },

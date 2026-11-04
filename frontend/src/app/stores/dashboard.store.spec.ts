@@ -103,6 +103,17 @@ describe('DashboardStore', () => {
   const respond = (body: Partial<Dashboard> = {}) =>
     backend.expectOne((req) => req.url === '/api/v1/dashboard').flush({ ...RESPONSE, ...body });
 
+  it('the dashboard route has no resolver: the store load is the only one', async () => {
+    const { dashboardRoutes } = await import('../workspaces/dashboard/dashboard.routes');
+    expect(dashboardRoutes[0].resolve).toBeUndefined();
+    expect(dashboardRoutes[0].runGuardsAndResolvers).toBeUndefined();
+  });
+
+  it('issues exactly one GET /dashboard when created', () => {
+    tick();
+    expect(backend.match((req) => req.url === '/api/v1/dashboard')).toHaveLength(1);
+  });
+
   it('loads on creation, with no separate bootstrap call', () => {
     // The first effect run IS the initial load, so the load path and the
     // refetch path cannot drift apart.
