@@ -44,6 +44,9 @@ def cycle(monkeypatch):
     monkeypatch.setattr(loop, "refresher_heartbeat_repo", FakeBeat)
     monkeypatch.setattr(loop, "symbol_set", lambda: SymbolSet(("AAPL", "BAD", "YF"), ("^GSPC",)))
     monkeypatch.setattr(loop, "_scan_running", lambda: False)
+    # tests/conftest.py forces MARKETDATA_LAYER off; the cycle idles under that kill switch.
+    monkeypatch.setattr(loop.config, "ADMIN_REFRESHER", "on")
+    monkeypatch.setattr(loop.config, "MARKETDATA_LAYER", "on")
     monkeypatch.setattr(loop, "_last_full", None)
     monkeypatch.setattr(loop, "STEPS", [quotes.quote_step])
     monkeypatch.setattr(loop.notify, "publish", published.append)

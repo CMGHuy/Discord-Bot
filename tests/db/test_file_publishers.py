@@ -80,6 +80,9 @@ def test_the_refresher_cycle_publishes_market(db_engine, monkeypatch):
     monkeypatch.setattr(loop, "refresher_heartbeat_repo", FakeBeat)
     monkeypatch.setattr(loop, "symbol_set", lambda: SymbolSet((), ()))
     monkeypatch.setattr(loop, "_scan_running", lambda: False)
+    # The cycle idles under the ADMIN_REFRESHER / MARKETDATA_LAYER kill switch.
+    monkeypatch.setattr(loop.config, "ADMIN_REFRESHER", "on")
+    monkeypatch.setattr(loop.config, "MARKETDATA_LAYER", "on")
     monkeypatch.setattr(loop, "STEPS", [changed])
     assert "market" in events.FILE_PUBLISHERS.values()
     assert _capture(db_engine, "market", loop.run_cycle) == ["market"]
