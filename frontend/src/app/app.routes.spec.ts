@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { provideLocationMocks } from '@angular/common/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRouteSnapshot, Router, Routes, provideRouter, withComponentInputBinding } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -57,7 +57,7 @@ describe('routing, authenticated', () => {
   it.each([
     ['/dashboard', 'Dashboard'],
     ['/trades', 'Trades'],
-    ['/analytics', 'Analytics'],
+    ['/insights/analytics', 'Analytics'],
     ['/watchlist', 'Watchlist'],
     ['/risk', 'Risk'],
     ['/system', 'System'],
@@ -86,12 +86,13 @@ describe('routing, authenticated', () => {
   });
 
   it('serves the calendar workspace behind the auth guard', async () => {
-    const route = routes.find((r) => r.path === 'calendar');
+    const route = routes.find((r) => r.path === 'trades/calendar');
     expect(route).toBeDefined();
     expect(route?.canMatch).toEqual([authGuard]);
 
     // The lazy route must expose its component through its child config.
     const children = await route!.loadChildren!() as Routes;
+    expect(children[1]?.path).toBe(':date');
     expect(children[0]?.loadComponent).toBeTypeOf('function');
     expect(await children[0]!.loadComponent!()).toBeDefined();
   });
@@ -109,7 +110,7 @@ describe('routing, authenticated', () => {
   });
 
   it('serves Research and Reports as real pages, with no placeholder left', async () => {
-    for (const path of ['research', 'reports']) {
+    for (const path of ['insights/research', 'insights/reports']) {
       const route = routes.find((item) => item.path === path);
       expect(route?.title).toBeTruthy();
       expect(String(route?.data?.['subtitle'])).not.toMatch(/planned/i);
@@ -126,8 +127,9 @@ describe('routing, authenticated', () => {
 
 describe('route data readiness contract', () => {
   const expected = [
-    'dashboard', 'trades', 'trades/:id', 'plans/:id', 'analytics', 'calendar', 'watchlist',
-    'watchlist/:symbol', 'risk', 'system', 'versions', 'research', 'reports',
+    'dashboard', 'trades', 'trades/:id', 'plans/:id', 'insights/analytics', 'trades/calendar',
+    'watchlist', 'watchlist/:symbol', 'risk', 'system', 'system/versions', 'insights/research',
+    'insights/reports',
   ] as const;
 
   it('keeps every authenticated workspace lazy, scoped, and resolver-backed', async () => {
@@ -148,7 +150,7 @@ describe('route data readiness contract', () => {
   });
 
   it('refreshes Analytics and System only for their active tabs', async () => {
-    const analytics = (await routes.find((route) => route.path === 'analytics')!.loadChildren!() as Routes)[0]!;
+    const analytics = (await routes.find((route) => route.path === 'insights/analytics')!.loadChildren!() as Routes)[0]!;
     const system = (await routes.find((route) => route.path === 'system')!.loadChildren!() as Routes)[0]!;
     const analyticsRefresh = analytics.data![RESOLVER_ROUTE_DATA].refreshOn;
     const systemRefresh = system.data![RESOLVER_ROUTE_DATA].refreshOn;
@@ -185,5 +187,116 @@ describe('routing, unauthenticated', () => {
 
     await expect(router.navigateByUrl('/trades')).rejects.toThrow();
     expect(router.url).not.toContain('trades');
+  });
+});
+
+/* v202 V202-4: section routes and the old paths' redirects.
+ *
+ * Every lazy route is swapped for a blank component, so these tests check
+ * the matching and redirect rules themselves, not each workspace's resolver.
+ * `trades/calendar` keeps its `''` and `:date` children, as calendar.routes
+ * declares them.
+ */
+@Component({ template: '' })
+class Blank {}
+
+function stubbed(): Routes {
+  return routes.map((route) => {
+    if (!route.loadChildren && !route.loadComponent) return route;
+    const { loadChildren: _lazy, loadComponent: _component, ...rest } = route;
+    void _lazy; void _component;
+    return route.path === 'trades/calendar'
+      ? { ...rest, children: [{ path: '', component: Blank }, { path: ':date', component: Blank }] }
+      : { ...rest, component: Blank };
+  });
+}
+
+function configureStubbed() {
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideRouter(stubbed()),
+      provideLocationMocks(),
+      { provide: SessionStore, useValue: { isAuthenticated: () => true } },
+    ],
+  });
+}
+
+// One harness per test: every test below navigates exactly once.
+async function land(url: string): Promise<{ url: string; paths: (string | undefined)[] }> {
+  const harness = await RouterTestingHarness.create();
+  await harness.navigateByUrl(url);
+  const router = TestBed.inject(Router);
+  let leaf = router.routerState.snapshot.root;
+  while (leaf.firstChild) leaf = leaf.firstChild;
+  return { url: router.url, paths: leaf.pathFromRoot.map((s) => s.routeConfig?.path) };
+}
+
+describe('v202 section routes and redirects', () => {
+  beforeEach(() => configureStubbed());
+
+  it.each([
+    ['/calendar', '/trades/calendar'],
+    ['/calendar/2026-10-01', '/trades/calendar/2026-10-01'],
+    ['/cancels', '/trades/cancels'],
+    ['/analytics', '/insights/analytics'],
+    ['/research', '/insights/research'],
+    ['/reports', '/insights/reports'],
+    ['/versions', '/system/versions'],
+    ['/insights', '/insights/analytics'],
+  ])('redirects %s to %s, keeping the query string and fragment', async (from, to) => {
+    expect((await land(`${from}?tab=tuning&page=2#x`)).url).toBe(`${to}?tab=tuning&page=2#x`);
+  });
+
+  it('redirects a bare old path without inventing a query', async () => {
+    expect((await land('/calendar')).url).toBe('/trades/calendar');
+  });
+
+  it.each(['/trades/calendar', '/trades/cancels', '/trades/calendar/2026-10-01'])(
+    'matches %s as a section, never as a trade id', async (url) => {
+      const { paths } = await land(url);
+      expect(paths).not.toContain('trades/:id');
+      expect(paths.some((p) => p === 'trades/calendar' || p === 'trades/cancels')).toBe(true);
+    });
+
+  it('still reads any other second segment as a trade id', async () => {
+    expect((await land('/trades/812')).paths).toContain('trades/:id');
+  });
+
+  it('serves Versions as a System section', async () => {
+    expect((await land('/system/versions')).paths).toContain('system/versions');
+  });
+
+  it('keeps Health on the bare System path with its query tabs', async () => {
+    expect((await land('/system?tab=logs')).paths).toContain('system');
+  });
+
+  it.each([
+    ['trades/calendar', 'Calendar', 'P&L by day'],
+    ['trades/cancels', 'Cancels', "Were the bot's own cancels right?"],
+    ['insights/analytics', 'Analytics', 'What already happened, measured'],
+    ['insights/research', 'Research', 'Every pre-registration and its verdict'],
+    ['insights/reports', 'Reports', 'What the measurements say about entries and gates'],
+    ['system/versions', 'Versions', "What's deployed, and when it changed"],
+  ])('declares %s with its section title and the page subtitle unchanged', (path, title, subtitle) => {
+    const route = routes.find((r) => r.path === path);
+    expect(route?.title).toBe(title);
+    expect(route?.data?.['subtitle']).toBe(subtitle);
+    expect(route?.canMatch).toEqual([authGuard]);
+  });
+
+  it('declares every section before the route that would swallow it', () => {
+    const at = (path: string) => routes.findIndex((r) => r.path === path);
+    expect(at('trades/calendar')).toBeLessThan(at('trades/:id'));
+    expect(at('trades/cancels')).toBeLessThan(at('trades/:id'));
+    expect(at('system/versions')).toBeLessThan(at('system'));
+  });
+
+  it('keeps no old path as a real page', () => {
+    for (const old of ['calendar', 'cancels', 'analytics', 'research', 'reports', 'versions']) {
+      const route = routes.find((r) => r.path === old);
+      expect(route?.redirectTo, old).toBeTruthy();
+      expect(route?.loadChildren, old).toBeUndefined();
+    }
   });
 });

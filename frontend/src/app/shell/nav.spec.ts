@@ -33,9 +33,17 @@ describe('NAV_GROUPS (v195 §5.1)', () => {
   });
 
   it('labels each entry with its route title', () => {
+    // v202 V202-4: the old paths are redirects now. Until V202-6 moves the nav
+    // model onto the new paths, each entry is looked up at the path it moved to.
+    const moved: Record<string, string> = {
+      '/calendar': '/trades/calendar', '/cancels': '/trades/cancels',
+      '/analytics': '/insights/analytics', '/research': '/insights/research',
+      '/reports': '/insights/reports', '/versions': '/system/versions',
+    };
     for (const entry of allEntries) {
-      const route = routes.find((candidate) => `/${candidate.path}` === entry.path);
-      expect(route, `no route for ${entry.path}`).toBeDefined();
+      const path = moved[entry.path] ?? entry.path;
+      const route = routes.find((candidate) => `/${candidate.path}` === path);
+      expect(route, `no route for ${path}`).toBeDefined();
       expect(route!.title).toBe(entry.label);
     }
   });
