@@ -200,7 +200,7 @@ def test_markdown_keeps_pipe_delimited_cell_ids_in_one_column():
     line = next(line for line in md.splitlines() if line.startswith("| strategy_horizon="))
     assert line == (
         "| strategy_horizon=RSI\\|2w | 40 | 10 | 50.0% | 0.100 | 0.120 | "
-        "+0.050 [0.010, 0.090] | 0.080 | tickers 1; top share 100.0% |")
+        "+0.050 [0.010, 0.090] | 0.080 | n/a | tickers 1; top share 100.0% |")
     assert data["cells"][0]["id"] == "strategy_horizon=RSI|2w"
 
 
@@ -296,3 +296,16 @@ def test_a_report_without_coverage_still_renders():
              "cells": [], "tallies": [], "giveback": {"n": 0, "mean": None, "median": None}}
     md = report.render_markdown(built)
     assert "alert-hour coverage" not in md
+
+
+def test_every_cell_carries_three_eras_and_the_header_the_boundary(tmp_path):
+    from autopsy import eras
+    data = _build(tmp_path)
+    assert data["header"]["era_boundary"] == {
+        "utc": eras.ERA_BOUNDARY_UTC.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": eras.ERA_BOUNDARY_SOURCE}
+    for cell in data["cells"]:
+        assert set(cell["eras"]) == set(eras.ERAS), cell["id"]
+        assert cell["eras"]["pre"]["n"] == cell["n"], cell["id"]   # fixture trades close Jan-Apr 2026
+        assert cell["notes"] == []
+    assert len(report.render_markdown(data).splitlines()) <= report.MD_MAX_LINES

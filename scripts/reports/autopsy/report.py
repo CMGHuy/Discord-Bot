@@ -10,7 +10,7 @@ import shlex
 from collections import Counter
 from pathlib import Path
 
-from . import bars, cuts, exits
+from . import bars, cuts, eras, exits
 from .exclusions import EXCLUSIONS_PATH, apply_exclusions, load_exclusions, stall_summary
 from .cells import apply_bh, cut_cells, net_value
 from .rows import closed_trades, friction_settings
@@ -46,6 +46,9 @@ def _decorate(cell, members: list, balance: float) -> None:
         cell.bar_covered_n = sum(bool(t.bars.get("covered")) for t in members)
     if cell.cut in exits.STOP_CUTS:
         cell.extra.update(exits.stop_extra(members, balance))
+    cell.eras = eras.era_stats(members)
+    if eras.sign_flip(cell.eras):
+        cell.notes.append("era sign flip")
 
 
 def _cells(trades: list, sector_of: dict, *, n_resamples: int, seed: int,
@@ -113,7 +116,9 @@ def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resam
     header = _header(trades, covered_n, tested, n_resamples=n_resamples, seed=seed, balance=balance)
     header.update(frictions=dict(frictions if frictions is not None else friction_settings()),
                   input_fingerprints=inputs, invocation=invocation, sector_map=sector_of,
-                  stall_exclusions=stall_summary(stall, excluded))
+                  stall_exclusions=stall_summary(stall, excluded),
+                  era_boundary={"utc": eras.ERA_BOUNDARY_UTC.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                "source": eras.ERA_BOUNDARY_SOURCE})
     coverage = {"trades": exits.hour_coverage(trades),
                 "plans": exits.hour_coverage(exits.issued_rows(rows))}
     header["alert_hour_coverage"] = coverage
@@ -173,6 +178,10 @@ def _header_lines(h: dict) -> list[str]:
              f"- Net of frictions: {h['net_of_frictions']}",
              f"- Cells tested: {h['cells_tested']} (one BH pass over all of them); "
              f"bootstrap resamples {h['resamples']}, seed {h['seed']}"]
+    if h.get("era_boundary"):
+        lines.append(f"- Exit-model era boundary (production deploy of b4ef2e87): "
+                     f"{h['era_boundary']['utc']} (source: {h['era_boundary']['source']}); "
+                     f"era columns carry no CI and no q")
     if h.get("alert_hour_coverage"):
         lines.append(_coverage_line("trades", h["alert_hour_coverage"]["trades"]))
     return lines + _provenance_lines(h) + [f"- Note: {note}" for note in h["notes"]] + [""]
@@ -192,7 +201,19 @@ def _extra_text(c: dict) -> str:
         parts.append(f"stop {_fmt(e['mean_stop_atr'], '.2f')} ATR, loss at 2% "
                      f"${_fmt(e['dollar_loss_at_2pct'], '.0f')}, "
                      f"overshoot {_fmt(e['mean_overshoot_r'])}")
+    parts += c.get("notes", [])
     return "; ".join(parts)
+
+
+def _eras_text(c: dict) -> str:
+    if not c.get("eras"):
+        return "n/a"
+    out = []
+    for era in eras.ERAS:
+        s = c["eras"][era]
+        out.append(f"{s['n']} n/a" if s["n"] == 0
+                   else f"{s['n']} {_pct(s['win_rate'])} {s['net_expr']:+.3f}")
+    return " / ".join(out)
 
 
 def _escape_table_text(text: str) -> str:
@@ -204,14 +225,15 @@ def _cell_row(c: dict) -> str:
     delta = "n/a" if c["delta"] is None else f"{c['delta']:+.3f}"
     return (f"| {_escape_table_text(c['id'])} | {c['n']} | {c['weeks']} | {_pct(c['win_rate'])} | "
             f"{_fmt(c['net_expr'])} | {_fmt(c['gross_expr'])} | {delta} {ci} | "
-            f"{_fmt(c['q'])} | {_escape_table_text(_extra_text(c))} |")
+            f"{_fmt(c['q'])} | {_eras_text(c)} | {_escape_table_text(_extra_text(c))} |")
 
 
 def _cell_lines(cells: list, budget: int) -> list[str]:
     ranked = sorted((c for c in cells if not c["thin"]), key=_sort_key)
     lines = ["## Cells (not thin; by q, then |Δ|)", "",
-             "| cell | N | weeks | WR | net ExpR | gross ExpR | Δ net ExpR [95% CI] | q | notes |",
-             "|---|---|---|---|---|---|---|---|---|"]
+             "| cell | N | weeks | WR | net ExpR | gross ExpR | Δ net ExpR [95% CI] | q | "
+             "eras pre / straddle / post (N WR net) | notes |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
     shown = ranked[:max(0, budget - len(lines) - 2)]
     lines += [_cell_row(c) for c in shown]
     if len(shown) < len(ranked):
