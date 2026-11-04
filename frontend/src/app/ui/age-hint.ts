@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 
+import { MarketStatus } from '../api/models';
 import { ConnectionStore } from '../stores/connection.store';
 
 /** The D2 windows as the SPA sees them. The server's `.env` knobs are not
@@ -14,6 +15,45 @@ export function ageText(ageS: number | null): string | null {
   if (ageS < 60) return `${Math.round(ageS)} s ago`;
   if (ageS < 3600) return `${Math.floor(ageS / 60)} min ago`;
   return `${Math.floor(ageS / 3600)} h ago`;
+}
+
+export type MarketTone = 'fresh' | 'stale' | 'closed' | 'stalled';
+export interface MarketAgeLabel { text: string | null; tone: MarketTone; }
+
+const ET_FORMAT = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
+const HOUR_MS = 3_600_000;
+
+/** "Fri 16:00" in New York time, read through formatToParts so no locale
+ *  punctuation leaks in. */
+function etStamp(iso: string): string {
+  const parts = ET_FORMAT.formatToParts(new Date(iso));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return part('weekday') + ' ' + part('hour') + ':' + part('minute');
+}
+
+function closedLabel(asOf: string, status: MarketStatus): string {
+  const closeAt = status.last_close_at;
+  const atClose = closeAt !== null && Date.parse(asOf) >= Date.parse(closeAt) - HOUR_MS;
+  return atClose ? 'last close · ' + etStamp(closeAt) + ' ET' : 'as of ' + etStamp(asOf) + ' ET';
+}
+
+/**
+ * v201: what a priced cell says about its age. A stalled refresher wins (the
+ * age is then the honest part), a closed market reads its last close rather
+ * than a scary "stale", and otherwise the age is fresh or stale against the
+ * server's limit.
+ */
+export function marketAgeLabel(asOf: string | null, nowMs: number, status: MarketStatus | null): MarketAgeLabel {
+  const age = asOf === null ? null : (nowMs - Date.parse(asOf)) / 1000;
+  if (status?.heartbeat.stalled) return { text: ageText(age), tone: 'stalled' };
+  if (status?.session === 'closed') {
+    return { text: asOf === null ? null : closedLabel(asOf, status), tone: 'closed' };
+  }
+  const limit = status?.stale_price_s ?? null;
+  const stale = limit !== null && age !== null && age > limit;
+  return { text: ageText(age), tone: stale ? 'stale' : 'fresh' };
 }
 
 /**
