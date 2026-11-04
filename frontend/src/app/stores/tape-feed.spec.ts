@@ -17,7 +17,7 @@ class FakeEventStream {
     return counter;
   }
 
-  changes(name: string, _options?: { minIntervalMs: number }): Signal<number> {
+  changes(name: string): Signal<number> {
     return this.counterFor(name).asReadonly();
   }
 
