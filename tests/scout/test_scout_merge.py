@@ -227,7 +227,8 @@ def test_a_playbook_row_sorts_last_in_its_edge_class():
 
 HEADER = {"window": ["2026-01-05", "2026-10-09"], "n": 212, "pooled_net_expr": 0.11,
           "pooled_win_rate": 0.52, "net_of_frictions": "modelled", "cells_tested": 147,
-          "bar_covered_n": 190, "resamples": 10000, "seed": 42, "notes": []}
+          "bar_covered_n": 190, "resamples": 10000, "seed": 42, "notes": [],
+          "autopsy_schema": 2}
 
 
 def test_the_slate_copies_the_header_and_carries_both_boundaries():

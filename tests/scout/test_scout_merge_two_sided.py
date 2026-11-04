@@ -205,3 +205,88 @@ def test_the_generator_roles_doc_states_the_two_sided_rule():
     for phrase in ("`exploit`", "`avoid`", "upper bound is below 0", "not known at entry",
                    "schema-1", "q ≤ 0.10"):
         assert phrase in section, phrase
+
+
+HEAD2 = {"window": ["2026-01-05", "2026-10-09"], "n": 212, "pooled_net_expr": 0.11,
+         "pooled_win_rate": 0.52, "net_of_frictions": "modelled", "cells_tested": 3,
+         "autopsy_schema": 2}
+
+
+def test_projected_change_for_exploit_is_cell_minus_pooled():
+    cell = dict(UP, n=40, net_expr=0.3)
+    assert merge.projected_pooled_change(cell, HEAD2, "exploit") == pytest.approx(0.19)
+
+
+def test_projected_change_for_avoid_is_the_exact_complement_minus_pooled():
+    cell = dict(DOWN, n=40, net_expr=-0.2)
+    got = merge.projected_pooled_change(cell, HEAD2, "avoid")
+    complement = (212 * 0.11 - 40 * -0.2) / (212 - 40)
+    assert got == round(complement - 0.11, 4) == 0.0721
+    share, delta = 40 / 212, -0.2 - complement
+    assert got == pytest.approx(-share * delta, abs=1e-4)
+
+
+@pytest.mark.parametrize("cell, header, direction", [
+    (None, HEAD2, "exploit"),
+    (dict(UP, n=40, net_expr=0.3), {"n": 212}, "exploit"),
+    (dict(UP, n=40, net_expr=None), HEAD2, "exploit"),
+    (dict(DOWN, n=212, net_expr=-0.2), HEAD2, "avoid"),
+    (dict(DOWN, n=40, net_expr=float("nan")), HEAD2, "avoid"),
+    (dict(DOWN, n=40, net_expr=-0.2), dict(HEAD2, n=None), "avoid")])
+def test_projected_change_is_none_when_it_cannot_be_computed(cell, header, direction):
+    assert merge.projected_pooled_change(cell, header, direction) is None
+
+
+def test_schema_2_ranks_exploit_and_avoid_by_the_bound_nearest_zero():
+    a = _cell("regime=a", lo=0.05, hi=0.35)
+    b = _cell("regime=b", lo=-0.40, hi=-0.20)
+    c = _cell("regime=c", lo=0.10, hi=0.30)
+    cells = {x["id"]: x for x in (a, b, c)}
+    rows = [_row(a, "exploit"), _row(b, "avoid"), _row(c, "exploit")]
+    assert [r.idea for r in merge.rank(rows, cells, schema=2)] == [
+        "avoid-regime=b", "exploit-regime=c", "exploit-regime=a"]
+
+
+def test_schema_1_ranks_every_row_by_its_lower_bound():
+    legacy_avoid = _cell("regime=x", lo=0.20, hi=0.40)
+    plain = _cell("regime=y", lo=0.10, hi=0.30)
+    cells = {x["id"]: x for x in (legacy_avoid, plain)}
+    rows = [_row(plain, "exploit"), _row(legacy_avoid, "avoid")]
+    assert [r.idea for r in merge.rank(rows, cells)] == ["avoid-regime=x", "exploit-regime=y"]
+    assert [r.idea for r in merge.rank(rows, cells, schema=2)] == ["exploit-regime=y", "avoid-regime=x"]
+
+
+def test_the_slate_shows_the_projected_pooled_change_per_row():
+    up, down = dict(UP, n=40, net_expr=0.3), dict(DOWN, n=40, net_expr=-0.2)
+    cells = {up["id"]: up, down["id"]: down}
+    playbook = _row(UP, "exploit", idea="pb")
+    playbook.evidence, playbook.route = "playbook gap-and-hold", "/screen pb"
+    text = merge.render_slate([_row(up, "exploit"), _row(down, "avoid"), playbook], [], HEAD2,
+                              date="2026-10-30", autopsy_path="a.json", cells=cells)
+    assert "- projected pooled change: +0.190 R (keep only this cell)" in text
+    assert "- projected pooled change: +0.072 R (drop this cell)" in text
+    assert "- projected pooled change: n/a (no autopsy cell)" in text
+    bare = merge.render_slate([_row(up, "exploit")], [], HEAD2, date="2026-10-30",
+                              autopsy_path="a.json")
+    assert "- projected pooled change: n/a (no autopsy cell)" in bare
+
+
+def test_a_schema_1_slate_opens_with_the_legacy_banner():
+    legacy = {k: v for k, v in HEAD2.items() if k != "autopsy_schema"}
+    lines = merge.render_slate([], [], legacy, date="2026-10-30", autopsy_path="a.json").splitlines()
+    assert lines[0] == "# Scout slate 2026-10-30"
+    assert [line for line in lines[1:] if line.strip()][0] == merge.LEGACY_BANNER
+    assert merge.LEGACY_BANNER == "legacy autopsy (schema 1): no known-at-entry check"
+    modern = merge.render_slate([], [], HEAD2, date="2026-10-30", autopsy_path="a.json")
+    assert merge.LEGACY_BANNER not in modern
+
+
+def test_the_cli_marks_a_schema_1_autopsy_as_legacy(tmp_path):
+    up = _cell("regime=risk_on", lo=0.05, hi=0.35, defined_at=None)
+    code = merge.main([str(_role_file(tmp_path, [_row(up, "exploit", idea="kept-idea")])),
+                       "--autopsy", str(_autopsy(tmp_path, [up], schema=None)),
+                       "--out-dir", str(tmp_path), "--date", "2026-10-30"])
+    assert code == 0
+    slate = (tmp_path / "2026-10-30-scout-slate.md").read_text(encoding="utf-8")
+    assert merge.LEGACY_BANNER in slate.split("## Ranked")[0]
+    assert "### 1. kept-idea (regime-desk)" in slate
