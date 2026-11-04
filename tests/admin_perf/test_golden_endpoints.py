@@ -2,11 +2,15 @@
 
 V205-4 pins the book and the clock; V205-4b appends the golden and money tests.
 Layer 1's refactors (V205-7..V205-10) must pass these unchanged."""
+import json
+import os
 from datetime import date, datetime, timezone
 
 import pytest
 
 from tests.admin_perf import golden_book as gb
+from tests.admin_perf import money_reference as mr
+from tests.admin_perf import record_golden
 
 NAMES = list(gb.ENDPOINTS)
 
@@ -49,3 +53,39 @@ def test_mask_and_diff_pointers():
     assert gb.mask(payload) == payload and gb.mask(payload) is not payload
     assert gb.diff_pointers(payload, {"items": [{"id": "x", "amount": 3.0}], "total": 2.0}) == {"/items/0/amount"}
     assert gb.diff_pointers([1], [1, 2]) == {""}
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_endpoint_matches_its_frozen_golden(name, golden_seed, frozen_clock, logged_in):
+    live = _get(logged_in, name)
+    if os.environ.get("ADMIN_PERF_RECORD") == "1":
+        record_golden.write_golden(name, live)
+    golden = json.loads(gb.golden_path(name).read_text(encoding="utf-8"))
+    pointers = list(mr.EXPECTED_MONEY[name])
+    assert gb.mask(live, pointers) == gb.mask(golden, pointers)
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_money_fields_match_the_hand_computed_reference(name, golden_seed, frozen_clock, logged_in):
+    live = _get(logged_in, name)
+    for pointer, expected in mr.EXPECTED_MONEY[name].items():
+        actual = gb.resolve(live, pointer)
+        if isinstance(expected, float):
+            assert actual == pytest.approx(expected, abs=0.005), pointer
+        else:
+            assert actual == expected, pointer
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_money_pointers_are_exactly_the_fx_sensitive_fields(name, golden_seed, frozen_clock, logged_in):
+    base = _get(logged_in, name)
+    golden_seed.set_fx(2.0)                             # every USDEUR=X close doubled
+    doubled = _get(logged_in, name)
+    assert gb.diff_pointers(gb.mask(base), gb.mask(doubled)) == set(mr.EXPECTED_MONEY[name])
+
+
+def test_no_golden_is_ever_overwritten(tmp_path, monkeypatch):
+    monkeypatch.setattr(gb, "GOLDEN_DIR", tmp_path)
+    assert record_golden.write_golden("dashboard", {"a": 1}) is True
+    assert record_golden.write_golden("dashboard", {"a": 2}) is False
+    assert json.loads((tmp_path / "dashboard.json").read_text(encoding="utf-8")) == {"a": 1}
