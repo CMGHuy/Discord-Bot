@@ -23,6 +23,8 @@ import { SortSpec } from '../../ui/data-table/data-table.types';
 import { isInline } from '../../ui/priority';
 import { compareTickers, isWithinCurrentWeek, Watchlist, WATCHLIST_COLUMNS, WATCHLIST_FALLBACK_HINT } from './watchlist';
 import { WatchlistStore } from '../../stores/watchlist.store';
+import { LiveValuesStore } from '../../stores/live-values.store';
+import { FakeLiveValues } from '../../testing/fake-live-values';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { TapeStore } from '../../stores/tape.store';
 import { writeWatchlistTags } from '../../ui/watchlist-prefs';
@@ -54,6 +56,7 @@ function rows(list: Partial<Ticker>[]): Element[] {
       provideRouter([]),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
+      { provide: LiveValuesStore, useClass: FakeLiveValues },
       WatchlistStore,
     ],
   });
@@ -172,6 +175,7 @@ function seed(): { fixture: ComponentFixture<Watchlist>; backend: HttpTestingCon
       provideRouter([]),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
+      { provide: LiveValuesStore, useClass: FakeLiveValues },
       WatchlistStore,
     ],
   });
@@ -246,6 +250,7 @@ describe('Watchlist tape column', () => {
         provideRouter([]),
         provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         WatchlistStore,
         { provide: TapeStore, useValue: tapeStub },
       ],
@@ -296,6 +301,7 @@ describe('Watchlist tape column sorting', () => {
         provideRouter([]),
         provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         WatchlistStore,
         { provide: TapeStore, useValue: { toggle: vi.fn(), symbols: () => ['NVDA'] } },
       ],
@@ -349,6 +355,21 @@ describe('Watchlist recomposed row', () => {
     expect(row.textContent).toContain('171.50');
     expect(row.textContent).toContain('+1.94%');
     expect(row.textContent).toContain('+6.20%');
+  });
+
+  it('price cell renders through sb-market-value and keeps the bar date', () => {
+    const asOf = new Date(Date.now() - 3 * 60_000).toISOString();
+    const row = firstRow({ price: 171.5, as_of: '2026-09-10', price_as_of: asOf });
+    const cell = row.querySelector('sb-market-value')!;
+    expect(cell.querySelector('.price')!.textContent!.trim()).toBe('171.50');
+    expect(cell.querySelector('.mv-age')!.textContent!.trim()).toBe('3 min ago');
+    expect(row.querySelector('.as-of')!.textContent).toContain('2026-09-10');
+    expect(row.querySelector('sb-age-hint')).toBeNull();
+  });
+
+  it('a refreshing price shows the spinner', () => {
+    const row = firstRow({ price: 171.5, price_as_of: new Date().toISOString(), price_refreshing: true });
+    expect(row.querySelector('sb-market-value sb-spinner')).not.toBeNull();
   });
 
   it('renders a missing price as no-value, never as zero', () => {
@@ -444,6 +465,7 @@ function render(opts: RenderOpts = {}): ComponentFixture<Watchlist> {
       provideRouter([]),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
+      { provide: LiveValuesStore, useClass: FakeLiveValues },
       WatchlistStore,
       PreferencesStore,
     ],
@@ -566,6 +588,7 @@ describe('Watchlist on a phone (v179 §3.1)', () => {
         provideRouter([]),
         provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         WatchlistStore,
         { provide: TapeStore, useValue: { toggle: vi.fn(), symbols: () => [] } },
         phoneViewport(),
@@ -618,6 +641,7 @@ describe('Watchlist on sb-page (v195 Phase 4, §5.2)', () => {
         provideRouter([]),
         provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         WatchlistStore,
       ],
     });
