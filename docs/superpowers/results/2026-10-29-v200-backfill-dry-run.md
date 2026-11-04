@@ -33,3 +33,37 @@ weekend or holiday gap before its post.
 ## Decision needed
 The partner decides whether V200-7 pins these 370 matches in revision v200_001.
 The raw CSV stays in the scratchpad (`v200_backfill.csv`) and is never committed.
+
+## Replica verification
+
+Run 2026-11-04 against `swingbot_prod_replica` in `swing-db` (refreshed by /replicate-prod-db: MATCH, 33 tables,
+alembic v173_002), revision file at c4f2f901. The script stayed in the scratchpad; it asserts every line below.
+
+| State | alembic | plans | pinned present | pinned with issued_at | issued_at_source = discord |
+|---|---|---|---|---|---|
+| before | v173_002 | 778 | 370 | 0 | 0 |
+| after upgrade | v200_001 | 778 | 370 | 370 | 370 |
+| after downgrade | v173_002 | 778 | 370 | 0 | 0 |
+
+- Unpinned plan docs unchanged by upgrade and downgrade (md5 equal).
+- Pinned plan docs restored by the downgrade apart from the two fields (md5 equal); 147 pinned docs held an
+  `"issued_at": null` key that the downgrade drops (reads back as None either way).
+- A second stamp on the upgraded replica refused before writing: `v200_001: pinned plans already carry issued_at: [...`.
+- NOTIFY on channel `trades`: 1 during upgrade, 1 during downgrade.
+- Replica left at `v200_001`.
+
+## Deploy note
+
+Not a plan task: the partner ships v200_001 with the normal deploy (`alembic upgrade head`,
+`docs/deploy/DEPLOY_HETZNER.md`). Never generate or edit the revision on the VM.
+
+- Writes: 370 plan docs gain `issued_at` and `issued_at_source = "discord"`; nothing else changes.
+- Last PITR drill: 2026-10-01 (`docs/deploy/DB_RESTORE.md` and V200-1's `pitr_last_drill` agree). Rollback is
+  `scripts/ops/rollback_to.sh` to the second before the upgrade ran; note the UTC time before `alembic upgrade head`.
+- The `plans` NOTIFY trigger fires once per touched row (channel `trades`); Postgres folds identical
+  payloads within the transaction, so the admin UI's SSE stream sees a short burst (1 on the
+  replica) and refreshes the trades views. Expected, not an incident.
+- Refusals on production: the revision raises (the upgrade stops, nothing written) if any pinned plan
+  is missing or already carries `issued_at`. A refusal is a stop to report; never edit the pins on the VM.
+- After the deploy: `alembic current` prints `v200_001`; the autopsy coverage line (V200-4) shows
+  `discord` = 370.
