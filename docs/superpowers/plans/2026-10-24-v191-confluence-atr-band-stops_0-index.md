@@ -309,3 +309,8 @@ State at 2026-11-03 (worktree `.claude/worktrees/2026-10-24-v191-confluence-atr-
 - **Then follow V191-21 Steps 2..9** (part `_4-runs-docs-and-release.md`): render with `logs/v191/render_stage.py` (git-ignored scratch; recreate from Step 1 if absent), check the stop-and-report conditions, commit after each stage group. V191-22 is the same chain for arm R. Stage 3 is a ONE-SHOT validation: never re-run it.
 - Logs and checkpoints are git-ignored, so only this machine has them.
 - Main is 330 commits ahead of this branch; merge main in before V191-25.
+
+### Update 2026-11-04
+
+- **V191-21 done (commit 9bb73b21): arm K UNDERPOWERED at Stage 0**, budget intact, arm closed. Stages 1-3 for K do not run.
+- **V191-22 (arm R) in progress at Step 2, Stage 0 replay** started 2026-11-04; log `logs/v191/stage22r0.log`, exit code `logs/v191/r0.exit`, progress `logs/measure_atr_band_stop.R.rows.progress`. Resume command is the one above with `--arm R --stage 0` (checkpointed). Then V191-22 Steps 3..9, V191-23..25.
