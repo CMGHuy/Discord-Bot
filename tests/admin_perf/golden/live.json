@@ -1,0 +1,98 @@
+{
+ "awaiting": {
+  "as_of": "2026-11-04T12:00:00+00:00",
+  "availability": "ok",
+  "count": 1,
+  "next_expiry": null,
+  "reason": null
+ },
+ "events": [
+  {
+   "at": "2026-11-03T20:30:00+00:00",
+   "kind": "trade_closed",
+   "pnl": {
+    "amount": 50.0,
+    "r": 1.0
+   },
+   "ref": "golden-t2-usd-win",
+   "text": "AAPL closed \u00b7 win",
+   "tone": "positive"
+  },
+  {
+   "at": "2026-11-03T14:00:00+00:00",
+   "kind": "trade_closed",
+   "pnl": {
+    "amount": 120.0,
+    "r": 1.2
+   },
+   "ref": "golden-t1-sap-win",
+   "text": "SAP.DE closed \u00b7 win",
+   "tone": "positive"
+  },
+  {
+   "at": "2026-11-02T23:30:00+00:00",
+   "kind": "trade_closed",
+   "pnl": {
+    "amount": -30.0,
+    "r": -0.6
+   },
+   "ref": "golden-t3-usd-midnight",
+   "text": "AAPL closed \u00b7 loss",
+   "tone": "negative"
+  },
+  {
+   "at": "2026-11-02T15:00:00+00:00",
+   "kind": "trade_closed",
+   "pnl": {
+    "amount": 70.0,
+    "r": 1.4
+   },
+   "ref": "golden-t4-usd-scaleout",
+   "text": "AAPL closed \u00b7 win",
+   "tone": "positive"
+  },
+  {
+   "at": "2026-11-02T08:00:00+00:00",
+   "kind": "plan_alerted",
+   "pnl": null,
+   "ref": "22222222-2222-4222-8222-222222222222",
+   "text": "Alert \u00b7 SAP.DE long \u00b7 entry 215.00",
+   "tone": "info"
+  },
+  {
+   "at": "2026-11-02T08:00:00+00:00",
+   "kind": "plan_alerted",
+   "pnl": null,
+   "ref": "11111111-1111-4111-8111-111111111111",
+   "text": "Alert \u00b7 AAPL long \u00b7 entry 100.00",
+   "tone": "info"
+  }
+ ],
+ "events_meta": {
+  "as_of": "2026-11-04T12:00:00+00:00",
+  "availability": "ok",
+  "missing": []
+ },
+ "heat": {
+  "as_of": "2026-11-04T12:00:00+00:00",
+  "availability": "ok",
+  "balance": 10000.0,
+  "cap_amount": 600.0,
+  "cap_pct": 6.0,
+  "headroom_amount": 500.0,
+  "headroom_pct": 5.0,
+  "includes_resting": true,
+  "open_amount": 100.0,
+  "open_pct": 1.0,
+  "reason": null,
+  "utilisation_pct": 16.7
+ },
+ "killswitch": {
+  "as_of": "2026-11-04T12:00:00+00:00",
+  "availability": "ok",
+  "detail": null,
+  "engaged": false,
+  "reason": null,
+  "since": null
+ }
+}
