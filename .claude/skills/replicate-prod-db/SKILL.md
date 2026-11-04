@@ -1,6 +1,6 @@
 ---
 name: replicate-prod-db
-description: "Copy the production Postgres data into a local database (read-only on the Hetzner VM) and verify row counts. Run as /replicate-prod-db, or by Claude itself before a task's first test run against the database (partner rule, 2026-10-18)."
+description: "Use before a task's first test run that reaches the local Postgres (the storage suite, tests/db/, any test on a store's read/write path or an Alembic migration), or when asked to refresh, replicate or copy production data locally (/replicate-prod-db). Not for frontend-only or pure-unit runs, not for writing to production, and not when a sibling task in this session already synced the replica."
 ---
 
 # Replicate prod DB
@@ -78,3 +78,13 @@ A verdict line naming target and `alembic` revision, or a FAIL shown in full.
 | "run `pg_dump` against prod from my machine directly" | The port is unpublished and the key goes through `ssh-hetzner.sh`; the script does the whole path. |
 | "DRIFT means it failed" | Production kept writing between dump and count. Only MISMATCH is a bad copy. |
 | "commit the dump so others can reuse it" | It is the live trading history; `backups/` is ignored on purpose. |
+| "the tests passed on yesterday's replica, skip the sync" | Partner rule (2026-10-18): the first DB test run of a task tops the replica up first. Only a sync earlier in this session counts. |
+
+## Trigger table
+
+Should fire: about to run `testrun.py suite storage` or a file under `tests/db/`.
+Should fire: implementing a store's write path, then running its tests.
+Should fire: "refresh my local database from production".
+Should not fire: running `ng test` / a frontend unit test.
+Should not fire: running a pure-unit test file under `tests/charts/`.
+Should not fire: asking how many rows a production table has (`prod-inspector`).
