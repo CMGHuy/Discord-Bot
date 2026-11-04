@@ -316,6 +316,21 @@ quote_currencies = register(sa.Table("quote_currencies", METADATA,
     *standard_columns()),
     ("symbol", "code", "outcome", "checked_at", "retry_after"))
 
+# v205: one FX rate per (major base, major account, Berlin day): the last positive
+# daily close strictly before that day. Written insert-if-absent by the refresher's
+# 08:00 Berlin snap and the one-off backfill (core/marketdata/fx_snap.py); read whole
+# by core/marketdata/fx_daily.py. No SSE trigger.
+fx_daily_rates = register(sa.Table("fx_daily_rates", METADATA,
+    sa.Column("base", sa.Text, primary_key=True),
+    sa.Column("account", sa.Text, primary_key=True),
+    sa.Column("day", sa.Date, primary_key=True),
+    sa.Column("rate", sa.Float(53), nullable=False),
+    sa.Column("bar_date", sa.Date, nullable=False),
+    sa.Column("snapped_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("source", sa.Text, nullable=False),
+    *standard_columns()),
+    ("base", "account", "day", "rate", "bar_date", "snapped_at", "source"))
+
 market_refresh_queue = register(sa.Table("market_refresh_queue", METADATA,
     sa.Column("id", sa.BigInteger, primary_key=True),
     sa.Column("kind", sa.Text, nullable=False),
@@ -538,6 +553,15 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "outcome": "NOT NULL known/unknown answer the FX job branches on",
         "checked_at": "NOT NULL time of the last lookup; the FX job's staleness test",
         "retry_after": "the FX job's backoff WHERE for an unknown answer; NULL when known",
+    },
+    "fx_daily_rates": {
+        "base": "primary key (base, account, day): one rate per major-code pair per Berlin day",
+        "account": "primary key (base, account, day): the major account currency converted into",
+        "day": "primary key: the Berlin calendar day the rate serves; fx_daily.lookup's sort key",
+        "rate": "NOT NULL multiplier fx_daily.lookup returns; never 1.0 for a missing pair",
+        "bar_date": "NOT NULL date of the frame bar the rate came from; the FALLBACK_DAYS test",
+        "snapped_at": "NOT NULL write time; max(snapped_at) is half of the memo's version key",
+        "source": "NOT NULL snap/backfill provenance, checked after the deploy backfill",
     },
     "market_refresh_queue": {
         "kind": "market_refresh_queue_pending_uq: one pending request per (kind, key)",
