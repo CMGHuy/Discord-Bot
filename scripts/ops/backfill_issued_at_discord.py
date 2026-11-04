@@ -17,6 +17,9 @@ Embed layouts
   * Aug-Sep 2026 full alert: title ``"<chips> · 🟢 BULLISH — AAPL"``; field ``Setup``
     (``"<strategy>"`` or ``"<strategy>  +N more horizon(s)"``); field ``Swing type``
     (the horizon label). No plan id.
+  * July 2026 (V200-6 sample): title ``"<chips> 🟢 LONG (buy) — AAPL"`` (``SHORT (sell)``
+    for bearish), the same ``Setup`` / ``Swing type`` fields; from 2026-07-19 the
+    footer carries ``plan <8 chars>`` (title ``"🅲 ⚠️ WEAK · ⭐ 🟢 LONG (buy) — GOOGL"``).
   * From 2026-09-30: title ``"🆕 ▲ LONG AAPL · ALERT · Lv4 ⭐"``; footer
     ``"... · plan abcd1234"`` (8-char prefix); ``url`` = ``<base>/plans/<full plan_id>``.
 
@@ -59,7 +62,7 @@ CSV_COLUMNS = ("plan_id", "plan_candidates", "message_candidates", "message_id",
 WINDOW_FIRST = dt.date(2026, 7, 1)
 WINDOW_LAST = dt.date(2026, 9, 16)
 
-_SIDE_RE = re.compile(r"(?i:\b(LONG|SHORT|BULLISH|BEARISH)\b)\s+(?:—\s+)?([A-Z0-9][A-Z0-9.^=\-]*)")
+_SIDE_RE = re.compile(r"(?i:\b(LONG|SHORT|BULLISH|BEARISH)\b)(?:\s+\((?:buy|sell)\))?\s+(?:—\s+)?([A-Z0-9][A-Z0-9.^=\-]*)")
 _MORE_RE = re.compile(r"\s+\+\d+ more horizon\(s\)$")
 _URL_ID_RE = re.compile(r"/plans/([0-9a-f-]{8,})")
 _FOOTER_ID_RE = re.compile(r"\bplan ([0-9a-f]{8})\b")
@@ -266,10 +269,11 @@ def write_csv(rows: list[MatchRow], fh) -> None:
 
 # --------------------------------------------------------------------------- I/O
 
-_PLANS_SQL = ("SELECT plan_id, doc->>'ticker', doc->>'direction', doc->>'strategy', "
-              "doc->>'horizon_key', left(doc->>'created_at', 10) FROM plans "
+_PLANS_SQL = ("SELECT plan_id, ticker, doc->>'direction', strategy, horizon_key, "
+              "(created_at AT TIME ZONE 'UTC')::date::text FROM plans "
               "WHERE doc->>'issued_at' IS NULL "
-              "AND left(doc->>'created_at', 10) BETWEEN :first AND :last ORDER BY plan_id")
+              "AND (created_at AT TIME ZONE 'UTC')::date BETWEEN CAST(:first AS date) "
+              "AND CAST(:last AS date) ORDER BY plan_id")
 
 
 def load_plans() -> list[PlanKey]:

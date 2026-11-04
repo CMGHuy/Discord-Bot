@@ -153,3 +153,12 @@ def test_the_script_is_read_only_rest_only_and_never_the_mirror():
     assert not re.search(r"\b(INSERT|UPDATE|DELETE|TRUNCATE|ALTER|DROP)\b", source)
     assert "READ ONLY" in source
     assert not re.search(r"print\([^)]*TOKEN", source)
+
+
+def test_alert_key_reads_the_july_layout_with_the_order_word():
+    key = bf.alert_key(_msg("7", "2026-07-03T08:45:33+00:00", "⭐ 🔴 SHORT (sell) — AAPL",
+                            setup="S/R Confluence"))
+    assert (key.ticker, key.direction, key.strategy) == ("AAPL", "bearish", "S/R Confluence")
+    weak = bf.alert_key(_msg("8", "2026-07-19T15:20:28+00:00", "🅲 ⚠️ WEAK · ⭐ 🟢 LONG (buy) — GOOGL",
+                             footer="Technical signal only -- not financial advice. · plan 0976c5ef"))
+    assert (weak.ticker, weak.direction, weak.plan_id) == ("GOOGL", "bullish", "0976c5ef")
