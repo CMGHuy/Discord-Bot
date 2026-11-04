@@ -42,11 +42,13 @@ def test_the_table_raises_no_sse_event():
     assert TABLE not in events.TABLE_CHANNELS
 
 
-def test_v173_002_sits_on_v173_001_and_is_the_single_head():
+def test_v173_002_sits_on_v173_001_and_the_chain_stays_one_head():
     scripts = ScriptDirectory.from_config(Config(str(REPO / "alembic.ini")))
     revision = scripts.get_revision("v173_002")
     assert revision.down_revision == "v173_001"
-    assert scripts.get_heads() == ["v173_002"]
+    heads = scripts.get_heads()
+    assert len(heads) == 1      # later revisions (v201_001 ...) extend the chain; never a fork
+    assert "v173_002" in {r.revision for r in scripts.walk_revisions("v173_002", heads[0])}
 
 
 def _tables(connection) -> set[str]:
