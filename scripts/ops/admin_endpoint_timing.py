@@ -117,9 +117,13 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
 
 
 def _ensure_repo_on_path() -> None:
-    """``python scripts/ops/x.py`` puts scripts/ops on sys.path, not the repo root."""
+    """``python scripts/ops/x.py`` puts scripts/ops on sys.path, not the repo root.
+
+    Under ``python -`` (stdin, as in the admin container) ``__file__`` is "<stdin>", not a
+    file: there is no checkout to add, and the app root is already importable.
+    """
     here = globals().get("__file__")
-    if here:
+    if here and Path(here).is_file():
         root = str(Path(here).resolve().parents[2])
         if root not in sys.path:
             sys.path.insert(0, root)

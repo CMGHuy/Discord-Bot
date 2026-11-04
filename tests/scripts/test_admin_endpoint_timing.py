@@ -106,3 +106,18 @@ def test_defaults_are_the_berlin_month_and_date(monkeypatch):
     monkeypatch.setattr(timing, "_now", lambda: datetime(2026, 10, 31, 23, 30, tzinfo=timezone.utc))
     args = timing._parse(["--runs", "3"])
     assert (args.month, args.date, args.runs) == ("2026-11", "2026-11-01", 3)
+
+
+def test_run_from_stdin_leaves_sys_path_alone(monkeypatch):
+    """`python -` sets __file__ to "<stdin>": no real path, so no repo root to add (and no IndexError)."""
+    monkeypatch.setattr(timing, "__file__", "<stdin>", raising=False)
+    before = list(sys.path)
+    timing._ensure_repo_on_path()
+    assert sys.path == before
+
+
+def test_run_with_no_file_leaves_sys_path_alone(monkeypatch):
+    monkeypatch.delattr(timing, "__file__", raising=False)
+    before = list(sys.path)
+    timing._ensure_repo_on_path()
+    assert sys.path == before
