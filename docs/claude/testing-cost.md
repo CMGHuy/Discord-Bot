@@ -40,9 +40,13 @@ there is fine; a `failed` anywhere is yours.
 symlinks). The suite is ~5x larger than the numbers below; full `-n 4` is now
 roughly 5 minutes, and single runs swing 250-380s with machine load. The DB
 tests use the project's one database container, `swing-db`, published on
-`127.0.0.1:55432` by the git-ignored `docker-compose.override.yml` (`docker compose
-up -d db`; test login `swingbot`/`swingbot`, base database `swingbot_test`);
-if it is down ~1200 tests skip silently.
+`127.0.0.1:56789` by the git-ignored `docker-compose.override.yml` (`docker compose
+up -d db` from the main checkout; 55432 is inside a Windows reserved port range
+and cannot be bound). Credentials are `.env`'s `DATABASE_URL`, resolved by
+`scripts/dev/swing_db.py` from the main checkout so every worktree and agent
+connects without a copy of `.env` (never print the values); `TEST_DATABASE_URL`
+still wins. Base database `swingbot_test`. If the container is down ~1200 tests
+skip silently: `docker start swing-db`.
 
 `full` uses `--dist worksteal` so one long test cannot leave workers idle at the
 tail: 295s vs 337s for default `load` back to back (one sample each, noisy).

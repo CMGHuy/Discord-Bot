@@ -288,8 +288,10 @@ inside the script and never printed, echoed, passed as arguments or written
 elsewhere; build any local test instance from those same `.env` values, never
 the `admin`/`admin` default. Reading `.env` (and scripts loading it) is
 partner-allowed; never print, echo, log or quote its values. Before database
-tests, run `replicate-prod-db` and point `DATABASE_URL` at the replica in the
-shared `swing-db` container; never make a per-task container.
+tests, run `replicate-prod-db` (incremental top-up) and point `DATABASE_URL` at
+the replica in the one shared `swing-db` container (port 56789, `.env`
+credentials any worktree/agent may read, never print); never make a
+per-task container.
 
 ## Efficient repository navigation
 

@@ -102,10 +102,14 @@ Referenced from the root `CLAUDE.md`.
   **Always replicate into this project's single local `swing-db` container**
   (default target `swingbot_prod_replica`); never start another Postgres
   container or a per-task/per-worktree database for it. Parallel tasks and
-  worktrees share that one replica and just point `DATABASE_URL` at it; the
-  replicate script is idempotent, so a task re-syncs only per the rule above
-  and never drops it from under a sibling task mid-run (check nothing else is
-  mid-test first).
+  worktrees share that one replica and just point `DATABASE_URL` at it.
+  The script is **incremental by default**: on the same alembic revision it
+  inserts only the rows the replica lacks (`ON CONFLICT DO NOTHING`), dropping
+  nothing, so it is safe beside a sibling task; it rebuilds only when the
+  replica is absent, on another revision, or with `--full` (check nothing else
+  is mid-test first). One container, port 56789, credentials from `.env`
+  (`scripts/dev/swing_db.py`); any worktree or agent may read those values,
+  none may print, log or quote them.
 
 ## The v96 skills layer
 
