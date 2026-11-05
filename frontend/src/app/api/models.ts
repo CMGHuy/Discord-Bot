@@ -90,6 +90,18 @@ export interface Identity {
   role: Role | null;
 }
 
+/** One viewer account as every `/api/v1/users` endpoint returns it (V207-6).
+ *  The server never sends the password hash or `credential_version`, so
+ *  neither exists here. */
+export interface AdminUser {
+  id: number;
+  username: string;
+  role: 'viewer';
+  disabled: boolean;
+  created_at: string;
+  last_login_at: string | null;
+}
+
 export interface Health {
   ok: boolean;
   versions: Versions;

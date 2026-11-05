@@ -40,6 +40,10 @@ export const WRITE_CALLS: Readonly<Record<string, WriteGate>> = {
   resumeScan: 'admin-route',       // system.store <- scan-tab.ts
   restartBot: 'admin-route',       // system.store <- system.ts
   savePreferences: 'store-no-save', // preferences.store (V207-11)
+  createUser: 'admin-route',        // users.store <- System -> Users tab (V207-17)
+  setUserDisabled: 'admin-route',   // users.store <- System -> Users tab
+  resetUserPassword: 'admin-route', // users.store <- System -> Users tab
+  deleteUser: 'admin-route',        // users.store <- System -> Users tab
 };
 
 export const GATED_CALLERS: Readonly<Partial<Record<WriteGate, readonly string[]>>> = {

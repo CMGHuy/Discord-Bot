@@ -6,7 +6,12 @@ import { describe, expect, it } from 'vitest';
 import { GATED_CALLERS, WRITE_CALLS, WriteGate } from './write-calls';
 
 const ROOT = join(process.cwd(), 'src/app');
-const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
+/** Cached: the gate test below reads every source once per method, and each method added made it slower. */
+const cache = new Map<string, string>();
+const read = (path: string): string => {
+  if (!cache.has(path)) cache.set(path, readFileSync(join(ROOT, path), 'utf8'));
+  return cache.get(path)!;
+};
 
 const walk = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
   const path = join(dir, name);
