@@ -337,10 +337,20 @@ backfill, after the deploy that brings the revision:
 4. Backfill: the same command without `--dry-run`. It prints `written=<n>`.
    A re-run is safe (insert-if-absent) and prints `written=0`.
 
-Rollback: redeploy the previous image (§ Rolling back). The old code never
-reads the table, so it can stay. To remove it, run
+After changing `CURRENCY_SYMBOL` (the account currency), re-run steps 3-4:
+the new account's pairs have no rows yet, so until the backfill runs, past
+amounts show `fx_missing` while the refresher is on.
+
+The snap writes a day's row only once the bar behind it is final (its London
+day ended). Expect the row later than 08:00 when the pair file was last
+written before London midnight; it arrives on the cycle after the next refresh.
+
+Rollback, in this order: (1) redeploy the previous image (§ Rolling back). The
+old code never reads the table, so it can stay. (2) Only to remove it, run
 `docker compose exec -T bot alembic downgrade <the revision v205_001 revises>`
-(`v200_001` when v205 was written).
+(`v200_001` when v205 was written). Downgrading to that revision also rolls
+back every later revision stacked on top of `v205_001`, so check
+`alembic history` first.
 
 ## Accessing the admin UI
 
