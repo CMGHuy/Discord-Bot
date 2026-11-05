@@ -2,7 +2,8 @@
 
 When ``admin_refresh.refresher_on()`` this is the only door page handlers use
 for prices. It never fetches: it reads the cache and the in-flight marks, and
-the Refresh control only enqueues work for the refresher process.
+the Refresh control only enqueues work for the refresher process. v204 adds
+snapshot reads, which never build.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Optional
 
+from swingbot.core.db.repositories import admin_snapshots as snapshot_store
 from swingbot.core.db.repositories import market_refresh
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import session
@@ -156,10 +158,86 @@ def total_meta(quotes: Iterable[Optional[MarketQuote]], *, extra_missing: int = 
         error=next((q.error for q in items if q is not None and q.error), None))
 
 
-def request_refresh(symbols: Iterable[str], *,
+def _snapshot_row(key: str) -> tuple[Optional[dict], Optional[str]]:
+    try:
+        return snapshot_store.admin_snapshot_repo().read(key), None
+    except Exception as exc:  # noqa: BLE001 - fail open: the page renders without the row
+        swallowed(log, "admin.market_values.snapshot_read", exc, "snapshot read failed: %s", exc)
+        return None, "snapshot store unavailable"
+
+
+def _snapshot_stale(computed_at: datetime, now: datetime) -> bool:
+    limit = admin_refresh.stale_after_s("snapshot", session.session_state())
+    if limit is None:
+        return computed_at < session.last_regular_close(now)
+    return (now - computed_at).total_seconds() > limit
+
+
+def _snapshot_priority(row: Optional[dict], in_flight: bool, now: datetime) -> Optional[int]:
+    if kinds.is_fresh_request():
+        return admin_refresh.PRIORITY_FRESH_HINT
+    if row is None:
+        return admin_refresh.PRIORITY_MISSING
+    if not in_flight and _snapshot_stale(row["computed_at"], now):
+        return admin_refresh.PRIORITY_MISSING
+    return None
+
+
+def read_snapshot(key: str, *, now: Optional[datetime] = None) -> dict:
+    now = now or datetime.now(timezone.utc)
+    mark = admin_refresh.snapshot_mark_key(key)
+    row, read_error = _snapshot_row(key)
+    active, errors = _marks([mark])
+    in_flight = mark in active
+    priority = _snapshot_priority(row, in_flight, now)
+    if priority is not None:
+        _enqueue(admin_refresh.QUEUE_KIND_SNAPSHOT, [key], priority)
+    computed_at = row["computed_at"] if row else None
+    return {"key": key, "doc": row["doc"] if row else None,
+            "inputs": row["inputs"] if row else None,
+            "computed_at": computed_at.isoformat() if computed_at else None,
+            "stale_inputs": bool(row["stale_inputs"]) if row else False,
+            "refreshing": row is None or in_flight,
+            "error": errors.get(mark) or read_error}
+
+
+def _as_utc(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+
+
+def _oldest_as_of(*values: Optional[str]) -> Optional[str]:
+    present = [v for v in values if v]
+    return min(present, key=_as_utc) if present else None
+
+
+def _missing_symbols(inputs: Optional[dict]) -> set[str]:
+    missing = (inputs or {}).get("missing") or {}
+    return (set(missing.get("quotes") or ()) | set(missing.get("fx") or ())
+            | set(missing.get("bars") or ()))
+
+
+def snapshot_meta(snap: dict, *, extra_missing: int = 0) -> dict:
+    inputs = snap.get("inputs")
+    count = len(_missing_symbols(inputs)) + extra_missing
+    oldest = _oldest_as_of((inputs or {}).get("oldest_quote_as_of"),
+                           (inputs or {}).get("oldest_fx_as_of"))
+    return _meta(as_of=oldest or snap.get("computed_at"), refreshing=snap["refreshing"],
+                 missing_count=count, incomplete=count > 0, computed_at=snap["computed_at"],
+                 stale_inputs=snap["stale_inputs"], source="snapshot", error=snap["error"])
+
+
+def request_refresh(symbols: Iterable[str], *, snapshots: Iterable[str] = (),
                     priority: int = admin_refresh.PRIORITY_USER) -> int:
+    keys = list(dict.fromkeys(snapshots))
+    unknown = [k for k in keys if not admin_refresh.is_snapshot_key(k)]
+    if unknown:
+        raise ValueError(f"unknown snapshot keys: {unknown}")
     wanted = _upper_unique(symbols)
-    if not wanted:
-        return 0
-    return market_refresh.refresh_queue_repo().enqueue(
-        admin_refresh.QUEUE_KIND_QUOTE, wanted, priority=priority)
+    queue = market_refresh.refresh_queue_repo
+    added = 0
+    if wanted:
+        added += queue().enqueue(admin_refresh.QUEUE_KIND_QUOTE, wanted, priority=priority)
+    if keys:
+        added += queue().enqueue(admin_refresh.QUEUE_KIND_SNAPSHOT, keys, priority=priority)
+    return added
