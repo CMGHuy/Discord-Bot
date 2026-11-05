@@ -131,6 +131,8 @@ def test_risk_shape(logged_in):
         "clusters": (list, type(None)), "throttle": dict, "killswitch": dict,
         "availability": dict,
         "scan_health": dict, "metrics": dict, "correlation": dict,
+        "market_meta": dict, "computed_at": (str, type(None)), "bars_meta": dict,
+        "fx_meta": dict, "lower_bound": list, "account": dict,
     })
     assert_shape(body["heat"], {
         "open_pct": NULLABLE_NUMBER, "cap_pct": NULLABLE_NUMBER,

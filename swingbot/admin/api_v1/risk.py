@@ -25,6 +25,7 @@ on every request.
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from datetime import datetime, timezone
@@ -35,6 +36,7 @@ from flask import jsonify, request
 from swingbot import config
 from swingbot.core.analytics import risk_payload
 from swingbot.core.infra.swallowed import swallowed
+from swingbot.core.marketdata.shared import admin_refresh
 
 from . import api_v1, error
 from .auth import require_auth
@@ -210,6 +212,152 @@ def _distribution_metrics(open_trades: list | None, benchmark: str, checked: str
     return risk_payload._distribution_metrics(open_trades, benchmark, checked, _risk_bars)
 
 
+def _account_balance() -> float | None:
+    """Today's account balance from Postgres (never the network); None when unknown."""
+    try:
+        from swingbot.core.planning import account
+        cfg = account.load_account_config() or {}
+        for key in ("balance", "base_balance"):
+            value = cfg.get(key)
+            if (isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and math.isfinite(value) and value > 0):
+                return float(value)
+    except Exception as exc:
+        swallowed(log, "ops.risk.account_balance", exc)
+    return None
+
+
+def _upper_set(symbols) -> set[str]:
+    return {str(s).upper() for s in (symbols or ())}
+
+
+def _held_tickers(positions: list | None) -> set[str]:
+    return _upper_set(p.get("ticker") for p in (positions or []) if p.get("ticker"))
+
+
+def _closed_fx_missing(metrics: dict | None) -> int:
+    drawdown = (metrics or {}).get("max_drawdown_amount") or {}
+    return drawdown.get("fx_missing_count") or 0
+
+
+def _lower_bound(doc: dict | None, missing: dict) -> list[str]:
+    """The figures computed without at least one held position, in a fixed order.
+
+    Only held tickers count: a missing benchmark or an unheld symbol never
+    makes a figure a lower bound. Heat is trade-based and never one.
+    """
+    doc = doc or {}
+    held = _held_tickers(doc.get("positions"))
+    bars = held & _upper_set(missing.get("bars"))
+    fx_missing = held & _upper_set(missing.get("fx"))
+    out = []
+    if _closed_fx_missing(doc.get("metrics")) > 0:
+        out.append("metrics.closed")
+    if bars or fx_missing:
+        out.append("metrics.distribution")
+    if bars:
+        out += ["correlation", "clusters"]
+    return out
+
+
+def _bars_meta(inputs: dict, stale: bool) -> dict:
+    block = inputs.get("bars_as_of") or {}
+    missing = (inputs.get("missing") or {}).get("bars") or {}
+    return {"per_symbol": dict(block.get("per_symbol") or {}),
+            "oldest": block.get("oldest"), "newest": block.get("newest"),
+            "stale_inputs": bool(stale),
+            "missing": [{"symbol": s, "reason": missing[s]} for s in sorted(missing)]}
+
+
+def _fx_meta(inputs: dict) -> dict:
+    missing = (inputs.get("missing") or {}).get("fx") or ()
+    return {"as_of": inputs.get("oldest_fx_as_of"), "missing": sorted(missing)}
+
+
+def _meta_keys(snap: dict, *, balance: float | None, source: str = "snapshot") -> dict:
+    """The six clock / completeness keys both paths of `GET /risk` add."""
+    from swingbot.admin import market_values
+    from swingbot.core.marketdata import fx
+
+    inputs = snap.get("inputs") or {}
+    return {
+        "market_meta": {**market_values.snapshot_meta(snap), "source": source},
+        "computed_at": snap["computed_at"],
+        "bars_meta": _bars_meta(inputs, snap["stale_inputs"]),
+        "fx_meta": _fx_meta(inputs),
+        "lower_bound": _lower_bound(snap["doc"], inputs.get("missing") or {}),
+        "account": {"balance": balance, "currency": fx.account_currency_code()},
+    }
+
+
+def _request_inputs(state: dict, result: risk_payload.RiskMetrics, body: dict) -> dict:
+    """A snapshot-shaped dict from this request's own inputs; never fetches."""
+    from swingbot.core.analytics import admin_snapshots
+
+    now = datetime.now(timezone.utc)
+    tickers = [t.get("ticker") for t in (state.get("open_trades") or [])]
+    try:
+        fx_map, missing_fx = admin_snapshots._fx_inputs(tickers, on=now.date())
+    except Exception as exc:
+        swallowed(log, "ops.risk.fx_inputs", exc)
+        fx_map, missing_fx = {}, []
+    fx_dates = [v.get("as_of") for v in fx_map.values() if v.get("as_of")]
+    per_symbol = dict(result.bars_as_of)
+    days = list(per_symbol.values())
+    return {
+        "key": "risk", "doc": body, "computed_at": now.isoformat(),
+        "stale_inputs": admin_snapshots.stale_inputs_for(result.bars_as_of, now),
+        "refreshing": False, "error": None,
+        "inputs": {
+            "oldest_quote_as_of": None, "fx": fx_map,
+            "oldest_fx_as_of": min(fx_dates) if fx_dates else None,
+            "bars_as_of": {"per_symbol": per_symbol, "oldest": min(days) if days else None,
+                           "newest": max(days) if days else None},
+            "missing": {"quotes": [], "fx": sorted(set(missing_fx)),
+                        "bars": dict(result.missing_bars)},
+        },
+    }
+
+
+def _risk_from_snapshot() -> dict:
+    """Refresher on: the stored snapshot, with the kill switch and scan health live."""
+    from swingbot.admin import market_values
+    from swingbot.core.edge import throttle
+
+    snap = market_values.read_snapshot(admin_refresh.SNAPSHOT_RISK)
+    doc = snap["doc"] or risk_payload.empty_body()
+    kill = _fresh_kill(throttle, {})
+    return {
+        **doc,
+        "availability": {**doc["availability"], "killswitch": kill["availability"]},
+        "killswitch": kill,
+        "scan_health": _scan_health(),
+        **_meta_keys(snap, balance=_account_balance()),
+    }
+
+
+def _risk_on_request() -> dict:
+    """Refresher off (the kill-switch fallback): today's request-time compute."""
+    from swingbot.core.edge.portfolio_state import collect_portfolio_state
+
+    from swingbot.core.edge import throttle
+
+    state = _cached("portfolio_state", collect_portfolio_state)
+    result = _cached("metrics", _risk_metrics)
+    kill = _fresh_kill(throttle, state)
+    # Utilisation stays unclamped (now inside `market_body`): 130% is exactly
+    # the situation the reader must see.
+    body = risk_payload.market_body(state, result)
+    snap = _request_inputs(state, result, body)
+    return {
+        **body,
+        "availability": {**body["availability"], "killswitch": kill["availability"]},
+        "killswitch": kill,
+        "scan_health": _scan_health(),
+        **_meta_keys(snap, balance=state.get("balance"), source="request"),
+    }
+
+
 @api_v1.route("/risk", methods=["GET"])
 @require_auth
 def get_risk():
@@ -218,7 +366,18 @@ def get_risk():
 
     Top-level keys: `heat`, `positions`, `sector_heat`, `unmapped_count`,
     `clusters`, `throttle`, `killswitch`, `scan_health`, `metrics`,
-    `correlation`.
+    `correlation`, and (v204) `market_meta`, `computed_at`, `bars_meta`,
+    `fx_meta`, `lower_bound`, `account`.
+
+    Two paths, one payload (v204). With the admin refresher on, the market
+    half is the stored `risk` snapshot (`_risk_from_snapshot`): nothing is
+    computed or fetched, `market_meta.source` is "snapshot" and
+    `computed_at` is the snapshot's clock. With it off -- the kill-switch
+    fallback -- today's request-time compute runs (`_risk_on_request`) and
+    the same six keys describe the request's own inputs, `source` "request".
+    The killswitch and scan health are read live on both paths.
+    `lower_bound` names the figures computed without at least one held
+    position; `account.balance` is null, never 0, when unknown.
 
     `unmapped_count` (v194 B6): open positions with no sector in the scan
     universe's sector map, and therefore absent from `sector_heat`. With it,
@@ -227,20 +386,9 @@ def get_risk():
     stored record; cached with the rest of `collect_portfolio_state`
     (`_cached`, `_RISK_TTL_S`); 0 when the collector produced none.
     """
-    from swingbot.core.edge.portfolio_state import collect_portfolio_state
-
-    from swingbot.core.edge import throttle
-
-    state = _cached("portfolio_state", collect_portfolio_state)
-    result = _cached("metrics", _risk_metrics)
-    kill = _fresh_kill(throttle, state)
-    body = risk_payload.market_body(state, result)
-    return jsonify({
-        **body,
-        "availability": {**body["availability"], "killswitch": kill["availability"]},
-        "killswitch": kill,
-        "scan_health": _scan_health(),
-    })
+    if admin_refresh.refresher_on():
+        return jsonify(_risk_from_snapshot())
+    return jsonify(_risk_on_request())
 
 
 @api_v1.route("/risk/killswitch", methods=["GET"])
