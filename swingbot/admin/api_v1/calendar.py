@@ -79,36 +79,10 @@ def calendar_pnl():
     strategy/horizon filter. A weekday pattern drawn from one month is 4-5
     observations per weekday and would be noise presented as a finding.
     """
-    from swingbot.core.analytics import pnl_calendar as pc
-
-    from .money import missing_count, to_account_currency
+    from swingbot.core.analytics import page_bodies
 
     _reject_unknown_params()
-    month = _month_param()
-    strategy, horizon = _filter_args()
-
-    everything = pc.load_rows(convert=to_account_currency)
-    rows = pc.filter_rows(everything, strategy=strategy, horizon=horizon)
-    grid = pc.month_grid(rows, month)
-    extremes = pc.best_worst_days(rows)
-
-    return jsonify({
-        # A panel-level timestamp is the time this filtered view was composed,
-        # not a claim about the age of any individual close in the month.
-        "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "month": grid["month"],
-        "days": grid["days"],
-        "totals": grid["totals"],
-        "longest_hold": pc.longest_hold(rows, grid["month"]),
-        "day_of_week": pc.day_of_week_breakdown(rows),
-        "best_day": extremes["best"],
-        "worst_day": extremes["worst"],
-        "streak": pc.day_streak(rows),
-        "fx_missing_count": missing_count(
-            [r for r in rows if r["day"].startswith(grid["month"])]),
-        # Derived from the UNFILTERED set -- see `available_filters`.
-        "filters": pc.available_filters(everything),
-    })
+    return jsonify(page_bodies.calendar_body(_month_param(), _filter_args()))
 
 
 def _date_param() -> str:
