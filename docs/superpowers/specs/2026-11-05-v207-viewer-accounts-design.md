@@ -242,7 +242,7 @@ Backend (suite `admin`, against the shared `swing-db` after `/replicate-prod-db`
   frontend session spec), which are updated for the added `role` field.
 
 Frontend: specs for `adminGuard`, `*ifAdmin` (renders for admin, not for
-viewer), nav hiding, Tuning tab and `KillswitchChip` hidden, the write-calls
+viewer), nav hiding, Tuning tab and Risk Engage/Release hidden (`KillswitchChip` still shown), the write-calls
 inventory (every mutating `api-client.ts` method listed), preferences store
 no-save for viewers, no toast on a preferences 403, read-only badge,
 and the Users page (empty, list, create, validation error, reset, delete
