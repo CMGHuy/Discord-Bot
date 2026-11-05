@@ -110,6 +110,42 @@ def test_risk_account_carries_balance_and_currency(on_client, market, snapshot_s
     assert on_client.get("/api/v1/risk").get_json()["account"] == {"balance": 12_500.0, "currency": "USD"}
 
 
+@pytest.mark.parametrize("cfg", [{"base_balance": 9000.0}, {"balance": 0, "base_balance": 9000.0}])
+def test_risk_account_balance_falls_back_to_base_balance(on_client, market, snapshot_store,
+                                                         monkeypatch, cfg):
+    monkeypatch.setattr(account_module, "load_account_config", lambda: cfg)
+    assert on_client.get("/api/v1/risk").get_json()["account"]["balance"] == 9000.0
+
+
+def test_risk_on_all_account_currency_book_dates_market_meta_by_its_bars(on_client, market,
+                                                                         snapshot_store):
+    usd_only = {**inputs(bars_missing={}), "fx": {}, "oldest_fx_as_of": None}
+    snapshot_store.rows["risk"] = snapshot_row("risk", doc(), age_s=60, inputs=usd_only)
+    body = on_client.get("/api/v1/risk").get_json()
+    assert body["market_meta"]["as_of"] == "2026-10-28" == body["bars_meta"]["oldest"]
+    assert body["market_meta"]["as_of"] != body["computed_at"]
+
+
+def test_risk_on_with_no_inputs_has_no_market_date(on_client, market, snapshot_store):
+    assert on_client.get("/api/v1/risk").get_json()["market_meta"]["as_of"] is None
+
+
+def test_risk_off_all_account_currency_book_dates_market_meta_by_its_bars(golden_book, monkeypatch):
+    monkeypatch.setattr(admin_snapshots, "_fx_inputs", lambda tickers, *, on: ({}, []))
+    body = golden_book.client.get("/api/v1/risk").get_json()
+    assert body["bars_meta"]["oldest"] and body["bars_meta"]["oldest"] < body["computed_at"][:10]
+    assert body["market_meta"]["as_of"] == body["bars_meta"]["oldest"]
+
+
+def test_risk_off_fx_inputs_failure_is_swallowed(golden_book, monkeypatch):
+    def boom(tickers, *, on):
+        raise RuntimeError("fx store down")
+    monkeypatch.setattr(admin_snapshots, "_fx_inputs", boom)
+    res = golden_book.client.get("/api/v1/risk")
+    assert res.status_code == 200
+    assert res.get_json()["fx_meta"] == {"as_of": None, "missing": []}
+
+
 @pytest.mark.parametrize("cfg", [{"balance": float("nan")}, {"balance": 0}, None])
 def test_risk_account_balance_unknown_is_null_never_zero(on_client, market, snapshot_store,
                                                          monkeypatch, cfg):
@@ -137,6 +173,12 @@ def test_risk_off_runs_todays_code_and_adds_the_meta_keys(golden_book, monkeypat
 
 def test_snapshot_body_matches_the_off_body_and_the_golden(golden_book, market, snapshot_store,
                                                            session_is, monkeypatch):
+    class AtGoldenNow(datetime):           # both paths on one clock, so stale_inputs is comparable
+        @classmethod
+        def now(cls, tz=None):
+            return GOLDEN_NOW
+
+    monkeypatch.setattr(risk, "datetime", AtGoldenNow)
     off = golden_book.client.get("/api/v1/risk").get_json()
     monkeypatch.setattr(risk_payload, "_now", lambda: GOLDEN_NOW)
     monkeypatch.setattr(admin_snapshots, "_now", lambda: GOLDEN_NOW)
@@ -148,5 +190,7 @@ def test_snapshot_body_matches_the_off_body_and_the_golden(golden_book, market, 
     monkeypatch.setattr(config, "MARKETDATA_LAYER", "on")
     on = golden_book.client.get("/api/v1/risk").get_json()
     assert set(on) == set(off)
+    for key in ("bars_meta", "fx_meta", "lower_bound"):
+        assert on[key] == off[key], key
     assert_matches_golden("risk", on)
     assert on["market_meta"]["source"] == "snapshot" and golden_book.network_calls == []

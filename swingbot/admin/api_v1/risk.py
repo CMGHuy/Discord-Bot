@@ -274,6 +274,16 @@ def _fx_meta(inputs: dict) -> dict:
     return {"as_of": inputs.get("oldest_fx_as_of"), "missing": sorted(missing)}
 
 
+def _market_meta(meta: dict, inputs: dict, source: str) -> dict:
+    """`snapshot_meta` with Risk's data date: with no quote or FX date, the
+    oldest bar's date (or None), never `computed_at` -- a book held wholly in
+    the account currency must not read as current when its bars are old."""
+    if inputs.get("oldest_quote_as_of") or inputs.get("oldest_fx_as_of"):
+        return {**meta, "source": source}
+    oldest_bar = (inputs.get("bars_as_of") or {}).get("oldest")
+    return {**meta, "as_of": oldest_bar, "source": source}
+
+
 def _meta_keys(snap: dict, *, balance: float | None, source: str = "snapshot") -> dict:
     """The six clock / completeness keys both paths of `GET /risk` add."""
     from swingbot.admin import market_values
@@ -281,7 +291,7 @@ def _meta_keys(snap: dict, *, balance: float | None, source: str = "snapshot") -
 
     inputs = snap.get("inputs") or {}
     return {
-        "market_meta": {**market_values.snapshot_meta(snap), "source": source},
+        "market_meta": _market_meta(market_values.snapshot_meta(snap), inputs, source),
         "computed_at": snap["computed_at"],
         "bars_meta": _bars_meta(inputs, snap["stale_inputs"]),
         "fx_meta": _fx_meta(inputs),
