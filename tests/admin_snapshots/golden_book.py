@@ -170,12 +170,33 @@ def golden_payload(name: str) -> dict:
     return json.loads((GOLDEN_DIR / f"{name}.json").read_text("utf-8"))
 
 
+def _scalar_matches(got, want) -> bool:
+    if isinstance(want, float):
+        # BLAS kernels can differ by a few ulps in the correlation and risk calculations.
+        return math.isclose(got, want, rel_tol=1e-14, abs_tol=1e-15)
+    return got == want
+
+
+def _assert_parity(got, want, path: str) -> None:
+    assert type(got) is type(want), f"{path}: expected {type(want).__name__}, got {type(got).__name__}"
+    if isinstance(want, dict):
+        assert got.keys() == want.keys(), f"{path}: payload keys differ"
+        for key, value in want.items():
+            _assert_parity(got[key], value, f"{path}.{key}")
+    elif isinstance(want, list):
+        assert len(got) == len(want), f"{path}: expected {len(want)} items, got {len(got)}"
+        for index, (actual, expected) in enumerate(zip(got, want)):
+            _assert_parity(actual, expected, f"{path}[{index}]")
+    else:
+        assert _scalar_matches(got, want), f"{path}: expected {want!r}, got {got!r}"
+
+
 def assert_matches_golden(name: str, body: dict) -> None:
     got = normalise(body)
     want = golden_payload(name)
     missing = set(want) - set(got)
     assert not missing, f"{name} is missing golden keys: {sorted(missing)}"
-    assert {key: got[key] for key in want} == want
+    _assert_parity({key: got[key] for key in want}, want, name)
 
 
 @pytest.fixture

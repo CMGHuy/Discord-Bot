@@ -1,5 +1,6 @@
 """v204 V204-1: today's request code reproduces the frozen golden payloads."""
 import json
+import math
 import os
 
 import pytest
@@ -40,6 +41,40 @@ def test_today_matches_golden(golden_book):
     assert golden_book.network_calls == []
     for name in GOLDEN_NAMES:
         assert_matches_golden(name, payloads[name])
+
+
+def test_golden_parity_accepts_one_ulp_of_roundoff():
+    body = golden_payload("risk")
+    row = body["correlation"]["values"][0]
+    row[1] = math.nextafter(row[1], math.inf)
+    body["future_field"] = {}
+    assert_matches_golden("risk", body)
+
+
+@pytest.mark.parametrize(("key", "value"), [
+    ("values", [[1.0, 0.53], [0.53, 1.0]]),
+    ("labels", ["AAPL", "SAP.DE", "MSFT"]),
+    ("future_field", {}),
+])
+def test_golden_parity_rejects_changes_to_nested_content(key, value):
+    body = golden_payload("risk")
+    body["correlation"][key] = value
+    with pytest.raises(AssertionError):
+        assert_matches_golden("risk", body)
+
+
+def test_golden_parity_rejects_a_material_float_change():
+    body = golden_payload("risk")
+    body["correlation"]["values"][0][1] += 1e-10
+    with pytest.raises(AssertionError):
+        assert_matches_golden("risk", body)
+
+
+def test_golden_parity_rejects_non_float_type_changes():
+    body = golden_payload("risk")
+    body["unmapped_count"] = True
+    with pytest.raises(AssertionError):
+        assert_matches_golden("risk", body)
 
 
 def _assert_risk_figures(body):
