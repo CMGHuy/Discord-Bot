@@ -84,6 +84,7 @@ def test_v192_reclaim_fields_ride_in_the_doc(repo, db_conn):
 
     record = plan_to_dict(model_plan(plan_id="P192", reclaim_atr=1.2345, reclaim_level=99.69,
                                      reclaim_session="2026-10-26", waits_next_open=True))
+    record["created_at"] = "2026-10-26T14:00:00+00:00"   # the store stamps one when absent
     repo.insert(record, conn=db_conn)
     stored = repo.get("P192", conn=db_conn)
     assert diff_records(record, stored) == []
