@@ -130,6 +130,18 @@ def test_chart_risk_and_watchlist_read_page_daily_when_on(admin_app, env, monkey
     assert asked == [(["AAPL"], "2y"), (["AAPL", "SPY"], "2y"), (["MSFT"], "6mo")]
 
 
+@pytest.mark.parametrize("refresher", ["on", "off"])
+def test_risk_bars_reads_page_daily_read_only_when_the_refresher_is_on(admin_app, env, monkeypatch, refresher):
+    from swingbot.admin.api_v1 import risk
+    from swingbot.core.marketdata.shared import admin_refresh
+    monkeypatch.setattr(config, "ADMIN_REFRESHER", refresher)
+    seen = []
+    monkeypatch.setattr(freshness, "page_daily",
+                        lambda t, period="2y", read_only=False: seen.append(read_only) or {})
+    risk._risk_bars(["AAPL"])
+    assert seen == [admin_refresh.refresher_on()] == [refresher == "on"]
+
+
 def test_off_mode_keeps_the_live_readers(admin_app, monkeypatch):
     from swingbot.admin import app as app_mod
     monkeypatch.setattr(config, "MARKETDATA_LAYER", "off")
