@@ -161,7 +161,7 @@ resets no validation budget and reopens no closed pre-registration; each names i
 Specs from v141 carry `**Screen:**` under `Edge:` (an entry strategy or filter
 cites a `SCREEN-PASS` ledger row from `scripts/backtest/screen_idea.py`, except a
 fill-timing veto (decided by price between the alert and the fill), which says
-`exempt (post-signal)` and must clear Stage -1 reachability (v192); a screen
+`exempt (post-signal)` and must clear Stage -1 reachability (v192; the v192 gap-toward-stop reclaim veto itself closed NO-LIFT at Stage 1, see the closed table); a screen
 fail is closed, never re-screened under either race shape; each idea freezes one,
 `fixed` or v163 `trail` with cap >= 60, under the same pass rule) and from v146
 `**Panel:**` (1-3 role skills run through `panel`; an unresolved `BLOCKING`
