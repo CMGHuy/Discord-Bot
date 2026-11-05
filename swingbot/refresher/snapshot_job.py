@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Callable, Iterable
 
@@ -33,6 +34,14 @@ def _describe(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}"
 
 
+@dataclass
+class _Progress:
+    """How far one batch got: keys finished (in order), keys landed, news to announce."""
+    done: list[str] = field(default_factory=list)
+    landed: list[str] = field(default_factory=list)
+    news: bool = False
+
+
 class SnapshotWorker:
     """Builds submitted snapshot keys on a background thread, one batch at a time."""
 
@@ -50,34 +59,45 @@ class SnapshotWorker:
         self._lock = threading.Lock()
         self._pending: list[str] = []
         self._active: set[str] = set()
+        self._marking: set[str] = set()
         self._abandoned: dict[str, threading.Thread] = {}
         self._landed: list[str] = []
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._start_lock = threading.Lock()  # never self._lock: start() may join the old thread
 
     # -- public seam -------------------------------------------------------
 
     def submit(self, keys: Iterable[str]) -> list[str]:
-        """Queue every key not already pending, building or abandoned; mark them, then wake."""
+        """Queue every key not already pending, building or abandoned; mark them, then wake.
+
+        Accepted keys sit in ``_marking`` (busy, but not takeable) until their
+        mark is written, so no batch can build and clear a key before its mark.
+        """
         with self._lock:
             self._abandoned = {k: t for k, t in self._abandoned.items() if t.is_alive()}
-            busy = set(self._pending) | self._active | set(self._abandoned)
-            accepted: list[str] = []
-            for key in keys:
-                if key not in busy:
-                    busy.add(key)
-                    accepted.append(key)
-            self._pending.extend(accepted)
+            busy = (set(self._pending) | self._active | set(self._abandoned)
+                    | self._marking)
+            accepted = [k for k in dict.fromkeys(keys) if k not in busy]
+            self._marking.update(accepted)
         if accepted:
             self._mark(accepted)
+            with self._lock:
+                self._marking.difference_update(accepted)
+                self._pending.extend(accepted)
             self._wake.set()
         return accepted
 
     def start(self) -> None:
-        with self._lock:
-            if self._thread is not None and self._thread.is_alive():
-                return
+        """Start the worker thread. A thread a timed-out ``stop`` left finishing
+        its batch is joined first (it would exit right after), never reused."""
+        with self._start_lock:
+            old = self._thread
+            if old is not None and old.is_alive():
+                if not self._stop.is_set():
+                    return
+                old.join()
             self._stop.clear()
             self._thread = threading.Thread(target=self._loop, name="snapshot-worker", daemon=True)
             self._thread.start()
@@ -90,26 +110,43 @@ class SnapshotWorker:
             thread.join(timeout)
 
     def run_batch(self, keys: list[str]) -> list[str]:
-        """Build `keys` in order, synchronously; return the ones that landed."""
+        """Build `keys` in order, synchronously; return the ones that landed.
+
+        Anything escaping mid-batch clears the unfinished keys' marks with the
+        error and re-raises; keys that landed before it still count and announce.
+        """
+        progress = _Progress()
+        try:
+            self._run_keys(keys, progress)
+        except Exception as exc:
+            self._fail(keys[len(progress.done):], exc)
+            progress.news = True
+            raise
+        finally:
+            with self._lock:
+                self._landed.extend(progress.landed)
+            if progress.news:
+                self._announce()
+        return progress.landed
+
+    def _run_keys(self, keys: list[str], progress: "_Progress") -> None:
         builders = self._builders_fn()
         with self._lock:
             self._active.update(keys)
-        landed: list[str] = []
-        news = False
         for key in keys:
-            try:
-                outcome = self._run_one(key, builders.get(key))
-            finally:
-                with self._lock:
-                    self._active.discard(key)
+            outcome = self._run_one(key, builders.get(key))
+            with self._lock:
+                self._active.discard(key)
+            progress.done.append(key)
             if outcome == "landed":
-                landed.append(key)
-            news = news or outcome != "kept"
+                progress.landed.append(key)
+            progress.news = progress.news or outcome != "kept"
+
+    def _fail(self, keys: list[str], exc: BaseException) -> None:
         with self._lock:
-            self._landed.extend(landed)
-        if news:
-            self._announce()
-        return landed
+            self._active.difference_update(keys)
+        for key in keys:
+            self._clear(key, error=_describe(exc))
 
     def drain_landed(self) -> list[str]:
         with self._lock:
@@ -182,7 +219,10 @@ class SnapshotWorker:
 
     def _loop(self) -> None:
         while not self._stop.is_set():
-            self._wake.wait(WAKE_POLL_S)
+            # Only submit's _wake.set(), sent after its mark landed, starts a batch:
+            # a timed poll taking a key mid-mark would let that mark outlive the build.
+            if not self._wake.wait(WAKE_POLL_S):
+                continue
             self._wake.clear()
             if self._stop.is_set():
                 break

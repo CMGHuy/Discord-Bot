@@ -173,3 +173,153 @@ def test_started_worker_builds_submitted_keys_off_the_caller_thread():
         env.w.stop()
     assert seen == ["snapshot-build-risk"]
     assert not any(t.name == "snapshot-worker" and t.is_alive() for t in threading.enumerate())
+
+
+def _worker_alive():
+    return any(t.name == "snapshot-worker" and t.is_alive() for t in threading.enumerate())
+
+
+def test_timed_poll_never_takes_a_key_whose_mark_is_still_in_flight(monkeypatch):
+    from swingbot.refresher import snapshot_job
+    monkeypatch.setattr(snapshot_job, "WAKE_POLL_S", 0.01)
+    env = make()
+    entered, release = threading.Event(), threading.Event()
+    plain_mark = env.marks.mark
+
+    def slow_mark(keys, *, timeout_s, now=None):
+        if not entered.is_set():                        # only submit's mark blocks
+            entered.set()
+            release.wait(5.0)
+        plain_mark(keys, timeout_s=timeout_s, now=now)
+    env.marks.mark = slow_mark
+    built = []
+    env.builders["risk"] = lambda: built.append(1) or result({"heat": 1})
+    env.w.start()
+    try:
+        submitter = threading.Thread(target=env.w.submit, args=(["risk"],))
+        submitter.start()
+        assert entered.wait(5.0)
+        time.sleep(0.1)                                 # many timed polls pass while mark blocks
+        assert built == []
+        release.set()
+        submitter.join(5.0)
+        assert wait_until(lambda: env.w.drain_landed() == ["risk"])
+    finally:
+        env.w.stop()
+    assert env.marks.calls[0][0] == "mark" and env.marks.calls[-1] == ("clear", ("snapshot:risk",), None)
+
+
+def test_another_submits_wake_never_takes_a_key_whose_mark_is_in_flight():
+    env = make()
+    entered, release = threading.Event(), threading.Event()
+    plain_mark = env.marks.mark
+
+    def slow_mark(keys, *, timeout_s, now=None):
+        if keys == ["snapshot:risk"] and not entered.is_set():
+            entered.set()
+            release.wait(5.0)
+        plain_mark(keys, timeout_s=timeout_s, now=now)
+    env.marks.mark = slow_mark
+    built = []
+    env.builders["risk"] = lambda: built.append("risk") or result({"heat": 1})
+    env.builders["analytics.snapshot"] = lambda: built.append("a") or result({"overall": {}})
+    env.w.start()
+    try:
+        submitter = threading.Thread(target=env.w.submit, args=(["risk"],))
+        submitter.start()
+        assert entered.wait(5.0)
+        assert env.w.submit(["risk", "analytics.snapshot"]) == ["analytics.snapshot"]
+        assert wait_until(lambda: "analytics.snapshot" in env.rows.rows)
+        assert built == ["a"]                           # the woken batch left "risk" alone
+        release.set()
+        submitter.join(5.0)
+        assert wait_until(lambda: "risk" in env.rows.rows)
+    finally:
+        env.w.stop()
+
+
+def test_escape_mid_batch_clears_unfinished_marks_and_keeps_landed():
+    rows, marks, published = Rows(), Marks(), []
+    reads = []
+
+    def budget():
+        reads.append(1)
+        if len(reads) > 1:                              # the second key's budget read escapes
+            raise RuntimeError("budget unreadable")
+        return 2.0
+    a, b, c = "risk", "analytics.snapshot", "calendar.pnl:2026-10"
+    builders = {k: (lambda: result({"ok": 1})) for k in (a, b, c)}
+    w = SnapshotWorker(builders_fn=lambda: builders, repo_fn=lambda: rows, marks_fn=lambda: marks,
+                       publish=published.append, budget_fn=budget, clock=lambda: T0)
+    with pytest.raises(RuntimeError):
+        w.run_batch([a, b, c])
+    assert w.drain_landed() == [a] and published == ["market"]
+    clears = [call for call in marks.calls if call[0] == "clear"]
+    assert clears == [("clear", ("snapshot:risk",), None),
+                      ("clear", ("snapshot:analytics.snapshot",), "RuntimeError: budget unreadable"),
+                      ("clear", ("snapshot:calendar.pnl:2026-10",), "RuntimeError: budget unreadable")]
+    assert w.submit([a, b, c]) == [a, b, c]             # nothing left stuck as active
+
+
+def test_worker_survives_a_raising_batch_and_accepts_the_key_again():
+    env = make()
+    env.builders["risk"] = lambda: result({"heat": 1})
+    calls = []
+
+    def flaky_builders():
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("builders boom")
+        return env.builders
+    env.w._builders_fn = flaky_builders
+    env.w.start()
+    try:
+        assert env.w.submit(["risk"]) == ["risk"]
+        assert wait_until(lambda: ("clear", ("snapshot:risk",), "RuntimeError: builders boom")
+                          in env.marks.calls)
+        assert wait_until(lambda: env.w.submit(["risk"]) == ["risk"])
+        assert wait_until(lambda: env.w.drain_landed() == ["risk"])
+        assert _worker_alive()
+    finally:
+        env.w.stop()
+
+
+def test_stop_then_start_runs_again():
+    env = make()
+    env.builders["risk"] = lambda: result({"heat": 1})
+    env.w.start()
+    env.w.stop()
+    env.w.start()
+    try:
+        assert env.w.submit(["risk"]) == ["risk"]
+        assert wait_until(lambda: env.w.drain_landed() == ["risk"])
+    finally:
+        env.w.stop()
+
+
+def test_start_after_a_stop_that_timed_out_mid_build_keeps_a_live_worker():
+    env = make()
+    building, release = threading.Event(), threading.Event()
+
+    def gated():
+        building.set()
+        release.wait(5.0)
+        return result({"v": 1})
+    env.builders["slow"] = gated
+    env.builders["risk"] = lambda: result({"heat": 1}, at=T0 + timedelta(seconds=1))
+    env.w.start()
+    assert env.w.submit(["slow"]) == ["slow"]
+    assert building.wait(5.0)
+    env.w.stop(timeout=0.05)                            # returns with the batch still running
+    starter = threading.Thread(target=env.w.start)
+    starter.start()
+    release.set()
+    starter.join(5.0)
+    try:
+        assert not starter.is_alive()
+        assert wait_until(lambda: "slow" in env.rows.rows)
+        assert env.w.submit(["risk"]) == ["risk"]
+        assert wait_until(lambda: "risk" in env.rows.rows)
+        assert _worker_alive()
+    finally:
+        env.w.stop()
