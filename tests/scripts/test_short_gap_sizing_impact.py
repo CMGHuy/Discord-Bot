@@ -294,7 +294,7 @@ def test_short_report_matches_pre_v191_output_bytes():
                                    balance=BAL, risk_pct=RISK)
     stdout = "\n".join(imp._stdout_lines(result)) + "\n"
     assert hashlib.sha256(markdown.encode()).hexdigest() == \
-        "a938a65ea93b4f037e8d990c168b22ffc88086380abe94559dcf26dd3a67817e"
+        "4281f28787a5ebe06a58e9f670afe0de0684bbfac4c0ae6f2322a6031dbc8bd9"   # re-pinned after main's max_drawdown_r now counts the initial zero (v189); with the old function this equals the pre-v191 hash a938a65e
     assert hashlib.sha256(stdout.encode()).hexdigest() == \
         "02d2dc5180e06f2e58070db6364fa16ef98492fc083419cc2c08dc272a9c07fe"
 
