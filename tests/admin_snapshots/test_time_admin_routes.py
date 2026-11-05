@@ -112,3 +112,33 @@ def test_measure_all_reports_route_progress_on_stderr(monkeypatch, capsys):
     output = capsys.readouterr()
     assert output.err.splitlines() == [f"Measuring {route}" for route in tar.ROUTES]
     assert VERDICT_LINE.findall(output.out)
+
+
+
+def test_provider_fallback_exits_two_without_results(monkeypatch, capsys, tmp_path):
+    class NoNetworkTicker:
+        fast_info = None
+
+        def __init__(self, symbol):
+            pass
+
+        def history(self, **kwargs):
+            return None
+
+    class QuoteFallbackClient(FakeClient):
+        def get(self, path):
+            data.get_current_price_detail("AAPL")
+            return super().get(path)
+
+    monkeypatch.setattr(data.config, "MARKETDATA_LAYER", "on")
+    monkeypatch.setattr(data, "_marked_quotes", lambda *args, **kwargs: {})
+    monkeypatch.setattr(data.yf, "Ticker", NoNetworkTicker)
+    monkeypatch.setattr(tar, "_client", QuoteFallbackClient)
+    monkeypatch.setattr(tar, "measure_cold", lambda route: [0.25] * 5)
+    monkeypatch.setattr(tar, "_write_results", lambda out, body: out.write_text(body))
+    out = tmp_path / "timings.md"
+
+    assert tar.main(["--out", str(out)]) == 2
+
+    assert "yfinance.Ticker" in capsys.readouterr().err
+    assert not out.exists()

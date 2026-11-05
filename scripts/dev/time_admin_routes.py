@@ -30,6 +30,11 @@ WARM_MAX_S = 0.5
 COLD_MAX_S = 1.0
 ROOT = Path(__file__).resolve().parents[2]
 NETWORK: tuple[tuple[str, str], ...] = (
+    # Provider entry points also cover fallbacks that bypass the wrappers below.
+    ("yfinance", "Ticker"),
+    ("yfinance", "download"),
+    ("requests.sessions", "Session.request"),  # Alpaca SDK
+    ("urllib.request", "urlopen"),  # Spot metals and FMP
     ("swingbot.core.marketdata.yf_safe", "download"),
     ("swingbot.core.marketdata.data", "get_quote_batch"),
     ("swingbot.core.marketdata.data", "get_current_price"),
@@ -66,14 +71,16 @@ def poisoned_network() -> Iterator[list[str]]:
     calls = []
     originals = []
     try:
-        for module_name, attr in NETWORK:
+        for module_name, attr_path in NETWORK:
             module = importlib.import_module(module_name)
-            originals.append((module, attr, getattr(module, attr)))
-            setattr(module, attr, _poison(f"{module_name}.{attr}", calls))
+            owner_name, _, attr = attr_path.rpartition(".")
+            owner = getattr(module, owner_name) if owner_name else module
+            originals.append((owner, attr, getattr(owner, attr)))
+            setattr(owner, attr, _poison(f"{module_name}.{attr_path}", calls))
         yield calls
     finally:
-        for module, attr, original in reversed(originals):
-            setattr(module, attr, original)
+        for owner, attr, original in reversed(originals):
+            setattr(owner, attr, original)
 
 
 def timed_get(client, path: str) -> float:
