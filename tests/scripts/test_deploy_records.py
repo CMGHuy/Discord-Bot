@@ -49,7 +49,8 @@ def test_the_record_is_one_json_line_and_an_append_failure_only_warns(src):
 
 def _chown_block(src):
     start = src.index("mkdir -p backups/env backups/pitr")
-    return src[start:src.index("python3 scripts/ops/env_set.py", start)]
+    end = min(src.index(m, start) for m in ("python3 scripts/ops/env_set.py", "# v197: the lifecycle queue migration"))
+    return src[start:end]
 
 
 def test_it_prepares_backup_dirs_before_any_snapshot_or_compose_up(src):
@@ -81,12 +82,20 @@ def test_lf_line_endings():
 
 def test_it_migrates_with_bot_and_admin_stopped_before_compose_up(src):
     """v197: the lifecycle queue migration runs with no consumer or writer up."""
-    stop = src.index("docker compose stop bot admin")
-    migrate = src.index("run --rm --no-deps -T bot alembic")
-    up = src.index("docker compose up -d --no-build --wait\n")
+    stop = src.index("docker compose stop bot admin refresher")
+    migrate = src.index("run --rm --no-deps -T bot alembic $MIGRATE_ARGS")
+    up = src.index("docker compose up -d --no-build --wait $SERVICES")
     assert stop < migrate < up
 
 
 def test_it_passes_the_lifecycle_destination_only_when_exported(src):
     assert 'LIFECYCLE_CHANNEL_ID:-' in src
-    assert '-x "lifecycle_channel_id=${LIFECYCLE_CHANNEL_ID}"' in src
+    assert 'MIGRATE_ARGS="-x lifecycle_channel_id=${LIFECYCLE_CHANNEL_ID}"' in src
+
+
+def test_it_fails_with_recovery_steps_when_the_database_is_ahead_of_the_image(src):
+    """Image-only rollback: alembic cannot locate the revision; bot/admin are stopped,
+    so the script must say how to restore service instead of a bare traceback."""
+    assert "Can't locate revision" in src
+    assert "docker compose up -d --no-build --wait bot admin refresher" in src
+    assert "rollback_to.sh" in src
