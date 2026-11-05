@@ -1,7 +1,6 @@
 ---
 name: task-brief
-description: "Fill one task's handoff file with this repo's known traps pre-corrected and bounded code excerpts (/task-brief <handoff path>); for a task without a handoff, extract it into a pasted brief instead (/task-brief <id>). Use when starting a numbered plan task (E53, G134, V199-5...)."
-disable-model-invocation: true
+description: "Fill one task's handoff file with this repo's known traps pre-corrected and bounded code excerpts (/task-brief <handoff path>); for a task without a handoff, extract it into a pasted brief instead (/task-brief <id>). Use when starting a numbered plan task (E53, G134, V199-5...). Run as /task-brief, or by Claude itself right after task_handoff.py writes a handoff."
 context: fork
 model: sonnet
 ---
