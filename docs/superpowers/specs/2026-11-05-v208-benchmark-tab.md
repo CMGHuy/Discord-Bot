@@ -62,7 +62,11 @@ one % axis with four benchmarks.
 10. **Layout order, top to bottom** (approved against the mockup): Today card
     → range picker → toggle chips → stat strip (incl. alpha/beta/Sharpe) →
     chart + exposure band → daily table → up/down capture.
-11. **Currency toggle: USD / account currency.** The account equity is kept
+11. **Currency toggle: deferred (see *Amendment after the code brief*).** The
+    partner chose a toggle, then confirmed the account is **USD trading US
+    stocks**, so the toggle would always be hidden. v208 compares in USD
+    only. The design below is kept as the follow-up's starting point.
+    Original decision: **Currency toggle: USD / account currency.** The account equity is kept
     in the account currency; the indexes move in USD. A segmented switch
     beside the range picker picks the comparison currency, and every line,
     stat and "Beat?" is computed in it:
@@ -485,6 +489,52 @@ tests. Otherwise v207's viewer matrix gains the route.
   ^IXIC/^DJI to ONEQ/DIA (one config line plus a label).
 - Once Stage 1 eToro demo trading lands (`docs/claude/etoro-roadmap.md`), a
   third bot line from the demo account balance could sit on the same chart.
+
+## Amendment after the code brief (2026-11-05)
+
+The plan-briefer (`.superpowers/briefs/2026-11-05-v208-benchmark-tab.md`
+§ 0) found five places where this spec does not match the code. Resolved as
+follows:
+
+1. **The equity pipeline does no FX conversion.** `equity.py`, the recorder,
+   `equity_candles.py` and the backfill sum P&L in each ticker's quote
+   currency. **Partner (2026-11-05): the account is USD and the book is US
+   stocks**, so equity is USD already. Consequences:
+   - **The currency toggle (decision 11) is out of v208.** v208 compares in
+     USD only. There is no `currency` request parameter, no index FX
+     conversion and no historical FX backfill. Exposure and deployed-return
+     figures are USD.
+   - `open_notional` is stored **unconverted, like `unrealized_pnl`** (the
+     same quote-currency sum).
+   - The tab asserts the precondition. If `account_currency_code() != 'USD'`
+     or any open or in-range trade has a non-USD quote currency, the tab
+     shows a banner: "Benchmark assumes a USD account trading USD stocks —
+     figures may be mixed-currency". Tested.
+   - Follow-up (its own spec, only if the account ever leaves USD):
+     converting equity at record time plus the toggle as designed in
+     decision 11.
+2. **The live book models no frictions.** `swingbot/core/edge/frictions.py`
+   is used only by backtests and screens, and
+   `core/tracking/performance.py:15` ignores slippage and fees. The standing
+   label is corrected to: "Paper trades only. Returns are pre-tax and
+   **exclude fees and slippage**; indexes are buy-and-hold. Not a
+   recommendation or forecast." The anti-goal is unchanged.
+3. **Session calendar.** Use the holiday- and half-day-aware
+   `is_nyse_regular_session` / `session_state` / `nyse_calendar()` /
+   `session_close` everywhere in v208, not the weekday-only
+   `is_regular_session`. A live sample recorded on an NYSE holiday falls on
+   a non-session day, and the alignment in *Bot · account daily series*
+   already skips it. The recorder itself is not changed here; its use of
+   the weekday-only helper is noted as a separate integrity fix.
+4. **FX rate semantics:** moot for v208 (see 1).
+5. **Promoted columns.** The new `equity_samples` columns and every
+   `benchmark_bars` column are added to the `register()` promoted tuple and
+   to `PROMOTION_REASONS`, per `schema-evolution.md`. Otherwise they land in
+   `doc` JSON. `_prepared()` rounding is extended to `open_notional`. A
+   repository test reads each new column back from its real column.
+
+Spec line references for the recorder (`equity_recorder.py:73-77, :90`) are
+approximate; the brief has the exact lines.
 
 ## Panel review
 
