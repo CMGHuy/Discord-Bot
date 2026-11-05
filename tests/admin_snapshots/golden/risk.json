@@ -1,0 +1,154 @@
+{
+  "availability": {
+    "clusters": {
+      "reason": null,
+      "state": "ok"
+    },
+    "distribution_metrics": {
+      "reason": null,
+      "state": "ok"
+    },
+    "drawdown_amount": {
+      "reason": null,
+      "state": "ok"
+    },
+    "drawdown_r": {
+      "reason": null,
+      "state": "ok"
+    },
+    "heat": {
+      "reason": null,
+      "state": "ok"
+    },
+    "positions": {
+      "reason": null,
+      "state": "ok"
+    },
+    "sector_heat": {
+      "reason": "sector_mapping_incomplete",
+      "state": "partial"
+    },
+    "throttle": {
+      "reason": null,
+      "state": "ok"
+    }
+  },
+  "clusters": [],
+  "correlation": {
+    "labels": [
+      "AAPL",
+      "MSFT",
+      "SAP.DE"
+    ],
+    "values": [
+      [
+        1.0,
+        0.5227602881135841,
+        -0.4332228673827002
+      ],
+      [
+        0.5227602881135842,
+        1.0,
+        0.5405338674230176
+      ],
+      [
+        -0.43322286738270027,
+        0.5405338674230177,
+        1.0
+      ]
+    ]
+  },
+  "heat": {
+    "cap_pct": 6.0,
+    "gap_risk_amount": null,
+    "gap_risk_unknown": 0,
+    "open_pct": 1.3806706114398422,
+    "utilisation_pct": 23.0
+  },
+  "metrics": {
+    "annualised_vol": {
+      "n": 299,
+      "value": 0.05438828889829786
+    },
+    "as_of": "2026-10-28",
+    "benchmark_symbol": "SPY",
+    "beta_spy": {
+      "n": 299,
+      "value": -0.41564701427042355
+    },
+    "expected_shortfall_95": {
+      "n": 299,
+      "value": 0.004561468246636635
+    },
+    "max_drawdown_amount": {
+      "fx_missing_count": 0,
+      "invalid_date_count": 0,
+      "n": 12,
+      "value": 88.0
+    },
+    "max_drawdown_r": {
+      "excluded_count": 0,
+      "invalid_date_count": 0,
+      "invalid_outcome_count": 0,
+      "n": 12,
+      "value": 1.6
+    },
+    "sharpe_r": {
+      "excluded_count": 0,
+      "invalid_date_count": 0,
+      "invalid_outcome_count": 0,
+      "n": 12,
+      "value": 0.1063807897507042
+    },
+    "var_95": {
+      "n": 299,
+      "value": 0.00442346730944962
+    }
+  },
+  "positions": [
+    {
+      "entry": 100.0,
+      "risk_of_loss_amount": 50.0,
+      "risk_of_loss_pct": 0.493,
+      "risk_pct": 0.493,
+      "shares": 10,
+      "stop_loss": 95.0,
+      "strategy": "VWAP",
+      "ticker": "AAPL",
+      "trade_id": "o000000000000001"
+    },
+    {
+      "entry": 200.0,
+      "risk_of_loss_amount": 50.0,
+      "risk_of_loss_pct": 0.493,
+      "risk_pct": 0.493,
+      "shares": 5,
+      "stop_loss": 190.0,
+      "strategy": "VWAP",
+      "ticker": "MSFT",
+      "trade_id": "o000000000000002"
+    },
+    {
+      "entry": 150.0,
+      "risk_of_loss_amount": 40.0,
+      "risk_of_loss_pct": 0.394,
+      "risk_pct": 0.394,
+      "shares": 4,
+      "stop_loss": 140.0,
+      "strategy": "VWAP",
+      "ticker": "SAP.DE",
+      "trade_id": "o000000000000003"
+    }
+  ],
+  "sector_heat": [
+    {
+      "heat_pct": 0.986,
+      "sector": "Technology"
+    }
+  ],
+  "throttle": {
+    "multiplier": 1.0,
+    "paused": false
+  },
+  "unmapped_count": 1
+}

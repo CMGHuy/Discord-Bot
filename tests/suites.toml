@@ -101,3 +101,7 @@ paths = ["tests/scout/"]
 [suites.refresher]
 description = "v201 admin market refresher: contract, process, quote cycle, never-fetch request door"
 paths = ["tests/refresher/", "tests/admin_market/"]
+
+[suites.admin-snapshots]
+description = "v204 admin snapshot pages: golden parity, read-only bars, risk payload, builders, worker, routes"
+paths = ["tests/admin_snapshots/"]
