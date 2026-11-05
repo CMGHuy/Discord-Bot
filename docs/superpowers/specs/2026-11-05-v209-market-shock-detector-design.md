@@ -72,6 +72,22 @@ Two tracks, approved by the partner on 2026-11-05.
   issuing shock shorts, moving stops up) is a **later spec**, written only
   from the parts that pass.
 
+### Plans
+
+Two plans, because together the tracks exceed the 20-task cap. This
+follows v206's precedent of several plans under one spec.
+
+1. **Plan v209** takes this spec's number and builds **Track 1**: the
+   detector, storage, wiring, notices, admin badge, the 2026-11-05 replay,
+   and the release in shadow mode.
+2. **Plan v210** (the next free number when it is written) builds **Track
+   2**: the screen runner's `CONTEXT_KIND = "level"` extension, the context
+   files, the two ideas, and their one-shot runs.
+
+   Its `**Spec:**` line points here. It does not depend on plan v209, and
+   it can run before, after or alongside it. It ends with `/panel` and
+   `/close-out` of this spec family once both plans are merged.
+
 ## Track 1 — the detector
 
 ### State machine
