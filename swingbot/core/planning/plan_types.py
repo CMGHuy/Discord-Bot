@@ -210,6 +210,13 @@ class TradePlanV2:
     # entry_context key; never read by a filter, score or backtest.
     # Omitted from plan_to_dict while None (_OMIT_WHEN_NONE).
     risk_notice: dict | None = None
+    # v191 (planning/builders.py, atr_band.py): where the ATR band put the stop
+    # of a confluence band plan -- "floor" (moved out to k x ATR14), "ceiling"
+    # (moved in to 2 x ATR14) or "untouched" (the level, inside the band). Set
+    # once at creation with stop_ceiling_pct; None for every plan built with
+    # CONFLUENCE_ATR_STOP_FLOOR at 0 and every plan persisted before v191.
+    # Omitted from plan_to_dict while None (_OMIT_WHEN_NONE).
+    stop_moved_by: str | None = None
     # v192 (planning/gap_reclaim.py): the next-open fill and gap-veto stamps,
     # frozen at creation; reclaim_session records the live resting session.
     # Omitted while None so plans without the feature retain their document shape.
@@ -240,11 +247,11 @@ def breakeven_trigger(plan: TradePlanV2, entry: float) -> float:
 _PLAN_FIELDS = None   # cached field list
 
 
-# v183: optional fields written only when set -- a None here is omitted, never
-# stored as null, so every plan doc without them (every long) stays
-# byte-identical to its pre-v183 shape. plan_from_dict defaults them back.
-_OMIT_WHEN_NONE = ("gap_sizing", "risk_notice", "issued_at_source", "reclaim_atr",
-                   "reclaim_level", "reclaim_session", "waits_next_open")
+# v183/v191/v192/v200: optional fields written only when set -- a None here is omitted, never
+# stored as null, so existing plan docs stay byte-identical while the new
+# fields are unused. plan_from_dict defaults omitted fields back.
+_OMIT_WHEN_NONE = ("gap_sizing", "risk_notice", "stop_moved_by", "issued_at_source",
+                   "reclaim_atr", "reclaim_level", "reclaim_session", "waits_next_open")
 
 
 def plan_to_dict(plan: TradePlanV2) -> dict:

@@ -121,6 +121,26 @@ def _submitted(payload: Mapping) -> dict | None:
     return values if isinstance(values, Mapping) else None
 
 
+COUPLING_MESSAGE = ("Confluence ATR stop floor above 0 needs LONG_GAP_SIZING and "
+                    "SHORT_GAP_SIZING both on (v191: the planned loss must stay inside the "
+                    "per-trade risk on a gap)")
+
+
+def _coupling_problem(values: Mapping) -> tuple[str, str] | None:
+    """Refuse an effective form with an ATR floor missing either sizing switch."""
+    form = _effective_form(values)
+    raw_floor = form.get("CONFLUENCE_ATR_STOP_FLOOR")
+    try:
+        floor = float(raw_floor or 0)
+    except (TypeError, ValueError):
+        return ("invalid", f"Confluence ATR stop floor must be a number, got {raw_floor!r}")
+    if floor <= 0:
+        return None
+    if "LONG_GAP_SIZING" in form and "SHORT_GAP_SIZING" in form:
+        return None
+    return ("invalid", COUPLING_MESSAGE)
+
+
 def _validate(values: Mapping) -> tuple[str, str] | None:
     """(code, message) for the first problem found, or None.
 
@@ -158,7 +178,7 @@ def _validate(values: Mapping) -> tuple[str, str] | None:
         if f.type == "select" and f.options and raw not in [v for v, _ in f.options]:
             return ("invalid",
                     f"{f.label} must be one of {[v for v, _ in f.options]}")
-    return None
+    return _coupling_problem(values)
 
 
 def _effective_form(values: Mapping) -> dict:

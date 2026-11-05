@@ -69,6 +69,7 @@ import numpy as np
 import pandas as pd
 
 from swingbot.core.market.indicators import atr, ema, fibonacci_levels, rolling_vwap, zigzag_pivots
+from swingbot.core.market.atr_band import AtrBand, band_stop
 from swingbot.core.market.volatility import bollinger_bands
 from swingbot.core.market.trendlines import trendline_levels
 from swingbot.core.market.fvg import find_fair_value_gaps
@@ -629,6 +630,8 @@ class Scenario:
     target2_sources: list | None
     constraints: dict = field(default_factory=dict)  # {"min_reward": bool, "min_stop_distance": bool, "max_stop_distance": bool, "min_risk_reward": bool}
 
+    atr14_pct: float | None = None  # v191 raw ATR14% of the creating bar, carried by an active band
+
     @property
     def risk_reward_ratio(self) -> float:
         risk = abs(self.entry - self.stop_loss)
@@ -659,10 +662,36 @@ def atr_floor_pct(df, current_price: float, h: dict) -> float:
         return 0.0
 
 
+def _active_band(band: AtrBand | None) -> AtrBand | None:
+    return band if band is not None and band.atr_pct is not None else None
+
+
+def _band_atr(band: AtrBand | None) -> float | None:
+    return None if band is None else band.atr_pct
+
+
+def _stop_constraints(stop_dist, entry, stop_price, target_price, direction, band,
+                      stop_limits) -> dict:
+    """The stop-distance and own-target gates, using band geometry when usable."""
+    min_distance, max_distance, min_rr = stop_limits
+    adjusted = None
+    if band is not None:
+        adjusted = band_stop(entry, stop_price, direction == "bullish", band.atr_pct, band.k)
+    risk_stop = stop_price if adjusted is None else adjusted.stop
+    risk = abs(entry - risk_stop)
+    reward = abs(target_price - entry)
+    rr = reward / risk if risk > 0 else 0.0
+    return {
+        "min_stop_distance": adjusted is not None or stop_dist >= min_distance,
+        "max_stop_distance": adjusted is not None or max_distance <= 0 or stop_dist <= max_distance,
+        "min_risk_reward": min_rr <= 0 or rr >= min_rr,
+    }
+
+
 def build_scenarios(current_price: float, supports: list, resistances: list, min_reward_pct: float,
                      atr_floor: float = 0.0, min_stop_distance_pct: float = 0.0,
                      max_stop_distance_pct: float = 0.0, min_risk_reward: float = 0.0,
-                     block_bullish: bool = False) -> list:
+                     block_bullish: bool = False, band: AtrBand | None = None) -> list:
     """
     Builds both possible scenarios (bullish toward resistance, bearish
     toward support), each only included if it clears EVERY one of these
@@ -691,19 +720,20 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
     code (scan_engine.py's requirement table) has a consistent shape to
     read regardless of which requirements are hard filters here vs.
     checked further up the pipeline (confluence count, confidence level).
+
+    With an active v191 ATR band, the band replaces both stop-distance
+    gates and own-target reward:risk uses the band stop. The scenario still
+    carries the raw structural level and its distance for downstream planning.
     """
+    band = _active_band(band)
     scenarios = []
 
     def _check_constraints(dist1, stop_dist, entry, stop_price, target_price,
                            direction) -> dict:
-        risk = abs(entry - stop_price)
-        reward = abs(target_price - entry)
-        rr = reward / risk if risk > 0 else 0.0
         return {
             "min_reward": dist1 >= min_reward_pct,
-            "min_stop_distance": stop_dist >= min_stop_distance_pct,
-            "max_stop_distance": max_stop_distance_pct <= 0 or stop_dist <= max_stop_distance_pct,
-            "min_risk_reward": min_risk_reward <= 0 or rr >= min_risk_reward,
+            **_stop_constraints(stop_dist, entry, stop_price, target_price, direction, band,
+                                (min_stop_distance_pct, max_stop_distance_pct, min_risk_reward)),
             # True means "passed", matching every key above -- a scenario that
             # fails this is never built, so a built one always reads True.
             "not_dead_cat_bounce": not (block_bullish and direction == "bullish"),
@@ -741,7 +771,7 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
                 stop_distance_pct=stop_dist, tight_stop=stop_dist < atr_floor, atr_floor_pct=atr_floor,
                 take_profit=t1.price, target_distance_pct=dist1, target_sources=list(t1.sources),
                 target2_price=target2_price, target2_distance_pct=target2_dist, target2_sources=target2_sources,
-                constraints=constraints,
+                constraints=constraints, atr14_pct=_band_atr(band),
             ))
 
     if supports and resistances and current_price:
@@ -767,7 +797,7 @@ def build_scenarios(current_price: float, supports: list, resistances: list, min
                 stop_distance_pct=stop_dist, tight_stop=stop_dist < atr_floor, atr_floor_pct=atr_floor,
                 take_profit=t1.price, target_distance_pct=dist1, target_sources=list(t1.sources),
                 target2_price=target2_price, target2_distance_pct=target2_dist, target2_sources=target2_sources,
-                constraints=constraints,
+                constraints=constraints, atr14_pct=_band_atr(band),
             ))
 
     return scenarios

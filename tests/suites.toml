@@ -19,8 +19,12 @@ description = "chart/PNG rendering -- alone because rendering dominates wall-clo
 paths = ["tests/charts/"]
 
 [suites.market-data]
-description = "OHLCV fetch/cache and the market layer: indicators, entry signals"
-paths = ["tests/marketdata/", "tests/market/"]
+description = "OHLCV fetch and cache"
+paths = ["tests/marketdata/"]
+
+[suites.market-signals]
+description = "the market layer: indicators, entry signals, ATR band"
+paths = ["tests/market/"]
 
 [suites.scanning]
 description = "the scan engine and everything it posts"

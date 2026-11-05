@@ -17,6 +17,7 @@ from swingbot.core.presentation import kinds
 from swingbot.core.presentation.instructions import (CLOSE_AT_MARKET, DO_NOT_PLACE, Instruction,
                                                      Money, block_warnings, instruction_for,
                                                      money_from, ticket_for, total_r)
+from swingbot.core.presentation.band_stop import band_stop_line
 from swingbot.core.presentation.gap_risk import gap_risk_line
 from swingbot.core.presentation.kinds import Family, Kind
 
@@ -103,9 +104,14 @@ def ticket_gap_line(plan) -> str | None:
     return gap_risk_line(_sizing_snapshot(_entry(plan), plan), currency=config.CURRENCY_SYMBOL)
 
 
+def ticket_band_line(plan) -> str | None:
+    """The band's shared order-block explanation in the configured currency."""
+    return band_stop_line(plan, currency=config.CURRENCY_SYMBOL)
+
+
 def _with_gap_line(instruction: Instruction, plan) -> Instruction:
-    line = ticket_gap_line(plan)
-    return dataclasses.replace(instruction, lines=(*instruction.lines, line)) if line else instruction
+    lines = tuple(line for line in (ticket_band_line(plan), ticket_gap_line(plan)) if line is not None)
+    return dataclasses.replace(instruction, lines=(*instruction.lines, *lines)) if lines else instruction
 
 
 def build_ticket_embed(item, plan) -> discord.Embed:

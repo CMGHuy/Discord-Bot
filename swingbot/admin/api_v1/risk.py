@@ -101,14 +101,17 @@ def _positions(open_trades: list[dict] | None, balance: float | None) -> list[di
 def _open_short_gap_risk(open_trades: list) -> dict:
     """v183: what the open shorts would lose on a gap the size of each ticker's
     p99 up-gap, summed -- shown beside heat, never added to it (heat stays on
-    stop risk). A short without a figure is counted, never guessed at."""
+    stop risk). A short without a figure is counted, never guessed at.
+    Shorts only, as the risk page labels it; a stamped long's gap figure
+    is on its order block (v191)."""
     from swingbot.core.planning.gap_sizing import gap_risk_amount_for
 
     total, known, unknown = 0.0, 0, 0
     for t in open_trades:
         if t.get("direction") != "bearish":
             continue
-        amount = (gap_risk_amount_for(t["shares"], t.get("entry"), t.get("stop_loss"), t.get("gap_sizing"))
+        amount = (gap_risk_amount_for(t["shares"], t.get("entry"), t.get("stop_loss"), t.get("gap_sizing"),
+                                     direction="bearish")
                   if t.get("shares") else None)
         if amount is None:
             unknown += 1

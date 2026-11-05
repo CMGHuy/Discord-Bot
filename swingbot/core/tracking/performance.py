@@ -668,12 +668,12 @@ def _paper_sizing(entry, stop_loss, direction, gap_sizing, label) -> dict | None
     """The paper book's share count, from the alert's one sizing path (v183).
 
     A failure in the gap path logs one line and sizes on the stop, never
-    leaving the trade unsized; a long never logs and never leaves today's path."""
+    leaving the trade unsized; an unstamped long never logs."""
     try:
         return gap_sizing_mod.size_for(entry, stop_loss, direction=direction,
                                        gap_sizing=gap_sizing, label=label)
     except Exception as exc:
-        if direction == "bearish" and gap_sizing:
+        if gap_sizing:
             log.info("%s: gap sizing fell back to stop (%s)", label, exc)
         return _stop_only_sizing(entry, stop_loss)
 

@@ -1,9 +1,14 @@
 """v104 stop scope and ceiling helpers for structural stops."""
 from __future__ import annotations
 
+import logging
+
 from swingbot.core.market.strategy_types import (HORIZONS, SHORT_STRATEGIES,
                                                   STRUCTURAL_DROP_STRATEGIES)
 from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, capped_planned_loss_pct
+from swingbot.core.infra.swallowed import swallowed
+
+log = logging.getLogger(__name__)
 
 CAP = "cap"
 DROP = "drop"
@@ -86,3 +91,28 @@ def risk_sizing_ok(plan, sizing_fn=None) -> bool:
     except (TypeError, ValueError):
         return False
     return 0.0 < actual_risk <= budget
+
+
+def band_sizing_verdict(plan, sizing_fn=None) -> str | None:
+    """Require positive risk-based shares within the band plan's dollar budget."""
+    if getattr(plan, "stop_moved_by", None) is None:
+        return None
+    from swingbot.core.market.atr_band import REASON_SIZE_ZERO
+    from swingbot.core.planning import gap_sizing
+
+    if sizing_fn is None:
+        sizing_fn = gap_sizing.size_for_plan
+    try:
+        sizing = sizing_fn(plan)
+    except Exception as exc:
+        swallowed(log, "scan.stop_scope.band_sizing_verdict", exc, level=logging.DEBUG)
+        return "risk_sizing"
+    if not sizing or sizing.get("mode") != "risk_pct" or gap_sizing.BAND_KEY not in sizing:
+        return "risk_sizing"
+    budget = sizing["balance"] * sizing["risk_pct"] / 100.0
+    shares = float(sizing["shares"] or 0.0)
+    if shares <= 0:
+        return REASON_SIZE_ZERO
+    if shares * sizing[gap_sizing.BAND_KEY] > budget + 1e-9:
+        return "risk_sizing"
+    return None

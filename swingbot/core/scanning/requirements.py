@@ -25,6 +25,16 @@ def _sources_str(sources) -> str:
     return ", ".join(dict.fromkeys(sources)) if sources else "n/a"
 
 
+def _stop_distance_detail(scenario, default: str) -> str:
+    """Describe the active ATR band while preserving the raw level distance."""
+    a = getattr(scenario, "atr14_pct", None)
+    if a is None:
+        return default
+    k = config.CONFLUENCE_ATR_STOP_FLOOR
+    return (f"{scenario.stop_distance_pct:.1f}% away "
+            f"(ATR band {k * a:.1f}–{2 * a:.1f}%: {k:g}× to 2× ATR14)")
+
+
 def _build_requirement_checks(scenario, target_confluence: tuple, conf,
                               effective_min_confluence: int,
                               effective_min_confidence: int, *, opex_tier=None) -> list:
@@ -48,11 +58,13 @@ def _build_requirement_checks(scenario, target_confluence: tuple, conf,
         ),
         RequirementCheck(
             key="min_stop_distance", label="Min stop distance %", passed=c.get("min_stop_distance", True),
-            detail=f"{scenario.stop_distance_pct:.1f}% away (needs {config.MIN_STOP_DISTANCE_PCT:.1f}%+)",
+            detail=_stop_distance_detail(
+                scenario, f"{scenario.stop_distance_pct:.1f}% away (needs {config.MIN_STOP_DISTANCE_PCT:.1f}%+)"),
         ),
         RequirementCheck(
             key="max_stop_distance", label="Max stop-loss %", passed=c.get("max_stop_distance", True),
-            detail=f"{scenario.stop_distance_pct:.1f}% away (needs ≤{config.MAX_STOP_LOSS_PCT:.1f}%)",
+            detail=_stop_distance_detail(
+                scenario, f"{scenario.stop_distance_pct:.1f}% away (needs ≤{config.MAX_STOP_LOSS_PCT:.1f}%)"),
         ),
         RequirementCheck(
             key="min_risk_reward", label="Min reward:risk", passed=c.get("min_risk_reward", True),

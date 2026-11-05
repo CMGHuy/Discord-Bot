@@ -76,6 +76,15 @@ def test_v139_stop_ceiling_pct_rides_in_the_doc(repo, db_conn):
     assert diff_records(record, repo.get("P1", conn=db_conn)) == []
 
 
+def test_v191_stop_moved_by_rides_in_the_doc(repo, db_conn):
+    """v191 used schema-evolution's ADD path: no column, no revision -- the band
+    plan's stop_moved_by and its stored ceiling live in plans.doc."""
+    from tests.db_diff import diff_records
+    record = _plan("P1", source="confluence", stop_ceiling_pct=6.1, stop_moved_by="floor")
+    repo.insert(record, conn=db_conn)
+    assert diff_records(record, repo.get("P1", conn=db_conn)) == []
+
+
 def test_v192_reclaim_fields_ride_in_the_doc(repo, db_conn):
     """The next-open stamps survive plans.doc and reload as a TradePlanV2."""
     from swingbot.core.planning.plan_types import plan_from_dict, plan_to_dict

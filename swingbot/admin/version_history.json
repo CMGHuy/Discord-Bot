@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-05 14:52:54 UTC",
+  "generated_at": "2026-11-05 16:27:41 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.39.0",
-    "bot": "2.16.3"
+    "bot": "2.16.4"
   },
   "releases": [
     {
@@ -2358,6 +2358,19 @@
       "versions": {
         "ui": "1.39.0",
         "bot": "2.16.3"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-05",
+      "last_seen": "2026-11-05",
+      "commit": "d42dcb9f",
+      "subject": "release(bot): 2.16.4 -- v191 ATR-band stop path (default off), gap sizing for longs, measurement closed",
+      "versions": {
+        "ui": "1.39.0",
+        "bot": "2.16.4"
       },
       "changed": [
         "bot"

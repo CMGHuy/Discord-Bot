@@ -3,15 +3,19 @@
 Every site that turns a plan or a paper trade into a share count calls
 size_for / size_for_plan / size_for_trade, never compute_position_size
 directly (stop_scope.risk_sizing_ok excepted: it runs before the stamp
-exists, and a gap cut only lowers shares). The rule in force and the p99
-up-gap are stamped on a SHORT plan once, at live creation, from completed
+exists, and a gap cut only lowers shares). The rule in force and the adverse p99
+gap are stamped on a plan once, at live creation, from completed
 bars; every reader uses that stamp, so a later switch flip or a missing
-frame never re-sizes an alerted plan differently. A long never reaches the
-gap branch. Sizing and display only -- no filter, score or gate reads this.
+frame never re-sizes an alerted plan differently. A long reaches the gap
+branch only with a long stamp (`n_down_gaps`), written while LONG_GAP_SIZING
+is on (v191 Part B). A band plan is stamped long or short and sized on its
+stored worst-fill distance; stamps without band_sizing_distance retain v183
+sizing. Sizing and display only -- no filter, score or gate reads this.
 """
 from __future__ import annotations
 
 import logging
+import math
 
 from swingbot import config
 from swingbot.core.infra.swallowed import swallowed
@@ -21,8 +25,13 @@ log = logging.getLogger(__name__)
 
 RULE_GAP = "gap_p99"
 RULE_STOP = "stop"
+BAND_KEY = "band_sizing_distance"
 MIN_UP_GAPS = 60
+MIN_DOWN_GAPS = 60
 LOOKBACK = 250
+_P99_KEY = {"bearish": "up_gap_p99_pct", "bullish": "down_gap_p99_pct"}
+_COUNT_KEY = {"bearish": "n_up_gaps", "bullish": "n_down_gaps"}
+_GAP_WORD = {"bearish": "up-gaps", "bullish": "down-gaps"}
 _NO_GAP = {"gap_risk_amount": None, "gap_sized": False, "gap_floor_pct": None}
 
 
@@ -30,10 +39,8 @@ def _rule() -> str:
     return RULE_GAP if config.SHORT_GAP_SIZING else RULE_STOP
 
 
-def gap_sizing_stamp(df, direction: str) -> dict | None:
-    """The stamp for a plan created now from `df` (completed bars only); None for a long."""
-    if direction != "bearish":
-        return None
+def _short_stamp(df) -> dict:
+    """Record the short rule and its adverse up-gap distribution."""
     from swingbot.core.edge.gates import gap_stats
     stats = gap_stats(df, lookback=LOOKBACK)
     n_up = int(stats["n_up"])
@@ -41,28 +48,73 @@ def gap_sizing_stamp(df, direction: str) -> dict | None:
     return {"rule": _rule(), "up_gap_p99_pct": p99, "n_up_gaps": n_up}
 
 
+def _long_stamp(df, rule: str) -> dict:
+    """Record the supplied long rule and its adverse down-gap distribution."""
+    from swingbot.core.edge.gates import gap_stats
+    stats = gap_stats(df, lookback=LOOKBACK)
+    n_down = int(stats["n_down"])
+    p99 = stats["p99_down_gap_pct"] if n_down >= MIN_DOWN_GAPS else None
+    return {"rule": rule, "down_gap_p99_pct": p99, "n_down_gaps": n_down}
+
+
+def gap_sizing_stamp(df, direction: str) -> dict | None:
+    """The stamp for a plan created now from `df` (completed bars only)."""
+    if direction == "bearish":
+        return _short_stamp(df)
+    if direction == "bullish" and config.LONG_GAP_SIZING:
+        return _long_stamp(df, RULE_GAP)
+    return None
+
+
+def _fallback_stamp(direction) -> dict | None:
+    """Keep the creation-time rule when its gap distribution cannot be read."""
+    if direction == "bearish":
+        return {"rule": _rule(), "up_gap_p99_pct": None, "n_up_gaps": 0}
+    if direction == "bullish" and config.LONG_GAP_SIZING:
+        return {"rule": RULE_GAP, "down_gap_p99_pct": None, "n_down_gaps": 0}
+    return None
+
+
+def _log_missing_p99(plan) -> None:
+    direction = plan.direction
+    if plan.gap_sizing is None or plan.gap_sizing[_P99_KEY[direction]] is not None:
+        return
+    minimum = MIN_UP_GAPS if direction == "bearish" else MIN_DOWN_GAPS
+    log.info("%s: gap sizing p99 n/a (%d %s, need %d) -- sized on the stop",
+             plan.ticker, plan.gap_sizing[_COUNT_KEY[direction]], _GAP_WORD[direction], minimum)
+
+
 def stamp_gap_sizing(plan, df) -> None:
-    """Set plan.gap_sizing; never raises. A short without a usable p99 logs one line."""
+    """Set plan.gap_sizing; never raises. A missing usable p99 logs one line."""
+    if getattr(plan, "stop_moved_by", None) is not None:
+        return _stamp_band_plan(plan, df)
     try:
         plan.gap_sizing = gap_sizing_stamp(df, plan.direction)
     except Exception as exc:
-        plan.gap_sizing = ({"rule": _rule(), "up_gap_p99_pct": None, "n_up_gaps": 0}
-                           if plan.direction == "bearish" else None)
+        plan.gap_sizing = _fallback_stamp(plan.direction)
         swallowed(log, "scan.gap_sizing.stamp", exc,
                   "%s: gap sizing stamp failed (%s) -- sized on the stop", plan.ticker, exc,
                   level=logging.INFO)
         return
-    if plan.gap_sizing is not None and plan.gap_sizing["up_gap_p99_pct"] is None:
-        log.info("%s: gap sizing p99 n/a (%d up-gaps, need %d) -- sized on the stop",
-                 plan.ticker, plan.gap_sizing["n_up_gaps"], MIN_UP_GAPS)
+    _log_missing_p99(plan)
 
 
 def gap_floor_for(direction: str | None, gap_sizing: dict | None) -> float | None:
-    """The p99 floor (percent) to size on, or None: long, no stamp, rule stop, no p99."""
-    if direction != "bearish" or not gap_sizing or gap_sizing.get("rule") != RULE_GAP:
+    """The adverse p99 floor (percent), or None without a usable gap-rule stamp."""
+    key = _P99_KEY.get(direction)
+    if key is None or not gap_sizing or gap_sizing.get("rule") != RULE_GAP:
         return None
-    p99 = gap_sizing.get("up_gap_p99_pct")
+    p99 = gap_sizing.get(key)
     return float(p99) if p99 is not None and p99 > 0 else None
+
+
+def _on_gap_path(direction, gap_sizing) -> bool:
+    """A long opts in only through its own stamp; an unstamped short keeps n/a."""
+    if (gap_sizing or {}).get("rule") == RULE_STOP:
+        return False
+    if direction == "bearish":
+        return True
+    return direction == "bullish" and "n_down_gaps" in (gap_sizing or {})
 
 
 def _stop_only(entry, stop_loss, account_cfg, label=""):
@@ -79,7 +131,9 @@ def _with_no_gap(result):
 
 def size_for(entry, stop_loss, *, direction, gap_sizing, account_cfg=None, label: str = "") -> dict | None:
     """The share count for one plan or trade under its stamped rule."""
-    if direction != "bearish" or (gap_sizing or {}).get("rule") == RULE_STOP:
+    if (gap_sizing or {}).get(BAND_KEY) is not None:
+        return _band_size(entry, stop_loss, direction, gap_sizing, account_cfg, label)
+    if not _on_gap_path(direction, gap_sizing):
         return _stop_only(entry, stop_loss, account_cfg, label)
     floor = gap_floor_for(direction, gap_sizing)
     if floor is None:
@@ -107,10 +161,83 @@ def size_for_trade(trade: dict, entry=None, account_cfg=None) -> dict | None:
                     label=trade.get("ticker", ""))
 
 
-def gap_risk_amount_for(shares, entry, stop_loss, gap_sizing) -> float | None:
-    """What a p99 gap would cost an open short of `shares`; None without a usable p99."""
-    floor = gap_floor_for("bearish", gap_sizing)
+def gap_risk_amount_for(shares, entry, stop_loss, gap_sizing, direction: str = "bearish") -> float | None:
+    """What a p99 gap would cost an open position of `shares`; None without a usable p99."""
+    floor = gap_floor_for(direction, gap_sizing)
     if floor is None or shares is None or entry is None or stop_loss is None:
         return None
     distance = account._sizing_distance(float(entry), abs(float(entry) - float(stop_loss)), floor)
     return round(float(shares) * distance, 2)
+
+
+def worst_fill_distance(stop_loss, stop_ceiling_pct, direction) -> float:
+    """Distance at the fill whose planned loss reaches the stored ceiling."""
+    ceiling = float(stop_ceiling_pct)
+    denominator = 100.0 - ceiling if direction == "bullish" else 100.0 + ceiling
+    return float(stop_loss) * ceiling / denominator
+
+
+def band_sizing_distance(trigger, stop_loss, stop_ceiling_pct, direction, gap_sizing) -> float:
+    """Cover the worst accepted fill and the stamped adverse gap allowance."""
+    distance = worst_fill_distance(stop_loss, stop_ceiling_pct, direction)
+    floor = gap_floor_for(direction, gap_sizing)
+    return max(distance, float(trigger) * floor / 100.0) if floor is not None else distance
+
+
+def _band_base_stamp(df, direction) -> dict:
+    return gap_sizing_stamp(df, direction) or _long_stamp(df, RULE_STOP)
+
+
+def _empty_band_stamp(direction) -> dict:
+    return _fallback_stamp(direction) or {
+        "rule": RULE_STOP, "down_gap_p99_pct": None, "n_down_gaps": 0}
+
+
+def _stamp_band_plan(plan, df) -> None:
+    try:
+        stamp = _band_base_stamp(df, plan.direction)
+    except Exception as exc:
+        stamp = _empty_band_stamp(plan.direction)
+        swallowed(log, "scan.gap_sizing.band_stamp", exc,
+                  "%s: band sizing stamp failed (%s) -- sized on the worst fill",
+                  plan.ticker, exc, level=logging.INFO)
+    stamp[BAND_KEY] = band_sizing_distance(
+        plan.trigger_price, plan.stop_loss, plan.stop_ceiling_pct, plan.direction, stamp)
+    plan.gap_sizing = stamp
+
+
+def _band_size(entry, stop_loss, direction, gap_sizing, account_cfg, label):
+    distance = float(gap_sizing[BAND_KEY])
+    try:
+        kwargs = {"ticker": label} if label else {}
+        result = account.compute_position_size(
+            entry, stop_loss, account_cfg, gap_floor_pct=distance / float(entry) * 100.0, **kwargs)
+    except Exception as exc:
+        swallowed(log, "scan.gap_sizing.band_size", exc,
+                  "%s: band sizing failed (%s) -- left unsized", label, exc, level=logging.INFO)
+        return None
+    if result is None:
+        return None
+    for key in _NO_GAP:
+        result.pop(key, None)
+    if result["mode"] == "risk_pct":
+        budget = result["balance"] * result["risk_pct"] / 100.0
+        shares = math.floor(min(result["shares"], budget / distance) * 100 + 1e-9) / 100
+        result.update(shares=shares, risk_amount=round(shares * abs(entry - stop_loss), 2),
+                      position_value=round(shares * entry, 2))
+    result[BAND_KEY] = distance
+    result.update(_band_gap_fields(entry, stop_loss, direction, gap_sizing, result["shares"], distance))
+    return result
+
+
+def _band_gap_fields(entry, stop_loss, direction, gap_sizing, shares, distance) -> dict:
+    if gap_sizing.get("rule") == RULE_STOP:
+        return {}
+    floor = gap_floor_for(direction, gap_sizing)
+    if floor is None:
+        return dict(_NO_GAP)
+    return {
+        "gap_risk_amount": round(shares * account._sizing_distance(entry, abs(entry - stop_loss), floor), 2),
+        "gap_sized": entry * floor / 100.0 >= distance - 1e-9,
+        "gap_floor_pct": floor,
+    }

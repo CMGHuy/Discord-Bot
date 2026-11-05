@@ -9,6 +9,7 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 
 EXPECTED = {
     # attr: (section, type, default, cast default, min, max, step)
+    "LONG_GAP_SIZING": ("Account Defaults", "checkbox", "false", False, None, None, None),
     "SHORT_GAP_SIZING": ("Account Defaults", "checkbox", "true", True, None, None, None),
     "SHORT_RISK_NOTICE": ("Universe & Scanning", "checkbox", "true", True, None, None, None),
     "SHORT_SQUEEZE_SI_PCT": ("Universe & Scanning", "float", "10.0", 10.0, 1, 100, 0.5),
@@ -60,3 +61,8 @@ def test_env_example_lists_all_four():
     for line in ("SHORT_GAP_SIZING=true", "SHORT_RISK_NOTICE=true",
                  "SHORT_SQUEEZE_SI_PCT=10.0", "SHORT_SQUEEZE_DTC=5.0"):
         assert f"\n{line}\n" in text, line
+
+
+def test_long_gap_switch_follows_the_short_one():
+    attrs = [f.attr for f in config.FIELDS]
+    assert attrs.index("LONG_GAP_SIZING") == attrs.index("SHORT_GAP_SIZING") + 1

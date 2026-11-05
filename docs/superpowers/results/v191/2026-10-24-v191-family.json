@@ -1,0 +1,25 @@
+{
+ "stage": "family",
+ "method": "holm",
+ "alpha": 0.05,
+ "primary": "K",
+ "arms": {
+  "K": {
+   "reached_stage3": false,
+   "stage3_verdict": null,
+   "p": 1.0,
+   "p_holm": 1.0,
+   "q_bh": 1.0,
+   "pass": false
+  },
+  "R": {
+   "reached_stage3": false,
+   "stage3_verdict": null,
+   "p": 1.0,
+   "p_holm": 1.0,
+   "q_bh": 1.0,
+   "pass": false
+  }
+ },
+ "passed": []
+}

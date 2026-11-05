@@ -215,6 +215,25 @@ FIELDS: list[Field] = [
                "further than this from the entry gets no plan (stop_beyond_confluence_ceiling) "
                "instead of the 1.75% clamp. Closed: REFUSED at Stage 0 in every cell (effect below "
                "MDE) -- see the v139 closed row in docs/claude/backtest-methodology.md. Keep 0."),
+    Field("CONFLUENCE_ATR_STOP_FLOOR", "CONFLUENCE_ATR_STOP_FLOOR", "Trade Filters & Risk",
+          "Confluence ATR stop floor k (v191)",
+          type="float", default="0", min=0, max=1.5, step=0.25,
+          help="v191 pre-registration. 0 = off: today's 1.75-2% stop band. Above 0, a confluence "
+               "plan's stop sits no closer than k x ATR14 and no further than 2 x ATR14 (rounded to "
+               "the tick away from entry), the percent stop gates and the 2% clamp step aside for "
+               "that plan, and shares are sized so the worst accepted fill to the stop, plus the "
+               "p99 gap allowance, never loses more than the per-trade risk. Honoured live only "
+               "with LONG_GAP_SIZING and SHORT_GAP_SIZING both on -- otherwise treated as 0 and "
+               "logged as an error. Closed (v191: arm K NO-LIFT, arm R NO-LIFT) -- see the v191 "
+               "rows in docs/claude/backtest-methodology.md. Keep 0."),
+    Field("CONFLUENCE_ATR_TARGET_MODE", "CONFLUENCE_ATR_TARGET_MODE", "Trade Filters & Risk",
+          "Confluence ATR-band target mode (v191)",
+          type="select", default="rechoose", options=["rechoose", "keep"],
+          help="v191. Read only when CONFLUENCE_ATR_STOP_FLOOR is above 0. rechoose (arm R): TP1 "
+               "is picked again against the band stop's risk. keep (arm K): TP1 stays where "
+               "today's 1.75-2% stop put it and the plan is dropped when its reward:risk against "
+               "the band stop falls under the minimum. v191 verdicts: keep (arm K) NO-LIFT, "
+               "rechoose (arm R) NO-LIFT."),
     Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
@@ -606,7 +625,16 @@ FIELDS: list[Field] = [
                "dollar risk. The stop never moves and R stays measured on the stop; only the share count can "
                "shrink. The rule in force is stamped on each plan when it is created, so flipping this never "
                "changes an alerted plan. Off: every new short is sized on the stop, byte-for-byte as before "
-               "v183. Longs are never affected."),
+               "v183. Longs follow LONG_GAP_SIZING."),
+    Field("LONG_GAP_SIZING", "LONG_GAP_SIZING", "Account Defaults",
+          "LONG gap-aware sizing (v191)", type="checkbox", default="false",
+          help="v191 Part B. On: a LONG plan is sized on max(stop distance, entry x the ticker's "
+               "p99 down-gap over 250 completed bars), the mirror of SHORT_GAP_SIZING, so a "
+               "routine bad gap through the stop stays inside the per-trade dollar risk. A gap "
+               "beyond the ticker's own p99 still can exceed it. The stop never moves and R stays "
+               "measured on the stop; only the share count can shrink. Stamped on each plan at "
+               "creation, so flipping this never resizes an alerted plan. Off (default): every "
+               "long is sized on the stop, byte-for-byte as before v191."),
     Field("MAX_OPEN_PER_HORIZON", "MAX_OPEN_PER_HORIZON", "Account Defaults",
           "Max open trades per horizon",
           type="number", default="4", min=1, max=20, step=1,
@@ -1548,6 +1576,7 @@ _SEARCH_CLASSES = {
         "TURTLE_SOUP_RESEARCH_MODE",
         "FVG_LEVELS_MODE", "FVG_DISPLACEMENT_ATR_K",
         "CONFLUENCE_STRUCTURAL_STOP_PCT", "CONFLUENCE_STOP_DROP_PCT",
+        "CONFLUENCE_ATR_STOP_FLOOR", "CONFLUENCE_ATR_TARGET_MODE",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
@@ -1565,7 +1594,7 @@ _SEARCH_CLASSES = {
         "EXTENDED_HOURS_DEBOUNCE_TICKS",
         "SHORT_UNIVERSE_MAX_SYMBOLS", "SHORT_UNIVERSE_FETCH_BUDGET_SECONDS",
         "ALERT_SYMBOL_COOLDOWN_HOURS",
-        "SHORT_GAP_SIZING", "SHORT_RISK_NOTICE", "SHORT_SQUEEZE_SI_PCT", "SHORT_SQUEEZE_DTC",
+        "SHORT_GAP_SIZING", "LONG_GAP_SIZING", "SHORT_RISK_NOTICE", "SHORT_SQUEEZE_SI_PCT", "SHORT_SQUEEZE_DTC",
     },
     "never": {"SLIPPAGE_BPS", "COMMISSION_PER_TRADE", "COMMISSION_RISK_BASIS"},
 }
@@ -1590,6 +1619,7 @@ _CASTERS = {
 # Lower-cased mode selects; an unknown value falls back to _MODE_FALLBACK's
 # entry (default "off") with a warning.
 _MODE_VALUES = {
+    "CONFLUENCE_ATR_TARGET_MODE": ("rechoose", "keep"),
     "PLAN_ENGINE_V2": ("off", "shadow", "on"),
     "MARKETDATA_LAYER": ("off", "count", "on"),
     "RUNNER_STRUCTURE_EXIT": ("off", "hl_trail", "progress_stall"),
@@ -1606,7 +1636,7 @@ _MODE_VALUES = {
 
 # v128: "off" is a signal change for FVG_LEVELS_MODE (it removes a level
 # source), so a typo must land on the pre-v128 behaviour instead.
-_MODE_FALLBACK = {"FVG_LEVELS_MODE": "all", "TRAINING_DATA_SOURCE": "alpaca"}
+_MODE_FALLBACK = {"CONFLUENCE_ATR_TARGET_MODE": "rechoose", "FVG_LEVELS_MODE": "all", "TRAINING_DATA_SOURCE": "alpaca"}
 
 # Floats that must be finite and > 0. Anything else is a parse failure, so
 # _apply_env falls back to the field default and knobs.parse_knob refuses the arm.
@@ -1645,6 +1675,33 @@ def _cast(f: Field, raw: str):
     return caster(raw) if caster else raw
 
 
+def enforce_atr_band_coupling() -> bool:
+    """Require both gap-sizing switches for a live v191 ATR stop floor.
+
+    Import and reload call this through _apply_env; replay's apply_knobs
+    bypasses it so measurement remains uncoupled. Return whether the floor
+    was zeroed, logging a broken live combination at ERROR.
+    """
+    g = globals()
+    floor = g.get("CONFLUENCE_ATR_STOP_FLOOR", 0.0)
+    long_on = g.get("LONG_GAP_SIZING", False)
+    short_on = g.get("SHORT_GAP_SIZING", False)
+    if floor <= 0 or (long_on and short_on):
+        return False
+    log.error("CONFLUENCE_ATR_STOP_FLOOR=%s needs LONG_GAP_SIZING and SHORT_GAP_SIZING "
+              "both on (LONG_GAP_SIZING=%s, SHORT_GAP_SIZING=%s) -- treated as 0 "
+              "(v191 coupling)", floor, long_on, short_on)
+    g["CONFLUENCE_ATR_STOP_FLOOR"] = 0.0
+    return True
+
+
+def _note_floor_change(changed: dict, before) -> None:
+    """Restate the floor change after coupling zeroed it."""
+    changed.pop("CONFLUENCE_ATR_STOP_FLOOR", None)
+    if before != 0.0:
+        changed["CONFLUENCE_ATR_STOP_FLOOR"] = (before, 0.0)
+
+
 def enforce_gap_reclaim_coupling() -> bool:
     """v192: GAP_RECLAIM_ATR > 0 is honoured only with MARKET_ENTRY_NEXT_OPEN on
     (the veto decides at the next open, which only that knob creates). Otherwise
@@ -1676,6 +1733,7 @@ def _apply_env() -> dict:
     """
     changed = {}
     g = globals()
+    floor_before = g.get("CONFLUENCE_ATR_STOP_FLOOR")
     gap_before = g.get("GAP_RECLAIM_ATR")
     for f in FIELDS:
         raw = os.getenv(f.key, f.default)
@@ -1701,6 +1759,8 @@ def _apply_env() -> dict:
         g[f.attr] = new_value
         if old_value != new_value:
             changed[f.attr] = (old_value, new_value)
+    if enforce_atr_band_coupling():
+        _note_floor_change(changed, floor_before)
     if enforce_gap_reclaim_coupling():
         _settle_change(changed, "GAP_RECLAIM_ATR", gap_before)
     return changed
