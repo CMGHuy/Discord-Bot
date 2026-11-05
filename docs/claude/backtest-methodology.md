@@ -19,6 +19,30 @@ interpreting any backtest, grid, or validation result.
   nothing: no switching back, no per-ticker or per-strategy source. Each new
   pre-registration names its `data_source` in its frozen block before TRAIN
   is read.
+- **Instrument v3 (v190): the PIT S&P 500 on Alpaca bars.** `--instrument v3`
+  is v2's contract (fills, costs, causal liquidity floor, PIT masking, purge,
+  270-day embargo, holdout guard) on the PIT Alpaca store
+  `data/market_data_pit/`: warm-up from 2016-01-04, research
+  2017-01-01..2025-12-31 on five purged anchored yearly folds (test years
+  2021–2025, `MIN_TRAIN_YEARS = 4` unchanged), holdout from 2026-01-01. Three
+  rules come with it. **Every v3 fold is in-sample or tainted for every
+  strategy, filter or knob that exists today:** 2021–2023 lie inside v1 TRAIN,
+  which tuned them, and 2024–2025 is v1 VALIDATION; out-of-fold figures are
+  never read as out-of-sample, and a component whose v1 VALIDATION shot is
+  spent gets no gating use of the 2024 or 2025 folds. **The 2026 holdout
+  budget is shared by v2 and v3:** a 2026 shot spent under one is spent under
+  the other, and the v104 Part A retries keep their frozen 74-ticker universe.
+  **The funnel does not accept v3 yet:** `validate_component.py --instrument
+  v3` exits with `V3_FUNNEL_REFUSAL` until a methodology spec maps Stage 2
+  and Stage 3 to five folds (on five folds "2 improving" would be looser than
+  "2 of 3"). The v190 re-baseline
+  (`docs/superpowers/results/2026-10-v190-v3-rebaseline.md`, ledger row
+  `v190-v3-rebaseline`, verdict `DESCRIPTION`) describes an instrument
+  change; never a lift; selects nothing. A later spec may cite only its power
+  columns (N, the A/B and C/B ratios, coverage, first counted date, MDE),
+  never its WR or ExpR, and any v3 badge rule is frozen before that table is
+  read or is scored on the 2026 holdout alone. The default instrument stays
+  `v1`, and no closed pre-registration re-runs on v3.
 
 ## Acceptance gate
 

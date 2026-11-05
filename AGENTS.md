@@ -89,8 +89,8 @@ code fix if the incident exposed a real defect. When a production configuration
 default changes, update `.env.example` too. Never expose or read `.env` or
 `.env.bak` unless the user expressly authorizes it.
 
-Entry points: `python bot.py` and `python admin_ui.py` (a Flask API plus an
-Angular SPA from `frontend/`). One Docker image builds the frontend; bot/admin
+Entry points: `python bot.py` and `python admin_ui.py` (Flask API plus
+Angular SPA from `frontend/`). One image builds the frontend; bot/admin/refresher
 run as separate containers. Configuration is schema-driven through
 `swingbot/config.py` and hot-reloaded by SIGHUP.
 
@@ -155,7 +155,14 @@ cache); `--data-source yfinance` or that `.env` line rolls back, and
 `BACKTEST_CACHE_DIR` or `--cache-dir` means yfinance. A missing store is an error,
 never an empty run. Live badges use the yfinance registry row. A new data source
 resets no validation budget and reopens no closed pre-registration; each names its
-`data_source`. Detail: `known-traps.md` § Two OHLCV caches, `backtest-methodology.md`
+`data_source`.
+`--instrument v3` (v190) alone reads the PIT Alpaca store `data/market_data_pit/`
+(every S&P member from 2016, local only); no universe name or variable selects it,
+it refuses without a fresh `_integrity.json`, and one fetcher runs per store root.
+v3's folds are in-sample or tainted for today's strategies, the 2026 holdout is
+shared with v2, and `validate_component.py` refuses v3 until a methodology spec
+maps its stages.
+Detail: `known-traps.md` § Two OHLCV caches, `backtest-methodology.md`
 § Windows.
 
 Specs from v141 carry `**Screen:**` under `Edge:` (an entry strategy or filter
@@ -216,6 +223,7 @@ Read the `docs/claude/` file before acting:
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234` must
   exit 0 (allow-list entries carry a reason and a date; its `hint` check fails
   an off-screen or covered `sb-hint` popover, and its `rail-label` check fails an icon-rail entry with no accessible name or no visible label on keyboard focus; fix either, never allow it).
+  UI: `shots --clip <css selector>`, one page per task.
 
 ## Skills: the same ones Claude uses
 
@@ -274,16 +282,17 @@ skills or agents: the claude.ai-synced knowledge-work plugins (`small-business`,
 the marketplace `skill-creator`. Codex has no counterpart; never name their skills
 or agents as a next step.
 
-Drive any browser, including production at bomeo-capital.com, with Playwright
-(`node frontend/scripts/browse.mjs shots|api ...`, persistent profile so one
-sign-in lasts; paths without a leading slash). Log in to bomeo-capital.com or a
+Drive any browser, production bomeo-capital.com included, with Playwright
+(`node frontend/scripts/browse.mjs shots|api ...`, persistent profile; paths
+without a leading slash). Log in to bomeo-capital.com or a
 local testing instance with `.env`'s `ADMIN_USERNAME`/`ADMIN_PASSWORD`, loaded
-inside the script and never printed, echoed, passed as arguments or written
-elsewhere; build any local test instance from those same `.env` values, never
-the `admin`/`admin` default. Reading `.env` (and scripts loading it) is
-partner-allowed; never print, echo, log or quote its values. Before database
-tests, run `replicate-prod-db` and point `DATABASE_URL` at the replica in the
-shared `swing-db` container; never make a per-task container.
+inside the script and never printed, echoed or passed as arguments; build any
+local test instance from those same `.env` values, never the `admin`/`admin`
+default. Reading `.env` (and scripts loading it) is partner-allowed; never
+print, echo or quote its values. Before database
+tests, run `replicate-prod-db` (incremental) and point `DATABASE_URL` at
+the replica in the one shared `swing-db` container (port 56789, `.env`
+credentials); never make a per-task container.
 
 ## Efficient repository navigation
 
@@ -393,8 +402,8 @@ Claude's role agents are mirrored as Codex agents (`.codex/agents/`); route the
 same work to them so bulk output stays out of your context:
 `test-runner` (full or fast suite), `backtest-runner` (runs past ~2 minutes),
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
-symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
-from a `task-brief`), `plan-briefer` (gathers a spec's code context into
+symbols exist), `task-implementer` then `task-reviewer` (one plan task each: `task_handoff.py <plan> <id>` writes the handoff; `agent_cost.py` checks cost),
+`plan-briefer` (gathers a spec's code context into
 `.superpowers/briefs/<plan base>.md` first), `plan-writer` (a plan from an
 approved spec and that brief: `mode=index` (index and task ledger) first,
 then one `mode=part <N>` per part, one at a time here, each appending task by

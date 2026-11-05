@@ -1065,7 +1065,7 @@ Ledger task V203-3 is split in two to stay under 20 KB. This half writes the pur
 Rules pinned here:
 - **Warnings** come in the type's fixed order. `heat-near-cap` applies at a utilisation ≥ 80 and ≤ 100, `over-cap` above 100 (never both). `stale` applies only once `/health` has answered (`botAlive !== null`), so a cold load raises no alarm. `disconnected` means the stream is `dead` or `degraded`, `bot-down` means `botAlive === false`, and `killswitch` means `killswitchOn === true`.
 - **Alarm** priority is bot-down > disconnected > stale. The stale text is `Data stale N min` under an hour, then `Data stale Nh`, then `Data stale Nd`, and just `Data stale` with no time.
-- **Strip heat** prints the currency symbol before a whole amount (the spec's `$2,010`), one decimal at most on each percent (`4.2%`, `6%`), and `· Over cap` above 100 %. It prints `Heat —` for a missing, unavailable or incomplete heat.
+- **Strip heat** prints a whole amount through the app's `amount()` with the unit after the figure (`2,010 €`; the v202 spec's `$2,010` is shorthand, v195 format wins), one decimal at most on each percent (`4.2%`, `6%`), and `· Over cap` above 100 %. It prints `Heat —` for a missing, unavailable or incomplete heat.
 - **`liveTime`**: `14:32 · 6m ago` in Berlin time. The age is `scanAge`'s wording, the same as the freshness chip ("6m ago", "5h ago"), and an absent or bad time gives `—`.
 - **Dock preference**: `prefs['shell.dock']` is a map from destination path to boolean. A non-object map or a non-boolean value reads as the fallback. A write returns a new object and keeps the other destinations.
 

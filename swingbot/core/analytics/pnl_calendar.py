@@ -257,13 +257,22 @@ def joined_rows(trades: list[dict], entries: list[dict], *, convert=None) -> lis
         e["trade_id"]: e for e in entries if e.get("trade_id")
     }
 
-    rows: list[dict] = []
+    # Split every trade first, then convert ALL parts in one call: `convert`
+    # memoises quote codes and FX rates per call, so a call per trade re-looked
+    # them up (and re-read the account currency) for every closed trade.
+    owners: list[tuple[dict, dict]] = []
+    parts: list[dict] = []
     for t in trades:
         entry = by_trade_id.get(t.get("id")) or {}
-        parts = expand_realized_legs(t)
-        for part in (convert(parts) if convert else parts):
-            if (row := _row_for(part, entry, t)) is not None:
-                rows.append(row)
+        for part in expand_realized_legs(t):
+            owners.append((entry, t))
+            parts.append(part)
+    converted = convert(parts) if convert and parts else parts
+
+    rows: list[dict] = []
+    for part, (entry, t) in zip(converted, owners):
+        if (row := _row_for(part, entry, t)) is not None:
+            rows.append(row)
     return rows
 
 

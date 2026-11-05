@@ -1,0 +1,233 @@
+[  6%] 28/414 LIFE
+[  7%] 29/414 LII
+[  8%] 34/414 LLTC
+[  9%] 38/414 LNC
+[ 10%] 42/414 LRCX
+[ 11%] 46/414 LUV
+[ 12%] 50/414 LXK
+[ 13%] 54/414 MA
+[ 14%] 58/414 MAS
+[ 15%] 63/414 MCO
+[ 16%] 67/414 MEE
+[ 17%] 71/414 MGM
+[ 18%] 75/414 MIL
+[ 19%] 79/414 MLM
+[ 20%] 83/414 MNK
+[ 21%] 87/414 MOLX
+[ 22%] 92/414 MRK
+[ 23%] 96/414 MRVL
+[ 24%] 100/414 MSI
+[ 25%] 104/414 MU
+[ 26%] 108/414 MXIM
+[ 27%] 112/414 NBR
+[ 28%] 116/414 NE
+[ 29%] 121/414 NI
+[ 30%] 125/414 NLSN
+[ 31%] 129/414 NOW
+[ 32%] 133/414 NTAP
+[ 33%] 137/414 NVLS
+[ 34%] 141/414 NWSA
+[ 35%] 145/414 O
+[ 36%] 150/414 OKE
+[ 37%] 154/414 ORLY
+[ 38%] 158/414 PARA
+[ 39%] 162/414 PBG
+[ 40%] 166/414 PCL
+[ 41%] 170/414 PEG
+[ 42%] 174/414 PFE
+[ 43%] 179/414 PH
+[ 44%] 183/414 PLD
+[ 45%] 187/414 PNC
+[ 46%] 191/414 POM
+[ 47%] 195/414 PRGO
+[ 48%] 199/414 PSX
+[ 49%] 203/414 PWR
+[ 50%] 207/414 Q
+[ 51%] 212/414 R
+[ 52%] 216/414 RDDT
+[ 53%] 220/414 RF
+[ 54%] 224/414 RJF
+[ 55%] 228/414 ROL
+[ 56%] 232/414 RRD
+[ 57%] 236/414 RTX
+[ 58%] 241/414 SBAC
+[ 59%] 245/414 SCHW
+[ 60%] 249/414 SHLD
+[ 61%] 253/414 SII
+[ 62%] 257/414 SLG
+[ 63%] 261/414 SNDK
+[ 64%] 265/414 SOLS
+[ 65%] 270/414 SRCL
+[ 66%] 274/414 STJ
+[ 67%] 278/414 STX
+[ 68%] 282/414 SVU
+[ 69%] 286/414 SWN
+[ 70%] 290/414 SYMC
+[ 71%] 294/414 TDC
+[ 72%] 299/414 TEG
+[ 73%] 303/414 TFX
+[ 74%] 307/414 TIE
+[ 75%] 311/414 TLAB
+[ 76%] 315/414 TPL
+[ 77%] 319/414 TRMB
+[ 78%] 323/414 TSLA
+[ 79%] 328/414 TTWO
+[ 80%] 332/414 TXN
+[ 81%] 336/414 UAA
+[ 82%] 340/414 UHS
+[ 83%] 344/414 UNP
+[ 84%] 348/414 USB
+[ 85%] 352/414 VEEV
+[ 86%] 357/414 VICI
+[ 87%] 361/414 VMRK
+[ 88%] 365/414 VRSN
+[ 89%] 369/414 VTR
+[ 90%] 373/414 WAT
+[ 91%] 377/414 WDAY
+[ 92%] 381/414 WFC
+[ 93%] 386/414 WM
+[ 94%] 390/414 WRB
+[ 95%] 394/414 WTW
+[ 96%] 398/414 WYNN
+[ 97%] 402/414 XL
+[ 98%] 406/414 XRX
+[ 99%] 410/414 YUM
+[100%] 414/414 ZTS
+written 391, unchanged 0, refetched 0, skipped 23, flagged 112, requests 4554
+  skipped KRFT: skipped: no Alpaca bars
+  skipped LO: skipped: no Alpaca bars
+  skipped MEE: skipped: no Alpaca bars
+  skipped MFE: skipped: no Alpaca bars
+  skipped MHS: skipped: no Alpaca bars
+  skipped MOLX: skipped: no Alpaca bars
+  skipped MWV: skipped: no Alpaca bars
+  skipped NOVL: skipped: no Alpaca bars
+  skipped NYX: skipped: no Alpaca bars
+  skipped PBG: skipped: no Alpaca bars
+  skipped PETM: skipped: no Alpaca bars
+  skipped PGN: skipped: no Alpaca bars
+  skipped PTV: skipped: no Alpaca bars
+  skipped RSHCQ: skipped: no Alpaca bars
+  skipped RX: skipped: no Alpaca bars
+  skipped SBNY/15min: skipped: no Alpaca bars
+  skipped SIAL: skipped: no Alpaca bars
+  skipped SUNEQ: skipped: no Alpaca bars
+  skipped SWY: skipped: no Alpaca bars
+  skipped TEG: skipped: no Alpaca bars
+  skipped TIE: skipped: no Alpaca bars
+  skipped TLAB: skipped: no Alpaca bars
+  skipped XTO: skipped: no Alpaca bars
+  flagged JWN: flagged: no-reference
+  flagged K: flagged: no-reference
+  flagged KG: flagged: price-mismatch
+  flagged KORS: flagged: no-reference
+  flagged KSU: flagged: no-reference
+  flagged LEG: flagged: no-reference
+  flagged LEN: flagged: price-mismatch
+  flagged LH: flagged: price-mismatch
+  flagged LIFE: flagged: no-reference
+  flagged LLL: flagged: no-reference
+  flagged LLTC: flagged: no-reference
+  flagged LM: flagged: no-reference
+  flagged LMT: flagged: price-mismatch
+  flagged LOW: flagged: price-mismatch
+  flagged LSI: flagged: no-reference
+  flagged LVLT: flagged: no-reference
+  flagged LXK: flagged: no-reference
+  flagged MAA: flagged: price-mismatch
+  flagged MDP: flagged: no-reference
+  flagged MDT: flagged: price-mismatch
+  flagged MI: flagged: price-mismatch
+  flagged MIL: flagged: no-reference
+  flagged MJN: flagged: no-reference
+  flagged MMC: flagged: no-reference
+  flagged MMM: flagged: price-mismatch
+  flagged MNK: flagged: no-reference
+  flagged MON: flagged: no-reference
+  flagged MRK: flagged: price-mismatch
+  flagged MRO: flagged: no-reference
+  flagged MWW: flagged: no-reference
+  flagged MXIM: flagged: no-reference
+  flagged MYL: flagged: no-reference
+  flagged NBL: flagged: no-reference
+  flagged NFX: flagged: no-reference
+  flagged NLOK: flagged: no-reference
+  flagged NLSN: flagged: no-reference
+  flagged NSM: flagged: no-reference
+  flagged NVLS: flagged: no-reference
+  flagged NXPI: flagged: price-mismatch
+  flagged O: flagged: price-mismatch
+  flagged ODP: flagged: no-reference
+  flagged PARA: flagged: price-mismatch
+  flagged PAYX: flagged: price-mismatch
+  flagged PBCT: flagged: no-reference
+  flagged PCP: flagged: no-reference
+  flagged PDCO: flagged: no-reference
+  flagged PEAK: flagged: no-reference
+  flagged PG: flagged: price-mismatch
+  flagged PKI: flagged: no-reference
+  flagged PLL: flagged: no-reference
+  flagged POM: flagged: no-reference
+  flagged PRGO: flagged: price-mismatch
+  flagged PX: flagged: no-reference
+  flagged PXD: flagged: no-reference
+  flagged Q: flagged: no-reference
+  flagged QEP: flagged: no-reference
+  flagged QLGC: flagged: no-reference
+  flagged RAI: flagged: no-reference
+  flagged RDC: flagged: no-reference
+  flagged RE: flagged: no-reference
+  flagged RHT: flagged: no-reference
+  flagged RRD: flagged: no-reference
+  flagged RTN: flagged: no-reference
+  flagged SATS: flagged: no-reference
+  flagged SBNY: flagged: short-overlap
+  flagged SCG: flagged: no-reference
+  flagged SEE: flagged: no-reference
+  flagged SIG: flagged: price-mismatch
+  flagged SIVB: flagged: no-reference
+  flagged SLG: flagged: price-mismatch
+  flagged SNI: flagged: no-reference
+  flagged SOLS: flagged: no-reference
+  flagged SPLS: flagged: no-reference
+  flagged SRCL: flagged: no-reference
+  flagged STE: flagged: price-mismatch
+  flagged STJ: flagged: no-reference
+  flagged STR: flagged: no-reference
+  flagged SVU: flagged: no-reference
+  flagged SW: flagged: price-mismatch
+  flagged SWN: flagged: no-reference
+  flagged SYMC: flagged: no-reference
+  flagged T: flagged: price-mismatch
+  flagged TDG: flagged: price-mismatch
+  flagged TE: flagged: price-mismatch
+  flagged TGNA: flagged: no-reference
+  flagged TIF: flagged: no-reference
+  flagged TMK: flagged: no-reference
+  flagged TSS: flagged: no-reference
+  flagged TT: flagged: price-mismatch
+  flagged TWC: flagged: no-reference
+  flagged TWTR: flagged: no-reference
+  flagged TWX: flagged: no-reference
+  flagged UTX: flagged: no-reference
+  flagged VAR: flagged: no-reference
+  flagged VIAB: flagged: no-reference
+  flagged VIAC: flagged: no-reference
+  flagged WBA: flagged: no-reference
+  flagged WCG: flagged: no-reference
+  flagged WDC: flagged: price-mismatch
+  flagged WFM: flagged: no-reference
+  flagged WIN: flagged: no-reference
+  flagged WLTW: flagged: no-reference
+  flagged WPX: flagged: no-reference
+  flagged WRK: flagged: no-reference
+  flagged WTW: flagged: price-mismatch
+  flagged WYND: flagged: no-reference
+  flagged X: flagged: no-reference
+  flagged XEC: flagged: no-reference
+  flagged XEL: flagged: price-mismatch
+  flagged XL: flagged: no-reference
+  flagged XLNX: flagged: no-reference
+  flagged ZBH: flagged: price-mismatch
+exit 0
+2026-10-31T16:59:10Z

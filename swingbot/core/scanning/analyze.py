@@ -559,7 +559,11 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
         # attempted -- a render-only feature's stamping failure must never
         # unset the plan and silently fall the item through to legacy-number
         # rendering (final-review Fix 4).
-        plan.issued_at = issued_at or datetime.now(timezone.utc).isoformat()
+        if issued_at:
+            plan.issued_at = issued_at
+        else:
+            plan.issued_at = datetime.now(timezone.utc).isoformat()
+            plan.issued_at_source = "live"
         _stamp_next_open_live(plan, df, now)
         item.plan_v2 = plan
         stamp_entry_context(plan, df, {

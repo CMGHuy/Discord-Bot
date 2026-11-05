@@ -358,6 +358,20 @@ def _open_trade_prices(open_trades: list) -> dict:
     return {t: get_current_price(t) for t in tickers}
 
 
+def _open_trade_market(open_trades: list) -> tuple[dict, dict]:
+    """(price per open ticker, the door's quote per ticker). v201: with the
+    refresher on, prices come from the cache through the never-fetch door;
+    off, today's request-time fetch and no quotes."""
+    from swingbot.core.marketdata.shared import admin_refresh
+    if not admin_refresh.refresher_on():
+        return _open_trade_prices(open_trades), {}
+    from swingbot.admin import market_values
+    quotes = market_values.read_quotes(t["ticker"] for t in open_trades)
+    prices = {t["ticker"]: getattr(quotes.get(str(t["ticker"]).upper()), "price", None)
+              for t in open_trades}
+    return prices, quotes
+
+
 def build_open_trade_views(open_trades: list, account_cfg: dict) -> dict:
     """One pass over open trades producing every per-trade map the table needs:
     price, status dot, P&L + SL/TP progress + position bar, holding period, and
@@ -366,6 +380,7 @@ def build_open_trade_views(open_trades: list, account_cfg: dict) -> dict:
     Returns {status, price, pnl, days, sizing, unrealized_pcts, unrealized_amounts} -- the
     first five keyed by trade id, the last two flat lists for the Open P&L card
     (a trade with no recorded share count adds to the first but not the second).
+    v201: plus `quotes`, the door's MarketQuote per ticker ({} with the refresher off).
     """
     status_map: dict = {}
     price_map: dict = {}
@@ -376,7 +391,7 @@ def build_open_trade_views(open_trades: list, account_cfg: dict) -> dict:
     unrealized_amounts: list = []
     now_utc = datetime.now(timezone.utc)
 
-    prices = _open_trade_prices(open_trades)
+    prices, quotes = _open_trade_market(open_trades)
 
     for t in open_trades:
         tid     = t["id"]
@@ -452,5 +467,5 @@ def build_open_trade_views(open_trades: list, account_cfg: dict) -> dict:
     return {
         "status": status_map, "price": price_map, "pnl": pnl_map,
         "days": days_map, "sizing": sizing_map, "unrealized_pcts": unrealized_pcts,
-        "unrealized_amounts": unrealized_amounts,
+        "unrealized_amounts": unrealized_amounts, "quotes": quotes,
     }

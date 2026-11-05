@@ -1,0 +1,26 @@
+{
+  "Volume Profile": {
+    "n_eval": 1964,
+    "wins": 787,
+    "losses": 1177,
+    "scratches": 509,
+    "timeouts": 4,
+    "closed": 2477,
+    "win_rate": 40.07128309572302,
+    "expectancy_r": 0.09036495761001213,
+    "excluded_share": 0.20710536939846588,
+    "avg_win_r": 2.027560355781448,
+    "max_dd_pct": -43.936916371011606,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 31.512071156289707,
+    "runner_be_pct": 68.10673443456162,
+    "runner_timeout_pct": 0.3811944091486658
+  },
+  "_watchlist_slice": {
+    "Volume Profile": {
+      "status": "thin",
+      "n": 0,
+      "expectancy_r": null
+    }
+  }
+}

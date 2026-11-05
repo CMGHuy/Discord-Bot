@@ -456,13 +456,13 @@ describe('Calendar day drawer', () => {
 
     const link = el(fixture).querySelector('a.open-day');
     expect(link?.textContent?.trim()).toBe('Open full day →');
-    expect(link?.getAttribute('href')).toBe('/calendar/2026-08-03?strategy=EMA20');
+    expect(link?.getAttribute('href')).toBe('/trades/calendar/2026-08-03?strategy=EMA20');
   });
 
   it('links the bare day when no filter is set, even on an empty day', async () => {
     const fixture = seed();
     await openDay(fixture, []);
-    expect(el(fixture).querySelector('a.open-day')?.getAttribute('href')).toBe('/calendar/2026-08-03');
+    expect(el(fixture).querySelector('a.open-day')?.getAttribute('href')).toBe('/trades/calendar/2026-08-03');
   });
 
   it('captions the drawer summary as paper, before costs', async () => {
@@ -667,11 +667,11 @@ describe('Calendar URL (v165 D6)', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        provideRouter([{ path: 'calendar', children: calendarRoutes }], withComponentInputBinding()),
+        provideRouter([{ path: 'trades/calendar', children: calendarRoutes }], withComponentInputBinding()),
         provideLocationMocks(),
         provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
         provideHttpClientTesting(),
-        // The real one would first ask /api/v1/preferences inside resolveRoute.
+        // The real one would first ask /api/v1/preferences inside startRoute.
         { provide: PreferencesStore, useValue: {
           resolve: () => of(undefined), values: () => ({}), update: () => undefined,
         } },
@@ -706,7 +706,7 @@ describe('Calendar URL (v165 D6)', () => {
   it('restores the month and the filters from the URL in its first request', async () => {
     mount();
     const harness = await RouterTestingHarness.create();
-    const navigation = harness.navigateByUrl('/calendar?month=2026-08&strategy=EMA20');
+    const navigation = harness.navigateByUrl('/trades/calendar?month=2026-08&strategy=EMA20');
     const first = await take((r) => r.url === MONTH_URL);
     expect(first.request.params.get('month')).toBe('2026-08');
     expect(first.request.params.get('strategy')).toBe('EMA20');
@@ -719,7 +719,7 @@ describe('Calendar URL (v165 D6)', () => {
   });
 
   it('makes exactly one request per filter change and writes it to the URL', async () => {
-    const { store } = await openAt('/calendar?month=2026-08&strategy=EMA20');
+    const { store } = await openAt('/trades/calendar?month=2026-08&strategy=EMA20');
     const backend = TestBed.inject(HttpTestingController);
 
     store.setHorizon('4w');
@@ -732,7 +732,7 @@ describe('Calendar URL (v165 D6)', () => {
     await settle();
     backend.expectNone((r) => r.url === MONTH_URL);       // the URL write did not reload
     const url = TestBed.inject(Router).url;
-    expect(url.startsWith('/calendar?')).toBe(true);
+    expect(url.startsWith('/trades/calendar?')).toBe(true);
     expect(url).toContain('month=2026-08');
     expect(url).toContain('strategy=EMA20');
     expect(url).toContain('horizon=4w');
@@ -748,7 +748,7 @@ describe('Calendar URL (v165 D6)', () => {
   });
 
   it('still reloads on a background refresh of the same URL', async () => {
-    await openAt('/calendar?month=2026-08');
+    await openAt('/trades/calendar?month=2026-08');
     const router = TestBed.inject(Router);
     void router.navigateByUrl(router.url, {
       onSameUrlNavigation: 'reload', replaceUrl: true, info: BACKGROUND_REFRESH_INFO,
@@ -759,8 +759,8 @@ describe('Calendar URL (v165 D6)', () => {
   });
 
   it('loads a URL edited by hand, filters it does not name included', async () => {
-    const { harness, store } = await openAt('/calendar?month=2026-08&strategy=EMA20');
-    const navigation = harness.navigateByUrl('/calendar?month=2026-07');
+    const { harness, store } = await openAt('/trades/calendar?month=2026-08&strategy=EMA20');
+    const navigation = harness.navigateByUrl('/trades/calendar?month=2026-07');
     const edited = await take((r) => r.url === MONTH_URL);
     expect(edited.request.params.get('month')).toBe('2026-07');
     expect(edited.request.params.has('strategy')).toBe(false);

@@ -10,7 +10,7 @@ import {
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
-import { EventStream } from '../api/event-stream';
+import { EventStream, MARKET_DATA_MIN_INTERVAL_MS } from '../api/event-stream';
 import { Observable, Subject, debounceTime, defer, finalize } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
@@ -185,6 +185,9 @@ export const DashboardStore = signalStore(
      *  data yet" from "a refetch is in flight", which want different UI:
      *  a skeleton once, and nothing at all thereafter. */
     empty: computed(() => data() === null),
+
+    /** v201: how fresh the open-P&L totals are (null from an older server). */
+    openMeta: computed(() => data()?.market_meta ?? null),
 
     /* -- v181: the scope selection ---------------------------------------- */
 
@@ -429,6 +432,9 @@ export const DashboardStore = signalStore(
     onInit(store, events = inject(EventStream)) {
       const account = events.changes('account');
       const trades = events.changes('trades');
+      // v201: the open-P&L KPIs are server totals that per-row patching
+      // cannot move, so a landed price refetches (throttled to 30 s).
+      const market = events.changes('market', { minIntervalMs: MARKET_DATA_MIN_INTERVAL_MS });
       // Coalesces the two signal reads (2026-09-14): closing a trade raises
       // BOTH a `trades` event and an `account` event (the balance moved
       // too) from the same scan tick. `effect()` re-runs on any dependency
@@ -449,6 +455,7 @@ export const DashboardStore = signalStore(
       effect(() => {
         account();
         trades();
+        market();
         if (first) {
           first = false;
           store['load']();

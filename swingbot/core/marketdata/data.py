@@ -193,6 +193,51 @@ def get_quote_batch(tickers, *, asker, max_age_s=None, fresh_only=False) -> dict
     return {t: q for t, (q, fresh) in marked.items() if fresh or not fresh_only}
 
 
+class _YfCap:
+    """The refresher's yfinance budget for one call: Alpaca misses and yfinance-only
+    names share at most `limit` symbols; 0 = never call yfinance."""
+
+    def __init__(self, limit: int):
+        self.left = max(0, int(limit))
+
+    def __call__(self, tickers) -> dict:
+        take = list(tickers)[:self.left]
+        self.left -= len(take)
+        return _yf_quote_details(take) if take else {}
+
+
+def refresh_quote_batch(tickers, *, yf_limit: int) -> dict:
+    """v201 refresher: one batched quote call at ADMIN_REFRESH (tier 5) that always
+    fetches (max_age_s=0) and lands in the shared cache. Spot metals, which the layer
+    never keys, are written with layer.put so the never-fetch read finds them.
+    Returns only values fetched by this call, keyed upper-case."""
+    tickers = _normalise_tickers(tickers)
+    spot, rest = spot_metals.split_spot(tickers)
+    yf_cap = _YfCap(yf_limit)
+    out = _refreshed_layer_quotes(rest, yf_cap) if rest else {}
+    if spot:
+        out.update(_refreshed_spot_quotes(spot, yf_cap))
+    return out
+
+
+def _refreshed_layer_quotes(tickers: list, yf_cap: _YfCap) -> dict:
+    with router.asker_scope(Asker.ADMIN_REFRESH):
+        entries = layer.get(DataKind.QUOTE, tickers,
+                            lambda syms: router.latest_quotes(list(syms), yf_cap),
+                            asker=Asker.ADMIN_REFRESH, provider=PROVIDER_ALPACA, max_age_s=0,
+                            encode=QuoteDetail.to_doc, decode=QuoteDetail.from_doc)
+    return {t: e.value for t, e in entries.items()
+            if e.outcome in ("fetched", "shared-wait") and e.value is not None and e.value.price}
+
+
+def _refreshed_spot_quotes(spot: list, yf_cap: _YfCap) -> dict:
+    with router.asker_scope(Asker.ADMIN_REFRESH):
+        got = router.latest_quotes(spot, yf_cap) or {}
+    priced = {t: q for t, q in got.items() if q is not None and q.price}
+    layer.put(DataKind.QUOTE, priced, provider="spot", encode=QuoteDetail.to_doc)
+    return priced
+
+
 def _marked_quotes(tickers, *, asker, max_age_s=None) -> dict:
     """{ticker: (QuoteDetail, fresh)} -- get_quote_batch's read, keeping
     whether each value passes the fresh-only rule (`_usable`), so price

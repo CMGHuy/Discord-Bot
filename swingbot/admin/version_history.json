@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-10-30 18:14:26 UTC",
+  "generated_at": "2026-11-04 14:10:34 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.37.3",
-    "bot": "2.15.8"
+    "ui": "1.38.0",
+    "bot": "2.16.1"
   },
   "releases": [
     {
@@ -2250,6 +2250,74 @@
       "versions": {
         "ui": "1.37.3",
         "bot": "2.15.8"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-10-31",
+      "last_seen": "2026-10-31",
+      "commit": "2d914d84",
+      "subject": "release(bot): 2.15.9 -- instrument v3: point-in-time S&P 500 on the Alpaca store, integrity report, describe-only re-baseline",
+      "versions": {
+        "ui": "1.37.3",
+        "bot": "2.15.9"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-04",
+      "last_seen": "2026-11-04",
+      "commit": "b7fb4496",
+      "subject": "release(ui,bot): ui 1.37.4 / bot 2.15.10 -- instant admin page loads (v201)",
+      "versions": {
+        "ui": "1.37.4",
+        "bot": "2.15.10"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-04",
+      "last_seen": "2026-11-04",
+      "commit": "7d171b0e",
+      "subject": "release(bot): 2.15.11 -- v200 scout tooling integrity",
+      "versions": {
+        "ui": "1.37.4",
+        "bot": "2.15.11"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-04",
+      "last_seen": "2026-11-04",
+      "commit": "10fd0b43",
+      "subject": "release(ui,bot): ui 1.37.5 / bot 2.16.0 -- shared market-data fetch layer (v171)",
+      "versions": {
+        "ui": "1.37.5",
+        "bot": "2.16.0"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-04",
+      "last_seen": "2026-11-04",
+      "commit": "d17fd17f",
+      "subject": "release(ui,bot): ui 1.38.0 / bot 2.16.1 -- six-destination shell and /live endpoint (v202)",
+      "versions": {
+        "ui": "1.38.0",
+        "bot": "2.16.1"
       },
       "changed": [
         "ui",

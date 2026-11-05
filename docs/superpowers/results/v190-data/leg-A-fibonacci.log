@@ -1,0 +1,1124 @@
+training data: alpaca, PIT store cut at 2025-12-31 (111 excluded)
+[12/848] ACN: excluded (missing frame) -- no cached frame
+[13/848] ACS: excluded (missing frame) -- no cached frame
+[37/848] ALLE: excluded (missing frame) -- no cached frame
+[54/848] ANRZQ: excluded (missing frame) -- no cached frame
+[59/848] APA: excluded (missing frame) -- no cached frame
+[66/848] APTV: excluded (missing frame) -- no cached frame
+[70/848] ARNC: excluded (missing frame) -- no cached frame
+[82/848] AYE: excluded (missing frame) -- no cached frame
+[94/848] BDK: excluded (missing frame) -- no cached frame
+[95/848] BDX: excluded (missing frame) -- no cached frame
+[99/848] BG: excluded (missing frame) -- no cached frame
+[105/848] BJS: excluded (missing frame) -- no cached frame
+[112/848] BMC: excluded (missing frame) -- no cached frame
+[115/848] BNI: excluded (missing frame) -- no cached frame
+[116/848] BNY: excluded (missing frame) -- no cached frame
+[122/848] BTUUQ: excluded (missing frame) -- no cached frame
+[135/848] CB: excluded (missing frame) -- no cached frame
+[136/848] CBE: excluded (missing frame) -- no cached frame
+[137/848] CBOE: excluded (missing frame) -- no cached frame
+[150/848] CEPH: excluded (missing frame) -- no cached frame
+[154/848] CFN: excluded (missing frame) -- no cached frame
+[162/848] CL: excluded (missing frame) -- no cached frame
+[167/848] CMCSK: excluded (missing frame) -- no cached frame
+[185/848] COV: excluded (missing frame) -- no cached frame
+[192/848] CPWR: excluded (missing frame) -- no cached frame
+[193/848] CRH: excluded (missing frame) -- no cached frame
+[204/848] CTRA: excluded (missing frame) -- no cached frame
+[206/848] CTVA: excluded (missing frame) -- no cached frame
+[209/848] CVH: excluded (missing frame) -- no cached frame
+[211/848] CVS: excluded (missing frame) -- no cached frame
+[229/848] DHR: excluded (missing frame) -- no cached frame
+[239/848] DOC: excluded (missing frame) -- no cached frame
+[249/848] DVN: excluded (missing frame) -- no cached frame
+[259/848] EG: excluded (missing frame) -- no cached frame
+[261/848] EKDKQ: excluded (missing frame) -- no cached frame
+[296/848] FB: excluded (missing frame) -- no cached frame
+[300/848] FDO: excluded (missing frame) -- no cached frame
+[303/848] FDXF: excluded (missing frame) -- no cached frame
+[308/848] FI: excluded (missing frame) -- no cached frame
+[316/848] FLEX: excluded (missing frame) -- no cached frame
+[325/848] FRC: excluded (missing frame) -- no cached frame
+[326/848] FRT: excluded (missing frame) -- no cached frame
+[329/848] FTI: excluded (missing frame) -- no cached frame
+[332/848] FTV: excluded (missing frame) -- no cached frame
+[357/848] GR: excluded (missing frame) -- no cached frame
+[368/848] HCBK: excluded (missing frame) -- no cached frame
+[376/848] HNZ: excluded (missing frame) -- no cached frame
+[380/848] HONA: excluded (missing frame) -- no cached frame
+[383/848] HP: excluded (missing frame) -- no cached frame
+[389/848] HSH: excluded (missing frame) -- no cached frame
+[391/848] HSP: excluded (missing frame) -- no cached frame
+[398/848] IBM: excluded (missing frame) -- no cached frame
+[410/848] IP: excluded (missing frame) -- no cached frame
+[421/848] J: excluded (missing frame) -- no cached frame
+[425/848] JCI: excluded (missing frame) -- no cached frame
+[428/848] JEF: excluded (missing frame) -- no cached frame
+[440/848] KG: excluded (missing frame) -- no cached frame
+[451/848] KRFT: excluded (missing frame) -- no cached frame
+[459/848] LEN: excluded (missing frame) -- no cached frame
+[460/848] LH: excluded (missing frame) -- no cached frame
+[471/848] LMT: excluded (missing frame) -- no cached frame
+[474/848] LO: excluded (missing frame) -- no cached frame
+[475/848] LOW: excluded (missing frame) -- no cached frame
+[489/848] MAA: excluded (missing frame) -- no cached frame
+[500/848] MDT: excluded (missing frame) -- no cached frame
+[501/848] MEE: excluded (missing frame) -- no cached frame
+[504/848] MFE: excluded (missing frame) -- no cached frame
+[507/848] MHS: excluded (missing frame) -- no cached frame
+[508/848] MI: excluded (missing frame) -- no cached frame
+[516/848] MMM: excluded (missing frame) -- no cached frame
+[521/848] MOLX: excluded (missing frame) -- no cached frame
+[526/848] MRK: excluded (missing frame) -- no cached frame
+[540/848] MWV: excluded (missing frame) -- no cached frame
+[562/848] NOVL: excluded (missing frame) -- no cached frame
+[576/848] NXPI: excluded (missing frame) -- no cached frame
+[578/848] NYX: excluded (missing frame) -- no cached frame
+[579/848] O: excluded (missing frame) -- no cached frame
+[592/848] PARA: excluded (missing frame) -- no cached frame
+[594/848] PAYX: excluded (missing frame) -- no cached frame
+[596/848] PBG: excluded (missing frame) -- no cached frame
+[600/848] PCL: excluded (missing frame) -- no cached frame
+[607/848] PETM: excluded (missing frame) -- no cached frame
+[610/848] PG: excluded (missing frame) -- no cached frame
+[611/848] PGN: excluded (missing frame) -- no cached frame
+[629/848] PRGO: excluded (missing frame) -- no cached frame
+[632/848] PSKY: excluded (missing frame) -- no cached frame
+[635/848] PTV: excluded (missing frame) -- no cached frame
+[668/848] RSHCQ: excluded (missing frame) -- no cached frame
+[672/848] RX: excluded (missing frame) -- no cached frame
+[676/848] SBNY: excluded (missing frame) -- no cached frame
+[685/848] SIAL: excluded (missing frame) -- no cached frame
+[686/848] SIG: excluded (missing frame) -- no cached frame
+[688/848] SIVB: excluded (missing frame) -- no cached frame
+[691/848] SLG: excluded (missing frame) -- no cached frame
+[695/848] SNDK: excluded (missing frame) -- no cached frame
+[706/848] STE: excluded (missing frame) -- no cached frame
+[715/848] SUNEQ: excluded (missing frame) -- no cached frame
+[717/848] SW: excluded (missing frame) -- no cached frame
+[721/848] SWY: excluded (missing frame) -- no cached frame
+[726/848] T: excluded (missing frame) -- no cached frame
+[729/848] TDG: excluded (missing frame) -- no cached frame
+[731/848] TE: excluded (missing frame) -- no cached frame
+[733/848] TEG: excluded (missing frame) -- no cached frame
+[741/848] TIE: excluded (missing frame) -- no cached frame
+[745/848] TLAB: excluded (missing frame) -- no cached frame
+[760/848] TT: excluded (missing frame) -- no cached frame
+[812/848] WDC: excluded (missing frame) -- no cached frame
+[828/848] WTW: excluded (missing frame) -- no cached frame
+[835/848] XEL: excluded (missing frame) -- no cached frame
+[841/848] XTO: excluded (missing frame) -- no cached frame
+[845/848] ZBH: excluded (missing frame) -- no cached frame
+excluded ACN: flagged: price-mismatch
+excluded ACS: skipped: no Alpaca bars
+excluded ALLE: flagged: price-mismatch
+excluded ANRZQ: skipped: no Alpaca bars
+excluded APA: flagged: price-mismatch
+excluded APTV: flagged: price-mismatch
+excluded ARNC: integrity: in-span break 2020-04-01 (price): resolve by hand
+excluded AYE: skipped: no Alpaca bars
+excluded BDK: skipped: no Alpaca bars
+excluded BDX: flagged: price-mismatch
+excluded BG: flagged: price-mismatch
+excluded BJS: skipped: no Alpaca bars
+excluded BMC: skipped: no Alpaca bars
+excluded BNI: skipped: no Alpaca bars
+excluded BNY: flagged: price-mismatch
+excluded BTUUQ: skipped: no Alpaca bars
+excluded CB: flagged: price-mismatch
+excluded CBE: skipped: no Alpaca bars
+excluded CBOE: flagged: price-mismatch
+excluded CEPH: skipped: no Alpaca bars
+excluded CFN: skipped: no Alpaca bars
+excluded CL: flagged: price-mismatch
+excluded CMCSK: skipped: no Alpaca bars
+excluded COV: skipped: no Alpaca bars
+excluded CPWR: skipped: no Alpaca bars
+excluded CRH: flagged: price-mismatch
+excluded CTRA: integrity: in-span break 2021-10-04 (volume): resolve by hand
+excluded CTVA: flagged: price-mismatch
+excluded CVH: skipped: no Alpaca bars
+excluded CVS: flagged: price-mismatch
+excluded DHR: flagged: price-mismatch
+excluded DOC: flagged: price-mismatch
+excluded DVN: flagged: price-mismatch
+excluded EG: flagged: price-mismatch
+excluded EKDKQ: skipped: no Alpaca bars
+excluded FB: integrity: identity re-derived: flagged: short-overlap
+excluded FDO: skipped: no Alpaca bars
+excluded FDXF: integrity: no daily bars in the store window
+excluded FI: integrity: in-span break 2023-06-07 (price+volume): resolve by hand
+excluded FLEX: flagged: price-mismatch
+excluded FRC: integrity: in-span break 2023-03-13 (volume): resolve by hand
+excluded FRT: flagged: price-mismatch
+excluded FTI: flagged: price-mismatch
+excluded FTV: flagged: price-mismatch
+excluded GR: skipped: no Alpaca bars
+excluded HCBK: skipped: no Alpaca bars
+excluded HNZ: skipped: no Alpaca bars
+excluded HONA: integrity: no daily bars in the store window
+excluded HP: flagged: price-mismatch
+excluded HSH: skipped: no Alpaca bars
+excluded HSP: skipped: no Alpaca bars
+excluded IBM: flagged: price-mismatch
+excluded IP: flagged: price-mismatch
+excluded J: flagged: price-mismatch
+excluded JCI: flagged: price-mismatch
+excluded JEF: flagged: price-mismatch
+excluded KG: flagged: price-mismatch
+excluded KRFT: skipped: no Alpaca bars
+excluded LEN: flagged: price-mismatch
+excluded LH: flagged: price-mismatch
+excluded LMT: flagged: price-mismatch
+excluded LO: skipped: no Alpaca bars
+excluded LOW: flagged: price-mismatch
+excluded MAA: flagged: price-mismatch
+excluded MDT: flagged: price-mismatch
+excluded MEE: skipped: no Alpaca bars
+excluded MFE: skipped: no Alpaca bars
+excluded MHS: skipped: no Alpaca bars
+excluded MI: flagged: price-mismatch
+excluded MMM: flagged: price-mismatch
+excluded MOLX: skipped: no Alpaca bars
+excluded MRK: flagged: price-mismatch
+excluded MWV: skipped: no Alpaca bars
+excluded NOVL: skipped: no Alpaca bars
+excluded NXPI: flagged: price-mismatch
+excluded NYX: skipped: no Alpaca bars
+excluded O: flagged: price-mismatch
+excluded PARA: flagged: price-mismatch
+excluded PAYX: flagged: price-mismatch
+excluded PBG: skipped: no Alpaca bars
+excluded PCL: integrity: identity re-derived: flagged: short-overlap
+excluded PETM: skipped: no Alpaca bars
+excluded PG: flagged: price-mismatch
+excluded PGN: skipped: no Alpaca bars
+excluded PRGO: flagged: price-mismatch
+excluded PSKY: integrity: identity re-derived: flagged: short-overlap
+excluded PTV: skipped: no Alpaca bars
+excluded RSHCQ: skipped: no Alpaca bars
+excluded RX: skipped: no Alpaca bars
+excluded SBNY: flagged: short-overlap
+excluded SIAL: skipped: no Alpaca bars
+excluded SIG: flagged: price-mismatch
+excluded SIVB: integrity: unresolved break 2023-03-09 (edge)
+excluded SLG: flagged: price-mismatch
+excluded SNDK: integrity: identity re-derived: flagged: short-overlap
+excluded STE: flagged: price-mismatch
+excluded SUNEQ: skipped: no Alpaca bars
+excluded SW: flagged: price-mismatch
+excluded SWY: skipped: no Alpaca bars
+excluded T: flagged: price-mismatch
+excluded TDG: flagged: price-mismatch
+excluded TE: flagged: price-mismatch
+excluded TEG: skipped: no Alpaca bars
+excluded TIE: skipped: no Alpaca bars
+excluded TLAB: skipped: no Alpaca bars
+excluded TT: flagged: price-mismatch
+excluded WDC: flagged: price-mismatch
+excluded WTW: flagged: price-mismatch
+excluded XEL: flagged: price-mismatch
+excluded XTO: skipped: no Alpaca bars
+excluded ZBH: flagged: price-mismatch
+point-in-time membership mask ON for universe 'sp500_pit': 846/848 tickers have membership rows
+signal-date cuts ON from the PIT integrity report: 62 cut range(s) on 46 ticker(s)
+[1/848] A
+[2/848] AABA
+[3/848] AAL
+[4/848] AAP
+[5/848] AAPL
+[6/848] ABBV
+[7/848] ABC
+[8/848] ABMD
+[9/848] ABNB
+[10/848] ABT
+[11/848] ACGL
+[14/848] ADBE
+[15/848] ADI
+[16/848] ADM
+[17/848] ADP
+[18/848] ADS
+[19/848] ADSK
+[20/848] ADT
+[21/848] AEE
+[22/848] AEP
+[23/848] AES
+[24/848] AET
+[25/848] AFL
+[26/848] AGN
+[27/848] AIG
+[28/848] AIV
+[29/848] AIZ
+[30/848] AJG
+[31/848] AKAM
+[32/848] AKS
+[33/848] ALB
+[34/848] ALGN
+[35/848] ALK
+[36/848] ALL
+[38/848] ALTR
+[39/848] ALXN
+[40/848] AMAT
+[41/848] AMCR
+[42/848] AMD
+[43/848] AME
+[44/848] AMG
+[45/848] AMGN
+[46/848] AMP
+[47/848] AMT
+[48/848] AMTM
+[49/848] AMZN
+[50/848] AN
+[51/848] ANDV
+[52/848] ANET
+[53/848] ANF
+[55/848] ANSS
+[56/848] ANTM
+[57/848] AON
+[58/848] AOS
+[60/848] APC
+[61/848] APD
+[62/848] APH
+[63/848] APO
+[64/848] APOL
+[65/848] APP
+[67/848] ARE
+[68/848] ARES
+[69/848] ARG
+[71/848] ATGE
+[72/848] ATI
+[73/848] ATO
+[74/848] ATVI
+[75/848] AVB
+[76/848] AVGO
+[77/848] AVP
+[78/848] AVY
+[79/848] AWK
+[80/848] AXON
+[81/848] AXP
+[83/848] AYI
+[84/848] AZO
+[85/848] BA
+[86/848] BAC
+[87/848] BALL
+[88/848] BAX
+[89/848] BBBY: excluded (bad data) -- BBBY: >40% bar on 2021-06-02 without volume spike (bad split adjust?)
+[90/848] BBT
+[91/848] BBWI
+[92/848] BBY
+[93/848] BCR
+[96/848] BEAM
+[97/848] BEN
+[98/848] BF-B
+[100/848] BHF
+[101/848] BHGE
+[102/848] BIG
+[103/848] BIIB
+[104/848] BIO
+[106/848] BK
+[107/848] BKNG
+[108/848] BKR
+[109/848] BLDR
+[110/848] BLK
+[111/848] BLL
+[113/848] BMS
+[114/848] BMY
+[117/848] BR
+[118/848] BRCM: excluded (bad data) -- BRCM: <30 bars of history
+[119/848] BRK-B
+[120/848] BRO
+[121/848] BSX
+[123/848] BWA
+[124/848] BX
+[125/848] BXLT
+[126/848] BXP
+[127/848] C
+[128/848] CA
+[129/848] CAG
+[130/848] CAH
+[131/848] CAM
+[132/848] CARR
+[133/848] CASY
+[134/848] CAT
+[138/848] CBRE
+[139/848] CBS
+[140/848] CCE
+[141/848] CCEP
+[142/848] CCI
+[143/848] CCL
+[144/848] CDAY
+[145/848] CDNS
+[146/848] CDW
+[147/848] CE
+[148/848] CEG
+[149/848] CELG
+[151/848] CERN
+[152/848] CF
+[153/848] CFG
+[155/848] CHD
+[156/848] CHK: excluded (bad data) -- CHK: >5 consecutive identical closes (frozen feed?); CHK: >40% bar on 2020-03-13 without volume spike (bad split adjust?)
+[157/848] CHRW
+[158/848] CHTR
+[159/848] CI
+[160/848] CIEN
+[161/848] CINF
+[163/848] CLF
+[164/848] CLX
+[165/848] CMA
+[166/848] CMCSA
+[168/848] CME
+[169/848] CMG
+[170/848] CMI
+[171/848] CMS
+[172/848] CNC
+[173/848] CNP
+[174/848] CNX
+[175/848] COF
+[176/848] COG
+[177/848] COHR
+[178/848] COIN
+[179/848] COL
+[180/848] COO
+[181/848] COP
+[182/848] COR
+[183/848] COST
+[184/848] COTY
+[186/848] CPAY
+[187/848] CPB
+[188/848] CPGX
+[189/848] CPRI
+[190/848] CPRT
+[191/848] CPT
+[194/848] CRL
+[195/848] CRM
+[196/848] CRWD
+[197/848] CSCO
+[198/848] CSGP
+[199/848] CSRA
+[200/848] CSX
+[201/848] CTAS
+[202/848] CTL
+[203/848] CTLT
+[205/848] CTSH
+[207/848] CTXS
+[208/848] CVC
+[210/848] CVNA
+[212/848] CVX
+[213/848] CXO
+[214/848] CZR
+[215/848] D
+[216/848] DAL
+[217/848] DASH
+[218/848] DAY
+[219/848] DD
+[220/848] DDOG
+[221/848] DE
+[222/848] DECK
+[223/848] DELL
+[224/848] DF
+[225/848] DFS
+[226/848] DG
+[227/848] DGX
+[228/848] DHI
+[230/848] DIS
+[231/848] DISCA
+[232/848] DISCK
+[233/848] DISH
+[234/848] DLR
+[235/848] DLTR
+[236/848] DNB: excluded (bad data) -- DNB: >5 consecutive identical closes (frozen feed?)
+[237/848] DNR
+[238/848] DO: excluded (bad data) -- DO: >5 consecutive identical closes (frozen feed?)
+[240/848] DOV
+[241/848] DOW
+[242/848] DPZ
+[243/848] DRE
+[244/848] DRI
+[245/848] DTE
+[246/848] DTV
+[247/848] DUK
+[248/848] DVA
+[250/848] DWDP
+[251/848] DXC
+[252/848] DXCM
+[253/848] EA
+[254/848] EBAY
+[255/848] ECHO
+[256/848] ECL
+[257/848] ED
+[258/848] EFX
+[260/848] EIX
+[262/848] EL
+[263/848] ELV
+[264/848] EMC
+[265/848] EME
+[266/848] EMN
+[267/848] EMR
+[268/848] ENDP: excluded (bad data) -- ENDP: >40% bar on 2022-08-18 without volume spike (bad split adjust?)
+[269/848] ENPH
+[270/848] EOG
+[271/848] EP
+[272/848] EPAM
+[273/848] EQIX
+[274/848] EQR
+[275/848] EQT
+[276/848] ERIE
+[277/848] ES
+[278/848] ESRX
+[279/848] ESS
+[280/848] ESV
+[281/848] ETFC
+[282/848] ETN
+[283/848] ETR
+[284/848] ETSY
+[285/848] EVHC: excluded (bad data) -- EVHC: >40% bar on 2016-12-02 without volume spike (bad split adjust?)
+[286/848] EVRG
+[287/848] EW
+[288/848] EXC
+[289/848] EXE
+[290/848] EXPD
+[291/848] EXPE
+[292/848] EXR
+[293/848] F
+[294/848] FANG
+[295/848] FAST
+[297/848] FBHS
+[298/848] FCPT
+[299/848] FCX
+[301/848] FDS
+[302/848] FDX
+[304/848] FE
+[305/848] FERG
+[306/848] FFIV
+[307/848] FHN
+[309/848] FICO
+[310/848] FII
+[311/848] FIS
+[312/848] FISV
+[313/848] FITB
+[314/848] FIX
+[315/848] FL
+[317/848] FLIR
+[318/848] FLR
+[319/848] FLS
+[320/848] FLT
+[321/848] FMC
+[322/848] FOSL
+[323/848] FOX
+[324/848] FOXA
+[327/848] FRX
+[328/848] FSLR
+[330/848] FTNT
+[331/848] FTR: excluded (bad data) -- FTR: >40% bar on 2020-03-23 without volume spike (bad split adjust?)
+[333/848] GAS
+[334/848] GD
+[335/848] GDDY
+[336/848] GE
+[337/848] GEHC
+[338/848] GEN
+[339/848] GENZ
+[340/848] GEV
+[341/848] GGP
+[342/848] GHC
+[343/848] GILD
+[344/848] GIS
+[345/848] GL
+[346/848] GLW
+[347/848] GM
+[348/848] GMCR
+[349/848] GME
+[350/848] GNRC
+[351/848] GNW
+[352/848] GOOG
+[353/848] GOOGL
+[354/848] GPC
+[355/848] GPN
+[356/848] GPS
+[358/848] GRMN
+[359/848] GS
+[360/848] GT
+[361/848] GWW
+[362/848] HAL
+[363/848] HAR
+[364/848] HAS
+[365/848] HBAN
+[366/848] HBI
+[367/848] HCA
+[369/848] HCP: excluded (bad data) -- HCP: >5 consecutive identical closes (frozen feed?)
+[370/848] HD
+[371/848] HES
+[372/848] HFC
+[373/848] HIG
+[374/848] HII
+[375/848] HLT
+[377/848] HOG
+[378/848] HOLX
+[379/848] HON
+[381/848] HOOD
+[382/848] HOT
+[384/848] HPE
+[385/848] HPQ
+[386/848] HRB
+[387/848] HRL
+[388/848] HRS
+[390/848] HSIC
+[392/848] HST
+[393/848] HSY
+[394/848] HUBB
+[395/848] HUM
+[396/848] HWM
+[397/848] IBKR
+[399/848] ICE
+[400/848] IDXX
+[401/848] IEX
+[402/848] IFF
+[403/848] IGT
+[404/848] ILMN
+[405/848] INCY
+[406/848] INFO
+[407/848] INTC
+[408/848] INTU
+[409/848] INVH
+[411/848] IPG
+[412/848] IPGP
+[413/848] IQV
+[414/848] IR
+[415/848] IRM
+[416/848] ISRG
+[417/848] IT
+[418/848] ITT
+[419/848] ITW
+[420/848] IVZ
+[422/848] JAVA
+[423/848] JBHT
+[424/848] JBL
+[426/848] JCP: excluded (bad data) -- JCP: >40% bar on 2020-03-13 without volume spike (bad split adjust?)
+[427/848] JEC
+[429/848] JKHY
+[430/848] JNJ
+[431/848] JNPR
+[432/848] JNS
+[433/848] JOY: excluded (bad data) -- JOY: >5 consecutive identical closes (frozen feed?)
+[434/848] JPM
+[435/848] JWN
+[436/848] K
+[437/848] KDP
+[438/848] KEY
+[439/848] KEYS
+[441/848] KHC
+[442/848] KIM
+[443/848] KKR
+[444/848] KLAC
+[445/848] KMB
+[446/848] KMI
+[447/848] KMX
+[448/848] KO
+[449/848] KORS
+[450/848] KR
+[452/848] KSS
+[453/848] KSU
+[454/848] KVUE
+[455/848] L
+[456/848] LB
+[457/848] LDOS
+[458/848] LEG
+[461/848] LHX
+[462/848] LIFE
+[463/848] LII
+[464/848] LIN
+[465/848] LITE
+[466/848] LKQ
+[467/848] LLL: excluded (bad data) -- LLL: >5 consecutive identical closes (frozen feed?)
+[468/848] LLTC
+[469/848] LLY
+[470/848] LM
+[472/848] LNC
+[473/848] LNT
+[476/848] LRCX
+[477/848] LSI
+[478/848] LULU
+[479/848] LUMN
+[480/848] LUV
+[481/848] LVLT
+[482/848] LVS
+[483/848] LW
+[484/848] LXK
+[485/848] LYB
+[486/848] LYV
+[487/848] M
+[488/848] MA
+[490/848] MAC
+[491/848] MAR
+[492/848] MAS
+[493/848] MAT
+[494/848] MCD
+[495/848] MCHP
+[496/848] MCK
+[497/848] MCO
+[498/848] MDLZ
+[499/848] MDP
+[502/848] MET
+[503/848] META
+[505/848] MGM
+[506/848] MHK
+[509/848] MIL: excluded (bad data) -- MIL: <30 bars of history
+[510/848] MJN
+[511/848] MKC
+[512/848] MKTX
+[513/848] MLM
+[514/848] MMC
+[515/848] MMI
+[517/848] MNK: excluded (bad data) -- MNK: >5 consecutive identical closes (frozen feed?)
+[518/848] MNST
+[519/848] MO
+[520/848] MOH
+[522/848] MON: excluded (bad data) -- MON: >5 consecutive identical closes (frozen feed?)
+[523/848] MOS
+[524/848] MPC
+[525/848] MPWR
+[527/848] MRNA
+[528/848] MRO
+[529/848] MRSH
+[530/848] MRVL
+[531/848] MS
+[532/848] MSCI
+[533/848] MSFT
+[534/848] MSI
+[535/848] MTB
+[536/848] MTCH
+[537/848] MTD
+[538/848] MU
+[539/848] MUR
+[541/848] MWW
+[542/848] MXIM
+[543/848] MYL
+[544/848] NAVI
+[545/848] NBL
+[546/848] NBR
+[547/848] NCLH
+[548/848] NDAQ
+[549/848] NDSN
+[550/848] NE
+[551/848] NEE
+[552/848] NEM
+[553/848] NFLX
+[554/848] NFX
+[555/848] NI
+[556/848] NKE
+[557/848] NKTR
+[558/848] NLOK
+[559/848] NLSN
+[560/848] NOC
+[561/848] NOV
+[563/848] NOW
+[564/848] NRG
+[565/848] NSC
+[566/848] NSM
+[567/848] NTAP
+[568/848] NTRS
+[569/848] NUE
+[570/848] NVDA
+[571/848] NVLS
+[572/848] NVR
+[573/848] NWL
+[574/848] NWS
+[575/848] NWSA
+[577/848] NYT
+[580/848] ODFL
+[581/848] ODP
+[582/848] OGN
+[583/848] OI
+[584/848] OKE
+[585/848] OMC
+[586/848] ON
+[587/848] ORCL
+[588/848] ORLY
+[589/848] OTIS
+[590/848] OXY
+[591/848] PANW
+[593/848] PAYC
+[595/848] PBCT
+[597/848] PBI
+[598/848] PCAR
+[599/848] PCG
+[601/848] PCP: excluded (bad data) -- PCP: <30 bars of history
+[602/848] PDCO
+[603/848] PEAK
+[604/848] PEG
+[605/848] PENN
+[606/848] PEP
+[608/848] PFE
+[609/848] PFG
+[612/848] PGR
+[613/848] PH
+[614/848] PHM
+[615/848] PKG
+[616/848] PKI
+[617/848] PLD
+[618/848] PLL: excluded (bad data) -- PLL: >5 consecutive identical closes (frozen feed?)
+[619/848] PLTR
+[620/848] PM
+[621/848] PNC
+[622/848] PNR
+[623/848] PNW
+[624/848] PODD
+[625/848] POM
+[626/848] POOL
+[627/848] PPG
+[628/848] PPL
+[630/848] PRU
+[631/848] PSA
+[633/848] PSX
+[634/848] PTC
+[636/848] PVH
+[637/848] PWR
+[638/848] PX: excluded (bad data) -- PX: >5 consecutive identical closes (frozen feed?)
+[639/848] PXD
+[640/848] PYPL
+[641/848] Q: excluded (bad data) -- Q: gap of 2911 calendar days in the index
+[642/848] QCOM
+[643/848] QEP
+[644/848] QLGC
+[645/848] QRVO
+[646/848] R
+[647/848] RAI
+[648/848] RCL
+[649/848] RDC
+[650/848] RDDT
+[651/848] RE
+[652/848] REG
+[653/848] REGN
+[654/848] RF
+[655/848] RHI
+[656/848] RHT
+[657/848] RIG
+[658/848] RJF
+[659/848] RL
+[660/848] RMD
+[661/848] ROK
+[662/848] ROL
+[663/848] ROP
+[664/848] ROST
+[665/848] RRC
+[666/848] RRD
+[667/848] RSG
+[669/848] RTN
+[670/848] RTX
+[671/848] RVTY
+[673/848] S
+[674/848] SATS
+[675/848] SBAC
+[677/848] SBUX
+[678/848] SCG
+[679/848] SCHW
+[680/848] SE
+[681/848] SEDG
+[682/848] SEE
+[683/848] SHLD
+[684/848] SHW
+[687/848] SII
+[689/848] SJM
+[690/848] SLB
+[692/848] SLM
+[693/848] SMCI
+[694/848] SNA
+[696/848] SNI
+[697/848] SNPS
+[698/848] SO
+[699/848] SOLS
+[700/848] SOLV
+[701/848] SPG
+[702/848] SPGI
+[703/848] SPLS
+[704/848] SRCL
+[705/848] SRE
+[707/848] STI: excluded (bad data) -- STI: >5 consecutive identical closes (frozen feed?); STI: >40% bar on 2024-01-11 without volume spike (bad split adjust?)
+[708/848] STJ
+[709/848] STLD
+[710/848] STR
+[711/848] STT
+[712/848] STX
+[713/848] STZ
+[714/848] SUN
+[716/848] SVU
+[718/848] SWK
+[719/848] SWKS
+[720/848] SWN
+[722/848] SYF
+[723/848] SYK
+[724/848] SYMC
+[725/848] SYY
+[727/848] TAP
+[728/848] TDC
+[730/848] TDY
+[732/848] TECH
+[734/848] TEL
+[735/848] TER
+[736/848] TFC
+[737/848] TFX
+[738/848] TGNA
+[739/848] TGT
+[740/848] THC
+[742/848] TIF
+[743/848] TJX
+[744/848] TKO
+[746/848] TMK
+[747/848] TMO
+[748/848] TMUS
+[749/848] TPL
+[750/848] TPR
+[751/848] TRGP
+[752/848] TRIP
+[753/848] TRMB
+[754/848] TROW
+[755/848] TRV
+[756/848] TSCO
+[757/848] TSLA
+[758/848] TSN
+[759/848] TSS
+[761/848] TTD
+[762/848] TTWO
+[763/848] TWC
+[764/848] TWTR
+[765/848] TWX
+[766/848] TXN
+[767/848] TXT
+[768/848] TYL
+[769/848] UA
+[770/848] UAA
+[771/848] UAL
+[772/848] UBER
+[773/848] UDR
+[774/848] UHS
+[775/848] ULTA
+[776/848] UNH
+[777/848] UNM
+[778/848] UNP
+[779/848] UPS
+[780/848] URBN
+[781/848] URI
+[782/848] USB
+[783/848] UTX
+[784/848] V
+[785/848] VAR
+[786/848] VEEV
+[787/848] VFC
+[788/848] VIAB
+[789/848] VIAC
+[790/848] VIAV
+[791/848] VICI
+[792/848] VLO
+[793/848] VLTO
+[794/848] VMC
+[795/848] VMRK
+[796/848] VNO
+[797/848] VNT
+[798/848] VRSK
+[799/848] VRSN
+[800/848] VRT
+[801/848] VRTX
+[802/848] VST
+[803/848] VTR
+[804/848] VTRS
+[805/848] VZ
+[806/848] WAB
+[807/848] WAT
+[808/848] WBA
+[809/848] WBD
+[810/848] WCG
+[811/848] WDAY
+[813/848] WEC
+[814/848] WELL
+[815/848] WFC
+[816/848] WFM
+[817/848] WHR
+[818/848] WIN
+[819/848] WLTW
+[820/848] WM
+[821/848] WMB
+[822/848] WMT
+[823/848] WPX
+[824/848] WRB
+[825/848] WRK
+[826/848] WSM
+[827/848] WST
+[829/848] WU
+[830/848] WY
+[831/848] WYND
+[832/848] WYNN
+[833/848] X
+[834/848] XEC
+[836/848] XL: excluded (bad data) -- XL: >5 consecutive identical closes (frozen feed?)
+[837/848] XLNX
+[838/848] XOM
+[839/848] XRAY
+[840/848] XRX
+[842/848] XYL
+[843/848] XYZ
+[844/848] YUM
+[846/848] ZBRA
+[847/848] ZION
+[848/848] ZTS
+
+-- excluded (missing frame): 111 of 848 ticker(s) --
+  ACN: no cached frame
+  ACS: no cached frame
+  ALLE: no cached frame
+  ANRZQ: no cached frame
+  APA: no cached frame
+  APTV: no cached frame
+  ARNC: no cached frame
+  AYE: no cached frame
+  BDK: no cached frame
+  BDX: no cached frame
+  BG: no cached frame
+  BJS: no cached frame
+  BMC: no cached frame
+  BNI: no cached frame
+  BNY: no cached frame
+  BTUUQ: no cached frame
+  CB: no cached frame
+  CBE: no cached frame
+  CBOE: no cached frame
+  CEPH: no cached frame
+  CFN: no cached frame
+  CL: no cached frame
+  CMCSK: no cached frame
+  COV: no cached frame
+  CPWR: no cached frame
+  CRH: no cached frame
+  CTRA: no cached frame
+  CTVA: no cached frame
+  CVH: no cached frame
+  CVS: no cached frame
+  DHR: no cached frame
+  DOC: no cached frame
+  DVN: no cached frame
+  EG: no cached frame
+  EKDKQ: no cached frame
+  FB: no cached frame
+  FDO: no cached frame
+  FDXF: no cached frame
+  FI: no cached frame
+  FLEX: no cached frame
+  FRC: no cached frame
+  FRT: no cached frame
+  FTI: no cached frame
+  FTV: no cached frame
+  GR: no cached frame
+  HCBK: no cached frame
+  HNZ: no cached frame
+  HONA: no cached frame
+  HP: no cached frame
+  HSH: no cached frame
+  HSP: no cached frame
+  IBM: no cached frame
+  IP: no cached frame
+  J: no cached frame
+  JCI: no cached frame
+  JEF: no cached frame
+  KG: no cached frame
+  KRFT: no cached frame
+  LEN: no cached frame
+  LH: no cached frame
+  LMT: no cached frame
+  LO: no cached frame
+  LOW: no cached frame
+  MAA: no cached frame
+  MDT: no cached frame
+  MEE: no cached frame
+  MFE: no cached frame
+  MHS: no cached frame
+  MI: no cached frame
+  MMM: no cached frame
+  MOLX: no cached frame
+  MRK: no cached frame
+  MWV: no cached frame
+  NOVL: no cached frame
+  NXPI: no cached frame
+  NYX: no cached frame
+  O: no cached frame
+  PARA: no cached frame
+  PAYX: no cached frame
+  PBG: no cached frame
+  PCL: no cached frame
+  PETM: no cached frame
+  PG: no cached frame
+  PGN: no cached frame
+  PRGO: no cached frame
+  PSKY: no cached frame
+  PTV: no cached frame
+  RSHCQ: no cached frame
+  RX: no cached frame
+  SBNY: no cached frame
+  SIAL: no cached frame
+  SIG: no cached frame
+  SIVB: no cached frame
+  SLG: no cached frame
+  SNDK: no cached frame
+  STE: no cached frame
+  SUNEQ: no cached frame
+  SW: no cached frame
+  SWY: no cached frame
+  T: no cached frame
+  TDG: no cached frame
+  TE: no cached frame
+  TEG: no cached frame
+  TIE: no cached frame
+  TLAB: no cached frame
+  TT: no cached frame
+  WDC: no cached frame
+  WTW: no cached frame
+  XEL: no cached frame
+  XTO: no cached frame
+  ZBH: no cached frame
+
+-- excluded (bad data, Task E16): 21 of 848 ticker(s) --
+  BBBY: BBBY: >40% bar on 2021-06-02 without volume spike (bad split adjust?)
+  BRCM: BRCM: <30 bars of history
+  CHK: CHK: >5 consecutive identical closes (frozen feed?); CHK: >40% bar on 2020-03-13 without volume spike (bad split adjust?)
+  DNB: DNB: >5 consecutive identical closes (frozen feed?)
+  DO: DO: >5 consecutive identical closes (frozen feed?)
+  ENDP: ENDP: >40% bar on 2022-08-18 without volume spike (bad split adjust?)
+  EVHC: EVHC: >40% bar on 2016-12-02 without volume spike (bad split adjust?)
+  FTR: FTR: >40% bar on 2020-03-23 without volume spike (bad split adjust?)
+  HCP: HCP: >5 consecutive identical closes (frozen feed?)
+  JCP: JCP: >40% bar on 2020-03-13 without volume spike (bad split adjust?)
+  JOY: JOY: >5 consecutive identical closes (frozen feed?)
+  LLL: LLL: >5 consecutive identical closes (frozen feed?)
+  MIL: MIL: <30 bars of history
+  MNK: MNK: >5 consecutive identical closes (frozen feed?)
+  MON: MON: >5 consecutive identical closes (frozen feed?)
+  PCP: PCP: <30 bars of history
+  PLL: PLL: >5 consecutive identical closes (frozen feed?)
+  PX: PX: >5 consecutive identical closes (frozen feed?)
+  Q: Q: gap of 2911 calendar days in the index
+  STI: STI: >5 consecutive identical closes (frozen feed?); STI: >40% bar on 2024-01-11 without volume spike (bad split adjust?)
+  XL: XL: >5 consecutive identical closes (frozen feed?)
+
+== TRAIN 2017-01-01 .. 2025-12-31 | pass: WR>=80, ExpR>0, N>=30, excl<=50% ==
+Strategy                   N   Win%    ExpR  MaxDD% AvgWinR   Scr    TO  Excl%   tp2% trail%    be%   rto%  PASS
+Fibonacci               5137   36.6  +0.035   -97.4  +2.225  1279    76    21%   0.0%  23.0%  66.1%  10.9%  FAIL
+
+-- per strategy x horizon (for gating decisions) --
+Strategy               Horiz      N   Win%    ExpR
+Fibonacci              2m       598   33.3  -0.067
+Fibonacci              2w      1099   34.6  -0.050
+Fibonacci              3m       398   38.7  +0.157
+Fibonacci              4m       368   40.2  +0.222
+Fibonacci              4w      1731   35.9  -0.025
+Fibonacci              5m       297   39.7  +0.192
+Fibonacci              6m       239   36.4  +0.065
+Fibonacci              7m       170   42.9  +0.210
+Fibonacci              8m       125   40.8  +0.284
+Fibonacci              9m       112   42.0  +0.340
+
+-- instrument v3: universe sp500_pit; PIT membership and the causal liquidity floor checked on the signal day --
+-- watchlist slice (same run, 0/0 watchlist tickers in the run's universe): FAIL here fails the strategy's verdict whatever PASS says; ExpR < 0 with N >= 30 fails, fewer is THIN --
+Fibonacci              N=0 ExpR=n/a -> THIN
+Wrote 6492 trade rows to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-fibonacci.jsonl
+Wrote provenance to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-fibonacci.json.provenance.json
+Wrote provenance to E:\Documents\Private\Projects\Discord-Bot\data\backtest_results\v190\leg-A-fibonacci.jsonl.provenance.json
+
+Saved backtest_range_summary.txt

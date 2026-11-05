@@ -131,7 +131,7 @@ def test_a_bullish_stop_entry_that_opens_above_its_trigger_gapped_through(tmp_pa
     assert row.bars["fill_day_open"] == 101.5
     assert row.bars["open_gap_pct"] == pytest.approx(1.5)
     assert row.bars["gapped_through"] is True
-    assert _cut("open_gap_bucket", row) == "adverse_large"
+    assert _cut("open_gap_bucket", row) == "open_worse_large"
     assert _cut("gapped_through_entry", row) == "gapped"
 
 
@@ -142,7 +142,7 @@ def test_a_bearish_limit_that_opens_beyond_its_limit_filled_better(tmp_path):
     bars.enrich_with_bars([row], _write(tmp_path, "AAA", series))
     assert row.bars["open_gap_pct"] == pytest.approx(-1.0)
     assert row.bars["gapped_through"] is True
-    assert _cut("open_gap_bucket", row) == "favourable"
+    assert _cut("open_gap_bucket", row) == "open_better"
 
 
 def test_a_market_entry_has_a_gap_but_no_gapped_through_flag(tmp_path):
@@ -381,3 +381,48 @@ def test_nonfinite_cut_values_are_uncovered(value):
     row.bars = {"dollar_volume": value, "open_gap_pct": value}
     assert _cut("dollar_volume_bucket", row) is None
     assert _cut("open_gap_bucket", row) is None
+
+
+@pytest.mark.parametrize("pct, bucket", [
+    (-0.26, "open_better"), (-0.25, "flat"), (0.0, "flat"), (0.25, "flat"),
+    (0.26, "open_worse_small"), (1.0, "open_worse_small"), (1.01, "open_worse_large"),
+    (None, None), (float("nan"), None)])
+def test_open_gap_bucket_names_say_which_side_the_open_was_on(pct, bucket):
+    row = _trade()
+    row.bars = {"open_gap_pct": pct}
+    assert bars._open_gap_bucket(row) == bucket
+
+
+SIGN_NOTE_DOCS = (
+    ".claude/skills/exit-harvester/SKILL.md", ".claude/skills/setup-scout/SKILL.md",
+    ".claude/skills/regime-desk/SKILL.md", ".claude/agents/scout.md",
+    ".claude/skills/setup-scout/references/playbook.md")
+
+
+def _flat(text: str) -> str:
+    return " ".join(text.split())
+
+
+def test_the_gap_sign_note_names_the_thresholds_it_describes():
+    assert f"{bars.GAP_FLAT_PCT}%" in bars.GAP_SIGN_NOTE
+    assert f"{bars.GAP_LARGE_PCT}%" in bars.GAP_SIGN_NOTE
+    for name in ("open_better", "flat", "open_worse_small", "open_worse_large"):
+        assert name in bars.GAP_SIGN_NOTE
+
+
+@pytest.mark.parametrize("doc", SIGN_NOTE_DOCS)
+def test_the_gap_sign_note_is_verbatim_in_every_scout_doc(doc):
+    text = (ROOT / doc).read_text(encoding="utf-8")
+    assert _flat(bars.GAP_SIGN_NOTE) in _flat(text.replace("\n- ", "\n").replace("\n  ", "\n")), doc
+
+
+def test_the_gap_sign_note_is_in_the_gap_docstring_and_the_autopsy_notes():
+    from autopsy import report
+    assert _flat(bars.GAP_SIGN_NOTE) in _flat(bars._gap.__doc__)
+    assert report.NOTES[-1] == bars.GAP_SIGN_NOTE
+
+
+def test_no_old_gap_bucket_name_is_left_in_the_autopsy_code():
+    source = (ROOT / "scripts" / "reports" / "autopsy" / "bars.py").read_text(encoding="utf-8")
+    for old in ('"favourable"', '"adverse_small"', '"adverse_large"'):
+        assert old not in source

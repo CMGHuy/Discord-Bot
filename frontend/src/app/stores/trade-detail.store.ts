@@ -15,6 +15,7 @@ import {
   AnalyticsStrategies, CalendarRow, GateKey, GatePart, GateRow, JournalEntry, TradeDetail,
 } from '../api/models';
 import { StrategyRow } from './analytics.store';
+import { LiveValuesStore, overlayQuote } from './live-values.store';
 
 /* -- the narrowed shapes of the loosely typed detail fields ---------------
  *
@@ -311,9 +312,13 @@ export const TradeDetailStore = signalStore(
     journalError: null,
   }),
   withComputed(({ data, noteDraft, noteAcked, noteSaving, noteError, noteUnjournaled, strategies,
-                 journal, journalAnswered }) => ({
+                 journal, journalAnswered }, live = inject(LiveValuesStore)) => ({
     empty: computed(() => data() === null),
-    trade: computed(() => data()),
+    // v201: the live quote for the ticker is laid over the loaded trade.
+    trade: computed(() => {
+      const trade = data();
+      return trade ? overlayQuote(trade, live.quote(trade.ticker)()) : null;
+    }),
     /** The heavy half. Null before the first response rather than an empty
      *  object, so a template cannot read a plan field that has not arrived
      *  and render a confident em dash for it. */

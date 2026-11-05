@@ -124,7 +124,9 @@ class TradePlanV2:
     # (analyze.attach_plan_v2). created_at is a DATE; an entry-timing study
     # over the 15m/5m archive needs the minute. None for every replayed plan
     # -- a backtest has no wall clock -- and for records persisted before
-    # v87. The E29 intraday reading is deliberately NOT stored beside it: it
+    # v87. From v200 a pre-v87 record may carry a Discord-recovered value
+    # (revision v200_001); issued_at_source says which.
+    # The E29 intraday reading is deliberately NOT stored beside it: it
     # is a pure function of the archived 1h tape and this timestamp.
     issued_at: str | None = None
     # v129: the price this trade leans on, frozen at the creating bar --
@@ -215,6 +217,12 @@ class TradePlanV2:
     reclaim_level: float | None = None
     reclaim_session: str | None = None
     waits_next_open: bool | None = None
+    # v200: where issued_at came from. "live" = attach_plan_v2 stamped the wall
+    # clock; "discord" = a pre-v87 plan whose issue time revision v200_001
+    # recovered from its Discord alert message. None = replayed (no issued_at),
+    # or written live before v200 -- readers count an issued_at without a
+    # source as live. Omitted from plan_to_dict while None (_OMIT_WHEN_NONE).
+    issued_at_source: str | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:
@@ -235,8 +243,8 @@ _PLAN_FIELDS = None   # cached field list
 # v183: optional fields written only when set -- a None here is omitted, never
 # stored as null, so every plan doc without them (every long) stays
 # byte-identical to its pre-v183 shape. plan_from_dict defaults them back.
-_OMIT_WHEN_NONE = ("gap_sizing", "risk_notice", "reclaim_atr", "reclaim_level",
-                   "reclaim_session", "waits_next_open")
+_OMIT_WHEN_NONE = ("gap_sizing", "risk_notice", "issued_at_source", "reclaim_atr",
+                   "reclaim_level", "reclaim_session", "waits_next_open")
 
 
 def plan_to_dict(plan: TradePlanV2) -> dict:

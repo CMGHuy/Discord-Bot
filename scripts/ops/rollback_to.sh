@@ -56,7 +56,7 @@ scripts/ops/restic_hourly.sh
 python3 -m swingbot.core.infra.env_snapshot snapshot .env
 
 # 4. Stop the writers.
-docker compose stop bot admin
+docker compose stop bot admin refresher
 
 # 5. market_data, swapped in atomically.
 restic restore "$restic_id" --target "$WORK/md" --include /opt/swing-bot/market_data
@@ -84,7 +84,12 @@ docker compose exec -T db psql -U swingbot -d swingbot -v ON_ERROR_STOP=1 -c \
    ON CONFLICT (name) DO UPDATE SET set_at = EXCLUDED.set_at" </dev/null
 
 # 9. Start and verify.
-docker compose up -d --no-build --wait bot admin
+# v201: an image older than the refresher has no swingbot.refresher module.
+SERVICES="bot admin"
+if docker run --rm --entrypoint python "$bot_image" -c "import swingbot.refresher" </dev/null >/dev/null 2>&1; then
+  SERVICES="bot admin refresher"
+fi
+docker compose up -d --no-build --wait $SERVICES
 echo "--- alembic (current must equal heads) ---"
 docker compose exec -T bot alembic current </dev/null
 docker compose exec -T bot alembic heads </dev/null

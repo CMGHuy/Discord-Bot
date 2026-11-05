@@ -19,8 +19,9 @@ def test_fields_and_vocabularies_are_the_plan_set():
                                    "exp_r", "p", "verdict", "record")
     assert stats.VERDICTS == ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE",
                               "WITHDRAWN", "OPEN", "SCREEN-PASS", "SCREEN-FAIL",
-                              "SCREEN-UNDERPOWERED", "COST", "SAVED", "INCONCLUSIVE")
-    assert stats.INSTRUMENTS == ("v1", "v2", "screen-v1")
+                              "SCREEN-UNDERPOWERED", "COST", "SAVED", "INCONCLUSIVE",
+                              "DESCRIPTION")
+    assert stats.INSTRUMENTS == ("v1", "v2", "screen-v1", "v3")
 
 
 def test_ledger_path_is_the_committed_results_file():
@@ -42,7 +43,7 @@ def test_an_integer_p_of_one_is_allowed():
 
 @pytest.mark.parametrize("field, value", [
     ("id", ""), ("date", "06/10/2026"), ("date", "20261006"), ("date", None),
-    ("hypothesis", "  "), ("instrument", "v3"), ("n", -1), ("n", 1.5),
+    ("hypothesis", "  "), ("instrument", "v4"), ("n", -1), ("n", 1.5),
     ("n", True), ("exp_r", "0.1"), ("exp_r", float("inf")), ("p", 1.2),
     ("p", -0.01), ("verdict", "PASSED"), ("record", ""),
 ])
@@ -199,3 +200,51 @@ def test_append_keeps_data_source_after_the_required_fields(tmp_path):
     assert list(json.loads(lines[0])) == list(stats.LEDGER_FIELDS)
     assert list(json.loads(lines[1])) == [*stats.LEDGER_FIELDS, "data_source"]
     assert [stats.ledger_data_source(r) for r in stats.load_ledger(path)] == ["yfinance", "alpaca"]
+
+
+# --- v190: the v3 instrument and the DESCRIPTION row ------------------------------------
+
+def _description(**over):
+    row = _row(id="v190-v3-rebaseline", instrument="v3", verdict="DESCRIPTION",
+               n=91234, exp_r=None, p=None,
+               hypothesis="Instrument v3 re-baseline: describes an instrument change; "
+                          "never a lift; selects nothing",
+               record="docs/superpowers/results/2026-10-v190-v3-rebaseline.md")
+    row.update(over)
+    return row
+
+
+def test_v3_is_a_ledger_instrument():
+    stats.validate_ledger_row(_row(instrument="v3"))
+
+
+def test_a_description_row_validates_with_null_p_and_null_exp_r():
+    stats.validate_ledger_row(_description())
+    stats.validate_ledger_row(_description(exp_r=0.04))
+    stats.validate_ledger_row(_description(data_source="alpaca"))
+
+
+@pytest.mark.parametrize("p", [0.0, 0.2, 1.0])
+def test_a_description_row_refuses_any_p_value(p):
+    with pytest.raises(ValueError, match="DESCRIPTION.*p"):
+        stats.validate_ledger_row(_description(p=p))
+
+
+def test_p_null_stays_allowed_on_every_other_verdict():
+    stats.validate_ledger_row(_row(p=None))
+    stats.validate_ledger_row(_row(verdict="NO-LIFT", p=None, exp_r=None))
+
+
+def test_a_description_row_is_outside_the_bh_family():
+    rows = [_row(id="a", p=0.01), _description(id="d"), _row(id="c", p=0.04)]
+    assert stats.ledger_qvalues(rows) == {"a": pytest.approx(0.02), "d": None,
+                                          "c": pytest.approx(0.04)}
+
+
+def test_a_description_row_appends_in_field_order(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    stats.append_ledger_row(_description(data_source="alpaca"), path)
+    stored = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+    assert list(stored) == [*stats.LEDGER_FIELDS, "data_source"]
+    assert (stored["verdict"], stored["instrument"], stored["p"]) == ("DESCRIPTION", "v3", None)
+    assert stats.load_ledger(path) == [stored]

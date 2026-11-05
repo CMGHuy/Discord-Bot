@@ -51,8 +51,8 @@ def test_fill_and_cost_models_keep_their_phase_one_fields():
 
 
 def test_unknown_version_is_refused():
-    with pytest.raises(ValueError, match="unknown instrument 'v3'"):
-        resolve("v3")
+    with pytest.raises(ValueError, match="unknown instrument 'v4'"):
+        resolve("v4")
 
 
 def test_specs_are_frozen():
@@ -62,7 +62,7 @@ def test_specs_are_frozen():
 
 SPAN_FIELDS = ["universe", "research_start", "research_end", "holdout_start", "fold_scheme",
                "fold_test_years", "purge", "embargo_days", "train_window", "validation_window",
-               "warmup_start", "liquidity_floor"]
+               "warmup_start", "liquidity_floor", "store"]
 
 
 def test_span_fields_are_appended_after_the_fill_and_cost_fields():
@@ -76,7 +76,7 @@ def test_span_fields_are_appended_after_the_fill_and_cost_fields():
 
 
 def test_versions_lists_every_resolvable_instrument():
-    assert contract.VERSIONS == ("v1", "v2")
+    assert contract.VERSIONS == ("v1", "v2", "v3")
     assert all(resolve(v).version == v for v in contract.VERSIONS)
 
 
@@ -157,3 +157,50 @@ def test_research_span_ends_before_the_holdout_for_every_instrument():
         spec = resolve(version)
         start, end = spec.research_span
         assert start < end < spec.holdout_start
+
+
+# --- v190: instrument v3, the PIT Alpaca store ------------------------------------------
+
+def test_v3_values_are_the_spec_values():
+    spec = resolve("v3")
+    assert spec.version == "v3"
+    assert spec.store == "pit"
+    assert spec.warmup_start == "2016-01-04"
+    assert spec.research_span == ("2017-01-01", "2025-12-31")
+    assert spec.holdout_start == "2026-01-01"
+    assert spec.fold_test_years == (2021, 2022, 2023, 2024, 2025)
+    assert spec.live_constructor is True
+
+
+def test_v3_is_v2_except_store_and_window():
+    """Fills, costs, universe, liquidity floor, purge, embargo and the sealed
+    holdout are v2's; only the store, the warm-up, the research start and the
+    fold years differ (spec section 4)."""
+    v2, v3 = resolve("v2"), resolve("v3")
+    differing = {f.name for f in dataclasses.fields(InstrumentSpec)
+                 if getattr(v2, f.name) != getattr(v3, f.name)}
+    assert differing == {"version", "store", "warmup_start", "research_start",
+                         "fold_test_years"}
+    assert v3.fill_model is v2.fill_model and v3.cost_model is v2.cost_model
+    assert v3.liquidity_floor == V2_LIQUIDITY_FLOOR
+    assert (v3.universe, v3.purge, v3.embargo_days) == ("sp500_pit", True, 270)
+    assert (v3.train_window, v3.validation_window) == (None, None)
+
+
+def test_v1_and_v2_keep_todays_store_selection():
+    assert resolve("v1").store is None
+    assert resolve("v2").store is None
+
+
+def test_store_values_are_a_closed_set():
+    assert contract.STORES == (None, "pit")
+    with pytest.raises(ValueError, match="unknown store 'watchlist'"):
+        dataclasses.replace(resolve("v2"), store="watchlist")
+
+
+def test_v2_values_are_untouched_by_v3():
+    """v3 is built by replace(); v2's own spec object is unchanged."""
+    v2 = resolve("v2")
+    assert v2.research_span == ("2010-01-01", "2025-12-31")
+    assert v2.warmup_start == "2009-06-01"
+    assert v2.fold_test_years == tuple(range(2014, 2026))

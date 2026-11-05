@@ -56,6 +56,8 @@ import yfinance as yf
 # so this bulk populator and the auto-cache-on-add path can never drift.
 from swingbot.core.marketdata.backtest_cache import CACHE_DIR, cache_path, normalize_ohlcv
 from swingbot.core.marketdata import training_data
+from swingbot import config
+from swingbot.core.backtesting.instrument import contract
 
 START, END = "2018-06-01", "2025-12-31"
 
@@ -85,11 +87,60 @@ def load_cached(ticker: str) -> pd.DataFrame | None:
 def add_data_source_arg(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--data-source", choices=training_data.DATA_SOURCES, default=None,
                     help="training bars: 'alpaca' (data/market_data/ history store) or "
-                         "'yfinance' (data/backtest_cache/); default TRAINING_DATA_SOURCE")
+                         "'yfinance' (data/backtest_cache/); default TRAINING_DATA_SOURCE"
+                         "; --instrument v3 always reads the PIT store (data/market_data_pit/)")
+
+
+def instrument_store_spec(args: argparse.Namespace) -> contract.InstrumentSpec | None:
+    """Resolve a store-bearing instrument, leaving legacy selections alone."""
+    version = getattr(args, "instrument", None)
+    if not version:
+        return None
+    spec = contract.resolve(version)
+    return spec if spec.store is not None else None
+
+
+def require_context_frames() -> None:
+    """Refuse a PIT run without every context frame after its integrity trim and cut."""
+    from swingbot.core.marketdata.universe import sector_map
+
+    symbols = dict.fromkeys([config.MARKET_REGIME_TICKER, *sector_map("etfs")])
+    missing = [symbol for symbol in symbols if training_data.load_daily(symbol) is None]
+    if not missing:
+        return
+    exclusions = training_data.excluded()
+
+    def _described(symbol: str) -> str:
+        reason = exclusions.get(symbol)
+        return f"{symbol} ({reason})" if reason else symbol
+
+    raise SystemExit(
+        "error: --instrument v3 needs every context frame in the PIT store, missing: "
+        + ", ".join(_described(symbol) for symbol in missing)
+        + " -- run the context pass (scripts/data/fetch_alpaca_history.py --root "
+          "data/market_data_pit --tickers ...) and rebuild the integrity report")
+
+
+def _select_instrument_store(args: argparse.Namespace, spec: contract.InstrumentSpec) -> str:
+    """Select the instrument's store and ensure its context is usable."""
+    if getattr(args, "data_source", None) not in (None, "alpaca"):
+        raise SystemExit(
+            f"error: --instrument {spec.version} reads the {spec.store} Alpaca store; "
+            f"--data-source {args.data_source} cannot be combined with it")
+    training_data.select("alpaca", spec.store, spec.research_end)
+    require_context_frames()
+    print(f"training data: alpaca, PIT store cut at {spec.research_end} "
+          f"({len(training_data.excluded())} excluded)")
+    return "alpaca"
 
 
 def apply_data_source(args: argparse.Namespace) -> str:
-    """Select the run's training source and say which one, before any bar is read."""
+    """Select the run's training source and say which one, before any bar is read.
+    An instrument with a store (v3) selects it here -- one call, every script
+    (spec section 3); no universe name and no environment variable does."""
+    spec = instrument_store_spec(args)
+    if spec is not None:
+        return _select_instrument_store(args, spec)
     source = training_data.select(getattr(args, "data_source", None))
     print(f"training data: {source} ({len(training_data.excluded())} excluded)")
     return source

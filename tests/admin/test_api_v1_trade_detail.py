@@ -28,8 +28,9 @@ _LOGIN = {"username": "admin", "password": "admin"}
 _PLAN_ID = "44444444-4444-4444-8444-444444444444"
 _TRADE_ID = "aaaaaaaaaaaaaaaa"
 
-# The detail response is the list row plus exactly one key.
-DETAIL_ROW = {**TRADE_ROW, "detail": dict}
+# The detail response is the list row plus `detail` and the v201 page-level
+# `market_meta` (the list carries the same block once, beside `items`).
+DETAIL_ROW = {**TRADE_ROW, "detail": dict, "market_meta": dict}
 
 
 @pytest.fixture
@@ -92,7 +93,7 @@ def test_detail_row_fields_match_the_list_exactly(seed, logged_in):
     # than pinned. Every other field must match exactly.
     volatile = {"held_hours"}
     assert (
-        {k: v for k, v in from_detail.items() if k != "detail" and k not in volatile}
+        {k: v for k, v in from_detail.items() if k not in ("detail", "market_meta") and k not in volatile}
         == {k: v for k, v in from_list.items() if k not in volatile}
     )
     assert from_detail["held_hours"] == pytest.approx(from_list["held_hours"], abs=1.0)

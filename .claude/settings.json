@@ -1,11 +1,4 @@
 {
-  "$comment": [
-    "Project-level permissions, shared via git. Personal/one-off grants belong in",
-    "settings.local.json (gitignored). Scope here is deliberately: read-only",
-    "inspection + the test/lint/backtest loop. Destructive or outward-facing",
-    "operations (git push, reset --hard, clean, rm -rf, docker down, deploy, ssh)",
-    "are intentionally left OUT so they still prompt."
-  ],
   "permissions": {
     "allow": [
       "Bash(python -m pytest:*)",
@@ -23,7 +16,6 @@
       "Bash(python scripts/reports/export_analytics.py:*)",
       "Bash(python scripts/data/build_universe.py:*)",
       "Bash(python scripts/backtest/run_confluence_validation.py:*)",
-
       "Bash(git status:*)",
       "Bash(git log:*)",
       "Bash(git show:*)",
@@ -40,7 +32,6 @@
       "Bash(git stash list)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-
       "Bash(ls:*)",
       "Bash(wc:*)",
       "Bash(head:*)",
@@ -52,16 +43,13 @@
       "Bash(echo:*)",
       "Bash(cat data/*)",
       "Bash(cat .superpowers/sdd/progress.md)",
-
       "Bash(make check)",
       "Bash(make logs)",
       "Bash(make status)",
       "Bash(docker compose ps)",
       "Bash(docker compose logs:*)",
-
       "Read(//e/Documents/Private/Projects/Discord-Bot/**)",
       "Read(//e/Claude/claude-config/**/plugins/cache/claude-plugins-official/superpowers/**)",
-
       "Skill(superpowers:subagent-driven-development)",
       "Skill(superpowers:test-driven-development)",
       "Skill(superpowers:systematic-debugging)",
@@ -70,11 +58,62 @@
       "Skill(superpowers:brainstorming)"
     ],
     "deny": [
-      "Read(./.env)",
       "Read(./.env.bak)"
     ]
   },
-
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/sync-local-settings.py",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/session-cursor.ps1",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/usage-watch.ps1",
+            "timeout": 20,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File .claude/hooks/usage-watch.ps1",
+            "timeout": 20,
+            "statusMessage": "Checking usage limits...",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Glob|Read|Edit|Write|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/guardrails.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash .claude/statusline.sh"
+  },
   "enabledPlugins": {
     "chrome-devtools-mcp@claude-plugins-official": false,
     "playwright@claude-plugins-official": false,
@@ -90,60 +129,15 @@
     "code-simplifier@claude-plugins-official": false,
     "claude-code-setup@claude-plugins-official": false,
     "claude-md-management@claude-plugins-official": false,
-    "skill-creator@claude-plugins-official": false
+    "skill-creator@claude-plugins-official": false,
+    "figma@claude-plugins-official": true
   },
-
   "preferredNotifChannel": "terminal_bell",
-
-  "statusLine": {
-    "type": "command",
-    "command": "bash .claude/statusline.sh"
-  },
-
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "pwsh -NoProfile -File .claude/hooks/session-cursor.ps1",
-            "timeout": 20
-          },
-          {
-            "type": "command",
-            "command": "pwsh -NoProfile -File .claude/hooks/usage-watch.ps1",
-            "timeout": 20,
-            "async": true
-          }
-        ]
-      }
-    ],
-
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "pwsh -NoProfile -File .claude/hooks/usage-watch.ps1",
-            "timeout": 20,
-            "async": true,
-            "statusMessage": "Checking usage limits..."
-          }
-        ]
-      }
-    ],
-
-    "PreToolUse": [
-      {
-        "matcher": "Glob|Read|Edit|Write|NotebookEdit|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python .claude/hooks/guardrails.py",
-            "timeout": 5
-          }
-        ]
-      }
-    ]
-  }
+  "$comment": [
+    "Project-level permissions, shared via git. Personal/one-off grants belong in",
+    "settings.local.json (gitignored). Scope here is deliberately: read-only",
+    "inspection + the test/lint/backtest loop. Destructive or outward-facing",
+    "operations (git push, reset --hard, clean, rm -rf, docker down, deploy, ssh)",
+    "are intentionally left OUT so they still prompt."
+  ]
 }

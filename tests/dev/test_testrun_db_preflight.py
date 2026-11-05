@@ -22,12 +22,21 @@ def test_default_url_matches_db_fixture(testrun):
     assert testrun.TEST_DB_URL_DEFAULT == DEFAULT_TEST_URL
 
 
+def test_preflight_hint_names_the_one_container(testrun, monkeypatch):
+    def refuse(*_args, **_kwargs):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(socket, "create_connection", refuse)
+    hint = testrun.db_preflight()
+    assert "docker start swing-db" in hint and "db-test" not in hint
+
+
 def test_preflight_returns_actionable_text_when_unreachable(testrun, monkeypatch):
     def refuse(*_args, **_kwargs):
         raise OSError("connection refused")
 
     monkeypatch.setattr(socket, "create_connection", refuse)
-    assert "docker compose --profile test up -d db-test" in testrun.db_preflight()
+    assert "docker start swing-db" in testrun.db_preflight()
 
 
 def test_preflight_is_silent_when_reachable(testrun, monkeypatch):

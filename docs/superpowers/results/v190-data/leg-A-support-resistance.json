@@ -1,0 +1,26 @@
+{
+  "Support/Resistance": {
+    "n_eval": 4340,
+    "wins": 1391,
+    "losses": 2949,
+    "scratches": 963,
+    "timeouts": 15,
+    "closed": 5318,
+    "win_rate": 32.05069124423963,
+    "expectancy_r": -0.01234637081609628,
+    "excluded_share": 0.1839037232042121,
+    "avg_win_r": 2.4132976276060387,
+    "max_dd_pct": -97.86423107909937,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 33.069734004313446,
+    "runner_be_pct": 65.42056074766354,
+    "runner_timeout_pct": 1.509705248023005
+  },
+  "_watchlist_slice": {
+    "Support/Resistance": {
+      "status": "thin",
+      "n": 0,
+      "expectancy_r": null
+    }
+  }
+}

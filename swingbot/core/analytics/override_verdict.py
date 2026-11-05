@@ -237,6 +237,8 @@ def mirror_ledger_row(record: dict) -> dict:
     """The jsonl line for the standing mirror procedure (results doc, V173-11);
     no bot code writes the ledger file."""
     lo, hi = record["ci"]
+    # v190 audit: v2 alone -- the v173 ledger row names the instrument it was
+    # measured on (v2 fills); v3 does not move it.
     entry = {"id": record["ledger_id"], "date": record["recorded_on"],
              "hypothesis": _HYPOTHESIS.format(lo=lo, hi=hi), "instrument": "v2",
              "n": int(record["n"]), "exp_r": float(record["mean_delta_r"]), "p": None,

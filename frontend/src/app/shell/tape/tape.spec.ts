@@ -3,6 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { MarketIndexStore } from '../../stores/market-index.store';
+import { LiveValuesStore } from '../../stores/live-values.store';
+import { FakeLiveValues } from '../../testing/fake-live-values';
 import { ConnectionStore } from '../../stores/connection.store';
 import { TapeStore } from '../../stores/tape.store';
 import { TAPE_PROXY_HINT, Tape } from './tape';
@@ -17,6 +19,7 @@ describe('Tape', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideRouter([]),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         { provide: ConnectionStore, useValue: { marketActive: () => true } },
         { provide: MarketIndexStore, useValue: { rows: () => indexRows, asOf: () => null, load: () => undefined } },
         { provide: TapeStore, useValue: {
@@ -94,14 +97,17 @@ describe('Tape', () => {
     expect(el.querySelector('.cap-row sb-hint')).toBeNull();
   });
 
-  it('shows the age of a value older than the tape window', () => {
-    const el = setup([{ ...index, age_s: 240 }], []).nativeElement as HTMLElement;
-    expect(el.querySelector('.tile .age-hint')?.textContent?.trim()).toBe('4 min ago');
+  it('tiles carry the price age through sb-market-value', () => {
+    const asOf = new Date(Date.now() - 4 * 60_000).toISOString();
+    const el = setup([{ ...index, price_as_of: asOf }], [{ ...stock, price_as_of: asOf }]).nativeElement as HTMLElement;
+    const ages = [...el.querySelectorAll('.tile sb-market-value .mv-age')].map((n) => n.textContent?.trim());
+    expect(ages).toContain('4 min ago');
+    expect(el.querySelector('.tile sb-age-hint')).toBeNull();
   });
 
-  it('shows no age inside the window, nor when the server sends none (flag off)', () => {
-    expect((setup([{ ...index, age_s: 30 }], []).nativeElement as HTMLElement).querySelector('.age-hint')).toBeNull();
-    TestBed.resetTestingModule();
-    expect((setup([index], []).nativeElement as HTMLElement).querySelector('.age-hint')).toBeNull();
+  it('a refreshing price shows the spinner, and one with no as-of shows no age', () => {
+    const el = setup([{ ...index, price_refreshing: true }], []).nativeElement as HTMLElement;
+    expect(el.querySelector('.tile sb-market-value sb-spinner')).not.toBeNull();
+    expect(el.querySelector('.tile sb-market-value .mv-age')).toBeNull();
   });
 });

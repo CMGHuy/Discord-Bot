@@ -1,4 +1,4 @@
-"""``--instrument v1|v2`` for backtest scripts (v136 spec, cross-cutting rule 2:
+"""``--instrument v1|v2|v3`` for backtest scripts (v136 spec, cross-cutting rule 2:
 "Scripts never define dates").
 
 Every live script under ``scripts/backtest/`` calls ``add_instrument_arg`` and
@@ -24,7 +24,9 @@ def add_instrument_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--instrument", choices=contract.VERSIONS, default="v1",
         help="backtest instrument (v136 spec): v1 = today's windows and fills (default); "
-             "v2 = research span, point-in-time S&P 500, purged folds")
+             "v2 = research span, point-in-time S&P 500, purged folds; "
+             "v3 = v2's contract on the point-in-time Alpaca store (data/market_data_pit/), "
+             "research 2017-2025")
 
 
 def spec_from_args(args: argparse.Namespace) -> InstrumentSpec:

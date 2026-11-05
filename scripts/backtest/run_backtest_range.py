@@ -379,14 +379,31 @@ def _tickers_for_run(universe: str | None, tickers_file: str | None = None) -> l
 
 def _membership_for_run(universe: str | None, tickers: list) -> dict | None:
     """{ticker: spans} for a point-in-time `*_pit` universe, else None
-    (unmasked -- every existing universe name behaves exactly as before)."""
+    (unmasked -- every existing universe name behaves exactly as before).
+    v190: under the PIT store (instrument v3) the integrity report's
+    signal-date cuts are subtracted from the spans, so the signal mask
+    `_spans_for` applies never admits a cut date; every other selection
+    passes cuts=None, byte-identical to before."""
     from swingbot.core.marketdata.pit_membership import membership_map
-    membership = membership_map(universe, tickers)
+    cuts = training_data.signal_cuts()
+    membership = membership_map(universe, tickers, cuts=cuts)
     if membership is not None:
         print(f"point-in-time membership mask ON for universe '{universe}': "
               f"{sum(1 for s in membership.values() if s)}/{len(tickers)} tickers "
               f"have membership rows", flush=True)
+        _print_signal_cuts(cuts, tickers)
     return membership
+
+
+def _print_signal_cuts(cuts: dict | None, tickers: list) -> None:
+    """One line naming how many integrity cuts the run's mask carries; silent
+    off the PIT store (cuts is None), so v1/v2 stdout is unchanged."""
+    if cuts is None:
+        return
+    hit = {ticker: cuts[ticker] for ticker in tickers if cuts.get(ticker)}
+    print(f"signal-date cuts ON from the PIT integrity report: "
+          f"{sum(len(ranges) for ranges in hit.values())} cut range(s) on "
+          f"{len(hit)} ticker(s)", flush=True)
 
 
 def _exclusion_reason(df, ticker, pit: bool) -> tuple[str, str] | None:

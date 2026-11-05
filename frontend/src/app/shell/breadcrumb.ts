@@ -4,7 +4,7 @@ import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter, map } from 'rxjs';
 
 import { RouteTitleService } from '../routing/route-title.service';
-import { breadcrumbFor, navEntryFor } from './nav';
+import { breadcrumbFor, isSectionUrl, navEntryFor } from './nav';
 
 export interface Crumb {
   label: string;
@@ -12,23 +12,30 @@ export interface Crumb {
   link: string | null;
 }
 
-/** '/trades' is 1 deep, '/trades/812' is 2: anything past the workspace is a detail page. */
-function depth(url: string): number {
-  return url.split(/[?#]/)[0].split('/').filter((part) => part !== '').length;
+/** Path segments past the page itself: 0 on '/trades', '/trades/calendar'
+ *  and '/system'; 1 on '/trades/812' and '/trades/calendar/2026-10-01'.
+ *  Reads the router's URL, which is past every redirect by NavigationEnd. */
+function detailDepth(url: string): number {
+  const depth = url.split(/[?#]/)[0].split('/').filter((part) => part !== '').length;
+  return depth - (isSectionUrl(url) ? 2 : 1);
 }
 
 /**
- * The crumbs for a URL -- v195 Phase 3. `Group / Page`, plus the detail
- * segment on a detail route: the one the route supplied, or its title while
- * the record loads ('Trade detail'). Off the nav (the /ui gallery) the route
- * title alone. Pure, so the spec can hold every case without a router.
+ * The crumbs for a URL -- v202 §1. `Destination / Section` (the destination
+ * alone on a single page), plus the detail segment on a detail route: the
+ * one the route supplied, or its title while the record loads ('Trade
+ * detail'). The crumb before a detail links back to its list. Off the nav
+ * (the /ui gallery) the route title alone. Pure, so the spec can hold every
+ * case without a router.
  */
 export function crumbsFor(url: string, detail: string | null, title: string): Crumb[] {
-  const shownDetail = detail || (depth(url) > 1 && title ? title : null);
+  const shownDetail = detail || (detailDepth(url) > 0 && title ? title : null);
   const labels = breadcrumbFor(url, shownDetail);
   if (labels.length === 0) return title ? [{ label: title, link: null }] : [];
-  const listPath = labels.length === 3 ? navEntryFor(url)!.entry.path : null;
-  return labels.map((label, index) => ({ label, link: index === 1 ? listPath : null }));
+  const found = navEntryFor(url)!;
+  const listPath = found.section?.path ?? found.entry.path;
+  const linkAt = shownDetail ? labels.length - 2 : -1;
+  return labels.map((label, index) => ({ label, link: index === linkAt ? listPath : null }));
 }
 
 /**

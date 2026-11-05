@@ -21,8 +21,9 @@ import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { TapeStore } from '../../stores/tape.store';
-import { TradesStore } from '../../stores/trades.store';
-import { AgeHint, DASHBOARD_PRICE_WINDOW_S } from '../../ui/age-hint';
+import { TradesStore, liveTickers } from '../../stores/trades.store';
+import { MarketRefresh } from '../../ui/market-refresh';
+import { MarketValue } from '../../ui/market-value';
 import { Async, asyncInputs } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { ColumnDef, Density, RowContext } from '../../ui/data-table/data-table.types';
@@ -173,7 +174,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
   imports: [
     Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, Flash,
-    Hint, AgeHint, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
+    Hint, MarketValue, MarketRefresh, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
     RecentActivity, MarketMovers, TradeDrawer, Page,
   ],
   // TradesStore, not DashboardStore -- that one is provided at the route
@@ -202,7 +203,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
   // `TradesStore` instance (see positions-table.ts) -- neither this one nor
   // that one touch the Trades workspace's own copy.
   template: `
-    <sb-page>
+    <sb-page [secondaryFromTablet]="true">
       <!-- v195 Phase 4: Close all is a money-moving bulk action, so it sits
            in the page header's actions, danger-quiet, behind its menu and its
            confirm dialog. Deliberately not clear-open (it DELETES records and
@@ -268,6 +269,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
       [points]="store.equityPoints()"
       [openPnlPct]="store.openPnlPct()"
       [openPnlAmount]="store.openPnlAmount()"
+      [openMeta]="store.openMeta()"
       [winRate]="store.winRate()"
       [expectancyR]="store.expectancyR()"
       [winRateN]="store.winRateN()"
@@ -302,6 +304,8 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
       <!-- The lifecycle and sizing context share one help trigger. The
            per-trade sizing mode belongs on the detail view, where its source
            data is available. -->
+      <!-- v201: Refresh asks the refresher for the live rows' prices. -->
+      <sb-market-refresh panel-actions [symbols]="liveSymbols()" />
       <sb-hint panel-actions class="lifecycle-hint" [xl]="true" align="left" glyph="?"
                label="About open positions">
         <span class="hint-heading">Plan lifecycle</span>
@@ -465,15 +469,27 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
          cell already shows. -->
     <ng-template #pnlCell let-row>
       @if (row.pnl_pct !== null) {
-        <span [sbFlash]="row.pnl_pct" [class]="pnlClass(row.pnl_pct)">
-          {{ fmtPct(row.pnl_pct) }}
-          <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
-        </span>
         <!-- An open row carries a live pnl_pct too, so it lands here, not in
-             the else branch; price_age_s is null on a closed row. -->
-        <sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="dashboardWindowS" />
+             the else branch; price_as_of is null on a closed row, which keeps
+             its realised figure out of sb-market-value (it hides a value
+             with no as-of). v201: price, age and refresh spinner through
+             sb-market-value. -->
+        @if (row.price_as_of || row.price_refreshing) {
+          <sb-market-value [asOf]="row.price_as_of ?? null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null">
+            <span [sbFlash]="row.pnl_pct" [class]="pnlClass(row.pnl_pct)">
+              {{ fmtPct(row.pnl_pct) }}
+              <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
+            </span>
+          </sb-market-value>
+        } @else {
+          <span [sbFlash]="row.pnl_pct" [class]="pnlClass(row.pnl_pct)">
+            {{ fmtPct(row.pnl_pct) }}
+            <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
+          </span>
+        }
       } @else {
         <span class="pnl-plan">
+          <sb-market-value [asOf]="row.price_as_of ?? null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null">
           <span [sbFlash]="livePnlPct(row)" [class]="pnlClass(livePnlPct(row))">
             {{ fmtPct(livePnlPct(row)) }}
             <!-- Only once shares exist to have a dollar value at all -- a
@@ -488,7 +504,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
               <span class="pnl-amount"> ({{ fmtMoney(liveUnrealizedAmount(row)) }})</span>
             }
           </span>
-          <sb-age-hint [ageS]="row.price_age_s ?? null" [windowS]="dashboardWindowS" />
+          </sb-market-value>
           <span class="sep">{{ ' → ' }}</span>
           <span class="tp expected">{{ fmtPct(expectedPnlPct(row)) }}</span>
           <span class="sep">{{ ' - ' }}</span>
@@ -641,7 +657,6 @@ export class Dashboard {
   private readonly router = inject(Router);
   private readonly api = inject(ApiClient);
   private readonly toast = inject(ToastService);
-  protected readonly dashboardWindowS = DASHBOARD_PRICE_WINDOW_S;
   protected readonly store = inject(DashboardStore);
   /** For the currency symbol alone. `ConnectionStore` is root-provided and
    *  the shell already keeps it fresh, so reading it here costs no request. */
@@ -665,6 +680,8 @@ export class Dashboard {
    *  (see `providers`), so it is created on entry and destroyed on exit. */
   protected readonly recent = inject(TradesStore);
 
+  /** v201: unique tickers of the live (not yet closed) rows, for Refresh. */
+  protected readonly liveSymbols = computed(() => liveTickers(this.recent.rows()));
   protected readonly activity = computed(() => deriveActivity(this.recent.rows()));
   protected readonly activityAsync = computed(() => asyncInputs(
     { data: () => this.recent.empty() ? null : this.recent.rows(),

@@ -19,6 +19,8 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
+import { FakeLiveValues } from '../testing/fake-live-values';
+import { LiveValuesStore } from './live-values.store';
 import { TradeDetailStore } from './trade-detail.store';
 
 /* SR49 — the nine detail fields that arrived and rendered nowhere.
@@ -149,6 +151,7 @@ describe('TradeDetailStore — the fields that rendered nowhere', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: new FakeEventStream() },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
       ],
     });
@@ -411,6 +414,7 @@ describe('TradeDetailStore — banked leg stats (v58)', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: new FakeEventStream() },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
       ],
     });

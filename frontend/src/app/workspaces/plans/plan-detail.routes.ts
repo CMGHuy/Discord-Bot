@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
 import { onEvents, routeData } from '../../routing/route-metadata';
-import { resolveRoute } from '../../routing/route-resolver';
+import { startRoute } from '../../routing/route-resolver';
 import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 
@@ -15,7 +15,7 @@ export const planDetailRoutes: Routes = [{
   runGuardsAndResolvers: 'always',
   data: routeData('Plan', onEvents('trades', 'journal')),
   resolve: {
-    ready: resolveRoute((route) => {
+    ready: startRoute((route) => {
       const store = inject(TradeDetailStore);
       store.setId(route.paramMap.get('id')!, false);
       return store.resolve();

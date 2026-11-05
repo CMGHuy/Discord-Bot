@@ -19,6 +19,8 @@ import { ConnectionStore } from '../../stores/connection.store';
 import { RouteTitleService } from '../../routing/route-title.service';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { TradesStore } from '../../stores/trades.store';
+import { FakeLiveValues } from '../../testing/fake-live-values';
+import { LiveValuesStore } from '../../stores/live-values.store';
 import { isInline } from '../../ui/priority';
 import { ToolbarControl } from '../../ui/toolbar';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
@@ -55,6 +57,7 @@ describe('Trades rowKey', () => {
       providers: [
         provideZonelessChangeDetection(), provideRouter([]),
         provideHttpClient(), provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradesStore,
       ],
     });
@@ -105,6 +108,7 @@ function render(footer?: FooterFixture): ComponentFixture<Trades> {
       provideRouter([]),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
+      { provide: LiveValuesStore, useClass: FakeLiveValues },
       TradesStore,
       { provide: ConnectionStore, useValue: connectionStub },
       { provide: PreferencesStore, useValue: preferencesStub },
@@ -364,6 +368,53 @@ function renderRows(items: TradeRow[]): HTMLElement {
   return fixture.nativeElement as HTMLElement;
 }
 
+const AT = '2026-10-29T14:00:00Z';
+const META = { as_of: AT, refreshing: false, stale_count: 0, missing_count: 2, incomplete: true,
+  source: 'request' as const, error: null };
+
+/** Trades with `items` and a server market_meta in its store. */
+function renderPriced(items: TradeRow[], market_meta: typeof META | undefined = META): HTMLElement {
+  const fixture = render();
+  patchState(unprotected(TestBed.inject(TradesStore)), {
+    data: { items, total: items.length, page: 1, per_page: 12, market_meta },
+    query: { page: 1, per_page: 12 },
+  });
+  fixture.detectChanges();
+  return fixture.nativeElement as HTMLElement;
+}
+
+describe('Trades - price age and Refresh (v201)', () => {
+  const priced = (id: string, ticker: string, status: string) =>
+    row({ id, ticker, status, pnl_pct: 1, current_price: 100, price_as_of: AT });
+
+  it('the Now column shows price and age', () => {
+    const el = renderPriced([priced('a', 'MSFT', 'ACTIVE'), priced('b', 'AAPL', 'ACTIVE')]);
+    const cells = el.querySelectorAll('tbody sb-market-value');
+    expect(cells.length).toBeGreaterThanOrEqual(2);
+    expect(cellText(cells[0])).toContain('100.00');
+  });
+
+  it('the header shows prices as-of, the incomplete note and Refresh', () => {
+    const el = renderPriced([priced('a', 'MSFT', 'ACTIVE')]);
+    const header = el.querySelector('sb-page [page-actions]')!;
+    expect(cellText(header.querySelector('sb-market-value')!)).toContain('Prices');
+    expect(cellText(header)).toContain('incomplete: 2 positions unpriced');
+    expect(header.querySelector('sb-market-refresh button')).not.toBeNull();
+  });
+
+  it('the header shows no incomplete note when nothing is missing', () => {
+    const el = renderPriced([priced('a', 'MSFT', 'ACTIVE')], { ...META, missing_count: 0 });
+    expect(cellText(el.querySelector('sb-page [page-actions]')!)).not.toContain('incomplete');
+  });
+
+  it('Refresh asks for the live tickers only', () => {
+    const el = renderPriced([priced('a', 'MSFT', 'ACTIVE'), priced('b', 'AAPL', 'CLOSED')]);
+    el.querySelector<HTMLButtonElement>('sb-page [page-actions] sb-market-refresh button')!.click();
+    const live = TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues;
+    expect(live.requestRefresh).toHaveBeenCalledWith(['MSFT']);
+  });
+});
+
 const cellText = (el: Element): string => el.textContent!.replace(/\s+/g, ' ').trim();
 
 describe('Trades — the Plan cell for runners (v177)', () => {
@@ -402,6 +453,7 @@ function renderPhone(items: TradeRow[]): ComponentFixture<Trades> {
       provideRouter([]),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
+      { provide: LiveValuesStore, useClass: FakeLiveValues },
       TradesStore,
       { provide: ConnectionStore, useValue: connectionStub },
       { provide: PreferencesStore, useValue: preferencesStub },
@@ -632,7 +684,7 @@ describe('Trades on sb-page (v195 Phase 4, §5.2)', () => {
 
   it('puts Clear open and Clear history in the header actions, quiet, never solid', () => {
     const actions = el(mountPage()).querySelector('sb-page [page-actions]')!;
-    const buttons = [...actions.querySelectorAll<HTMLButtonElement>('button[sb-button]')];
+    const buttons = [...actions.querySelectorAll<HTMLButtonElement>('button[sb-button]:not(sb-market-refresh button)')];
     expect(buttons.map((b) => b.getAttribute('data-action'))).toEqual(['clear-open', 'clear-history']);
     expect(buttons.map((b) => b.textContent!.trim())).toEqual(['Clear open', 'Clear history']);
     for (const button of buttons) {

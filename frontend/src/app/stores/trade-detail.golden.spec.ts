@@ -5,6 +5,8 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { goldenOpenCase, loadGoldenPartialTrade } from '../ui/testing/golden-partial-trade';
+import { FakeLiveValues } from '../testing/fake-live-values';
+import { LiveValuesStore } from './live-values.store';
 import { TradeDetailStore } from './trade-detail.store';
 
 /* v189 B1/B5 on the golden scaled-out trade: TP1 banked 50 of 100 shares at
@@ -21,7 +23,7 @@ describe('TradeDetailStore on the golden partial trade', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting(), TradeDetailStore],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting(), { provide: LiveValuesStore, useClass: FakeLiveValues }, TradeDetailStore],
     });
     store = TestBed.inject(TradeDetailStore);
     backend = TestBed.inject(HttpTestingController);

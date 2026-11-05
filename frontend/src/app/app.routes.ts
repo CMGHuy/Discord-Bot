@@ -3,7 +3,7 @@ import { Routes } from '@angular/router';
 import { authGuard } from './shell/auth.guard';
 
 /**
- * Six workspaces, plus the two detail views that hang off them.
+ * Six destinations (v202), their section routes, and the detail views that hang off them.
  *
  * Every one is `loadComponent`, so a workspace's component and (from Phase
  * 4) its store arrive together and only when visited. That is what makes
@@ -41,6 +41,22 @@ export const routes: Routes = [
     data: { subtitle: 'Every plan, filled or not' },
     loadChildren: () => import('./workspaces/trades/trades.routes').then((m) => m.tradesRoutes),
   },
+  // v202: Trades' sections. Declared BEFORE `trades/:id`, so a section word is
+  // never read as a trade id (`/trades/calendar` is not trade "calendar").
+  {
+    path: 'trades/calendar',
+    canMatch: [authGuard],
+    title: 'Calendar',
+    data: { subtitle: 'P&L by day' },
+    loadChildren: () => import('./workspaces/calendar/calendar.routes').then((m) => m.calendarRoutes),
+  },
+  {
+    path: 'trades/cancels',
+    canMatch: [authGuard],
+    title: 'Cancels',
+    data: { subtitle: "Were the bot's own cancels right?" },
+    loadChildren: () => import('./workspaces/cancels/cancels.routes').then((m) => m.cancelsRoutes),
+  },
   {
     // Trade Detail has its own route-scoped store and resolver.
     path: 'trades/:id',
@@ -59,27 +75,18 @@ export const routes: Routes = [
     data: { subtitle: 'Why this plan, and how it is going' },
     loadChildren: () => import('./workspaces/plans/plan-detail.routes').then((m) => m.planDetailRoutes),
   },
-  {
-    path: 'analytics',
-    canMatch: [authGuard],
-    title: 'Analytics',
-    data: { subtitle: 'What already happened, measured' },
-    loadChildren: () => import('./workspaces/analytics/analytics.routes').then((m) => m.analyticsRoutes),
-  },
-  {
-    path: 'calendar',
-    canMatch: [authGuard],
-    title: 'Calendar',
-    data: { subtitle: 'P&L by day' },
-    loadChildren: () => import('./workspaces/calendar/calendar.routes').then((m) => m.calendarRoutes),
-  },
-  {
-    path: 'cancels',
-    canMatch: [authGuard],
-    title: 'Cancels',
-    data: { subtitle: "Were the bot's own cancels right?" },
-    loadChildren: () => import('./workspaces/cancels/cancels.routes').then((m) => m.cancelsRoutes),
-  },
+  // v202: the pre-Phase-1 paths. RELATIVE redirects (no leading slash) keep
+  // the query string and fragment, which Analytics' tab state and every old
+  // bookmark depend on; an absolute redirect would drop both. These come out
+  // at Phase 4's close-out with `cockpit` and `universe`, together with
+  // their names in spa.py's WORKSPACES.
+  { path: 'calendar', pathMatch: 'full', redirectTo: 'trades/calendar' },
+  { path: 'calendar/:date', redirectTo: 'trades/calendar/:date' },
+  { path: 'cancels', pathMatch: 'full', redirectTo: 'trades/cancels' },
+  { path: 'analytics', pathMatch: 'full', redirectTo: 'insights/analytics' },
+  { path: 'research', pathMatch: 'full', redirectTo: 'insights/research' },
+  { path: 'reports', pathMatch: 'full', redirectTo: 'insights/reports' },
+  { path: 'versions', pathMatch: 'full', redirectTo: 'system/versions' },
   {
     path: 'watchlist',
     canMatch: [authGuard],
@@ -106,6 +113,14 @@ export const routes: Routes = [
     data: { subtitle: 'Exposure, caps and the killswitch' },
     loadChildren: () => import('./workspaces/risk/risk.routes').then((m) => m.riskRoutes),
   },
+  // v202: System's Versions section, before `system` so it is matched first.
+  {
+    path: 'system/versions',
+    canMatch: [authGuard],
+    title: 'Versions',
+    data: { subtitle: "What's deployed, and when it changed" },
+    loadChildren: () => import('./workspaces/versions/versions.routes').then((m) => m.versionsRoutes),
+  },
   {
     path: 'system',
     canMatch: [authGuard],
@@ -113,20 +128,22 @@ export const routes: Routes = [
     data: { subtitle: 'What the bot itself is doing' },
     loadChildren: () => import('./workspaces/system/system.routes').then((m) => m.systemRoutes),
   },
+  // v202: Insights has no page of its own; it opens on its first section.
+  { path: 'insights', pathMatch: 'full', redirectTo: 'insights/analytics' },
   {
-    path: 'versions',
+    path: 'insights/analytics',
     canMatch: [authGuard],
-    title: 'Versions',
-    data: { subtitle: "What's deployed, and when it changed" },
-    loadChildren: () => import('./workspaces/versions/versions.routes').then((m) => m.versionsRoutes),
+    title: 'Analytics',
+    data: { subtitle: 'What already happened, measured' },
+    loadChildren: () => import('./workspaces/analytics/analytics.routes').then((m) => m.analyticsRoutes),
   },
   {
-    path: 'research', canMatch: [authGuard], title: 'Research',
+    path: 'insights/research', canMatch: [authGuard], title: 'Research',
     data: { subtitle: 'Every pre-registration and its verdict' },
     loadChildren: () => import('./workspaces/research/research.routes').then((m) => m.researchRoutes),
   },
   {
-    path: 'reports', canMatch: [authGuard], title: 'Reports',
+    path: 'insights/reports', canMatch: [authGuard], title: 'Reports',
     data: { subtitle: 'What the measurements say about entries and gates' },
     loadChildren: () => import('./workspaces/reports/reports.routes').then((m) => m.reportsRoutes),
   },

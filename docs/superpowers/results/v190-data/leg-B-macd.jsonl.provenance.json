@@ -1,0 +1,21 @@
+{
+ "adjustment": "all",
+ "data_source": "alpaca",
+ "excluded": {
+  "ASML": "flagged: price-mismatch",
+  "CVX": "flagged: price-mismatch",
+  "HD": "flagged: price-mismatch",
+  "HPQ": "flagged: price-mismatch",
+  "IBM": "flagged: price-mismatch",
+  "QCOM": "flagged: price-mismatch",
+  "SPCX": "flagged: short-overlap",
+  "UNH": "flagged: price-mismatch",
+  "WDC": "flagged: price-mismatch",
+  "XAGUSD": "skipped: spot metal (built from futures)",
+  "XAUUSD": "skipped: spot metal (built from futures)"
+ },
+ "feed": "sip",
+ "manifest_hash": "9e0a4e0ddd62886d5077f5d27aa86a6f1447b9285ad6af7d6b4af0c292a49b60",
+ "store": "watchlist",
+ "store_dir": "E:\\Documents\\Private\\Projects\\Discord-Bot\\data\\market_data"
+}

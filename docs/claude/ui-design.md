@@ -69,6 +69,26 @@ each width (Playwright, never claude-in-chrome — `skills-tools.md`).
   `ROUTES` in `frontend/scripts/layout-audit-lib.mjs` in the same commit. It
   is not in CI (spec v179 §6a.6).
 
+## UI tasks (v199)
+
+- **One page per task.** A UI fix-wave plan task covers one page (its route
+  and tabs) at all three widths; an audit that finds issues on several pages
+  produces one task per page. Open-ended "fix all audit findings" tasks ran
+  40–110 minutes each.
+- **Audit first.** A `task-implementer` on a UI task runs
+  `node frontend/scripts/layout-audit.mjs --base http://localhost:1234`
+  first, works from its findings, and finishes with it exiting 0 at 390,
+  768 and 1440: the audit covers the three widths the full-page
+  screenshots used to.
+- **Clipped screenshots only.** A screenshot is read only for a named
+  element: `node frontend/scripts/browse.mjs shots --path <route> --widths <w> --clip <css selector>`
+  captures that element's box plus 8px (an element taller than the
+  viewport whole). No match exits 1 naming the selector, never a full page.
+- **At most 4 image reads per task.** Every image read stays in context for
+  every later turn. Needing more is `BLOCKED:` with the reason.
+  `scripts/dev/agent_cost.py` counts image reads per run; nothing enforces
+  the cap mechanically.
+
 ## Tables and pagers
 
 - Every data table has a rows-per-page dropdown beside the page controls:

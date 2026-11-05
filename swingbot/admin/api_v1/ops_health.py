@@ -59,6 +59,7 @@ def _bot_block() -> dict:
 @api_v1.route("/system/health", methods=["GET"])
 @require_auth
 def get_system_health():
+    from . import market_updates
     bot = _bot_block()
     rows = (_swallowed_rows("bot", bot.get("counts"))
             + _swallowed_rows("admin", swallowed_mod.snapshot()))
@@ -70,4 +71,5 @@ def get_system_health():
                        "empty_pct": config.EMPTY_SYMBOLS_ALERT_PCT},
         "swallowed": rows,
         "bot_counts_since": since if isinstance(since, str) else None,
+        "refresher": market_updates.refresher_health(),
     })

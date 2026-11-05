@@ -22,7 +22,7 @@ EXPECTED_COLUMNS = (
     "stop_loss", "take_profit", "target2", "closed_at", "exit_price", "close_reason",
     "last_leg_reason", "outcome", "r_realized", "mfe_r", "mae_r", "exit_efficiency",
     "holding_days", "stop_width_atr", "atr_pct", "regime2_state", "session_bucket",
-    "days_to_earnings", "rs_percentile",
+    "days_to_earnings", "rs_percentile", "plan_issued_at", "plan_issued_at_source",
 )
 
 # Word-bounded and case-sensitive: `updated_at` / `created_at` must not trip it,
@@ -217,12 +217,15 @@ def book_rows_db():
         yield conn
 
 
+def _sqlite_query(source: str) -> str:
+    """The rows COPY body, with projection-only PostgreSQL syntax adapted for sqlite."""
+    query = source.split("COPY (", 1)[1].split(") TO STDOUT", 1)[0]
+    return query.replace("::text", "").replace("->(-1)", "->'$[#-1]'")
+
+
 def test_rows_include_each_plan_and_preserve_closed_trades(source, book_rows_db):
     """An open trade must not hide its plan from the issued-plan denominator."""
-    query = source.split("COPY (", 1)[1].split(") TO STDOUT", 1)[0]
-    # Adapt projection-only PostgreSQL syntax; relational joins/filters stay intact.
-    query = query.replace("::text", "").replace("->(-1)", "->'$[#-1]'")
-    cursor = book_rows_db.execute(query)
+    cursor = book_rows_db.execute(_sqlite_query(source))
     assert tuple(column[0] for column in cursor.description) == EXPECTED_COLUMNS
     rows = [(row[0], row[1], row[2]) for row in cursor.fetchall()]
     assert sorted(rows) == [
@@ -233,3 +236,19 @@ def test_rows_include_each_plan_and_preserve_closed_trades(source, book_rows_db)
         ("trade", "closed-trade", "closed-plan"),
         ("trade", "orphan-closed-trade", None),
     ]
+
+
+def test_the_issued_columns_read_the_plan_doc(source, book_rows_db):
+    book_rows_db.execute(
+        "UPDATE plans SET doc = ? WHERE plan_id = 'unfilled-plan'",
+        ('{"issued_at": "2026-08-04T13:02:11+00:00", "issued_at_source": "discord"}',))
+    book_rows_db.execute(
+        "UPDATE plans SET doc = ? WHERE plan_id = 'closed-plan'",
+        ('{"issued_at": "2026-10-15T14:31:07+00:00"}',))
+    cursor = book_rows_db.execute(_sqlite_query(source))
+    names = [column[0] for column in cursor.description]
+    pid, at, src = (names.index(n) for n in ("plan_id", "plan_issued_at", "plan_issued_at_source"))
+    got = {row[pid]: (row[at], row[src]) for row in cursor.fetchall()}
+    assert got["unfilled-plan"] == ("2026-08-04T13:02:11+00:00", "discord")
+    assert got["closed-plan"] == ("2026-10-15T14:31:07+00:00", None)
+    assert got["open-plan"] == (None, None)

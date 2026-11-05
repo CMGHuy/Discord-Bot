@@ -33,7 +33,13 @@ DOLLAR_VOLUME_BARS = 20
 # Friday close may anchor Tuesday after a Monday holiday; older bars are stale.
 MAX_ANCHOR_LAG_DAYS = 4
 GAP_FLAT_PCT = 0.25           # |open gap| at or under this is "flat"
-GAP_LARGE_PCT = 1.0           # an adverse gap above this is "adverse_large"
+GAP_LARGE_PCT = 1.0           # a worse open above this is "open_worse_large"
+GAP_SIGN_NOTE = (
+    "Gap sign: open_gap_pct compares the fill-day open with the planned entry and is "
+    "positive when the open was worse for the trade (higher for a long, lower for a short), "
+    "so open_better is an open more than 0.25% on the trade's side of the planned entry, "
+    "flat is within 0.25%, open_worse_small is worse by up to 1.0% and open_worse_large "
+    "is worse by more than 1.0%.")
 DOLLAR_VOLUME_EDGES = ((20e6, "lt_20m"), (50e6, "20m_50m"), (200e6, "50m_200m"))
 DOLLAR_VOLUME_TOP = "ge_200m"
 FILLED_PLAN_STATUSES = frozenset({"ACTIVE", "PARTIAL", "CLOSED"})
@@ -126,7 +132,14 @@ def _dollar_volume(df: pd.DataFrame, index: int) -> float | None:
 
 
 def _gap(row, open_: float) -> tuple[float | None, bool | None]:
-    """Open gap in percent, positive = adverse to the trade, and the gapped-through flag."""
+    """Open gap in percent and the gapped-through flag.
+
+    Gap sign: open_gap_pct compares the fill-day open with the planned entry and is
+    positive when the open was worse for the trade (higher for a long, lower for a short),
+    so open_better is an open more than 0.25% on the trade's side of the planned entry,
+    flat is within 0.25%, open_worse_small is worse by up to 1.0% and open_worse_large is
+    worse by more than 1.0%.
+    """
     if row.planned_entry is None or row.planned_entry <= 0:
         return None, None
     pct = (open_ - row.planned_entry) / row.planned_entry * 100.0 * _sign(row)
@@ -276,10 +289,10 @@ def _open_gap_bucket(row) -> str | None:
     if pct is None or not math.isfinite(pct):
         return None
     if pct < -GAP_FLAT_PCT:
-        return "favourable"
+        return "open_better"
     if pct <= GAP_FLAT_PCT:
         return "flat"
-    return "adverse_small" if pct <= GAP_LARGE_PCT else "adverse_large"
+    return "open_worse_small" if pct <= GAP_LARGE_PCT else "open_worse_large"
 
 
 def _gapped_through_entry(row) -> str | None:
@@ -314,6 +327,14 @@ def bar_cuts() -> tuple:
             ("gapped_through_entry", _gapped_through_entry),
             ("dollar_volume_bucket", _dollar_volume_bucket),
             ("near_stop_reversal", _near_stop_reversal))
+
+
+BAR_DEFINED_AT = {
+    "open_gap_bucket": "fill",          # bars.open_gap_pct, measured on the bar the fill selected
+    "gapped_through_entry": "entry",    # bars.gapped_through: the fill happens at that open
+    "dollar_volume_bucket": "entry",    # bars.dollar_volume
+    "near_stop_reversal": "outcome",    # bars.reversal, bars.wider_stop_lost
+}
 
 
 def fill_tallies(rows: list[BookRow]) -> list[Tally]:

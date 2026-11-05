@@ -477,6 +477,34 @@ def test_data_read_path_routes_to_its_readers(sel, tmp_path, path, expected):
     assert (result.full, result.targets) == (False, expected)
 
 
+@pytest.mark.parametrize("path", [
+    "data/market_data_pit/_integrity.json",
+    "data/market_data_pit/daily/_manifest.json",
+    "data/universe/symbol_aliases.json",
+])
+def test_pit_store_and_alias_table_route_to_the_history_store_suite(sel, tmp_path, path):
+    """v190: the PIT store and the rename alias table are read by tests under
+    tests/history_store/ (fixture copies, never the real files)."""
+    repo = _with_readers(_repo(tmp_path))
+    reader = repo / "tests/history_store/test_history_store.py"
+    reader.parent.mkdir(parents=True, exist_ok=True)
+    reader.write_text("X = 1\n", encoding="utf-8")
+    result = sel.select([path], repo)
+    assert (result.full, result.targets) == (False, ["tests/history_store/"])
+
+
+def test_the_watchlist_store_row_is_unchanged(sel, tmp_path):
+    """data/market_data_pit/ must not shadow, or be shadowed by, data/market_data/."""
+    repo = _with_readers(_repo(tmp_path))
+    for rel in ("tests/history_store/test_history_store.py",
+                "tests/history_store/test_training_data.py"):
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text("X = 1\n", encoding="utf-8")
+    result = sel.select(["data/market_data/daily/AAPL.csv"], repo)
+    assert (result.full, result.targets) == (False, [
+        "tests/history_store/test_history_store.py", "tests/history_store/test_training_data.py"])
+
+
 def test_path_loaded_python_helper_selects_the_test_that_loads_its_importer(
         sel, tmp_path):
     """sync_codex.py does `import skill_frontmatter` and test_codex_mirror
@@ -582,6 +610,10 @@ _NOT_READ = {
     # and the directory walk also lists these READMEs.
     "frontend/README.md",
     "frontend/chart-harness/README.md",
+    # test_event_stream.py names a directory; the walk also lists these v190
+    # re-baseline write-ups, which no test opens.
+    "docs/superpowers/results/v190-data/coverage-v3.md",
+    "docs/superpowers/results/v190-data/rebaseline-body.md",
     # test_guardrails.py feeds these to the hook's plan-doc shape check.
     "docs/superpowers/plans/implemented/2026-09-18-v96-claude-skills-layer.md",
     "docs/superpowers/plans/implemented/2026-09-16-v92-exit-quality-harvest.md",

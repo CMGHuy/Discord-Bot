@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { ActivatedRouteSnapshot, Routes } from '@angular/router';
 import { onEvents, routeData } from '../../routing/route-metadata';
-import { resolveRoute } from '../../routing/route-resolver';
+import { startRoute } from '../../routing/route-resolver';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { TradesStore } from '../../stores/trades.store';
 import { TradeQuery } from '../../api/models';
@@ -28,7 +28,7 @@ export const queryFor = (route: ActivatedRouteSnapshot, savedPerPage: number): T
 });
 
 /** The saved per-page choice, read the way `tablePerPage` reads it for the
- *  component. `resolveRoute` resolves preferences before this runs. */
+ *  component. `startRoute` resolves preferences before this runs. */
 function savedPerPage(): number {
   const preferences = inject(PreferencesStore);
   const viewport = inject(ViewportService);
@@ -41,7 +41,7 @@ export const tradesRoutes: Routes = [{
   runGuardsAndResolvers: 'always',
   data: routeData('Trades', onEvents('trades')),
   resolve: {
-    ready: resolveRoute((route) => {
+    ready: startRoute((route) => {
       const store = inject(TradesStore);
       store.setQuery(queryFor(route, savedPerPage()), false);
       return store.resolve();

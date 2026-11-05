@@ -329,8 +329,8 @@ describe('CalendarDayPage', () => {
   it('shows a 404 day as the empty state, with working prev/next and the caption', async () => {
     const root = el(await open('2026-08-04', 404));
     expect(text(root, 'sb-empty-state .empty-title')).toBe('No closed trades on 2026-08-04 under this filter');
-    expect(root.querySelector('a.prev')?.getAttribute('href')).toBe('/calendar/2026-08-03?strategy=EMA20');
-    expect(root.querySelector('a.next')?.getAttribute('href')).toBe('/calendar/2026-08-05?strategy=EMA20');
+    expect(root.querySelector('a.prev')?.getAttribute('href')).toBe('/trades/calendar/2026-08-03?strategy=EMA20');
+    expect(root.querySelector('a.next')?.getAttribute('href')).toBe('/trades/calendar/2026-08-05?strategy=EMA20');
     expect(root.querySelector('.tiles')).toBeNull();
     expect(text(root, 'sb-page p.description')).toBe(PAPER_CAPTION);
   });
@@ -339,8 +339,8 @@ describe('CalendarDayPage', () => {
     const root = el(await open('2026-08-10', dayBody({ date: '2026-08-10' }), {
       '2026-09': [{ ...cell('2026-09-01', 0, 0), trade_count: 0 }, cell('2026-09-02', 15, 0.3)],
     }));
-    expect(root.querySelector('a.prev')?.getAttribute('href')).toBe('/calendar/2026-08-05?strategy=EMA20');
-    expect(root.querySelector('a.next')?.getAttribute('href')).toBe('/calendar/2026-09-02?strategy=EMA20');
+    expect(root.querySelector('a.prev')?.getAttribute('href')).toBe('/trades/calendar/2026-08-05?strategy=EMA20');
+    expect(root.querySelector('a.next')?.getAttribute('href')).toBe('/trades/calendar/2026-09-02?strategy=EMA20');
   });
 
   it('disables a step with nowhere to go', async () => {
@@ -352,13 +352,13 @@ describe('CalendarDayPage', () => {
   it('links back to the same filtered month from the day stepper, with no ← link', async () => {
     const root = el(await open('2026-08-05'));
     expect(text(root, 'nav.steps a.month')).toBe('August 2026');
-    expect(root.querySelector('nav.steps a.month')?.getAttribute('href')).toBe('/calendar?month=2026-08&strategy=EMA20');
+    expect(root.querySelector('nav.steps a.month')?.getAttribute('href')).toBe('/trades/calendar?month=2026-08&strategy=EMA20');
     expect(root.querySelector('a.back')).toBeNull();
   });
 });
 
 describe('calendar/:date route', () => {
-  const ROUTES: Routes = [{ path: 'calendar', children: calendarRoutes }];
+  const ROUTES: Routes = [{ path: 'trades/calendar', children: calendarRoutes }];
 
   async function take(predicate: (r: HttpRequest<unknown>) => boolean): Promise<TestRequest> {
     const backend = TestBed.inject(HttpTestingController);
@@ -378,7 +378,7 @@ describe('calendar/:date route', () => {
   it('hands the date and the filters from the URL to the day store', async () => {
     configure(ROUTES);
     const harness = await RouterTestingHarness.create();
-    const navigation = harness.navigateByUrl('/calendar/2026-08-05?strategy=EMA20&horizon=4w');
+    const navigation = harness.navigateByUrl('/trades/calendar/2026-08-05?strategy=EMA20&horizon=4w');
     const day = await take((r) => r.url === DAY_URL);
     expect(day.request.params.get('date')).toBe('2026-08-05');
     expect(day.request.params.get('strategy')).toBe('EMA20');
@@ -394,7 +394,7 @@ describe('calendar/:date route', () => {
 
   it('shows the empty state for an impossible date without a single request', async () => {
     configure(ROUTES);
-    const harness = await RouterTestingHarness.create('/calendar/2026-02-30');
+    const harness = await RouterTestingHarness.create('/trades/calendar/2026-02-30');
     TestBed.inject(HttpTestingController).verify();
     expect(text(harness.routeNativeElement!, 'sb-empty-state .empty-title'))
       .toBe('No closed trades on 2026-02-30 under this filter');
@@ -403,7 +403,7 @@ describe('calendar/:date route', () => {
   it('keeps the tiles on screen when the same URL is resolved again', async () => {
     configure(ROUTES);
     const harness = await RouterTestingHarness.create();
-    const first = harness.navigateByUrl('/calendar/2026-08-05?strategy=EMA20');
+    const first = harness.navigateByUrl('/trades/calendar/2026-08-05?strategy=EMA20');
     (await take((r) => r.url === DAY_URL)).flush(dayBody());
     (await take((r) => r.url === MONTH_URL)).flush(AUGUST);
     await first;
@@ -411,7 +411,7 @@ describe('calendar/:date route', () => {
     harness.detectChanges();
     expect(harness.routeNativeElement!.querySelectorAll('.tiles sb-stat-tile')).toHaveLength(7);
 
-    const again = TestBed.inject(Router).navigateByUrl('/calendar/2026-08-05?strategy=EMA20',
+    const again = TestBed.inject(Router).navigateByUrl('/trades/calendar/2026-08-05?strategy=EMA20',
       { onSameUrlNavigation: 'reload', replaceUrl: true });
     const day = await take((r) => r.url === DAY_URL);   // a refresh is in flight
     harness.detectChanges();
@@ -424,13 +424,13 @@ describe('calendar/:date route', () => {
   it('asks for the new day when the date in the URL changes', async () => {
     configure(ROUTES);
     const harness = await RouterTestingHarness.create();
-    const first = harness.navigateByUrl('/calendar/2026-08-05?strategy=EMA20');
+    const first = harness.navigateByUrl('/trades/calendar/2026-08-05?strategy=EMA20');
     (await take((r) => r.url === DAY_URL)).flush(dayBody());
     (await take((r) => r.url === MONTH_URL)).flush(AUGUST);
     await first;
     (await take((r) => r.url === SPARK_URL)).flush(SPARKS);
 
-    const second = harness.navigateByUrl('/calendar/2026-08-10?strategy=EMA20');
+    const second = harness.navigateByUrl('/trades/calendar/2026-08-10?strategy=EMA20');
     const day = await take((r) => r.url === DAY_URL);
     expect(day.request.params.get('date')).toBe('2026-08-10');
     day.flush(dayBody({ date: '2026-08-10' }));
