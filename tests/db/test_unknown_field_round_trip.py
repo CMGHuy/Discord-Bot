@@ -6,6 +6,7 @@ import pytest
 
 from swingbot.core.db import schema
 from swingbot.core.db.repositories.account import AccountRepository
+from swingbot.core.db.repositories.admin_users import AdminUsersRepository
 from swingbot.core.db.repositories.base import Repository
 from swingbot.core.db.repositories.equity_samples import EquitySampleRepository
 from swingbot.core.db.repositories.flags import FlagRepository
@@ -98,6 +99,8 @@ CASES = {
     "refresher_heartbeat": (RefresherHeartbeatRepository,
                             {"key": "refresher", "beat_at": TS, "cadence_s": 60.0,
                              "session": "regular"}),
+    # v207: viewer accounts.
+    "admin_users": (AdminUsersRepository, {"username": "probe-user", "password_hash": "h"}),
 }
 
 #: Tables with no repository, and why. Anything else must be in CASES.
@@ -107,7 +110,6 @@ NOT_REPOSITORY_BACKED = {
                                 "round trip is tests/db/test_preregistration_verdicts_repository.py",
     "fx_daily_rates": "composite key (base, account, day), written insert_if_absent only and "
                       "read as promoted columns; its round trip is tests/db/test_v205_fx_daily_rates.py",
-    "admin_users": "v207: its repository arrives in V207-2, which moves this entry to CASES",
 }
 
 #: Tables whose rows need the probe plan first (a foreign key into plans).
