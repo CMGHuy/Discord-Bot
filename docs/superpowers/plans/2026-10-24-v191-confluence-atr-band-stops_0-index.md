@@ -314,3 +314,7 @@ State at 2026-11-03 (worktree `.claude/worktrees/2026-10-24-v191-confluence-atr-
 
 - **V191-21 done (commit 9bb73b21): arm K UNDERPOWERED at Stage 0**, budget intact, arm closed. Stages 1-3 for K do not run.
 - **V191-22 (arm R) in progress at Step 2, Stage 0 replay** started 2026-11-04; log `logs/v191/stage22r0.log`, exit code `logs/v191/r0.exit`, progress `logs/measure_atr_band_stop.R.rows.progress`. Resume command is the one above with `--arm R --stage 0` (checkpointed). Then V191-22 Steps 3..9, V191-23..25.
+
+### Update 2026-11-05
+
+- **V191-22 done (commit c188691d): arm R UNDERPOWERED at Stage 0**, budget intact, arm closed; both arms closed at Stage 0, no VALIDATION shot spent. Rows files (K 53 MB, R 61 MB) are left out of git (50 MB rule) and exist only on this machine. Next: V191-23 (Holm family, record, ledger rows, closed row), V191-24, V191-25.
