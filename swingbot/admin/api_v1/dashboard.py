@@ -31,14 +31,13 @@ taken that decision away from it.
 """
 from __future__ import annotations
 
-from datetime import date
-
 from flask import jsonify, request
 
 from swingbot import config
 from swingbot.admin import dashboard as dash
 from swingbot.core.planning.plan_engine import DEFAULT_EXPIRY_BARS
 from swingbot.core.tracking.performance import TradeLog, expand_realized_legs
+from swingbot.core.marketdata import fx_convert
 
 from . import ApiError, api_v1, iso
 from .auth import require_auth
@@ -318,7 +317,7 @@ def _open_amounts(open_trades: list[dict], prices: dict) -> tuple[list[float], i
         if not price or not t.get("entry"):
             continue
         raw = dash.unrealized_pnl_amount(t.get("entry"), t.get("direction"), t.get("shares"), price)
-        value, flagged = convert_amount(raw, t.get("ticker"), date.today())
+        value, flagged = convert_amount(raw, t.get("ticker"), fx_convert.berlin_today())
         missing += flagged
         if value is not None:
             amounts.append(value)

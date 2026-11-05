@@ -49,6 +49,7 @@ from swingbot.core.planning.gap_sizing import gap_risk_amount_for, size_for
 from swingbot.core.presentation.gap_risk import gap_risk_line
 from swingbot.core.presentation.plan_view import plan_view
 from swingbot.core.presentation.short_notice import risk_notice_lines
+from swingbot.core.marketdata import fx_convert
 
 from . import api_v1, collection, error, parse_collection_params, ApiError
 from .auth import require_auth
@@ -1340,7 +1341,7 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
             row["r_multiple"] = _live_r(row, price)
             row["realized_pnl_amount"], row["fx_missing"] = convert_amount(
                 dash.unrealized_pnl_amount(entry, direction, row.get("open_shares"), price),
-                row.get("ticker"), date.today())
+                row.get("ticker"), fx_convert.berlin_today())
         # Store the display value in a transient field; apply it exactly once
         # in _strip_internal_fields after all passes are complete.
         if row.get("open_shares") is not None:

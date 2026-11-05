@@ -35,6 +35,7 @@ from flask import jsonify, request
 
 from swingbot import config
 from swingbot.core.infra.swallowed import swallowed
+from swingbot.core.marketdata import fx_convert
 
 from . import api_v1, error
 from .auth import require_auth
@@ -453,7 +454,7 @@ def _distribution_metrics(open_trades: list | None, benchmark: str, checked: str
     if not open_trades:
         return _empty_distribution(), {"labels": [], "values": []}, _distribution_status(checked, None)
     symbols = _asset_symbols(open_trades)
-    weights, reason = signed_weights(open_trades, on=datetime.fromisoformat(checked).date())
+    weights, reason = signed_weights(open_trades, on=fx_convert.fx_day(checked))
     try:
         bars = _risk_bars(sorted(set(symbols) | {benchmark}))
     except Exception as exc:
