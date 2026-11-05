@@ -10,6 +10,8 @@ door works on the other.
 my cookie still good" at SPA boot, before the shell renders. Without it the
 app flashes a dashboard and then bounces to login (spec v13 Decision 7).
 """
+import pytest
+
 from tests.admin.api_v1_contract import assert_error, assert_shape
 
 from swingbot.admin import api_v1 as v1  # noqa: F401  (reload-safe import idiom)
@@ -93,7 +95,7 @@ def test_health_ok_with_basic_auth(client, auth):
     # to every money figure the SPA renders, so no one workspace owns it.
     assert_shape(
         r.get_json(),
-        {"ok": bool, "versions": dict, "market_active": bool, "currency": str},
+        {"ok": bool, "versions": dict, "market_active": bool, "currency": str, "sse_streams": int},
     )
     assert r.get_json()["ok"] is True
     # get_versions() returns ui/bot/last_updated -- NOT VERSION.json verbatim
@@ -104,6 +106,48 @@ def test_health_ok_with_basic_auth(client, auth):
         {"ui": str, "bot": str, "last_updated": (str, type(None))},
         where="versions",
     )
+
+
+class _InertWatcher:
+    def start(self):
+        return self
+
+    def stop(self):
+        return None
+
+
+@pytest.fixture
+def broker(admin_app, monkeypatch):
+    """A broker with an inert watcher, installed as the process singleton.
+
+    Depends on `admin_app` so it is installed after the fixture's module
+    reloads; `/health` imports the broker module at call time.
+    """
+    from swingbot.admin.events import broker as b
+    made = b.EventBroker(watcher_factory=lambda emit: _InertWatcher())
+    monkeypatch.setattr(b, "_BROKER", made)
+    return made
+
+
+def test_health_reports_the_open_event_stream_count(client, auth, broker):
+    """v206: every probe result records the SSE thread budget (each stream holds a gunicorn thread)."""
+    assert client.get("/api/v1/health", headers=auth).get_json()["sse_streams"] == 0
+    with broker.subscribe(), broker.subscribe():
+        body = client.get("/api/v1/health", headers=auth).get_json()
+        assert body["sse_streams"] == broker.connection_count == 2
+    assert client.get("/api/v1/health", headers=auth).get_json()["sse_streams"] == 0
+
+
+def test_health_keeps_every_other_field_as_it_was(client, auth, broker):
+    from swingbot import config
+    from swingbot.admin import helpers
+
+    body = client.get("/api/v1/health", headers=auth).get_json()
+    body.pop("sse_streams")
+    assert set(body) == {"ok", "versions", "market_active", "currency"}
+    assert body["ok"] is True
+    assert body["versions"] == helpers.get_versions()
+    assert body["currency"] == config.CURRENCY_SYMBOL
 
 
 def test_v1_401_does_not_send_a_basic_auth_challenge(client):

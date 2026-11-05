@@ -79,6 +79,18 @@ def session_delete():
     return jsonify(_identity())
 
 
+def _sse_streams() -> int:
+    """Open event streams in this process (v206 Measurement rules).
+
+    Each stream holds a gunicorn thread for its whole life, so the count is
+    the thread budget a probe result has to record. The broker module is
+    imported here, not at the top: `broker.py` imports `api_v1`, so a
+    module-level import would be circular.
+    """
+    from swingbot.admin.events import broker as _broker
+    return _broker.get_broker().connection_count
+
+
 @api_v1.route("/health", methods=["GET"])
 @require_auth
 def health():
@@ -101,6 +113,8 @@ def health():
 
     Never raises: an unavailable market check reports False rather than
     failing the probe that monitoring uses to decide the admin is down.
+
+    v206 adds `sse_streams`, the open event-stream count, for the browser probe.
     """
     try:
         from swingbot.core.marketdata.data import is_us_market_active
@@ -125,4 +139,7 @@ def health():
         # genuinely price in different units. Account-level totals have one
         # currency and this is it.
         "currency": config.CURRENCY_SYMBOL,
+        # v206: the open SSE stream count (additive). Each stream holds a
+        # gunicorn thread, so the browser probe records it with every result.
+        "sse_streams": _sse_streams(),
     })
