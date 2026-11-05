@@ -491,10 +491,10 @@ after bumping.
 No plan file may exceed 1500 lines. Split it into more `_N` parts (lettered
 `_2a`/`_2b`), never compress a task or split one across files, and afterwards
 confirm the `^### Task` sequence has no gap. From v197 a task is ≤ 20 KB
-(split: `<id>`/`<id>b`), a plan ≤ 20 tasks (`SCOPE`). A plan runs the full suite ONCE, as
-its own final verification task, never per task and never again after a clean
-merge; the per-task check is the one narrow test file (or `npm test --include`
-one spec). Full cadence: `document-conventions.md`.
+(split: `<id>`/`<id>b`), a plan ≤ 20 tasks (`SCOPE`). A plan never runs the full suite: the CI
+pipeline does on push to `main`. After pushing, watch the run (`gh run watch`) and fix failing
+tests alone until green; the per-task check is the one narrow test file (or `npm test --include`
+one spec). Detail: `document-conventions.md`, `working-conventions.md` § Pipeline watch.
 
 "Implement plan vN" with nothing more means: in a worktree. Reuse the plan's
 existing `.claude/worktrees/` worktree if one exists, else create it; implement
