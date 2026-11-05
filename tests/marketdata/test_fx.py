@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from swingbot import config
-from swingbot.core.marketdata import fx
+from swingbot.core.marketdata import fx, fx_daily
 
 
 def _frame(closes: dict[str, float]) -> pd.DataFrame:
@@ -19,8 +19,35 @@ def _frame(closes: dict[str, float]) -> pd.DataFrame:
                          "Close": values, "Volume": [0] * len(values)}, index=index)
 
 
+class FakeRates:
+    """fx_daily_rates as fx_daily.lookup reads it. No insert method: a write would raise."""
+
+    def __init__(self):
+        self.rows: list[dict] = []
+
+    def version(self, *, conn=None):
+        return len(self.rows), None
+
+    def all_rates(self, *, conn=None):
+        return sorted(self.rows, key=lambda r: (r["base"], r["account"], r["day"]))
+
+
+def stored(base, account, day, rate, bar_date):
+    return {"base": base, "account": account, "day": day, "rate": rate, "bar_date": bar_date}
+
+
+@pytest.fixture
+def table(monkeypatch):
+    """An empty fx_daily_rates; a test adds rows before its first fx_rate call."""
+    rates = FakeRates()
+    monkeypatch.setattr(fx_daily, "fx_daily_rate_repo", lambda: rates)
+    fx_daily.reset_memo()
+    yield rates
+    fx_daily.reset_memo()
+
+
 @pytest.fixture(autouse=True)
-def _isolated(monkeypatch):
+def _isolated(monkeypatch, table):
     monkeypatch.setattr(fx, "_frames", {})
     monkeypatch.setattr(fx, "_quote_codes", {})
     monkeypatch.setattr(fx, "_unknown_until", {})
@@ -51,10 +78,10 @@ def test_same_currency_is_identity_with_no_fetch(cache):
     assert refreshed == []
 
 
-def test_converts_at_the_exit_dates_close(cache):
+def test_converts_at_the_last_close_before_the_day(cache):
     frames, refreshed = cache
     frames["USDEUR=X"] = _frame({"2026-10-19": 0.91, "2026-10-20": 0.92, "2026-10-21": 0.93})
-    assert fx.fx_rate("USD", "EUR", date(2026, 10, 20)) == pytest.approx(0.92)
+    assert fx.fx_rate("USD", "EUR", date(2026, 10, 20)) == pytest.approx(0.91)
     assert refreshed == [("USDEUR=X", "daily")]
 
 
@@ -95,7 +122,7 @@ def test_a_missing_pair_is_none_never_one(cache):
 def test_an_unusable_close_is_none(cache, closes):
     frames, _ = cache
     frames["USDEUR=X"] = _frame(closes)
-    assert fx.fx_rate("USD", "EUR", date(2026, 10, 20)) is None
+    assert fx.fx_rate("USD", "EUR", date(2026, 10, 21)) is None
 
 
 @pytest.mark.parametrize("src,dst", [("", "EUR"), ("USD", ""), (None, "EUR"), ("USD", None)])
@@ -105,15 +132,15 @@ def test_an_unknown_code_is_none(cache, src, dst):
 
 def test_minor_units_scale_to_their_major_currency(cache):
     frames, _ = cache
-    frames["GBPEUR=X"] = _frame({"2026-10-20": 1.15})
+    frames["GBPEUR=X"] = _frame({"2026-10-19": 1.15})
     assert fx.fx_rate("GBp", "GBP", date(2026, 10, 20)) == pytest.approx(0.01)
     assert fx.fx_rate("GBp", "EUR", date(2026, 10, 20)) == pytest.approx(0.0115)
 
 
 def test_a_datetime_is_read_as_its_date(cache):
     frames, _ = cache
-    frames["USDEUR=X"] = _frame({"2026-10-20": 0.92})
-    assert fx.fx_rate("USD", "EUR", datetime(2026, 10, 20, 21, 5)) == pytest.approx(0.92)
+    frames["USDEUR=X"] = _frame({"2026-10-19": 0.91, "2026-10-20": 0.92})
+    assert fx.fx_rate("USD", "EUR", datetime(2026, 10, 20, 21, 5)) == pytest.approx(0.91)
 
 
 def test_a_failed_refresh_still_reads_what_the_cache_has(cache, monkeypatch):
@@ -124,7 +151,7 @@ def test_a_failed_refresh_still_reads_what_the_cache_has(cache, monkeypatch):
         raise RuntimeError("yahoo down")
 
     monkeypatch.setattr(fx.data_refresh, "refresh_symbol", boom)
-    assert fx.fx_rate("USD", "EUR", date(2026, 10, 20)) == pytest.approx(0.92)
+    assert fx.fx_rate("USD", "EUR", date(2026, 10, 21)) == pytest.approx(0.92)
 
 
 def test_a_loaded_pair_is_reused_within_the_ttl(cache, monkeypatch):
@@ -135,6 +162,35 @@ def test_a_loaded_pair_is_reused_within_the_ttl(cache, monkeypatch):
     for _ in range(3):
         fx.fx_rate("USD", "EUR", date(2026, 10, 20))
     assert len(refreshed) == 2
+
+
+def test_a_stored_row_wins_and_reads_no_frame(cache, table):
+    frames, refreshed = cache
+    frames["USDEUR=X"] = _frame({"2026-10-19": 0.91})
+    table.rows.append(stored("USD", "EUR", date(2026, 10, 20), 0.95, date(2026, 10, 19)))
+    assert fx.fx_rate("USD", "EUR", date(2026, 10, 20)) == pytest.approx(0.95)
+    assert refreshed == []
+
+
+def test_a_major_row_serves_a_minor_quote_with_its_scale(cache, table):
+    _, refreshed = cache
+    table.rows.append(stored("GBP", "EUR", date(2026, 10, 20), 1.15, date(2026, 10, 19)))
+    assert fx.fx_rate("GBp", "EUR", date(2026, 10, 20)) == pytest.approx(0.0115)
+    assert fx.fx_rate("GBp", "GBP", date(2026, 10, 20)) == pytest.approx(0.01)
+    assert refreshed == []
+
+
+def test_a_miss_falls_back_to_the_frame_by_the_same_rule_and_writes_nothing(cache, table):
+    frames, refreshed = cache
+    frames["USDEUR=X"] = _frame({"2026-10-19": 0.91, "2026-10-20": 0.92})
+    assert fx.fx_rate("USD", "EUR", date(2026, 10, 20)) == pytest.approx(0.91)
+    assert fx.fx_rate("USD", "EUR", date(2026, 10, 20), refresh=False) is None   # table only
+    assert table.rows == [] and refreshed == [("USDEUR=X", "daily")]
+
+
+def test_fallback_days_is_fx_dailys_and_the_old_scan_is_gone():
+    assert fx.FALLBACK_DAYS is fx_daily.FALLBACK_DAYS
+    assert not hasattr(fx, "_close_on_or_before")
 
 
 # -- account_currency_code ----------------------------------------------------
@@ -186,7 +242,7 @@ def test_quote_currency_code_survives_a_failed_lookup(monkeypatch):
 
 def test_a_pence_quoted_ticker_converts_at_one_hundredth_of_the_pound(cache, monkeypatch):
     frames, _ = cache
-    frames["GBPEUR=X"] = _frame({"2026-10-20": 1.15})
+    frames["GBPEUR=X"] = _frame({"2026-10-19": 1.15})
     monkeypatch.setattr(fx.data, "_provider_currency_code", lambda key: ("GBp", True))
     code = fx.quote_currency_code("VOD.L")
     assert code == "GBp"
