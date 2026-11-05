@@ -23,7 +23,7 @@ MASK = "<masked>"
 
 #: Modules whose module-level datetime/date/dt names the frozen clock replaces.
 #: test_clock_modules_cover_every_clock_read fails when the call path reads the
-#: clock from a module missing here. V205-16 appends swingbot.core.marketdata.fx_convert.
+#: clock from a module missing here. fx_convert reads Berlin today since V205-16.
 CLOCK_MODULES: tuple[str, ...] = (
     "swingbot.admin.api_v1.calendar",
     "swingbot.admin.api_v1.dashboard",
@@ -34,6 +34,7 @@ CLOCK_MODULES: tuple[str, ...] = (
     "swingbot.core.analytics.rank",
     "swingbot.core.analytics.snapshots",
     "swingbot.core.market.session",
+    "swingbot.core.marketdata.fx_convert",
     "swingbot.core.planning.account",
     "swingbot.core.tracking.performance",
 )
