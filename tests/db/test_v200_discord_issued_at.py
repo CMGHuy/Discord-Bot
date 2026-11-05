@@ -166,4 +166,4 @@ def scripts():
 def test_v200_001_sits_on_v201_001_and_is_the_single_head(scripts):
     assert (MIG.revision, MIG.down_revision) == ("v200_001", "v201_001")
     assert scripts.get_revision("v200_001").down_revision == "v201_001"
-    assert scripts.get_heads() == ["v200_001"]
+    assert len(scripts.get_heads()) == 1    # v204_001 now sits on top; its test pins the head
