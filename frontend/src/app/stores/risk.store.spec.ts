@@ -5,13 +5,15 @@ import {
 } from '@angular/common/http/testing';
 import {
   ApplicationRef,
+  Provider,
   Signal,
   WritableSignal,
+  computed,
   provideZonelessChangeDetection,
   signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
 import {
@@ -19,7 +21,10 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { DomainAvailability, Risk, RiskAvailability } from '../api/models';
+import {
+  DomainAvailability, MarketMeta, MarketStatus, Risk, RiskAvailability, SnapshotUpdate,
+} from '../api/models';
+import { LiveValuesStore } from './live-values.store';
 import { RiskStore } from './risk.store';
 
 /* NG49 — exposure, heat and the killswitch.
@@ -101,6 +106,33 @@ const RESPONSE: Risk = {
   correlation: { labels: ['AAPL', 'MSFT'], values: [[1, 0.5], [0.5, 1]] },
 };
 
+function fakeLive(snaps = signal<Record<string, SnapshotUpdate>>({})) {
+  const live = {
+    snaps,
+    status: signal<MarketStatus | null>({ session: 'regular', last_close_at: '2026-10-28T20:00:00Z',
+      stale_price_s: 120, stale_snapshot_s: 600, heartbeat: { beat_at: null, cadence_s: 30, stalled: false } }),
+    snapshot: (k: string) => computed(() => snaps()[k] ?? null),
+    quote: () => signal(null),
+    requestRefresh: vi.fn(),
+  };
+  return { live, provider: { provide: LiveValuesStore, useValue: live } };
+}
+
+function configure(extra: Provider[] = []): void {
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideHttpClient(
+        withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+      ),
+      provideHttpClientTesting(),
+      { provide: EventStream, useValue: new FakeEventStream() },
+      ...extra,
+      RiskStore,
+    ],
+  });
+}
+
 describe('RiskStore', () => {
   let store: InstanceType<typeof RiskStore>;
   let backend: HttpTestingController;
@@ -108,17 +140,7 @@ describe('RiskStore', () => {
 
   beforeEach(() => {
     events = new FakeEventStream();
-    TestBed.configureTestingModule({
-      providers: [
-        provideZonelessChangeDetection(),
-        provideHttpClient(
-          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
-        ),
-        provideHttpClientTesting(),
-        { provide: EventStream, useValue: events },
-        RiskStore,
-      ],
-    });
+    configure([fakeLive().provider, { provide: EventStream, useValue: events }]);
     store = TestBed.inject(RiskStore);
     store.load();
     backend = TestBed.inject(HttpTestingController);
@@ -416,17 +438,7 @@ describe('RiskStore balance and cap headroom (v195 §5.2)', () => {
   let backend: HttpTestingController;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [
-        provideZonelessChangeDetection(),
-        provideHttpClient(
-          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
-        ),
-        provideHttpClientTesting(),
-        { provide: EventStream, useValue: new FakeEventStream() },
-        RiskStore,
-      ],
-    });
+    configure([fakeLive().provider]);
     store = TestBed.inject(RiskStore);
     backend = TestBed.inject(HttpTestingController);
   });
@@ -507,5 +519,95 @@ describe('RiskStore balance and cap headroom (v195 §5.2)', () => {
     store.load();
     respond({ heat: { open_pct: 3, cap_pct: null, utilisation_pct: null } });
     expect(store.headroomPct()).toBeNull();
+  });
+});
+
+/* -- v204 -- the risk snapshot clock, Refresh scope and unavailable reasons -- */
+
+describe('RiskStore snapshot (v204)', () => {
+  let backend: HttpTestingController;
+  const tick = () => TestBed.inject(ApplicationRef).tick();
+  const META: MarketMeta = {
+    as_of: '2026-10-29', refreshing: false, stale_count: 0, missing_count: 1, incomplete: true,
+    computed_at: '2026-10-29T14:00:00Z', stale_inputs: false, source: 'snapshot', error: null,
+  };
+  const upd = (computed_at: string | null, refreshing = false): SnapshotUpdate =>
+    ({ key: 'risk', computed_at, stale_inputs: false, refreshing, error: null });
+  const risk = (body: Partial<Risk> = {}) => {
+    backend.expectOne('/api/v1/risk').flush({ ...RESPONSE, ...body });
+    backend.expectOne('/api/v1/dashboard').flush({ account_balance: 10_000 });
+  };
+  const setup = (extra: Provider[]) => {
+    TestBed.resetTestingModule();
+    configure(extra);
+    backend = TestBed.inject(HttpTestingController);
+    return TestBed.inject(RiskStore);
+  };
+
+  it('refetches once when the risk snapshot lands newer', () => {
+    const { live, provider } = fakeLive();
+    const store = setup([provider]);
+    store.load(); tick(); risk({ computed_at: '2026-10-29T14:00:00Z' });
+    live.snaps.set({ risk: upd('2026-10-29T14:00:00Z') }); tick();
+    backend.expectNone('/api/v1/risk');
+    live.snaps.set({ risk: upd('2026-10-29T14:05:00Z') }); tick();
+    backend.expectOne('/api/v1/risk');
+  });
+
+  it('adds no load at creation when a snapshot is already cached', () => {
+    const { live, provider } = fakeLive();
+    live.snaps.set({ risk: upd('2026-10-29T14:05:00Z') });
+    const store = setup([provider]);
+    tick();
+    backend.expectNone('/api/v1/risk');          // only the route's own load() may fetch
+    expect(store.data()).toBeNull();
+  });
+
+  it('meta takes refreshing from the live snapshot', () => {
+    const { live, provider } = fakeLive();
+    const store = setup([provider]);
+    store.load(); tick(); risk({ market_meta: META, computed_at: '2026-10-29T14:00:00Z' });
+    live.snaps.set({ risk: upd(null, true) });
+    expect(store.meta()?.refreshing).toBe(true);
+  });
+
+  it('positionTickers are the unique upper-case position tickers', () => {
+    const store = setup([fakeLive().provider]);
+    store.load(); tick();
+    const base = RESPONSE.positions![0];
+    risk({ positions: [
+      { ...base, ticker: 'AAPL' }, { ...base, ticker: 'aapl' }, { ...base, ticker: 'MSFT' },
+    ] });
+    expect(store.positionTickers()).toEqual(['AAPL', 'MSFT']);
+  });
+
+  it("accountBalance prefers the risk body's account balance", () => {
+    const store = setup([fakeLive().provider]);
+    store.load(); tick();
+    risk({ account: { balance: 12_500, currency: 'USD' } });
+    expect(store.accountBalance()).toBe(12_500);
+    store.load(); tick();
+    risk({ account: undefined });
+    expect(store.accountBalance()).toBe(10_000);
+  });
+
+  it('correlationNote names the reason for a null matrix', () => {
+    const store = setup([fakeLive().provider]);
+    store.load(); tick();
+    risk({ correlation: { labels: ['AAPL'], values: null, reason: 'insufficient_overlap' } as Risk['correlation'] });
+    expect(store.correlationNote()).toBe('unavailable: fewer than 2 overlapping bars');
+    store.load(); tick();
+    risk();
+    expect(store.correlationNote()).toBeNull();
+  });
+
+  it('betaNote reads zero_variance', () => {
+    const store = setup([fakeLive().provider]);
+    store.load(); tick();
+    risk({ availability: { ...AVAILABILITY, beta_spy: 'zero_variance' } as RiskAvailability });
+    expect(store.betaNote()).toBe('unavailable: benchmark did not move');
+    store.load(); tick();
+    risk({ availability: { ...AVAILABILITY, beta_spy: OK } as RiskAvailability });
+    expect(store.betaNote()).toBeNull();
   });
 });

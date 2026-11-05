@@ -3,6 +3,7 @@ import {
   patchState,
   signalStore,
   withComputed,
+  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
@@ -14,8 +15,12 @@ import { Observable, defer } from 'rxjs';
 
 import { routeRequest } from '../routing/route-request';
 import {
-  Correlation, Killswitch, Risk, RiskAvailability, RiskMetrics, RiskPosition, SectorHeat,
+  Correlation, Killswitch, Risk, RiskAvailability, RiskBarsMeta, RiskFxMeta, RiskMetrics, RiskPosition,
+  SectorHeat,
 } from '../api/models';
+import { availabilityReason, unavailableLabel } from '../ui/lower-bound';
+import { LiveValuesStore } from './live-values.store';
+import { followSnapshot, snapshotMeta } from './snapshot-follow';
 
 function sumKnown(values: readonly (number | null | undefined)[]): number | null {
   const known = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
@@ -202,6 +207,32 @@ export const RiskStore = signalStore(
     metrics: computed<RiskMetrics | null>(() => data()?.metrics ?? null),
     correlation: computed<Correlation | null>(() => data()?.correlation ?? null),
   })),
+  withComputed((store, live = inject(LiveValuesStore)) => {
+    /** v204: the Risk body's market meta, `refreshing`/`error` overlaid from
+     *  the live risk snapshot. Null for an older server. */
+    const meta = computed(() => snapshotMeta(store.data()?.market_meta, live.snapshot('risk')()));
+    return {
+    meta,
+    computedAt: computed(() => store.data()?.computed_at ?? null),
+    bars: computed<RiskBarsMeta | null>(() => store.data()?.bars_meta ?? null),
+    fx: computed<RiskFxMeta | null>(() => store.data()?.fx_meta ?? null),
+    missingCount: computed(() => meta()?.missing_count ?? 0),
+    lowerBound: computed(() => new Set(store.data()?.lower_bound ?? [])),
+    positionTickers: computed(() =>
+      [...new Set((store.data()?.positions ?? []).map((p) => p.ticker.toUpperCase()))]),
+    /** The Risk body's own balance wins; the `/dashboard` read stays as the
+     *  fallback for an older server. */
+    accountBalance: computed(() => finiteOrNull(store.data()?.account?.balance) ?? store.balance()),
+    correlationNote: computed(() => {
+      const c = store.data()?.correlation;
+      return c && c.values === null ? unavailableLabel(c.reason) : null;
+    }),
+    betaNote: computed(() => {
+      const r = availabilityReason(store.data()?.availability?.beta_spy);
+      return r === null ? null : unavailableLabel(r);
+    }),
+    };
+  }),
   withMethods((store, api = inject(ApiClient)) => {
     /** Fire and forget: the route never waits for it, and a failure keeps the
      *  last balance (null before the first), so the KPIs fall back to
@@ -255,5 +286,12 @@ export const RiskStore = signalStore(
       },
       dismissCommandError(): void { patchState(store, { commandError: null }); },
     };
+  }),
+  withHooks({
+    onInit(store) {
+      followSnapshot(() => 'risk', () => store.computedAt(), () => {
+        if (store.data() !== null) store.load();
+      });
+    },
   }),
 );
