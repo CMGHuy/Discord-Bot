@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
+
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
@@ -5,6 +8,8 @@ import {
 } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -13,6 +18,7 @@ import {
   loadingInterceptor,
 } from '../api/interceptors';
 import { PreferencesStore, WRITE_DEBOUNCE_MS } from './preferences.store';
+import { SessionStore } from './session.store';
 
 /* NG32 — column-picker persistence, server-side. */
 
@@ -33,6 +39,7 @@ describe('PreferencesStore', () => {
         provideHttpClientTesting(),
       ],
     });
+    patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: 'admin', role: 'admin' });
     store = TestBed.inject(PreferencesStore);
     backend = TestBed.inject(HttpTestingController);
   });
@@ -178,5 +185,64 @@ describe('PreferencesStore', () => {
     // Losing a column preference is not worth a toast over the workspace
     // someone is reading, and this session stays correct either way.
     expect(store.columns('trades')).toEqual(['a']);
+  });
+
+  /* -- v207: viewers read the admin's record and never write it ---------- */
+
+  describe('as a viewer (v207)', () => {
+    const asViewer = () =>
+      patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: 'viewer1', role: 'viewer' });
+    const noWrite = () => backend.expectNone((req) => req.method !== 'GET');
+
+    it('still reads the shared record', () => {
+      asViewer();
+      loadWith({ tables: { trades: ['ticker'] } });
+      expect(store.columns('trades')).toEqual(['ticker']);
+    });
+
+    it('keeps column changes in memory and never saves them', () => {
+      asViewer();
+      loadWith({ tables: { trades: ['ticker'] } });
+      store.setColumns('trades', ['ticker', 'pnl']);
+      store.setColumns('analytics', ['edge']);
+      store.resetColumns('analytics');
+      store.update((prefs) => ({ ...prefs, 'shell.zoom': 110 }));
+      vi.advanceTimersByTime(WRITE_DEBOUNCE_MS * 3);
+      noWrite();
+      expect(store.columns('trades')).toEqual(['ticker', 'pnl']);
+      expect(store.columns('analytics')).toBeNull();
+      expect(store.values()).toMatchObject({ 'shell.zoom': 110 });
+    });
+
+    it('writes nothing on flush either', () => {
+      asViewer();
+      loadWith({});
+      store.setColumns('trades', ['ticker']);
+      store.flush();
+      vi.advanceTimersByTime(WRITE_DEBOUNCE_MS * 3);
+      noWrite();
+    });
+
+    it('checks the role when the write fires, not when it was queued', () => {
+      loadWith({});
+      store.setColumns('trades', ['ticker']);
+      asViewer();
+      vi.advanceTimersByTime(WRITE_DEBOUNCE_MS);
+      noWrite();
+    });
+  });
+
+  it('is the only caller of savePreferences outside the client itself (v207)', () => {
+    const root = join(process.cwd(), 'src/app');
+    const walk = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      return statSync(path).isDirectory() ? walk(path) : [path];
+    });
+    const callers = walk(root)
+      .filter((path) => path.endsWith('.ts') && !path.endsWith('.spec.ts'))
+      .filter((path) => readFileSync(path, 'utf8').includes('savePreferences'))
+      .map((path) => relative(root, path).replaceAll('\\', '/'))
+      .sort();
+    expect(callers).toEqual(['api/api-client.ts', 'stores/preferences.store.ts']);
   });
 });

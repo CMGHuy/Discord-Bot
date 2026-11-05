@@ -9,6 +9,7 @@ import {
 
 import { ApiClient } from '../api/api-client';
 import { Preferences } from '../api/models';
+import { SessionStore } from './session.store';
 
 /** How long a burst of changes settles before it is written. */
 export const WRITE_DEBOUNCE_MS = 750;
@@ -29,11 +30,14 @@ interface PreferencesSlice {
  * `settings` subscription: this is the one piece of state whose only writer
  * is this browser, so re-reading it could only ever overwrite what the user
  * just did with what they did a moment earlier.
+ *
+ * Viewers (v207) read the admin's shared record (spec Decision 5) and their
+ * edits last for this page life only: nothing is ever written for them.
  */
 export const PreferencesStore = signalStore(
   { providedIn: 'root' },
   withState<PreferencesSlice>({ data: {}, loaded: false }),
-  withMethods((store, api = inject(ApiClient)) => {
+  withMethods((store, api = inject(ApiClient), session = inject(SessionStore)) => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let inFlight: Observable<void> | null = null;
 
@@ -45,16 +49,21 @@ export const PreferencesStore = signalStore(
      * write is a whole-object replace, so only the last one carries
      * anything the others did not.
      */
+    // Role is read when the write fires, not when it was queued (v207).
+    const write = () => {
+      if (!session.isAdmin()) return;
+      api.savePreferences(store.data()).subscribe({
+        // Silent on failure, deliberately. Losing a column preference is
+        // not worth a toast over the workspace someone is reading, and
+        // the local state stays correct for this session either way.
+        error: () => undefined,
+      });
+    };
     const scheduleWrite = () => {
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        api.savePreferences(store.data()).subscribe({
-          // Silent on failure, deliberately. Losing a column preference is
-          // not worth a toast over the workspace someone is reading, and
-          // the local state stays correct for this session either way.
-          error: () => undefined,
-        });
+        write();
       }, WRITE_DEBOUNCE_MS);
     };
 
@@ -143,7 +152,7 @@ export const PreferencesStore = signalStore(
         if (timer === null) return;
         clearTimeout(timer);
         timer = null;
-        api.savePreferences(store.data()).subscribe({ error: () => undefined });
+        write();
       },
     };
   }),
