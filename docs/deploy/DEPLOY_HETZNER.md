@@ -317,6 +317,31 @@ pages only read what it stored.
 - `scripts/ops/rollback_to.sh` stops it with the other writers and starts it only
   when the target image has `swingbot.refresher`.
 
+### v205: daily FX rates (`fx_daily_rates`)
+
+The admin converts money at one FX rate per currency pair per Berlin day,
+stored in `fx_daily_rates` (revision `v205_001`). The refresher writes the
+day's row from 08:00 Berlin by itself. Past days are filled once, by a
+backfill, after the deploy that brings the revision:
+
+1. Deploy as usual. `deploy.sh` runs `alembic upgrade head` after
+   `up --wait`; until it has, the admin shows converted amounts as
+   `fx_missing` and the refresher logs `fx snap failed` once per cycle. Both
+   recover by themselves.
+2. Check the revision:
+   `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot alembic current"`
+   prints `v205_001 (head)` or a later head.
+3. Dry run:
+   `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T admin python scripts/ops/backfill_fx_daily_rates.py --dry-run"`.
+   It prints `<PAIR> planned=<n>` per pair and the total, and writes nothing.
+4. Backfill: the same command without `--dry-run`. It prints `written=<n>`.
+   A re-run is safe (insert-if-absent) and prints `written=0`.
+
+Rollback: redeploy the previous image (§ Rolling back). The old code never
+reads the table, so it can stay. To remove it, run
+`docker compose exec -T bot alembic downgrade <the revision v205_001 revises>`
+(`v200_001` when v205 was written).
+
 ## Accessing the admin UI
 
 The admin UI runs on port `1234` (or `$ADMIN_PORT`), published on
