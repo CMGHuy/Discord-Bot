@@ -1,9 +1,14 @@
 """v104 stop scope and ceiling helpers for structural stops."""
 from __future__ import annotations
 
+import logging
+
 from swingbot.core.market.strategy_types import (HORIZONS, SHORT_STRATEGIES,
                                                   STRUCTURAL_DROP_STRATEGIES)
 from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, capped_planned_loss_pct
+from swingbot.core.infra.swallowed import swallowed
+
+log = logging.getLogger(__name__)
 
 CAP = "cap"
 DROP = "drop"
@@ -99,7 +104,8 @@ def band_sizing_verdict(plan, sizing_fn=None) -> str | None:
         sizing_fn = gap_sizing.size_for_plan
     try:
         sizing = sizing_fn(plan)
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "scan.stop_scope.band_sizing_verdict", exc, level=logging.DEBUG)
         return "risk_sizing"
     if not sizing or sizing.get("mode") != "risk_pct" or gap_sizing.BAND_KEY not in sizing:
         return "risk_sizing"

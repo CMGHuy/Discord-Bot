@@ -3,12 +3,16 @@
 Pure arithmetic: no config reads or frame writes. The caller supplies the
 creating bar's completed frame; ATR is never the horizon-scaled floor.
 """
+import logging
 import math
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 from typing import NamedTuple
 
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market.indicators import atr
 from swingbot.core.risk_limits import planned_loss_pct
+
+log = logging.getLogger(__name__)
 
 ATR_PERIOD = 14
 BAND_CEILING_ATR = 2.0
@@ -42,7 +46,8 @@ def raw_atr14_pct(df, entry: float) -> float | None:
         return None
     try:
         value = float(atr(df, ATR_PERIOD).iloc[-1])
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "scan.atr_band.raw_atr14_pct", exc, level=logging.DEBUG)
         return None
     if not math.isfinite(value) or value <= 0:
         return None
