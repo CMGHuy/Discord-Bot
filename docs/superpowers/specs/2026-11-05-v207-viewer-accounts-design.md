@@ -71,7 +71,8 @@ like its neighbours (Postgres-only per `schema-evolution.md`), exposing
 
 **Before the migration has run** (the containers start before
 `alembic upgrade head` in `deploy/deploy.sh`), a lookup that raises
-`UndefinedTable` is treated as "no such user": logged once as a warning,
+`UndefinedTable` is caught in the `admin_users` repository and treated as
+"no such user": logged once as a warning,
 answered as invalid credentials, never a 500. The `.env` admin is checked
 first and never touches the table, so the admin is unaffected in that window.
 
@@ -159,8 +160,9 @@ message names the offending field, as other v1 modules do. Each mutation logs
 - **Session store** exposes `role` and `isAdmin` signals from `GET /session`.
 - **`adminGuard`** (beside `shell/auth.guard.ts`) on every `system/**` route;
   a viewer is redirected to `/dashboard`.
-- **Nav:** the System entry is hidden for viewers, in every nav layout
-  (desktop rail, tablet, mobile).
+- **Nav:** the System entry is hidden for viewers in all three consumers of
+  `shell/nav.ts`: the shell rail, the mobile More sheet and the command
+  palette.
 - **`*ifAdmin` structural directive** wraps every write control on viewer-
   readable pages. Known controls (the plan's brief completes this list by
   tracing every mutating `api-client.ts` method to its callers):
@@ -170,8 +172,8 @@ message names the offending field, as other v1 modules do. Each mutation logs
   | trades workspace, trade detail | close / cancel / delete / note edit | `/trades/<id>/close`, `/cancel`, `DELETE /trades/<id>`, `/note` |
   | trades workspace | clear-open / clear-history / close-open | `/trades/clear-open`, `/clear-history`, `/close-open` |
   | watchlist workspace | add / remove ticker | `/watchlist/tickers` |
-  | shell `KillswitchChip` (`shell/shell.ts`) and Risk tab | killswitch toggle | `/risk/killswitch` |
-  | callers of `live-values`, `system`, `risk` stores | market refresh; scan trigger/stop/pause/resume rendered outside System | `/market/refresh`, `/system/scan/*` |
+  | Risk workspace (`workspaces/risk/risk.ts`) | killswitch Engage / Release buttons (the shell `KillswitchChip` is a read-only link and stays) | `/risk/killswitch` |
+  | market-refresh caller (component per the brief, table 3d) | market refresh | `/market/refresh` |
   | Insights → Analytics | Tuning tab (whole tab hidden, Decision 3) | `/jobs/tune`, `/analytics/tuning/proposals` |
 
   The inventory lives as a checked-in list (`frontend/src/app/auth/write-calls.ts`:
@@ -182,8 +184,9 @@ message names the offending field, as other v1 modules do. Each mutation logs
   persistence path for column pickers or data tables follows the same rule and
   is covered by the same spec.
 - **Read-only badge** in the shell header for viewers: "Read-only · <username>".
-- **Users page** at `/system/users`, a tab in the System workspace following
-  its existing tab pattern: table on desktop/tablet, stacked cards on mobile,
+- **Users page** as a System workspace tab, `/system?tab=users`, added to
+  `SYSTEM_TABS` (`stores/system.store.ts`) like the existing tabs (System tabs
+  are query params, not routes): table on desktop/tablet, stacked cards on mobile,
   touch-sized row actions (disable/enable, reset password, delete with a
   confirm step), create-user and reset-password dialogs, and an empty state
   ("No viewer accounts yet"). Designed and checked at mobile, tablet and
@@ -196,7 +199,10 @@ message names the offending field, as other v1 modules do. Each mutation logs
 
 The SSE endpoint `GET /api/v1/events` (`swingbot/admin/events/stream.py`) is
 outside `/system`, so viewers receive it. Today it authenticates once at
-connect. It changes to re-run `resolve_principal()` on each loop iteration
+connect, and its generator has no request context, so the route captures the
+session's principal fields at connect and passes an optional re-check callable
+into the generator (existing direct-call tests keep working). It changes to
+re-check the principal on each loop iteration
 (heartbeat cadence) and close the stream when the principal is gone, so a
 disabled, deleted or password-reset viewer is cut off within one heartbeat and
 gets a 401 on reconnect. The plan also verifies event payloads carry no
@@ -231,7 +237,9 @@ Backend (suite `admin`, against the shared `swing-db` after `/replicate-prod-db`
 - `GET /session` returns `role` for both principals.
 - Alembic revision upgrades and downgrades cleanly.
 - With an empty `admin_users` table, the existing admin test suite passes
-  unchanged (the off state is today's behaviour).
+  unchanged (the off state is today's behaviour) — **except** the exact-shape
+  asserts on `GET /session` (`tests/admin/test_api_v1_session.py` and the
+  frontend session spec), which are updated for the added `role` field.
 
 Frontend: specs for `adminGuard`, `*ifAdmin` (renders for admin, not for
 viewer), nav hiding, Tuning tab and `KillswitchChip` hidden, the write-calls
