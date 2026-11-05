@@ -33,6 +33,12 @@ const RAW_BUTTON_ALLOWLIST = new Map<string, string>([
   // glyph and placeholder text across the sheet's full width. It opens the
   // palette rather than taking input, so it is not a text input (v195 V195-18).
   ['shell/more-sheet.ts', 'class="search"'],
+  // v203 shell controls: each is a chip, an edge tab or a full-width strip with its own
+  // geometry (dot + words, a rotated 40px tab, a state line), not a labelled button. They pad
+  // to 44px with .sb-hit and carry their own accessible names.
+  ['shell/alarm-chip.ts', 'class="alarm-chip sb-hit"'],
+  ['shell/live/live-edge-tab.ts', 'class="edge-tab sb-hit"'],
+  ['shell/live/live-strip.ts', 'class="live-strip sb-hit"'],
 ]);
 
 describe('no call site hand-rolls a button', () => {

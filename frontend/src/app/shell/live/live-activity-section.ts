@@ -93,7 +93,7 @@ let nextId = 0;
     <section class="live-section" [attr.aria-labelledby]="headingId">
       <h2 class="title" [id]="headingId">Activity</h2>
       @switch (view().state) {
-        @case ('loading') { <p class="muted" role="status">Loading…</p> }
+        @case ('loading') { <p class="dim" role="status">Loading…</p> }
         @case ('unavailable') { <sb-panel-error message="Activity unavailable" (retry)="retry.emit()" /> }
         @default {
           @if (view().scanWarning; as warning) { <p class="scan-warning warn" role="status">{{ warning }}</p> }
@@ -133,7 +133,7 @@ let nextId = 0;
     .tone-negative .dot { background: var(--neg); }
     .tone-negative .r { color: var(--neg); }
     .tone-warning .dot { background: var(--warn); }
-    .muted, .quiet, .faint { color: var(--text-muted); }
+    .dim, .quiet, .faint { color: var(--text-muted); }
     .faint { font-size: var(--text-micro); }
     .warn { color: var(--warn); }
     .link { display: inline-flex; align-items: center; min-height: var(--control-h); color: var(--accent); font-size: var(--text-table); text-decoration: none; }

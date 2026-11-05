@@ -59,7 +59,7 @@ describe('LiveAwaitingSection', () => {
   it('shows the count, the next expiry and a link to the pending plans in the Book', () => {
     const el = mount(awaiting());
     expect(text(el.querySelector('.figure')!)).toBe('3 awaiting order');
-    expect(text(el.querySelector('.note')!)).toBe('Next expires 30 Oct');
+    expect(text(el.querySelector('.aside-note')!)).toBe('Next expires 30 Oct');
     const link = el.querySelector<HTMLAnchorElement>('a.link')!;
     expect(link.getAttribute('href')).toBe('/trades?status=PENDING');
     expect(link.textContent!.trim()).toBe('Show in Book ›');
@@ -71,7 +71,7 @@ describe('LiveAwaitingSection', () => {
     const el = mount(awaiting({ count: 0, next_expiry: null }));
     expect(text(el.querySelector('.figure')!)).toBe('0 awaiting order');
     expect(el.querySelector('a.link')).toBeNull();
-    expect(el.querySelector('.note')).toBeNull();
+    expect(el.querySelector('.aside-note')).toBeNull();
   });
 
   it('says loading, and says unavailable with the reason', () => {

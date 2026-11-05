@@ -76,7 +76,7 @@ describe('LiveHeatSection', () => {
     expect(meter.getAttribute('aria-label')).toBe('Portfolio heat against the cap');
     expect(el.querySelector<HTMLElement>('.fill')!.style.width).toBe('70%');
     expect(text(el.querySelector('.room')!)).toBe('Room 883 € · 1.8% under the cap');
-    expect(text(el.querySelector('.note')!)).toBe('incl. resting orders');
+    expect(text(el.querySelector('.aside-note')!)).toBe('incl. resting orders');
     expect(el.querySelectorAll('.warn').length).toBe(0);
   });
 

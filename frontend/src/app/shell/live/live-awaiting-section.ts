@@ -58,7 +58,7 @@ let nextId = 0;
         @default {
           <p class="figure"><span class="count">{{ view().count }}</span> awaiting order</p>
           @if (view().state === 'ok') {
-            @if (view().expiry; as expiry) { <p class="note">Next expires {{ expiry }}</p> }
+            @if (view().expiry; as expiry) { <p class="aside-note">Next expires {{ expiry }}</p> }
             <a class="link sb-hit" routerLink="/trades" [queryParams]="pendingParams">Show in Book ›</a>
           }
           <p class="as-of" [class.warn]="view().stale">As of {{ view().asOf }}</p>
@@ -72,7 +72,7 @@ let nextId = 0;
     p { margin: 0 0 var(--space-4); font-size: var(--text-table); overflow-wrap: anywhere; }
     .figure { color: var(--text-secondary); }
     .count { color: var(--text); font-size: var(--text-body); font-weight: 600; font-variant-numeric: tabular-nums; }
-    .note, .muted, .as-of { color: var(--text-muted); }
+    .aside-note, .muted, .as-of { color: var(--text-muted); }
     .as-of.warn { color: var(--warn); }
     .link { display: inline-flex; align-items: center; min-height: var(--control-h); color: var(--accent); font-size: var(--text-table); text-decoration: none; }
     .link:hover { text-decoration: underline; }

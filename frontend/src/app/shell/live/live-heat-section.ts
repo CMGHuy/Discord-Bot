@@ -93,7 +93,7 @@ let nextId = 0;
           </div>
           <p class="util" [class.warn]="warn()">{{ view().utilisation }}</p>
           <p class="room">{{ view().room }}</p>
-          @if (view().resting) { <p class="note">incl. resting orders</p> }
+          @if (view().resting) { <p class="aside-note">incl. resting orders</p> }
           <p class="as-of" [class.warn]="view().stale">As of {{ view().asOf }}</p>
         }
       }
@@ -105,9 +105,9 @@ let nextId = 0;
     p { margin: 0 0 var(--space-4); font-size: var(--text-table); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
     .at-risk { color: var(--text); }
     .util, .room { color: var(--text-secondary); }
-    .note, .muted, .as-of { color: var(--text-muted); }
+    .aside-note, .muted, .as-of { color: var(--text-muted); }
     .warn, .as-of.warn { color: var(--warn); }
-    .track { height: 6px; margin: var(--space-6) 0; border-radius: 3px; background: var(--border); overflow: hidden; }
+    .track { height: 6px; margin: var(--space-6) 0; border-radius: var(--radius-sm); background: var(--border); overflow: hidden; }
     .fill { display: block; height: 100%; background: var(--text-muted); }
     .fill.warn { background: var(--warn); }
   `,
