@@ -6,15 +6,25 @@ and after numbers come from one instrument. Spec:
 docs/superpowers/specs/2026-11-05-v206-admin-under-load-design.md, Goal
 (Measurement rules) and P1-a.
 
+    python scripts/ops/admin_browser_probe.py --date 2026-11-03 --out .superpowers/probe/<run> [--image-tag TAG]
+
 The top half is pure aggregation, unit-tested. The browser loop imports
 Playwright lazily (it is not a declared dependency), so importing this
 module never needs it.
 """
 from __future__ import annotations
 
+import argparse
+import json
 import math
 import re
+import subprocess
+import sys
+import time
+from datetime import date, datetime
+from pathlib import Path
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
 
 API_PREFIX = "/api/v1"
 #: Shell and polling endpoints; every other /api path is "heavy" (spec P1-a).
@@ -213,3 +223,252 @@ def render_markdown(report: dict) -> str:
               "| Round | Route | Settle s | Requests | Per min | First heavy | TTFB ms | Scan |",
               "|---|---|---|---|---|---|---|---|", *(_page_line(p) for p in report["pages"])]
     return "\n".join(lines) + "\n"
+
+
+# --- the browser loop and the CLI (V206-2) -----------------------------------
+
+ROOT = Path(__file__).resolve().parents[2]
+BERLIN = ZoneInfo("Europe/Berlin")
+DEFAULT_BASE = "https://bomeo-capital.com"
+#: Spec P1-a, in this fixed order; production serves the SPA at the root path.
+ROUTES = ("dashboard", "trades", "trades/calendar", "trades/calendar/{date}", "trades/cancels",
+          "watchlist", "risk", "insights/analytics", "insights/research", "insights/reports",
+          "system", "system/versions")
+QUIET_S = 2.0
+IDLE_ROUTE = "dashboard"
+IDLE_WINDOW_S = 120.0
+VIEWPORT = {"width": 1440, "height": 900}
+_ENV_LINE = re.compile(r"\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$")
+
+
+class LoginFailed(Exception):
+    """No session: carries a reason (an HTTP status), never a credential."""
+
+
+def routes(day: str) -> list[str]:
+    return [route.format(date=day) for route in ROUTES]
+
+
+def _iso_date(text: str) -> str:
+    date.fromisoformat(text)  # ValueError -> argparse rejects the value
+    return text
+
+
+def parse_args(argv=None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Browser probe of the admin under load (v206).")
+    parser.add_argument("--date", required=True, type=_iso_date, help="day for trades/calendar/<date>")
+    parser.add_argument("--out", required=True, type=Path, help="directory for probe.json and probe.md")
+    parser.add_argument("--base", default=DEFAULT_BASE)
+    parser.add_argument("--rounds", type=int, default=3)
+    parser.add_argument("--cap", type=float, default=90.0, help="settle cap per page, seconds")
+    parser.add_argument("--image-tag", default="", help="production image tag, recorded in the result")
+    return parser.parse_args(argv)
+
+
+def default_env_path() -> Path:
+    """`.env` in this checkout, else the main checkout's (a worktree has none)."""
+    local = ROOT / ".env"
+    if local.exists():
+        return local
+    try:
+        common = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True, text=True, timeout=10, check=True).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return local
+    return Path(common).parent / ".env"
+
+
+def load_credentials(env_path: Path) -> tuple[str, str]:
+    """ADMIN_USERNAME / ADMIN_PASSWORD from `.env`. Never printed, logged or written."""
+    env = {}
+    for line in Path(env_path).read_text(encoding="utf-8").splitlines():
+        match = _ENV_LINE.match(line)
+        if match:
+            env[match.group(1)] = match.group(2).strip('"').strip("'")
+    user, password = env.get("ADMIN_USERNAME"), env.get("ADMIN_PASSWORD")
+    if not user or not password:
+        raise LoginFailed("ADMIN_USERNAME or ADMIN_PASSWORD missing from .env")
+    return user, password
+
+
+def _git_sha() -> str:
+    try:
+        return subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+                              capture_output=True, text=True, timeout=10, check=True).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def build_meta(args, now=None) -> dict:
+    now = now or datetime.now(BERLIN)
+    return {"probe_sha": _git_sha(), "image_tag": args.image_tag or None,
+            "berlin_time": now.isoformat(timespec="seconds"), "date": args.date, "base": args.base,
+            "rounds": args.rounds, "cap_s": args.cap, "quiet_s": QUIET_S}
+
+
+def write_outputs(out_dir: Path, raw: dict) -> dict:
+    report = summarise(raw)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "probe.json").write_text(json.dumps({"raw": raw, "report": report}, indent=1), encoding="utf-8")
+    (out_dir / "probe.md").write_text(render_markdown(report), encoding="utf-8")
+    return report
+
+
+def _is_api(url: str) -> bool:
+    return "/api/" in url and "/api/v1/events" not in url
+
+
+def _response_facts(request) -> dict:
+    timing = request.timing
+    facts = {"ttfb_ms": None, "total_ms": round(timing["responseEnd"], 1)}
+    if timing["responseStart"] > 0:
+        facts["ttfb_ms"] = round(timing["responseStart"] - timing["requestStart"], 1)
+    try:
+        response = request.response()
+        if response is not None:
+            facts["status"] = response.status
+            facts["server_timing"] = response.headers.get("server-timing")
+            facts["bytes"] = len(response.body()) if response.status == 200 else None
+    except Exception:  # noqa: BLE001 -- a closed page loses the facts, never the call
+        pass
+    return facts
+
+
+class _Recorder:
+    """One page's /api calls. The live loop only collects; `settle_time` decides."""
+
+    def __init__(self, clock=time.monotonic):
+        self._clock = clock
+        self.t0 = clock()
+        self.calls: dict[int, dict] = {}
+
+    def reset(self) -> None:
+        self.t0, self.calls = self._clock(), {}
+
+    def _now(self) -> float:
+        return round(self._clock() - self.t0, 3)
+
+    def in_flight(self) -> int:
+        return sum(1 for call in self.calls.values() if call["end_s"] is None)
+
+    def on_request(self, request) -> None:
+        if _is_api(request.url):
+            self.calls[id(request)] = {"url": request.url, "status": None, "start_s": self._now(), "end_s": None,
+                                       "ttfb_ms": None, "total_ms": None, "bytes": None, "server_timing": None}
+
+    def on_finished(self, request) -> None:
+        call = self.calls.get(id(request))
+        if call is not None:
+            call["end_s"] = self._now()
+            call.update(_response_facts(request))
+
+    def on_failed(self, request) -> None:
+        call = self.calls.get(id(request))
+        if call is not None:
+            call["end_s"] = self._now()
+
+
+def _wait_quiet(page, recorder: _Recorder, cap_s: float) -> float:
+    """Poll until nothing has been in flight for QUIET_S, or the cap. Returns the window (s)."""
+    quiet_since = None
+    while time.monotonic() - recorder.t0 < cap_s:
+        page.wait_for_timeout(100)
+        if recorder.in_flight():
+            quiet_since = None
+        elif quiet_since is None:
+            quiet_since = time.monotonic()
+        elif time.monotonic() - quiet_since >= QUIET_S:
+            break
+    return round(time.monotonic() - recorder.t0, 3)
+
+
+def _visit(page, recorder: _Recorder, url: str, cap_s: float) -> dict:
+    recorder.reset()
+    try:
+        page.goto(url, wait_until="load", timeout=int(cap_s * 1000))
+    except Exception as exc:  # noqa: BLE001 -- a page that never loads is `cap`, never dropped
+        print(f"probe: {url} did not load ({type(exc).__name__})", file=sys.stderr)
+    window = _wait_quiet(page, recorder, cap_s)
+    calls = list(recorder.calls.values())
+    return {"final_url": page.url, "window_s": window, "calls": calls,
+            "settle_s": settle_time([(c["start_s"], c["end_s"]) for c in calls], QUIET_S, cap_s)}
+
+
+def _get_json(context, url: str) -> dict | None:
+    try:
+        response = context.request.get(url, timeout=30_000)
+        return response.json() if response.ok else None
+    except Exception:  # noqa: BLE001 -- an unreadable sample is recorded as unknown
+        return None
+
+
+def _scan_sample(context, base: str) -> bool | None:
+    body = _get_json(context, f"{base}/api/v1/system/scan")
+    return None if body is None else bool(body.get("running"))
+
+
+def _login(context, base: str, credentials: tuple[str, str]) -> int:
+    user, password = credentials
+    response = context.request.post(f"{base}/api/v1/session", data={"username": user, "password": password})
+    if response.status != 200:
+        raise LoginFailed(f"HTTP {response.status}")
+    return response.status
+
+
+def _probe_page(page, context, recorder, base: str, rnd: int, route: str, cap_s: float) -> dict:
+    visit = _visit(page, recorder, f"{base}/{route}", cap_s)
+    return {"round": rnd, "route": route, **visit, "final_url": visit["final_url"].replace(base, ""),
+            "scan_running": _scan_sample(context, base)}
+
+
+def _idle(page, recorder: _Recorder, base: str, cap_s: float) -> dict:
+    """Spec Measurement rules: open dashboard, settle (or cap), then count /api requests for 120 s."""
+    visit = _visit(page, recorder, f"{base}/{IDLE_ROUTE}", cap_s)
+    recorder.reset()
+    page.wait_for_timeout(IDLE_WINDOW_S * 1000)
+    return {"route": IDLE_ROUTE, "settle_s": visit["settle_s"], "window_s": IDLE_WINDOW_S,
+            "calls": list(recorder.calls.values())}
+
+
+def run_browser(args, credentials: tuple[str, str]) -> dict:
+    """The live loop. Logs in before any page exists, so a failed login loads nothing."""
+    from playwright.sync_api import sync_playwright  # lazy: not a declared dependency
+
+    base = args.base.rstrip("/")
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            context = browser.new_context(viewport=VIEWPORT, service_workers="block")
+            meta = {"login_status": _login(context, base, credentials)}
+            # Streams other tabs hold before this probe opens its own.
+            meta["sse_streams"] = (_get_json(context, f"{base}/api/v1/health") or {}).get("sse_streams")
+            page, recorder = context.new_page(), _Recorder()
+            page.on("request", recorder.on_request)
+            page.on("requestfinished", recorder.on_finished)
+            page.on("requestfailed", recorder.on_failed)
+            pages = [_probe_page(page, context, recorder, base, rnd, route, args.cap)
+                     for rnd in range(1, args.rounds + 1) for route in routes(args.date)]
+            idle = _idle(page, recorder, base, args.cap)
+        finally:
+            browser.close()
+    return {"meta": meta, "pages": pages, "idle": idle}
+
+
+def main(argv=None, *, runner=None, env_path=None) -> int:
+    args = parse_args(argv)
+    meta = build_meta(args)
+    try:
+        credentials = load_credentials(env_path or default_env_path())
+        raw = (runner or run_browser)(args, credentials)
+    except LoginFailed as exc:
+        print(f"probe: login failed: {exc}; nothing measured", file=sys.stderr)
+        return 2
+    raw["meta"] = {**meta, **raw.get("meta", {})}
+    report = write_outputs(args.out, raw)
+    print(f"probe: {report['label']} run, {len(raw['pages'])} pages -> {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

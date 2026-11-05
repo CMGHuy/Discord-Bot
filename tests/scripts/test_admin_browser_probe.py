@@ -206,3 +206,124 @@ def test_markdown_shows_the_label_thin_rows_cap_and_the_idle_rate(raw):
 def test_markdown_shows_a_dash_for_an_unknown_stream_count(raw):
     raw["meta"]["sse_streams"] = None
     assert "Open SSE streams at start: -" in probe.render_markdown(probe.summarise(raw))
+
+
+# --- CLI, outputs and credential hygiene (V206-2) ----------------------------
+
+SENTINEL_USER = "sentinel-user-7f3a"
+SENTINEL_PASS = "sentinel-pass-91c2"
+ARGV = ["--date", "2026-11-03", "--out"]
+
+
+def _env(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text(f"# admin\nADMIN_USERNAME={SENTINEL_USER}\nADMIN_PASSWORD=\"{SENTINEL_PASS}\"\n",
+                    encoding="utf-8")
+    return path
+
+
+def _runner_from(raw, seen=None):
+    def runner(args, credentials):
+        if seen is not None:
+            seen.append(credentials)
+        return {"meta": {"login_status": 200, "sse_streams": 2}, "pages": raw["pages"], "idle": raw["idle"]}
+    return runner
+
+
+def test_routes_are_the_spec_list_in_order_with_the_pinned_date():
+    assert probe.routes("2026-11-03") == [
+        "dashboard", "trades", "trades/calendar", "trades/calendar/2026-11-03", "trades/cancels",
+        "watchlist", "risk", "insights/analytics", "insights/research", "insights/reports",
+        "system", "system/versions"]
+
+
+def test_defaults_match_the_spec():
+    args = probe.parse_args(["--date", "2026-11-03", "--out", "x"])
+    assert (args.base, args.rounds, args.cap, args.image_tag) == ("https://bomeo-capital.com", 3, 90.0, "")
+
+
+@pytest.mark.parametrize("argv", [["--out", "x"], ["--date", "2026-13-40", "--out", "x"], ["--date", "2026-11-03"]])
+def test_date_and_out_are_required_and_the_date_must_be_real(argv):
+    with pytest.raises(SystemExit):
+        probe.parse_args(argv)
+
+
+def test_meta_records_provenance(monkeypatch):
+    from datetime import datetime
+    monkeypatch.setattr(probe, "_git_sha", lambda: "abc1234")
+    args = probe.parse_args(["--date", "2026-11-03", "--out", "x", "--image-tag", "ghcr.io/x:1"])
+    meta = probe.build_meta(args, now=datetime(2026, 11, 5, 16, 20, tzinfo=probe.BERLIN))
+    assert meta == {"probe_sha": "abc1234", "image_tag": "ghcr.io/x:1", "berlin_time": "2026-11-05T16:20:00+01:00",
+                    "date": "2026-11-03", "base": "https://bomeo-capital.com", "rounds": 3, "cap_s": 90.0,
+                    "quiet_s": 2.0}
+
+
+def test_credentials_reach_the_runner_but_never_the_output(tmp_path, raw, capsys):
+    seen, out = [], tmp_path / "run"
+    code = probe.main(ARGV + [str(out)], runner=_runner_from(raw, seen), env_path=_env(tmp_path))
+    assert code == 0
+    assert seen == [(SENTINEL_USER, SENTINEL_PASS)]
+    printed = capsys.readouterr()
+    texts = [(out / "probe.json").read_text(encoding="utf-8"), (out / "probe.md").read_text(encoding="utf-8"),
+             printed.out, printed.err]
+    for text in texts:
+        assert SENTINEL_USER not in text and SENTINEL_PASS not in text
+
+
+def test_outputs_merge_runner_meta_over_provenance(tmp_path, raw, monkeypatch):
+    monkeypatch.setattr(probe, "_git_sha", lambda: "abc1234")
+    out = tmp_path / "run"
+    probe.main(ARGV + [str(out), "--image-tag", "ghcr.io/x:1"], runner=_runner_from(raw), env_path=_env(tmp_path))
+    written = json.loads((out / "probe.json").read_text(encoding="utf-8"))
+    meta = written["report"]["meta"]
+    assert (meta["probe_sha"], meta["image_tag"], meta["sse_streams"], meta["login_status"]) == \
+        ("abc1234", "ghcr.io/x:1", 2, 200)
+    assert written["report"]["label"] == "scan"
+    assert "Label: **scan**" in (out / "probe.md").read_text(encoding="utf-8")
+
+
+def test_a_failed_login_exits_non_zero_and_writes_nothing(tmp_path, capsys):
+    def runner(args, credentials):
+        raise probe.LoginFailed("HTTP 401")
+    out = tmp_path / "run"
+    assert probe.main(ARGV + [str(out)], runner=runner, env_path=_env(tmp_path)) == 2
+    assert not out.exists()
+    err = capsys.readouterr().err
+    assert "HTTP 401" in err and SENTINEL_PASS not in err and SENTINEL_USER not in err
+
+
+def test_missing_credentials_fail_before_the_browser_starts(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("OTHER=1\n", encoding="utf-8")
+
+    def runner(*_):
+        raise AssertionError("the browser must not start without credentials")
+    assert probe.main(ARGV + [str(tmp_path / "run")], runner=runner, env_path=env) == 2
+
+
+def test_default_env_path_prefers_this_checkout(tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text("X=1\n", encoding="utf-8")
+    monkeypatch.setattr(probe, "ROOT", tmp_path)
+    assert probe.default_env_path() == tmp_path / ".env"
+
+
+class _Request:
+    def __init__(self, url, response_start=150.0):
+        self.url = url
+        self.timing = {"startTime": 0, "requestStart": 50.0, "responseStart": response_start, "responseEnd": 400.0}
+
+    def response(self):
+        return None
+
+
+def test_the_recorder_tracks_api_calls_only_and_knows_what_is_in_flight():
+    ticks = iter([0.0, 0.5, 1.0, 1.5])
+    recorder = probe._Recorder(clock=lambda: next(ticks))  # t0 = 0.0
+    api, events, asset = _Request("https://h/api/v1/trades"), _Request("https://h/api/v1/events"), _Request("https://h/main.js")
+    for request in (api, events, asset):
+        recorder.on_request(request)                         # api starts at 0.5
+    assert recorder.in_flight() == 1
+    recorder.on_finished(api)                                # ends at 1.0
+    (call,) = recorder.calls.values()
+    assert (call["start_s"], call["end_s"], call["ttfb_ms"], call["total_ms"]) == (0.5, 1.0, 100.0, 400.0)
+    assert recorder.in_flight() == 0
