@@ -156,12 +156,22 @@ def _drop_path(body: dict, dotted: str) -> None:
     body.pop(key, None)
 
 
+def _drop_file_build_clock(result: dict) -> None:
+    """The kill-switch analytics meta carries the file's built_at as both as_of and
+    computed_at (a request-path wall clock); a data-date as_of never equals computed_at."""
+    meta = result.get("market_meta")
+    if isinstance(meta, dict) and meta.get("source") == "request" \
+            and meta.get("as_of") == meta.get("computed_at"):
+        meta.pop("as_of", None)
+
+
 def normalise(body: dict) -> dict:
     result = json.loads(json.dumps(body, sort_keys=True))
     for key in TOP_LEVEL_DROPPED:
         result.pop(key, None)
     _drop_path(result, "availability.killswitch")
     result = _drop_volatile(result)
+    _drop_file_build_clock(result)
     for path in WALL_CLOCK_PATHS:
         _drop_path(result, path)
     return result

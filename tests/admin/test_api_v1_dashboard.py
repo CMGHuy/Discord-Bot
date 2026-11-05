@@ -245,7 +245,8 @@ def test_equity_sparkline_is_numbers_not_svg(seed, logged_in):
     would take that decision away from it."""
     seed()
     equity = logged_in.get("/api/v1/dashboard").get_json()["equity_30d"]
-    assert_shape(equity, {"points": list, "change_pct": NULLABLE_NUMBER}, where="equity_30d")
+    assert_shape(equity, {"points": list, "change_pct": NULLABLE_NUMBER,
+                          "market_meta": (dict, type(None))}, where="equity_30d")
     assert all(isinstance(p, (int, float)) for p in equity["points"])
     assert "svg" not in equity
 

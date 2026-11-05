@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 
 from flask import jsonify, request
 
+from swingbot.admin.queries import analytics_snapshot_read
 from swingbot.core.analytics import page_bodies
 from swingbot.core.tracking.performance import TradeLog
 
@@ -36,19 +37,15 @@ def _snapshot(fresh: bool = False) -> dict:
     500ing -- the behaviour /api/stats already has, and the reason the
     Analytics workspace works on a fresh install.
     """
-    from swingbot.core.analytics.snapshots import load_snapshot, refresh_snapshot
-
-    if fresh:
-        refresh_snapshot()
-        return load_snapshot(max_age_seconds=3600) or {}
-    return load_snapshot(max_age_seconds=3600) or refresh_snapshot() or {}
+    return analytics_snapshot_read(fresh=fresh)[0]
 
 
 @api_v1.route("/analytics/snapshot", methods=["GET"])
 @require_auth
 def analytics_snapshot():
-    """The whole snapshot, forwarded verbatim (was /api/stats)."""
-    return jsonify(_snapshot(fresh=request.args.get("fresh") == "1"))
+    """The whole snapshot, forwarded verbatim (was /api/stats), plus its MarketMeta."""
+    doc, meta = analytics_snapshot_read(fresh=request.args.get("fresh") == "1")
+    return jsonify({**doc, "market_meta": meta})
 
 
 def _iso_day(name: str) -> str | None:

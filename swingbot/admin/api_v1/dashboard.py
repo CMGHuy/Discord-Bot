@@ -37,6 +37,7 @@ from flask import jsonify, request
 
 from swingbot import config
 from swingbot.admin import dashboard as dash
+from swingbot.admin.queries import analytics_snapshot_read
 from swingbot.core.planning.plan_engine import DEFAULT_EXPIRY_BARS
 from swingbot.core.tracking.performance import TradeLog, expand_realized_legs
 
@@ -46,20 +47,6 @@ from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
 from .money import convert_amount, missing_count, to_account_currency
 
 
-#: v201: with the refresher on, the sparkline reads the snapshot at any age
-#: (the bot's scan loop keeps it fresh) and never rebuilds it on a request.
-_ANY_AGE_S = 10**9
-
-
-def _equity_snapshot():
-    from swingbot.core.analytics.snapshots import load_snapshot
-    from swingbot.core.marketdata.shared import admin_refresh
-    if admin_refresh.refresher_on():
-        return load_snapshot(max_age_seconds=_ANY_AGE_S)
-    from swingbot.core.analytics.snapshots import refresh_snapshot
-    return load_snapshot(max_age_seconds=3600) or refresh_snapshot()
-
-
 def _equity_30d() -> dict:
     """The last 30 balance points, raw, plus the window's change.
 
@@ -67,20 +54,20 @@ def _equity_30d() -> dict:
     before the SVG: the SPA gets the series and draws it itself.
     """
     try:
-        snap = _equity_snapshot()
+        snap, meta = analytics_snapshot_read()
         points = [
             p["balance"]
             for p in ((snap or {}).get("equity_curve") or {}).get("points", [])[-30:]
         ]
     except Exception:
-        points = []
+        points, meta = [], None
 
     first = points[0] if points else None
     change = (
         round((points[-1] - first) / first * 100.0, 2)
         if first else None
     )
-    return {"points": points, "change_pct": change}
+    return {"points": points, "change_pct": change, "market_meta": meta}
 
 
 def _risk_figures(all_trades: list[dict]) -> dict:
