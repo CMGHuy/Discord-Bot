@@ -25,7 +25,6 @@ on every request.
 from __future__ import annotations
 
 import logging
-import math
 import threading
 import time
 from datetime import datetime, timezone
@@ -34,103 +33,13 @@ from typing import Any, Callable
 from flask import jsonify, request
 
 from swingbot import config
+from swingbot.core.analytics import risk_payload
 from swingbot.core.infra.swallowed import swallowed
 
 from . import api_v1, error
 from .auth import require_auth
 
 log = logging.getLogger(__name__)
-
-
-def _position_risk(trade: dict, balance: float | None) -> float | None:
-    from swingbot.core.edge.heat import trade_risk_pct
-    if balance is None:
-        return None
-    try:
-        value = float(trade_risk_pct(trade, balance))
-        return round(value, 3) if math.isfinite(value) else None
-    except Exception:
-        return None
-
-
-def _plans_or_none() -> dict | None:
-    """Every stored plan by id, or None when the store cannot be read -- a
-    row then shows no risk of loss rather than pricing a PENDING placeholder
-    as held."""
-    from swingbot.core.tracking.equity import load_plans_by_id
-
-    try:
-        return load_plans_by_id()
-    except Exception as exc:
-        swallowed(log, "ops.risk.plans_by_id", exc, level=logging.DEBUG)
-        return None
-
-
-def _risk_of_loss_fields(trade: dict, plans: dict | None, balance: float | None) -> dict:
-    """v189 B4: the row's risk of loss beside its enforced `risk_pct`. Never
-    summed into `risk_pct`: those rows still add up to `heat.open_pct`, and
-    the utilisation gauge stays on enforced heat."""
-    from swingbot.core.tracking.equity import position_risk_of_loss
-
-    if plans is None:
-        return {"risk_of_loss_amount": None, "risk_of_loss_pct": None}
-    amount = position_risk_of_loss(trade, plans.get(trade.get("plan_id")))
-    pct = (round(amount / balance * 100.0, 3)
-           if amount is not None and balance is not None and balance > 0 else None)
-    return {"risk_of_loss_amount": amount, "risk_of_loss_pct": pct}
-
-
-def _positions(open_trades: list[dict] | None, balance: float | None) -> list[dict] | None:
-    """One row per open trade, its enforced `risk_pct` from `trade_risk_pct`.
-    Each row also carries its risk of loss to the working stop (v189 B4),
-    shown beside risk_pct and never added to it."""
-    if open_trades is None:
-        return None
-    plans = _plans_or_none()
-    rows = [{"trade_id": t.get("id"), "ticker": t.get("ticker"),
-             "strategy": t.get("strategy"), "shares": t.get("shares"),
-             "entry": t.get("entry"), "stop_loss": t.get("stop_loss"),
-             "risk_pct": _position_risk(t, balance),
-             **_risk_of_loss_fields(t, plans, balance)} for t in open_trades]
-    rows.sort(key=lambda row: row["risk_pct"] if row["risk_pct"] is not None else -math.inf,
-              reverse=True)
-    return rows
-
-
-def _open_short_gap_risk(open_trades: list) -> dict:
-    """v183: what the open shorts would lose on a gap the size of each ticker's
-    p99 up-gap, summed -- shown beside heat, never added to it (heat stays on
-    stop risk). A short without a figure is counted, never guessed at."""
-    from swingbot.core.planning.gap_sizing import gap_risk_amount_for
-
-    total, known, unknown = 0.0, 0, 0
-    for t in open_trades:
-        if t.get("direction") != "bearish":
-            continue
-        amount = (gap_risk_amount_for(t["shares"], t.get("entry"), t.get("stop_loss"), t.get("gap_sizing"))
-                  if t.get("shares") else None)
-        if amount is None:
-            unknown += 1
-        else:
-            total, known = total + amount, known + 1
-    return {"gap_risk_amount": round(total, 2) if known else None, "gap_risk_unknown": unknown}
-
-
-def _heat_gap_block(open_trades: list[dict] | None) -> dict:
-    if open_trades is None:
-        return {"gap_risk_amount": None, "gap_risk_unknown": 0}
-    try:
-        return _open_short_gap_risk(open_trades)
-    except Exception as exc:
-        swallowed(log, "ops.risk.heat_gap_block", exc, level=logging.DEBUG)
-        return {"gap_risk_amount": None, "gap_risk_unknown": 0}
-
-
-def _sector_rows(values: dict | None) -> list[dict] | None:
-    if values is None:
-        return None
-    return [{"sector": sector, "heat_pct": pct} for sector, pct in
-            sorted(values.items(), key=lambda item: item[1] or 0.0, reverse=True)]
 
 
 _DATA_SOURCE_WINDOW = 20
@@ -268,218 +177,37 @@ def _invalidate_cache() -> None:
         _last_known_kill.clear()
 
 
-def _metric(value: float | None, n: int) -> dict:
-    return {"value": value, "n": n}
-
-
-def _pnl_amounts(closed: list) -> list[float]:
-    """Finite account-currency amounts in valid close order."""
-    from .risk_read_model import chronological_records
-    ordered, _ = chronological_records(closed)
-    amounts = []
-    for row in ordered:
-        raw = row.get("realized_pnl_amount")
-        if raw is None:
-            continue
-        value = float(raw)
-        if not math.isfinite(value):
-            raise ValueError("nonfinite realized amount")
-        amounts.append(value)
-    return amounts
-
-
-def _money_metric(closed: list) -> tuple[dict, str | None]:
-    """Money drawdown and coverage, converting only date-valid records."""
-    from swingbot.core.analytics import risk_metrics as rm
-    from . import money
-    from .risk_read_model import chronological_records
-    ordered, counts = chronological_records(closed)
-    metric = {"value": None, "n": 0, "fx_missing_count": 0,
-              "invalid_date_count": counts["invalid_date_count"]}
-    try:
-        converted = money.to_account_currency(ordered)
-        metric["fx_missing_count"] = money.missing_count(converted)
-        amounts = _pnl_amounts(converted)
-        value = rm.max_drawdown_r(amounts)
-        if amounts and value is None:
-            raise ValueError("nonfinite cumulative amount")
-        metric.update(value=None if value is None else round(value, 2), n=len(amounts))
-    except Exception as exc:
-        swallowed(log, "ops.risk.max_drawdown_amount", exc, level=logging.DEBUG)
-        return metric, "money_conversion_unavailable"
-    return metric, None
-
-
-def _max_drawdown_amount(closed: list) -> dict:
-    return _money_metric(closed)[0]
-
-
-def _closed_history() -> list | None:
-    from swingbot.core.tracking.performance import TradeLog
-    try:
-        rows = TradeLog().get_trades(status=None, limit=None, ledger="main")
-        if not isinstance(rows, list):
-            raise ValueError("invalid closed-history response")
-        return [row for row in rows if not isinstance(row, dict)
-                or row.get("status") in ("win", "loss", "closed")]
-    except Exception as exc:
-        swallowed(log, "ops.risk.closed_trades_unavailable", exc, level=logging.WARNING)
-        return None
-
-
-def _population_status(checked: str, count: int, total: int, excluded: int, reason: str) -> dict:
-    state = "ok"
-    if total and count == 0:
-        state = "unavailable"
-    elif excluded:
-        state = "partial"
-    return {"state": state, "checked_at": checked, "reason": None if state == "ok" else reason}
-
-
-def _finite_metric(value) -> float | None:
-    return float(value) if value is not None and math.isfinite(value) else None
-
-
-def _r_metrics(closed: list, checked: str) -> tuple[dict, dict]:
-    from swingbot.core.analytics import metrics as trade_metrics
-    from swingbot.core.analytics import risk_metrics as rm
-    from .risk_read_model import chronological_records
-    ordered, counts = chronological_records(closed, outcome=trade_metrics.r_multiple)
-    values = [float(trade_metrics.r_multiple(row)) for row in ordered]
-    drawdown = rm.max_drawdown_r(values)
-    status = _population_status(checked, len(values), len(closed), counts["excluded_count"],
-                                "invalid_closed_records")
-    if values and drawdown is None:
-        status = {"state": "unavailable", "checked_at": checked, "reason": "invalid_closed_records"}
-    return {
-        "sharpe_r": {**_metric(_finite_metric(rm.sharpe_of(values)), len(values)), **counts},
-        "max_drawdown_r": {**_metric(drawdown, len(values)), **counts},
-    }, {"drawdown_r": status}
-
-
-def _closed_metrics(closed: list | None, checked: str) -> tuple[dict, dict]:
-    if closed is None:
-        counts = {"excluded_count": 0, "invalid_date_count": 0, "invalid_outcome_count": 0}
-        unavailable = {"state": "unavailable", "checked_at": checked, "reason": "closed_trades_unavailable"}
-        return {
-            "sharpe_r": {**_metric(None, 0), **counts},
-            "max_drawdown_r": {**_metric(None, 0), **counts},
-            "max_drawdown_amount": {"value": None, "n": 0, "fx_missing_count": 0, "invalid_date_count": 0},
-        }, {"drawdown_r": dict(unavailable), "drawdown_amount": dict(unavailable)}
-    metrics, availability = _r_metrics(closed, checked)
-    money, failure = _money_metric(closed)
-    reason = "missing_fx" if money["fx_missing_count"] else "incomplete_money_outcomes"
-    if money["invalid_date_count"]:
-        reason = "invalid_closed_records"
-    money_status = _population_status(checked, money["n"], len(closed), len(closed) - money["n"], reason)
-    if failure:
-        money_status = {"state": "unavailable", "checked_at": checked, "reason": failure}
-    return {**metrics, "max_drawdown_amount": money}, {**availability, "drawdown_amount": money_status}
-
-
 def _risk_bars(symbols: list[str]) -> dict:
     """Daily bars for the risk view: the shared layer's files when on, else today's batch."""
     from swingbot.admin import freshness
+    from swingbot.core.marketdata.shared import admin_refresh
     if freshness.layer_on():
-        return freshness.page_daily(symbols)
+        return freshness.page_daily(symbols, read_only=admin_refresh.refresher_on())
     from swingbot.core.marketdata.data import get_daily_data_batch
     return get_daily_data_batch(symbols)
 
 
-_DISTRIBUTION_KEYS = ("var_95", "expected_shortfall_95", "annualised_vol", "beta_spy")
+# v204: the risk maths lives in core (`risk_payload`); these names keep the
+# route's tests and callers answering from here. `_risk_bars` is looked up
+# at call time, so a patch of `risk._risk_bars` still reaches the payload.
+_closed_metrics = risk_payload._closed_metrics
+_closed_history = risk_payload._closed_history
+_max_drawdown_amount = risk_payload._max_drawdown_amount
+_pnl_amounts = risk_payload._pnl_amounts
+_DISTRIBUTION_KEYS = risk_payload._DISTRIBUTION_KEYS
 
 
-def _empty_distribution() -> dict:
-    return {**{key: _metric(None, 0) for key in _DISTRIBUTION_KEYS}, "as_of": None}
-
-
-def _distribution_status(checked: str, reason: str | None) -> dict:
-    return {"distribution_metrics": {"state": "unavailable" if reason else "ok",
-                                      "checked_at": checked, "reason": reason}}
-
-
-def _asset_symbols(rows: list) -> list[str]:
-    return sorted({str(row["ticker"]).strip().upper() for row in rows
-                   if isinstance(row, dict) and isinstance(row.get("ticker"), str) and row["ticker"].strip()})
-
-
-def _asset_correlation(symbols: list[str], bars: dict) -> dict:
-    from swingbot.core.analytics import risk_metrics as rm
-    try:
-        labels, values = rm.correlation_matrix(symbols, bars)
-        return {"labels": labels, "values": values}
-    except Exception as exc:
-        swallowed(log, "ops.risk.asset_correlation", exc, level=logging.DEBUG)
-        return {"labels": symbols, "values": []}
-
-
-def _market_values(weights: dict, bars: dict, benchmark: str) -> dict:
-    from swingbot.core.analytics import risk_metrics as rm
-    returns = rm.portfolio_returns(weights, bars)
-    benchmark_returns = rm.portfolio_returns({benchmark: 1.0}, bars)
-    count = len(returns)
-    volatility = rm.annualised_vol(returns)
-    beta = rm.beta_vs(returns, benchmark_returns) if volatility is not None else None
-    return {
-        "var_95": _metric(rm.value_at_risk(returns), count),
-        "expected_shortfall_95": _metric(rm.expected_shortfall(returns), count),
-        "annualised_vol": _metric(volatility, count),
-        "beta_spy": _metric(beta, len(returns.align(benchmark_returns, join="inner")[0])),
-        "as_of": returns.index[-1].strftime("%Y-%m-%d") if count else None,
-    }
-
-
-def _covered_distribution(weights: dict, symbols: list, bars: dict,
-                          benchmark: str, checked: str) -> tuple:
-    from .risk_read_model import complete_bars
-    if not complete_bars(sorted(set(symbols) | {benchmark}), bars):
-        return _empty_distribution(), _distribution_status(checked, "incomplete_bars")
-    try:
-        values = _market_values(weights, bars, benchmark)
-    except Exception as exc:
-        swallowed(log, "ops.risk.distribution_values", exc, level=logging.DEBUG)
-        return _empty_distribution(), _distribution_status(checked, "market_data_unavailable")
-    if any(values[key]["value"] is not None and not math.isfinite(values[key]["value"])
-           for key in _DISTRIBUTION_KEYS):
-        return _empty_distribution(), _distribution_status(checked, "market_data_unavailable")
-    reason = None if values["as_of"] is not None else "incomplete_bars"
-    return values, _distribution_status(checked, reason)
-
-
-def _distribution_metrics(open_trades: list | None, benchmark: str, checked: str) -> tuple[dict, dict, dict]:
-    from .risk_read_model import signed_weights
-    if open_trades is None:
-        return _empty_distribution(), {"labels": [], "values": []}, _distribution_status(checked, "positions_unavailable")
-    if not open_trades:
-        return _empty_distribution(), {"labels": [], "values": []}, _distribution_status(checked, None)
-    symbols = _asset_symbols(open_trades)
-    weights, reason = signed_weights(open_trades, on=datetime.fromisoformat(checked).date())
-    try:
-        bars = _risk_bars(sorted(set(symbols) | {benchmark}))
-    except Exception as exc:
-        swallowed(log, "ops.risk.distribution_bars", exc, level=logging.DEBUG)
-        return _empty_distribution(), {"labels": symbols, "values": []}, _distribution_status(checked, reason or "market_data_unavailable")
-    correlation = _asset_correlation(symbols, bars)
-    if reason:
-        return _empty_distribution(), correlation, _distribution_status(checked, reason)
-    values, availability = _covered_distribution(weights, symbols, bars, benchmark, checked)
-    return values, correlation, availability
+def _risk_metrics() -> risk_payload.RiskMetrics:
+    return risk_payload.metrics_and_correlation(_risk_bars)
 
 
 def _risk_metrics_and_correlation() -> tuple[dict, dict, dict]:
-    """Independently project closed-trade and signed market observations."""
-    from swingbot.core.tracking.performance import TradeLog
-    try:
-        open_trades = TradeLog().get_trades(status="open", limit=None)
-    except Exception:
-        open_trades = None
-    checked = datetime.now(timezone.utc).isoformat()
-    benchmark = getattr(config, "MARKET_REGIME_TICKER", "SPY") or "SPY"
-    closed_metrics, closed_availability = _closed_metrics(_closed_history(), checked)
-    market_metrics, correlation, market_availability = _distribution_metrics(open_trades, benchmark, checked)
-    return {**market_metrics, **closed_metrics, "benchmark_symbol": benchmark}, correlation, {
-        **market_availability, **closed_availability,
-    }
+    result = _risk_metrics()
+    return result.metrics, result.correlation, result.availability
+
+
+def _distribution_metrics(open_trades: list | None, benchmark: str, checked: str) -> tuple[dict, dict, dict]:
+    return risk_payload._distribution_metrics(open_trades, benchmark, checked, _risk_bars)
 
 
 @api_v1.route("/risk", methods=["GET"])
@@ -504,39 +232,14 @@ def get_risk():
     from swingbot.core.edge import throttle
 
     state = _cached("portfolio_state", collect_portfolio_state)
-
-    balance = state.get("balance")
-
-    open_pct = state.get("open_heat")
-    cap_pct = float(state.get("heat_cap") or getattr(config, "PORTFOLIO_HEAT_CAP_PCT", 6.0))
-    # Utilisation is NOT clamped. The Jinja page clamps only the width of the
-    # bar it paints, so a bar cannot overflow its track -- the number itself
-    # stays truthful, and 130% is exactly the situation the reader must see.
-    utilisation = (
-        round(open_pct / cap_pct * 100.0, 1)
-        if open_pct is not None and cap_pct else None
-    )
-
-    metrics, correlation, metric_availability = _cached("metrics", _risk_metrics_and_correlation)
+    result = _cached("metrics", _risk_metrics)
     kill = _fresh_kill(throttle, state)
+    body = risk_payload.market_body(state, result)
     return jsonify({
-        "heat": {
-            "open_pct": open_pct,
-            "cap_pct": cap_pct,
-            "utilisation_pct": utilisation,
-            **_heat_gap_block(state.get("open_trades")),
-        },
-        "availability": {**state.get("availability", {}), **metric_availability,
-                         "killswitch": kill["availability"]},
-        "positions": _positions(state.get("open_trades"), balance),
-        "sector_heat": _sector_rows(state.get("sector_heat")),
-        "unmapped_count": int(state.get("unmapped_count") or 0),
-        "clusters": state.get("clusters"),
-        "throttle": {"multiplier": state.get("throttle_mult"), "paused": state.get("paused")},
+        **body,
+        "availability": {**body["availability"], "killswitch": kill["availability"]},
         "killswitch": kill,
         "scan_health": _scan_health(),
-        "metrics": metrics,
-        "correlation": correlation,
     })
 
 

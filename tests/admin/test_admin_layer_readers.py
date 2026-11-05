@@ -118,7 +118,7 @@ def test_chart_risk_and_watchlist_read_page_daily_when_on(admin_app, env, monkey
     from swingbot.admin.api_v1 import risk
     asked = []
     monkeypatch.setattr(freshness, "page_daily",
-                        lambda t, period="2y": asked.append((list(t), period)) or {s: make_ohlcv([1.0, 2.0]) for s in t})
+                        lambda t, period="2y", **_kw: asked.append((list(t), period)) or {s: make_ohlcv([1.0, 2.0]) for s in t})
     monkeypatch.setattr(data, "get_daily_data", lambda *a, **k: pytest.fail("live chart fetch"))
     monkeypatch.setattr(data, "get_daily_data_batch", lambda *a, **k: pytest.fail("live batch fetch"))
     monkeypatch.setattr(watchlist_rows, "get_daily_data_batch", lambda *a, **k: pytest.fail("live batch fetch"))
