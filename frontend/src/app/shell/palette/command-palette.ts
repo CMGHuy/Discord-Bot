@@ -12,6 +12,7 @@ import {
 import { Router } from '@angular/router';
 
 import { SearchIndexStore } from '../../stores/search-index.store';
+import { SessionStore } from '../../stores/session.store';
 import { Button } from '../../ui/button';
 import { DensityService } from '../../ui/density.service';
 import { FocusTrap } from '../../ui/focus-trap';
@@ -21,7 +22,7 @@ import {
   PREFERENCE_ITEMS,
   PaletteItem,
   emptyQueryItems,
-  pageItems,
+  pageItemsFor,
   rankPaletteItems,
   tickerItems,
   tradeItems,
@@ -218,12 +219,13 @@ export class CommandPalette {
   protected readonly active = signal(0);
   protected readonly optionId = optionId;
 
-  private readonly pages = pageItems();
+  private readonly session = inject(SessionStore);
+  private readonly pages = computed(() => pageItemsFor(this.session.isAdmin()));
 
   private readonly items = computed<PaletteItem[]>(() => [
     ...tickerItems(this.index.tickers()),
     ...tradeItems(this.index.trades()),
-    ...this.pages,
+    ...this.pages(),
     ...PREFERENCE_ITEMS,
   ]);
 
