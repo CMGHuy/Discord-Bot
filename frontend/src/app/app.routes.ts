@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 
+import { adminGuard } from './auth/admin.guard';
 import { authGuard } from './shell/auth.guard';
 
 /**
@@ -116,14 +117,16 @@ export const routes: Routes = [
   // v202: System's Versions section, before `system` so it is matched first.
   {
     path: 'system/versions',
-    canMatch: [authGuard],
+    // v207: System is admin-only; a viewer is sent to the Dashboard.
+    canMatch: [authGuard, adminGuard],
     title: 'Versions',
     data: { subtitle: "What's deployed, and when it changed" },
     loadChildren: () => import('./workspaces/versions/versions.routes').then((m) => m.versionsRoutes),
   },
   {
     path: 'system',
-    canMatch: [authGuard],
+    // v207: System is admin-only; a viewer is sent to the Dashboard.
+    canMatch: [authGuard, adminGuard],
     title: 'System',
     data: { subtitle: 'What the bot itself is doing' },
     loadChildren: () => import('./workspaces/system/system.routes').then((m) => m.systemRoutes),

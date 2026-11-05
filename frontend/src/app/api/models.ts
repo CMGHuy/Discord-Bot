@@ -81,9 +81,13 @@ export interface TradeCollection extends Collection<TradeRow> { prices_as_of?: s
  *  for humans and may change freely. */
 /* -- session ------------------------------------------------------------ */
 
+export type Role = 'admin' | 'viewer';
+
 export interface Identity {
   authenticated: boolean;
   username: string | null;
+  /** v207: who the session is; null when anonymous, and when an older server omits it, so the SPA shows the viewer layout. */
+  role: Role | null;
 }
 
 export interface Health {

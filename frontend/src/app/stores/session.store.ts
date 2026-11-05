@@ -11,6 +11,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiClient } from '../api/api-client';
 import { ApiError } from '../api/api-error';
+import type { Identity, Role } from '../api/models';
 import { UnauthorizedService } from '../api/unauthorized.service';
 
 /** `unknown` only exists before the boot check resolves. The shell must
@@ -20,6 +21,8 @@ export type SessionStatus = 'unknown' | 'anonymous' | 'authenticated';
 interface SessionState {
   status: SessionStatus;
   username: string | null;
+  /** v207: presentation only -- the server is the boundary. */
+  role: Role | null;
   /** Set only by a rejected *login attempt*. An expired session is not an
    *  error and must not populate this. */
   error: string | null;
@@ -39,9 +42,20 @@ interface SessionState {
   redirectTo: string | null;
 }
 
+/** What an identity answer says about the session. Fails closed: no role (or an
+ *  anonymous answer) means no role. */
+function fromIdentity(identity: Identity): Pick<SessionState, 'status' | 'username' | 'role'> {
+  return {
+    status: identity.authenticated ? 'authenticated' : 'anonymous',
+    username: identity.username,
+    role: identity.authenticated ? identity.role ?? null : null,
+  };
+}
+
 const initial: SessionState = {
   status: 'unknown',
   username: null,
+  role: null,
   error: null,
   submitting: false,
   redirectTo: null,
@@ -72,12 +86,14 @@ function loginError(error: unknown): string {
 export const SessionStore = signalStore(
   { providedIn: 'root' },
   withState(initial),
-  withComputed(({ status, username }) => ({
+  withComputed(({ status, username, role }) => ({
     isAuthenticated: computed(() => status() === 'authenticated'),
     /** True only while the boot check is outstanding. Render nothing at
      *  all in this state -- not the shell, not the login form. */
     isResolving: computed(() => status() === 'unknown'),
     displayName: computed(() => username() ?? 'admin'),
+    isAdmin: computed(() => status() === 'authenticated' && role() === 'admin'),
+    isViewer: computed(() => status() === 'authenticated' && role() === 'viewer'),
   })),
   withMethods((store, api = inject(ApiClient)) => ({
     /**
@@ -116,12 +132,9 @@ export const SessionStore = signalStore(
 
       try {
         const identity = await firstValueFrom(api.session());
-        patchState(store, {
-          status: identity.authenticated ? 'authenticated' : 'anonymous',
-          username: identity.username,
-        });
+        patchState(store, fromIdentity(identity));
       } catch {
-        patchState(store, { status: 'anonymous', username: null });
+        patchState(store, { status: 'anonymous', username: null, role: null });
       }
     },
 
@@ -129,15 +142,12 @@ export const SessionStore = signalStore(
       patchState(store, { submitting: true, error: null });
       try {
         const identity = await firstValueFrom(api.login(username, password));
-        patchState(store, {
-          status: identity.authenticated ? 'authenticated' : 'anonymous',
-          username: identity.username,
-          submitting: false,
-        });
+        patchState(store, { ...fromIdentity(identity), submitting: false });
       } catch (error) {
         patchState(store, {
           status: 'anonymous',
           username: null,
+          role: null,
           submitting: false,
           error: loginError(error),
         });
@@ -176,7 +186,7 @@ export const SessionStore = signalStore(
         // a failure here must not strand someone in a session they have
         // asked to leave.
       }
-      patchState(store, { status: 'anonymous', username: null });
+      patchState(store, { status: 'anonymous', username: null, role: null });
       window.location.reload();
     },
 
@@ -194,7 +204,7 @@ export const SessionStore = signalStore(
       const requested = redirectTo ?? fallback;
       const remembered = requested && requested !== '/' ? requested : null;
       patchState(store, {
-        status: 'anonymous', username: null,
+        status: 'anonymous', username: null, role: null,
         redirectTo: redirectTo !== undefined
           ? remembered
           : store.redirectTo() ?? remembered,
