@@ -195,6 +195,28 @@ def admin_users_table_missing(monkeypatch):
     return repo
 
 
+VIEWER_USERNAME = "viewer1"
+VIEWER_PASSWORD = "viewer-password-1"
+
+
+@pytest.fixture
+def viewer_client(client):
+    """v207: `client` signed in through POST /api/v1/session as a viewer.
+
+    Returns (client, row); `row` is the repository row as created (id,
+    credential_version 1). An admin Basic header (`auth`) still works on the
+    same client for setup calls."""
+    from swingbot.admin import principals
+    from swingbot.core.db.repositories.admin_users import admin_users_repo
+
+    row = admin_users_repo().create_user(VIEWER_USERNAME,
+                                         principals.hash_password(VIEWER_PASSWORD))
+    response = client.post("/api/v1/session",
+                           json={"username": VIEWER_USERNAME, "password": VIEWER_PASSWORD})
+    assert response.status_code == 200, response.get_json()
+    return client, row
+
+
 @pytest.fixture
 def layer_quotes(monkeypatch):
     """v171: MARKETDATA_LAYER=on with data.get_quote_batch answered from

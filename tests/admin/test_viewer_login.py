@@ -143,3 +143,90 @@ def test_attempt_login_ignores_an_empty_attempt(admin_app):
 def test_attempt_keeps_its_bool_shape(admin_app):
     with admin_app.test_request_context("/api/v1/health"):
         assert login_limiter.attempt("a", "b", lambda u, p: True) == login_limiter.Attempt(True)
+
+
+# --- POST /api/v1/session as a viewer (V207-4b) ---------------------------------
+
+def test_a_viewer_logs_in_and_the_session_says_viewer(client):
+    row = _make_viewer()
+    r = client.post("/api/v1/session", json=VIEWER)
+    assert r.status_code == 200
+    assert r.get_json() == {"authenticated": True, "username": "viewer1", "role": "viewer"}
+    assert client.get("/api/v1/session").get_json()["role"] == "viewer"
+    with client.session_transaction() as s:
+        assert s["role"] == "viewer" and s["user_id"] == row["id"]
+        assert s["credential_version"] == 1 and s["username"] == "viewer1"
+        assert "admin_authed" not in s and "pw_hash" not in s
+
+
+def test_viewer_login_is_case_insensitive_and_reports_the_stored_name(client):
+    _make_viewer(name="Viewer1")
+    r = client.post("/api/v1/session", json={**VIEWER, "username": "VIEWER1"})
+    assert r.get_json()["username"] == "Viewer1"
+
+
+def test_the_viewer_client_fixture_is_signed_in(viewer_client):
+    client, _row = viewer_client
+    assert client.get("/api/v1/session").get_json() == {
+        "authenticated": True, "username": "viewer1", "role": "viewer"}
+    assert client.get("/api/v1/health").status_code == 200
+
+
+@pytest.mark.parametrize("case", ["admin-wrong-password", "viewer-wrong-password",
+                                  "unknown-user", "disabled-viewer"])
+def test_every_failure_is_the_same_401(client, case):
+    _make_viewer()
+    _make_viewer(name="viewer2", disabled=True)
+    body = {"admin-wrong-password": {"username": "admin", "password": "nope-nope-nope"},
+            "viewer-wrong-password": {**VIEWER, "password": "nope-nope-nope"},
+            "unknown-user": {"username": "ghost", "password": "viewer-password-1"},
+            "disabled-viewer": {"username": "viewer2", "password": "viewer-password-1"},
+            }[case]
+    r = client.post("/api/v1/session", json=body)
+    assert r.status_code == 401 and r.get_json() == FAIL_BODY
+    assert client.get("/api/v1/session").get_json()["authenticated"] is False
+
+
+def test_every_failure_counts_toward_the_lockout(client):
+    _make_viewer()
+    _make_viewer(name="viewer2", disabled=True)
+    for body in ({"username": "admin", "password": "nope-nope-nope"},
+                 {**VIEWER, "password": "nope-nope-nope"},
+                 {"username": "ghost", "password": "viewer-password-1"},
+                 {"username": "viewer2", "password": "viewer-password-1"},
+                 {**VIEWER, "password": "still-wrong-pw"}):
+        assert client.post("/api/v1/session", json=body).status_code == 401
+    locked = client.post("/api/v1/session", json=VIEWER)       # right password, too late
+    assert_error(locked, "rate_limited", 429)
+    assert int(locked.headers["Retry-After"]) >= 1
+
+
+def test_a_missing_table_is_invalid_credentials_and_the_admin_is_unaffected(
+        client, admin_users_table_missing):
+    r = client.post("/api/v1/session", json=VIEWER)
+    assert r.status_code == 401 and r.get_json() == FAIL_BODY
+    ok = client.post("/api/v1/session", json={"username": "admin", "password": "admin"})
+    assert ok.status_code == 200 and ok.get_json()["role"] == "admin"
+    assert client.get("/api/v1/health").status_code == 200
+
+
+def test_a_password_reset_ends_the_viewer_session_on_its_next_request(viewer_client):
+    client, row = viewer_client
+    admin_users_repo().reset_password(row["id"], principals.hash_password("a-new-password"))
+    assert client.get("/api/v1/session").get_json() == {
+        "authenticated": False, "username": None, "role": None}
+    assert_error(client.get("/api/v1/health"), "auth", 401)
+
+
+def test_logout_clears_a_viewer_session(viewer_client):
+    client, _row = viewer_client
+    assert client.delete("/api/v1/session").get_json() == {
+        "authenticated": False, "username": None, "role": None}
+    assert client.get("/api/v1/session").get_json()["authenticated"] is False
+
+
+def test_switching_from_viewer_to_admin_leaves_no_viewer_fields(viewer_client):
+    client, _row = viewer_client
+    client.post("/api/v1/session", json={"username": "admin", "password": "admin"})
+    with client.session_transaction() as s:
+        assert s["role"] == "admin" and "user_id" not in s and "credential_version" not in s
