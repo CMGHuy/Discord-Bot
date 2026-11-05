@@ -13,10 +13,9 @@ This file is session hygiene: commits, shared state, and versioning.
 - Conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`), one
   commit per task; the task's own narrow test run
   (`scripts/dev/testrun.py file ...`, or `fast` when it crosses files) plus
-  `make check` green before each. **The full suite runs once, as the plan's
-  final verification task** — not per task, and not again after the merge to
-  `main` unless that merge resolved conflicts. See
-  `document-conventions.md` -> "One full suite run, at the end of the plan".
+  `make check` green before each. **No plan runs the full suite** — the CI
+  pipeline does, on push to `main`. See `document-conventions.md` -> "No full
+  suite in a plan" and § Pipeline watch below.
 - Active plans live in `docs/superpowers/plans/*.md` with a Progress block at
   the top; the per-task execution ledger is `.superpowers/sdd/progress.md`
   (gitignored). Update both when completing plan tasks — both have drifted
@@ -370,3 +369,24 @@ it has no Codex mirror (like the usage watcher).
 `.env` is readable (partner, 2026-11-04): no `.env` deny rules; allow rules cover the
 main checkout's `.env` by absolute path so worktrees (which have none) can read it.
 Values are still never printed, echoed or logged.
+
+## Pipeline watch
+
+After a merge to `main` is **pushed**, Claude follows the CI run until it ends —
+the full suites run there (`.github/workflows/deploy.yml`), not locally.
+
+1. `gh run list --branch main --limit 1 --json databaseId,status,conclusion`
+   for the run id, then `gh run watch <id> --exit-status` in the background
+   (`run_in_background`), so the wait costs no turns.
+2. Green: report it and continue (close-out, deploy follows by itself).
+3. Red: `gh run view <id> --log-failed > <scratchpad file>`, read only the
+   failing test names and assertion lines, fix each (`testrun.py file ...`,
+   alone, never the whole suite), commit scoped, push, and watch the new run.
+   A load-sensitive timeout that passes alone is re-run in the pipeline
+   (`gh run rerun <id> --failed`) and recorded, not "fixed".
+4. A failure that is not a unit test (build, lint, complexity gate, deploy job)
+   is read the same way; a deploy-job failure touches production, so stop and
+   tell the partner rather than retry.
+
+Never push to `main` and walk away: the plan is not closed out while the run is
+red or pending.
