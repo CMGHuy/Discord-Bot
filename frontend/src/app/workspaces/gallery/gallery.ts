@@ -77,7 +77,7 @@ import { Waterfall, WaterfallStep } from '../../ui/waterfall';
 const SNAPSHOT_DEMO_AT = '2026-10-30T21:10:00Z';
 
 @Directive({
-  selector: '[gallerySnapshotSession]',
+  selector: '[sbGallerySnapshotSession]',
   providers: [
     { provide: CLOCK, useValue: signal(Date.parse('2026-10-30T21:13:00Z')) },
     {
@@ -90,9 +90,9 @@ const SNAPSHOT_DEMO_AT = '2026-10-30T21:10:00Z';
   ],
 })
 export class GallerySnapshotSession {
-  readonly gallerySnapshotSession = input.required<MarketStatus['session']>();
+  readonly sbGallerySnapshotSession = input.required<MarketStatus['session']>();
   readonly status = computed<MarketStatus>(() => ({
-    session: this.gallerySnapshotSession(),
+    session: this.sbGallerySnapshotSession(),
     last_close_at: '2026-10-30T20:00:00Z',
     stale_price_s: 120,
     stale_snapshot_s: 600,
@@ -604,15 +604,15 @@ interface ContractRow {
       <sb-market-value [asOf]="null" [refreshing]="true">187.42</sb-market-value>
       <sb-market-value [asOf]="'2026-10-30T19:59:58Z'">187.42</sb-market-value>
       <div class="snapshot-example">
-        <div gallerySnapshotSession="regular">
+        <div sbGallerySnapshotSession="regular">
           <sb-market-value kind="snapshot" [computedAt]="snapshotDemoAt">$1,200</sb-market-value>
         </div>
-        <div gallerySnapshotSession="regular">
+        <div sbGallerySnapshotSession="regular">
           <sb-market-value kind="snapshot" [computedAt]="snapshotDemoAt" [staleInputs]="true">
             $1,200
           </sb-market-value>
         </div>
-        <div gallerySnapshotSession="closed">
+        <div sbGallerySnapshotSession="closed">
           <sb-market-value kind="snapshot" [computedAt]="snapshotDemoAt">$1,200</sb-market-value>
         </div>
         <div>{{ snapshotLowerBound }}</div>
