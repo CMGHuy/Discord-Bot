@@ -3,10 +3,22 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { TradeRow } from '../../api/models';
 import { RowActions } from './row-actions';
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
+import { Role } from '../../api/models';
+import { SessionStore } from '../../stores/session.store';
+
+let role: Role = 'admin';
+beforeEach(() => { role = 'admin'; });
+function signInAs(as: Role): void {
+  patchState(unprotected(TestBed.inject(SessionStore)), {
+    status: 'authenticated', username: as === 'admin' ? 'admin' : 'viewer1', role: as,
+  });
+}
 
 function row(over: Partial<TradeRow> = {}): TradeRow {
   return {
@@ -40,6 +52,7 @@ function mount(inputs: { row: TradeRow }): ComponentFixture<RowActions> {
       provideHttpClientTesting(),
     ],
   });
+  signInAs(role);
   const f = TestBed.createComponent(RowActions);
   f.componentRef.setInput('row', inputs.row);
   f.detectChanges();
@@ -100,5 +113,24 @@ describe('row actions menu (v85 D13)', () => {
     expect(req.request.method).toBe('POST');
     req.flush({});
     expect(done).toBe(1);
+  });
+});
+
+describe('row actions for a viewer (v207)', () => {
+  it('offers the admin the trigger and its commands (unchanged)', () => {
+    const f = mount({ row: row({ status: 'ACTIVE' }) });
+    expect((f.nativeElement as HTMLElement).querySelector('.trigger')).not.toBeNull();
+    expect(items(f)).toContain('Close position');
+  });
+
+  it('renders nothing at all for a viewer, on any status', () => {
+    role = 'viewer';
+    for (const status of ['ACTIVE', 'PARTIAL', 'PENDING', 'CLOSED']) {
+      const host = mount({ row: row({ status }) }).nativeElement as HTMLElement;
+      expect(host.querySelector('button')).toBeNull();
+      expect(host.querySelector('[role="menu"]')).toBeNull();
+      expect(host.textContent!.trim()).toBe('');
+    }
+    httpMock.expectNone(() => true);
   });
 });

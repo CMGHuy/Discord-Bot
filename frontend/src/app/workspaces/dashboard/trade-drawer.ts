@@ -11,6 +11,7 @@ import { LEG_HINT_TEXT, legLabel } from '../trades/leg-label';
 import { sideLabel } from '../trades/trade-figures';
 import { livePnlPct, liveUnrealizedAmount } from './dashboard.helpers';
 import { RowActions } from './row-actions';
+import { IfAdminDirective } from '../../auth/if-admin.directive';
 
 /** The header marker. The bot only paper-trades (CLAUDE.md, eToro roadmap
  *  stage 0); a drawer that looks like a position ticket must say so. */
@@ -116,7 +117,7 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
 @Component({
   selector: 'sb-trade-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Drawer, Hint, RowActions, RouterLink],
+  imports: [Drawer, Hint, RowActions, RouterLink, IfAdminDirective],
   template: `
     <sb-drawer [open]="true" [heading]="row().ticker" (closed)="closed.emit()">
       <span drawer-header class="paper-marker-row">
@@ -135,7 +136,7 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
       </dl>
       <div class="drawer-actions">
         <a class="full-trade sb-hit" [routerLink]="['/trades', row().id]">Open full trade →</a>
-        <sb-row-actions [row]="row()" placement="up" (done)="actionDone.emit()" />
+        <sb-row-actions *ifAdmin [row]="row()" placement="up" (done)="actionDone.emit()" />
       </div>
     </sb-drawer>
   `,
