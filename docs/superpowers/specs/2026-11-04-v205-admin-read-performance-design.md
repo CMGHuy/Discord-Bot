@@ -435,3 +435,37 @@ inside the production `admin` container (piped over stdin), script at commit 4f1
 | calendar_month | `/api/v1/calendar/pnl?month=2026-11` | 2 | 200 | 4197.7 | 2332 | - | - |
 | calendar_day | `/api/v1/calendar/pnl/day?date=2026-11-03` | 2 | 200 | 4191.5 | 7384 | - | - |
 | calendar_sparklines | `/api/v1/calendar/pnl/day/sparklines?date=2026-11-03` | 2 | 200 | 780.6 | 2939 | - | - |
+
+### After v205 (script)
+
+Measured 2026-11-05 15:14 Berlin with `scripts/ops/admin_endpoint_timing.py --month 2026-11 --date 2026-11-03 --runs 2`
+inside the `admin` container (image `sha-2fc791252ee1`), after the backfill (dry run planned=8362,
+written=8362, re-run written=0; `fx_daily_rates`: 1 pair (USD/EUR), 8363 rows: 8362 backfill + 1 snap).
+
+| Endpoint | Path | Run | Status | ms | Bytes | db ms | Statements |
+|---|---|---|---|---|---|---|---|
+| dashboard | `/api/v1/dashboard` | 1 | 200 | 3021.6 | 1386 | 621.1 | 23 |
+| dashboard_today | `/api/v1/dashboard?mode=today` | 1 | 200 | 2121.7 | 1385 | 444.5 | 8 |
+| trades | `/api/v1/trades` | 1 | 200 | 964.9 | 43016 | 274.9 | 6 |
+| trades_open | `/api/v1/trades?status=open` | 1 | 200 | 1115.5 | 24539 | 227.5 | 5 |
+| live | `/api/v1/live` | 1 | 200 | 1283.0 | 2022 | 404.5 | 6 |
+| calendar_month | `/api/v1/calendar/pnl?month=2026-11` | 1 | 200 | 810.3 | 2420 | 160.0 | 2 |
+| calendar_day | `/api/v1/calendar/pnl/day?date=2026-11-03` | 1 | 200 | 825.2 | 7389 | 160.2 | 2 |
+| calendar_sparklines | `/api/v1/calendar/pnl/day/sparklines?date=2026-11-03` | 1 | 200 | 726.5 | 3233 | 142.0 | 2 |
+| dashboard | `/api/v1/dashboard` | 2 | 200 | 2368.4 | 1386 | 454.5 | 8 |
+| dashboard_today | `/api/v1/dashboard?mode=today` | 2 | 200 | 2191.8 | 1385 | 447.0 | 8 |
+| trades | `/api/v1/trades` | 2 | 200 | 1139.8 | 43020 | 276.7 | 5 |
+| trades_open | `/api/v1/trades?status=open` | 2 | 200 | 989.1 | 24560 | 222.9 | 5 |
+| live | `/api/v1/live` | 2 | 200 | 1555.6 | 2022 | 438.9 | 6 |
+| calendar_month | `/api/v1/calendar/pnl?month=2026-11` | 2 | 200 | 776.6 | 2420 | 240.6 | 2 |
+| calendar_day | `/api/v1/calendar/pnl/day?date=2026-11-03` | 2 | 200 | 752.0 | 7389 | 139.2 | 2 |
+| calendar_sparklines | `/api/v1/calendar/pnl/day/sparklines?date=2026-11-03` | 2 | 200 | 686.3 | 3233 | 181.4 | 2 |
+
+**Verdict against the Layer 1 Goal (every endpoint under 1.5 s):** not met.
+Slowest row: `dashboard` run 1 at 3021.6 ms (before: 4422.2 ms). Rows at or over 1500 ms,
+which is where the Layer 2 plan starts: `dashboard` run 1 (3021.6 ms, db 621.1 ms, 23
+statements), `dashboard` run 2 (2368.4 ms, db 454.5 ms, 8 statements), `dashboard_today`
+run 1 (2121.7 ms, db 444.5 ms, 8 statements), `dashboard_today` run 2 (2191.8 ms, db
+447.0 ms, 8 statements), `live` run 2 (1555.6 ms, db 438.9 ms, 6 statements). Database
+time is a minor share of these rows, so most of the remainder is application-side.
+On purpose (L1-a): converted money amounts now use the close before the exit's Berlin day.
