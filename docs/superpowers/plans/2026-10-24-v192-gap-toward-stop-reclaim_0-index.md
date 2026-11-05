@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Dispatch `task-implementer` at each task's `**Model:**` tier and escalate per `docs/claude/model-routing.md`. **Never read a part whole**: `grep -n "^### Task V192-8:" -A 300 docs/superpowers/plans/2026-10-24-v192-gap-toward-stop-reclaim_2-live-path.md`.
 
 **Bump:** bot patch
-**Edge:** expectancy — removes market-entry trades whose next open has already moved toward the stop and never trades back to the planned entry; prediction on the selected cell: decided win rate +1.5pp or more, ΔExpR > 0, removed population WR lower and ExpR ≤ 0 (v72 clause 6). The +1.5pp is a judgement, not derived from the autopsy cell.
+**Edge:** expectancy — removes market-entry trades whose next open has already moved toward the stop and never trades back to the planned entry; prediction on the selected cell: decided win rate +1.5pp or more, ΔExpR > 0, removed population WR lower and ExpR ≤ 0 (v72 clause 6). The +1.5pp is a judgement, not derived from the autopsy cell. **Prediction missed (close-out):** fold-train ΔExpR was −0.129R at g=0.10 and −0.078R at g=0.25, both below zero; ΔWR +3.49pp and +1.85pp held. NO-LIFT at Stage 1; VALIDATION unspent. See the results doc.
 **Screen:** exempt (post-signal)
 **Spec:** [2026-10-24-v192-gap-toward-stop-reclaim-design.md](../specs/2026-10-24-v192-gap-toward-stop-reclaim-design.md)
 **Brief:** `.superpowers/briefs/2026-10-24-v192-gap-toward-stop-reclaim.md`
