@@ -101,3 +101,12 @@ def test_enforce_is_a_no_op_when_coupled(monkeypatch):
     monkeypatch.setattr(config, "MARKET_ENTRY_NEXT_OPEN", False)
     assert config.enforce_gap_reclaim_coupling() is True
     assert config.GAP_RECLAIM_ATR == 0.0
+
+
+def test_gap_reclaim_help_names_the_recorded_v192_verdict():
+    gap = _field("GAP_RECLAIM_ATR")
+    assert "v192 result:" in gap.help
+    assert "results/2026-10-24-v192-gap-reclaim.md" in gap.help
+    assert any(v in gap.help for v in ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE"))
+    assert gap.default == "0"
+    assert _field("MARKET_ENTRY_NEXT_OPEN").default == "false"

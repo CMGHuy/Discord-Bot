@@ -324,7 +324,9 @@ FIELDS: list[Field] = [
                "the open but rests as a DAY buy-stop (sell-stop for a short) at the "
                "planned entry and cancels at the close without a reclaim. 0 turns it "
                "off. Honoured only with MARKET_ENTRY_NEXT_OPEN on -- otherwise it is "
-               "set to 0 at load with an error in the log. Frozen grid 0.10 / 0.25 / 0.50."),
+               "set to 0 at load with an error in the log. Frozen grid 0.10 / 0.25 / 0.50. "
+               "v192 result: NO-LIFT at Stage 1 (docs/superpowers/results/2026-10-24-v192-gap-reclaim.md); "
+               "stays 0 until the partner decides."),
     Field("FIB_SR_CONFLUENCE_ATR", "FIB_SR_CONFLUENCE_ATR", "Trade Filters & Risk",
           "Fibonacci: Rolling S/R confluence tolerance (x ATR)",
           type="float", default="0.0", min=0.0, max=2.0, step=0.25,
