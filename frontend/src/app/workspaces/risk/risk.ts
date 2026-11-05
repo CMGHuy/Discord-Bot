@@ -21,7 +21,10 @@ import { ColumnDef, DetailLink, RowContext, SortSpec } from '../../ui/data-table
 import { Flash } from '../../ui/flash';
 import { ABSENT, amount, dateTime, money, num, riskPct, share, shareCount, text } from '../../ui/format';
 import { Hint } from '../../ui/hint';
-import { Freshness } from '../../ui/freshness';
+import { IncompleteNote } from '../../ui/incomplete-note';
+import { lowerBoundLabel } from '../../ui/lower-bound';
+import { MarketRefresh } from '../../ui/market-refresh';
+import { MarketValue } from '../../ui/market-value';
 import { Panel } from '../../ui/layout';
 import { Matrix } from '../../ui/matrix';
 import { RowLink } from '../../ui/row-link';
@@ -29,6 +32,7 @@ import { PERFORMANCE_CAVEAT, StatTile, StatTone } from '../../ui/stat-tile';
 import { StatStrip } from '../../ui/stat-strip';
 import { tablePerPage } from '../../ui/table-per-page';
 import { Page } from '../../ui/page';
+import { PnlBasis } from '../../ui/pnl-basis';
 import { riskUnits } from '../../ui/risk-units';
 
 /** v194 B4/B5: what the Exposure table's figures are, shown as the panel's
@@ -103,6 +107,22 @@ export const RISK_DRAWDOWN_ABOUT =
 export function drawdownFxNote(missing: number): string | undefined {
   if (!(missing > 0)) return undefined;
   return `${missing} closed trade${missing === 1 ? '' : 's'} without an FX rate for the exit day left out of the amount.`;
+}
+
+const ABSENT_CLOCK = '—';
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_FMT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const HHMM_FMT = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+
+/** A bar date ("2026-10-28") as "Oct 28"; UTC, so a date never shifts a day. */
+function dayLabel(date: string): string {
+  const at = new Date(`${date.slice(0, 10)}T00:00:00Z`);
+  return Number.isNaN(at.getTime()) ? ABSENT_CLOCK : DAY_FMT.format(at);
+}
+
+/** Sorted, comma-joined symbols; null when there are none. */
+function symbolList(symbols: readonly string[]): string | null {
+  return symbols.length ? [...symbols].sort().join(', ') : null;
 }
 
 /** One Risk metric tile, pre-formatted -- `StatTile` never formats. */
@@ -189,7 +209,10 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Hint, Matrix, Page, Panel, RowLink, StatStrip, StatTile],
+  imports: [
+    Async, Button, ConfirmDialog, DataTable, Flash, Hint, IncompleteNote, Matrix, MarketRefresh, MarketValue,
+    Page, Panel, PnlBasis, RowLink, StatStrip, StatTile,
+  ],
   // v54 D1: exposure-by-position is a table and the rest of this workspace
   // (heat, sectors, clusters) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
@@ -214,6 +237,20 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
              consequential as engaging -- it puts money back at risk -- and a
              one-click release beside a guarded engage is an invitation to
              undo a deliberate stop by accident. -->
+        @if (store.data()?.market_meta) {
+          <div class="clocks" role="group" aria-label="Risk data clocks">
+            <sb-market-value kind="snapshot" [asOf]="null" [computedAt]="store.computedAt()"
+              [staleInputs]="store.bars()?.stale_inputs ?? false" [refreshing]="store.meta()?.refreshing ?? false"
+              [error]="store.meta()?.error ?? null">Risk snapshot</sb-market-value>
+            <span class="clock" data-clock="fx">FX rates as of {{ fxClock() }}</span>
+            <span class="clock" data-clock="bars" [class.stale]="store.bars()?.stale_inputs">daily bars through {{ barsClock() }} close</span>
+            @if (barsSpread(); as spread) { <sb-hint [text]="spread" label="Daily bars per symbol" /> }
+            @if (missingBars(); as list) { <span class="clock stale" data-clock="missing-bars">no daily bars: {{ list }}</span> }
+            @if (missingFx(); as list) { <span class="clock stale" data-clock="missing-fx">no FX rate: {{ list }}</span> }
+            <sb-incomplete-note [missing]="store.missingCount()" />
+            <sb-market-refresh [symbols]="store.positionTickers()" [snapshots]="riskKey" />
+          </div>
+        }
         <div class="kill-actions">
           @if (store.killswitchOn() !== true) {
             <button sb-button data-action="killswitch" variant="danger" type="button" class="sb-hit"
@@ -280,6 +317,9 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
       (retry)="store.load()"
     >
     <sb-panel heading="Portfolio heat">
+      <sb-market-value kind="snapshot" [asOf]="null" [computedAt]="store.computedAt()"
+          [staleInputs]="store.bars()?.stale_inputs ?? false" [refreshing]="store.meta()?.refreshing ?? false"
+          [error]="store.meta()?.error ?? null" />
       @if (domainProblem('heat', 'Heat'); as problem) {
         <p role="status" class="section-help">{{ problem }}</p>
       }
@@ -447,13 +487,14 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
     >
     <sb-panel heading="Risk metrics">
       <div class="metrics">
-        <!-- Per panel, not global (D30): the bar date the daily-return
-             series behind these six tiles was computed from -- the killswitch
-             and exposure numbers above are live and carry no such date. -->
-        <sb-freshness [at]="store.metrics()?.as_of ?? null" />
+        <!-- v204: this panel's age is the risk snapshot's (computed_at); the bar date is the header's "daily bars through" clock. -->
+        <sb-market-value kind="snapshot" [asOf]="null" [computedAt]="store.computedAt()"
+          [staleInputs]="store.bars()?.stale_inputs ?? false" [refreshing]="store.meta()?.refreshing ?? false"
+          [error]="store.meta()?.error ?? null" />
         <!-- v186 D3: one strip, tiles split by hairlines; no cols, so the
              strip's default auto-fit at 140px keeps today's column count. -->
         <p class="section-help">Quote returns; entry notionals valued in account currency; historical FX returns excluded</p>
+        <p class="section-help">Money drawdown: <sb-pnl-basis /></p>
         @for (key of metricDomains; track key) {
           @if (store.availability()?.[key]) {
             @if (domainProblem(key, metricDomainLabels[key]); as problem) {
@@ -527,11 +568,11 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
          what actually throttle position size and still deserve a plain,
          readable list of their own. -->
     <sb-panel page-secondary [style.display]="breakdownDisplay()" heading="Underlying-asset correlation">
-      <!-- Same reasoning as the metrics panel's own marker: the matrix
-           is computed from the same daily-bar fetch, and shares its date --
-           not the whole page's freshness, which the Killswitch/Exposure
-           panels have no equivalent for. -->
-      <sb-freshness [at]="store.metrics()?.as_of ?? null" />
+      <!-- v204: this panel's age is the risk snapshot's (computed_at); the bar date is the header's "daily bars through" clock. -->
+      <sb-market-value kind="snapshot" [asOf]="null" [computedAt]="store.computedAt()"
+          [staleInputs]="store.bars()?.stale_inputs ?? false" [refreshing]="store.meta()?.refreshing ?? false"
+          [error]="store.meta()?.error ?? null" />
+      @if (store.lowerBound().has('correlation')) { <sb-incomplete-note [missing]="store.missingCount()" /> }
       <p class="section-help">
         Pairwise correlation of daily quote returns across open positions.
         Pairs outlined together sit in the same cluster listed beside it.
@@ -543,17 +584,18 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
             [values]="corr.values"
             [clusters]="clusterTickerLists()"
           />
-        } @else if (positionsKnown() && store.availability()?.distribution_metrics?.state !== 'unavailable') {
+        } @else if (positionsKnown() && !store.correlationNote() && store.availability()?.distribution_metrics?.state !== 'unavailable') {
           <p class="none">Not enough open positions to correlate.</p>
         } @else {
-          <p class="section-help" role="status">Correlation data unavailable.</p>
+          <p class="section-help" role="status">Correlation {{ store.correlationNote() ?? 'data unavailable.' }}</p>
         }
       } @else {
-        <p class="section-help" role="status">Correlation data unavailable.</p>
+        <p class="section-help" role="status">Correlation {{ store.correlationNote() ?? 'data unavailable.' }}</p>
       }
     </sb-panel>
 
     <sb-panel page-secondary [style.display]="breakdownDisplay()" heading="Correlated clusters">
+      @if (store.lowerBound().has('clusters')) { <sb-incomplete-note [missing]="store.missingCount()" /> }
       <!-- SR62. risk.html:97-100. The panel listed the clusters without
            ever saying why they matter. -->
       <p class="section-help">
@@ -637,6 +679,15 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
       gap: var(--register-pad);
     }
     .kill-actions { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+    .clocks {
+      display: flex; flex-wrap: wrap; align-items: baseline;
+      gap: var(--space-4) var(--space-8); min-width: 0;
+    }
+    .clock {
+      font-size: var(--text-micro); color: var(--text-faint);
+      font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+    }
+    .clock.stale { color: var(--warn); }
     .kill-value {
       font-size: var(--text-subhead);
       font-weight: 700;
@@ -762,6 +813,7 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
     @media (max-width: 639px) {
+      .clocks { flex-basis: 100%; flex-direction: column; align-items: flex-start; }
       .kill { flex-direction: column; align-items: stretch; }
     }
   `,
@@ -772,6 +824,28 @@ export class Risk {
   private readonly connection = inject(ConnectionStore);
 
   static readonly TABLE_ID = 'risk-exposure';
+
+  protected readonly riskKey = ['risk'];
+
+  protected readonly fxClock = computed(() => {
+    const asOf = this.store.fx()?.as_of;
+    if (!asOf) return ABSENT_CLOCK;
+    if (DATE_ONLY.test(asOf)) return dayLabel(asOf);
+    const at = new Date(asOf);
+    return Number.isNaN(at.getTime()) ? ABSENT_CLOCK : HHMM_FMT.format(at);
+  });
+  protected readonly barsClock = computed(() => {
+    const oldest = this.store.bars()?.oldest;
+    return oldest ? dayLabel(oldest) : ABSENT_CLOCK;
+  });
+  protected readonly barsSpread = computed(() => {
+    const perSymbol = this.store.bars()?.per_symbol ?? {};
+    if (new Set(Object.values(perSymbol)).size < 2) return null;
+    return Object.keys(perSymbol).sort().map((s) => `${s} ${dayLabel(perSymbol[s])}`).join(' · ');
+  });
+  protected readonly missingBars = computed(() =>
+    symbolList((this.store.bars()?.missing ?? []).map((m) => m.symbol)));
+  protected readonly missingFx = computed(() => symbolList(this.store.fx()?.missing ?? []));
 
   protected readonly sort = signal<SortSpec | null>(null);
   protected setSort(next: SortSpec): void { this.sort.set(next); }
@@ -841,7 +915,7 @@ export class Risk {
 
   /** One place that turns a % of account into "money · %". */
   private units(pct: number | null): string {
-    return riskUnits(pct, this.store.balance(), this.connection.currency());
+    return riskUnits(pct, this.store.accountBalance(), this.connection.currency());
   }
 
   protected readonly openRiskText = computed(() => this.units(this.store.openHeatPct()));
@@ -950,7 +1024,20 @@ export class Risk {
   /** The money drawdown under the R figure, negative like it; null (no
    *  line) when the payload has no money figure. */
   private fmtDrawdownMoney(value: number | null): string | null {
-    return value === null ? null : money(value === 0 ? 0 : -value, this.connection.currency(), 2);
+    if (value === null) return null;
+    const text = money(value === 0 ? 0 : -value, this.connection.currency(), 2);
+    const balance = this.store.accountBalance();
+    if (balance === null || !(balance > 0)) return text;
+    return `${text} · ${((value / balance) * 100).toFixed(2)}% of account`;
+  }
+
+  /** v204: a tile whose family the server marked a lower bound reads
+   *  "≥ value, N unpriced"; with nothing unpriced the label is null and the
+   *  tile keeps its own secondary. */
+  private markLowerBound(tile: MetricTile, family: 'metrics.distribution' | 'metrics.closed'): MetricTile {
+    if (!this.store.lowerBound().has(family)) return tile;
+    const label = lowerBoundLabel(tile.secondary ?? tile.value ?? '—', this.store.missingCount());
+    return label === null ? tile : { ...tile, secondary: label };
   }
 
   /** Six tiles over R8-01's metrics, each carrying the sample it was
@@ -961,13 +1048,13 @@ export class Risk {
     const m = this.store.metrics();
     if (!m) return [];
     const ddAmount = m.max_drawdown_amount;
-    return [
+    const tiles: MetricTile[] = [
       { label: 'VaR 95%', value: this.fmtRiskPct(m.var_95.value), sample: m.var_95.n },
       { label: 'Expected shortfall', value: this.fmtRiskPct(m.expected_shortfall_95.value), sample: m.expected_shortfall_95.n },
       { label: 'Annualised vol', value: this.fmtRiskPct(m.annualised_vol.value), sample: m.annualised_vol.n },
       // I4: label the ACTUAL configured benchmark, not a hardcoded "SPY" --
       // an operator can point config.MARKET_REGIME_TICKER elsewhere.
-      { label: `Beta vs ${m.benchmark_symbol}`, value: this.fmtRatio(m.beta_spy.value), sample: m.beta_spy.n },
+      { label: `Beta vs ${m.benchmark_symbol}`, value: this.store.betaNote() ?? this.fmtRatio(m.beta_spy.value), sample: m.beta_spy.n },
       {
         label: RISK_SHARPE_LABEL, value: this.fmtRatio(m.sharpe_r.value), sample: m.sharpe_r.n,
         about: RISK_SHARPE_ABOUT,
@@ -979,6 +1066,7 @@ export class Risk {
         hint: drawdownFxNote(ddAmount?.fx_missing_count ?? 0),
       },
     ];
+    return tiles.map((tile, i) => this.markLowerBound(tile, i < 4 ? 'metrics.distribution' : 'metrics.closed'));
   });
 
   protected readonly metricDomains = ['distribution_metrics', 'drawdown_r', 'drawdown_amount'] as const;

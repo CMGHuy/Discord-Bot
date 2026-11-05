@@ -7,16 +7,19 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Provider, provideZonelessChangeDetection, signal } from '@angular/core';
+import { Provider, computed, provideZonelessChangeDetection, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import {
   authInterceptor,
   errorInterceptor,
   loadingInterceptor,
 } from '../../api/interceptors';
-import { DomainAvailability, RiskAvailability, Risk as RiskData, RiskMetrics } from '../../api/models';
+import {
+  DomainAvailability, MarketStatus, RiskAvailability, Risk as RiskData, RiskMetrics, SnapshotUpdate,
+} from '../../api/models';
+import { LiveValuesStore } from '../../stores/live-values.store';
 import {
   EXPOSURE_HINT, Risk, UNROUNDED_TOTALS_NOTE, drawdownFxNote, exactRiskText, knownRiskTotal, reconciles, unmappedNote,
   RISK_DRAWDOWN_LABEL, RISK_SHARPE_LABEL, RISK_KPI_ABOUT, largestCluster, topSectorOf,
@@ -68,6 +71,28 @@ function payload(overrides: Partial<RiskData> = {}): RiskData {
   } as RiskData;
 }
 
+function fakeLive(snaps = signal<Record<string, SnapshotUpdate>>({})) {
+  const live = {
+    snaps,
+    status: signal<MarketStatus | null>({ session: 'regular', last_close_at: '2026-10-28T20:00:00Z',
+      stale_price_s: 120, stale_snapshot_s: 600, heartbeat: { beat_at: null, cadence_s: 30, stalled: false } }),
+    snapshot: (k: string) => computed(() => snaps()[k] ?? null),
+    quote: () => signal(null),
+    requestRefresh: vi.fn(),
+  };
+  return { live, provider: { provide: LiveValuesStore, useValue: live } };
+}
+
+const SNAP: Partial<RiskData> = {
+  market_meta: { as_of: '2026-10-29', refreshing: false, stale_count: 0, missing_count: 0, incomplete: false,
+    computed_at: '2026-10-29T14:00:00Z', stale_inputs: false, source: 'snapshot', error: null },
+  computed_at: '2026-10-29T14:00:00Z',
+  bars_meta: { per_symbol: { AAPL: '2026-10-28' }, oldest: '2026-10-28', newest: '2026-10-28', stale_inputs: false, missing: [] },
+  fx_meta: { as_of: '2026-10-29', missing: [] },
+  lower_bound: [],
+  account: { balance: 10_000, currency: 'USD' },
+};
+
 function seed(extra: Provider[] = []): { fixture: ComponentFixture<Risk>; backend: HttpTestingController } {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
@@ -76,7 +101,7 @@ function seed(extra: Provider[] = []): { fixture: ComponentFixture<Risk>; backen
       provideRouter([]),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
-      RiskStore, ...extra,
+      fakeLive().provider, RiskStore, ...extra,
     ],
   });
   const fixture = TestBed.createComponent(Risk);
@@ -427,26 +452,12 @@ describe('Risk gauge, budget and correlation matrix', () => {
 /* -- v85 R8-06 -- control bar, freshness, and the narrow-width pass -- */
 
 describe('Risk freshness and chrome', () => {
-  it('marks the metrics panel with the bar date they were computed from', async () => {
-    const el = (await render({ metrics: { ...DEFAULT_METRICS, as_of: '2026-09-10' } }))
-      .nativeElement as HTMLElement;
-    expect(el.querySelector('.metrics sb-freshness')).not.toBeNull();
-  });
-
-  it('shows the metrics panel marker as a real date, not a bogus midnight time', async () => {
-    // I1: `as_of` is a date-only string ("2026-09-10", a daily bar has no
-    // time-of-day). Rendering it as a full timestamp always read
-    // "as of 00:00:00" regardless of actual freshness.
-    const el = (await render({ metrics: { ...DEFAULT_METRICS, as_of: '2026-09-10' } }))
-      .nativeElement as HTMLElement;
-    const marker = el.querySelector('.metrics sb-freshness .freshness')!;
-    expect(marker.textContent).toContain('as of 2026-09-10');
-    expect(marker.textContent).not.toContain('00:00:00');
-  });
-
-  it('dates each metrics panel by its own bar, not one stamp for the page', async () => {
-    const el = (await render()).nativeElement as HTMLElement;
-    expect(el.querySelectorAll('sb-freshness').length).toBeGreaterThan(1);
+  it('the bar date moved to the header clock', async () => {
+    const el = (await render({ ...SNAP })).nativeElement as HTMLElement;
+    expect(el.querySelectorAll('sb-freshness').length).toBe(0);
+    const clocks = el.querySelector('.clocks')!.textContent!;
+    expect(clocks).toContain('daily bars through Oct 28 close');
+    expect(clocks).not.toContain('00:00');
   });
 
   it('renders the route title as the one h1, from sb-page, and no section head', async () => {
@@ -1128,5 +1139,119 @@ describe('Risk on sb-page, source (v195 Phase 4)', () => {
   it('never puts a slot attribute on an element inside a conditional', () => {
     // Each slot is one stable element; a conditional sits inside it.
     expect(src).not.toMatch(/@if \([^)]*\) \{\s*<[^>]*\bpage-(actions|scope|kpis|primary|secondary)\b/);
+  });
+});
+
+/* -- v204 -- two clocks, per-panel snapshot age, lower bounds, unavailable reasons -- */
+
+describe('Risk snapshot clocks and warnings (v204)', () => {
+  const root = async (overrides: Partial<RiskData> = {}, extra: Provider[] = []) =>
+    (await render({ ...SNAP, ...overrides }, extra)).nativeElement as HTMLElement;
+  const withMeta = (missing_count: number) => ({ market_meta: { ...SNAP.market_meta!, missing_count } });
+  const tile = (el: HTMLElement, label: string) =>
+    [...el.querySelectorAll('sb-stat-tile')].find((t) => t.textContent?.includes(label))!;
+  const panel = (el: HTMLElement, heading: string) => el.querySelector(`sb-panel[heading="${heading}"]`)!;
+
+  it('labels its two clocks', async () => {
+    const text = (await root()).querySelector('.clocks')!.textContent!;
+    expect(text).toContain('FX rates as of Oct 29');
+    expect(text).toContain('daily bars through Oct 28 close');
+  });
+
+  it('the FX clock reads HH:MM for a timed as-of', async () => {
+    const el = await root({ fx_meta: { as_of: '2026-10-29T14:32:00', missing: [] } });
+    expect(el.querySelector('[data-clock="fx"]')!.textContent).toContain('FX rates as of 14:32');
+  });
+
+  it('stale bars take the stale tone', async () => {
+    const el = await root({ bars_meta: { ...SNAP.bars_meta!, stale_inputs: true } });
+    expect(el.querySelector('[data-clock="bars"]')!.classList.contains('stale')).toBe(true);
+    expect(el.querySelector('.clocks sb-market-value .mv')!.getAttribute('data-tone')).toBe('stale');
+  });
+
+  it('per-symbol bar dates show when they differ', async () => {
+    const el = await root({ bars_meta: { ...SNAP.bars_meta!, per_symbol: { AAPL: '2026-10-28', 'SAP.DE': '2026-10-27' } } });
+    const hint = el.querySelector('.clocks sb-hint') as HTMLElement;
+    expect(hint).not.toBeNull();
+    expect(hint.textContent).toContain('AAPL Oct 28 · SAP.DE Oct 27');
+  });
+
+  it('shows no per-symbol hint when every symbol shares a date', async () => {
+    expect((await root()).querySelector('.clocks sb-hint')).toBeNull();
+  });
+
+  it('lists symbols with no daily bars and no FX rate', async () => {
+    const el = await root({
+      bars_meta: { ...SNAP.bars_meta!, missing: [{ symbol: 'XAUUSD', reason: 'spot_metal' }] },
+      fx_meta: { as_of: '2026-10-29', missing: ['SAP.DE'] },
+    });
+    const text = el.querySelector('.clocks')!.textContent!;
+    expect(text).toContain('no daily bars: XAUUSD');
+    expect(text).toContain('no FX rate: SAP.DE');
+  });
+
+  it('risk panels carry the snapshot age', async () => {
+    const el = await root();
+    for (const heading of ['Portfolio heat', 'Risk metrics', 'Underlying-asset correlation']) {
+      expect(panel(el, heading).querySelectorAll('sb-market-value').length).toBe(1);
+    }
+    expect(el.querySelectorAll('sb-freshness').length).toBe(0);
+  });
+
+  it('lower-bound note renders for a partial book', async () => {
+    const el = await root({ lower_bound: ['metrics.distribution'], ...withMeta(1) });
+    const shown = tile(el, 'VaR 95%').querySelector('.value, [class*="value"]')?.textContent?.trim() ?? '';
+    expect(tile(el, 'VaR 95%').textContent).toContain(`≥ ${shown}, 1 position unpriced`);
+    expect(tile(el, 'Sharpe').textContent).not.toContain('≥');
+  });
+
+  it('marked correlation and clusters panels show the incomplete note', async () => {
+    const el = await root({ lower_bound: ['correlation', 'clusters'], ...withMeta(2) });
+    const notes = [...el.querySelectorAll('sb-incomplete-note')].filter((n) => !n.closest('.clocks'));
+    expect(notes.length).toBe(2);
+    for (const note of notes) expect(note.textContent).toContain('incomplete: 2 positions unpriced');
+  });
+
+  it('null correlation reads unavailable with its reason, never 0', async () => {
+    const el = await root({
+      correlation: { labels: ['AAPL', 'MSFT'], values: null, reason: 'insufficient_overlap' } as RiskData['correlation'],
+    });
+    expect(el.textContent).toContain('Correlation unavailable: fewer than 2 overlapping bars');
+    expect(el.querySelector('sb-matrix')).toBeNull();
+  });
+
+  it('zero-variance beta reads unavailable, never 0', async () => {
+    const el = await root({
+      availability: { ...AVAILABILITY, beta_spy: 'zero_variance' } as unknown as RiskAvailability,
+      metrics: { ...DEFAULT_METRICS, beta_spy: { value: null, n: 118 } } as unknown as RiskMetrics,
+    });
+    expect(tile(el, 'Beta vs').textContent).toContain('unavailable: benchmark did not move');
+  });
+
+  it('drawdown is shown against the account', async () => {
+    const el = await root({
+      metrics: { ...DEFAULT_METRICS, max_drawdown_amount: { value: 1_200, n: 782, fx_missing_count: 0 } },
+    });
+    expect(tile(el, 'Max drawdown').textContent).toContain('12.00% of account');
+  });
+
+  it('money drawdown carries the P&L basis', async () => {
+    const el = await root();
+    expect(el.querySelector('.metrics sb-pnl-basis')!.textContent!.trim()).toBe('pre-tax, before modelled frictions');
+  });
+
+  it('Refresh asks for the position tickers and the risk snapshot', async () => {
+    const { live, provider } = fakeLive();
+    const base = { trade_id: 't', strategy: 'VWAP', shares: 1, entry: 100, stop_loss: 95, risk_pct: 1 };
+    const el = await root({
+      positions: [{ ...base, trade_id: 'a', ticker: 'MSFT' }, { ...base, trade_id: 'b', ticker: 'NVDA' }],
+    }, [provider]);
+    (el.querySelector('sb-market-refresh button') as HTMLButtonElement).click();
+    expect(live.requestRefresh).toHaveBeenCalledWith(['MSFT', 'NVDA'], ['risk']);
+  });
+
+  it('an older server without meta renders no clock', async () => {
+    const el = (await render()).nativeElement as HTMLElement;
+    expect(el.querySelector('.clocks')).toBeNull();
   });
 });
