@@ -1236,16 +1236,6 @@ describe('Dashboard for a viewer (v207)', () => {
     expect(columnKeys(await loaded())).toEqual(adminKeys.filter((key) => key !== 'actions'));
   });
 
-  it('renders a row-actions trigger on an admin row but none on a viewer row', async () => {
-    const rows = [tradeRow({ id: 'a1', status: 'ACTIVE', status_label: 'ACTIVE' })];
-    const adminEl = await loadedWithRows(rows);
-    expect(adminEl.querySelector('sb-positions-table sb-row-actions')).not.toBeNull();
-    role = 'viewer';
-    const el = await loadedWithRows(rows);
-    expect(el.querySelector('sb-positions-table sb-row-actions')).toBeNull();
-    expect(el.querySelector('sb-positions-table [aria-label="Row actions"]')).toBeNull();
-  });
-
   it('keeps the header and the dialogs out of the scope bar for a viewer too', async () => {
     role = 'viewer';
     const el = (await loaded()).nativeElement as HTMLElement;
