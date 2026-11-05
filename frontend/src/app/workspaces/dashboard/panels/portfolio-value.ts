@@ -50,7 +50,7 @@ import { EquityCandles } from './equity-candles';
   `,
   styles: `
     :host { display: block; }
-    .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: flex-start; min-width: 0; margin: 0 0 var(--space-10); }
+    .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-muted); min-width: 0; margin: 0 0 var(--space-10); }
     .figure {
       margin: 0;
       font-size: var(--text-title);
