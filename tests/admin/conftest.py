@@ -164,6 +164,37 @@ def _clear_login_limiter():
     login_limiter.LIMITER.reset()
 
 
+@pytest.fixture(autouse=True)
+def _fast_password_hash(monkeypatch):
+    """v207: scrypt costs tens of milliseconds per hash. Viewer tests hash and
+    check passwords constantly, so the suite uses a one-iteration PBKDF2;
+    production keeps principals.HASH_METHOD = "scrypt". A stored hash names its
+    own method, so checks keep working whichever method made it."""
+    from swingbot.admin import principals
+
+    monkeypatch.setattr(principals, "HASH_METHOD", "pbkdf2:sha256:1")
+
+
+@pytest.fixture
+def admin_users_table_missing(monkeypatch):
+    """v207: the deploy window before `alembic upgrade head` -- the admin_users
+    repository points at a table Postgres has never seen, so every lookup
+    raises a real UndefinedTable (the shared test table is left alone)."""
+    import sqlalchemy as sa
+
+    from swingbot.core.db import schema
+    from swingbot.core.db.repositories import admin_users as au
+
+    ghost = sa.Table("admin_users_not_migrated", sa.MetaData(),
+                     *[sa.Column(c.name, c.type, primary_key=c.primary_key)
+                       for c in schema.admin_users.columns])
+    repo = au.AdminUsersRepository()
+    repo.table, repo.key_col = ghost, ghost.c.id
+    monkeypatch.setattr(au, "_repo", repo)
+    monkeypatch.setattr(au, "_warned_missing", False)
+    return repo
+
+
 @pytest.fixture
 def layer_quotes(monkeypatch):
     """v171: MARKETDATA_LAYER=on with data.get_quote_batch answered from
