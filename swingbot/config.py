@@ -224,14 +224,16 @@ FIELDS: list[Field] = [
                "that plan, and shares are sized so the worst accepted fill to the stop, plus the "
                "p99 gap allowance, never loses more than the per-trade risk. Honoured live only "
                "with LONG_GAP_SIZING and SHORT_GAP_SIZING both on -- otherwise treated as 0 and "
-               "logged as an error. Unmeasured; Keep 0 until the partner decides."),
+               "logged as an error. Closed (v191: arm K NO-LIFT, arm R NO-LIFT) -- see the v191 "
+               "rows in docs/claude/backtest-methodology.md. Keep 0."),
     Field("CONFLUENCE_ATR_TARGET_MODE", "CONFLUENCE_ATR_TARGET_MODE", "Trade Filters & Risk",
           "Confluence ATR-band target mode (v191)",
           type="select", default="rechoose", options=["rechoose", "keep"],
           help="v191. Read only when CONFLUENCE_ATR_STOP_FLOOR is above 0. rechoose (arm R): TP1 "
                "is picked again against the band stop's risk. keep (arm K): TP1 stays where "
                "today's 1.75-2% stop put it and the plan is dropped when its reward:risk against "
-               "the band stop falls under the minimum."),
+               "the band stop falls under the minimum. v191 verdicts: keep (arm K) NO-LIFT, "
+               "rechoose (arm R) NO-LIFT."),
     Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "

@@ -3,6 +3,7 @@
 **Spec (the pre-registration):** `docs/superpowers/specs/2026-10-24-v191-confluence-atr-band-stops-design.md`, last changed in `6966724d`. Stage 3 runs only with `--preregistration` naming that file.
 **Plan:** `docs/superpowers/plans/2026-10-24-v191-confluence-atr-band-stops_0-index.md` (§ Global Constraints carries the frozen block below).
 **Driver:** `scripts/backtest/measure_atr_band_stop.py`; stage files under `docs/superpowers/results/v191/`.
+**Verdict:** arm K NO-LIFT (UNDERPOWERED at Stage 0); arm R NO-LIFT (UNDERPOWERED at Stage 0). Knob defaults stay 0 / rechoose / false.
 
 ## Frozen before any run
 
@@ -202,3 +203,21 @@ No Stage 1 report exists, so there are no component-side dollar-exceedance count
 ### Observations
 
 Every cell has observed N above its target N, yet none meets the 0.10R MDE ceiling. As with arm K, paired-row scarcity is the cause: only 1487 / 997 / 342 paired rows come from tens of thousands of stratum rows, because most band plans are newly admitted and have no baseline twin. The ceiling, windows and cells are frozen and are not widened.
+
+## Family (Holm)
+
+method holm, alpha 0.05, primary K, passed none
+
+| arm | reached Stage 3 | Stage 3 verdict | p | p Holm | q BH | pass |
+|---|---|---|---|---|---|---|
+| K | False | None | 1.0 | 1.0 | 1.0 | False |
+| R | False | None | 1.0 | 1.0 | 1.0 | False |
+
+Holm across the two arms on each arm's Stage 3 permutation p, an arm closed before Stage 3 entering as p = 1.0; BH q reported, never gating.
+
+## Verdict
+
+- **Arm K:** UNDERPOWERED at Stage 0 (ledger NO-LIFT). Its VALIDATION shot is not spent. Prediction not scored (closed before Stage 1).
+- **Arm R:** UNDERPOWERED at Stage 0 (ledger NO-LIFT). Its VALIDATION shot is not spent. Prediction not scored (closed before Stage 1).
+
+Part B (`LONG_GAP_SIZING`) ships regardless of these verdicts; it is sizing only (V191-24 reports its impact).
