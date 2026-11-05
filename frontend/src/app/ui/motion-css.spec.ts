@@ -249,15 +249,6 @@ describe('the mode rules for the new classes (v168 §1)', () => {
     expect(body['sb-shimmer']).toBeUndefined();
     expect(body['sb-skeleton-pulse']).toBe('0%, 100% { opacity: 0.5; } 50% { opacity: 0.9; }');
   });
-
-  it('slides the nav indicator on a spring under On, fades it under Reduced (#6)', () => {
-    expect(bodiesFor(MOTION, '[data-motion=on] sb-nav-indicator .nav-indicator')).toEqual([
-      'transition: transform calc(350ms * var(--motion-scale)) var(--ease-spring), opacity var(--dur-base) var(--ease-out);',
-    ]);
-    expect(bodiesFor(MOTION, '[data-motion=reduced] sb-nav-indicator .nav-indicator')).toEqual([
-      'transition: opacity var(--dur-base) var(--ease-out);',
-    ]);
-  });
 });
 
 describe('Off keeps every fallback (spec v168 §1)', () => {

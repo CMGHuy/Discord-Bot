@@ -210,6 +210,13 @@ class TradePlanV2:
     # entry_context key; never read by a filter, score or backtest.
     # Omitted from plan_to_dict while None (_OMIT_WHEN_NONE).
     risk_notice: dict | None = None
+    # v192 (planning/gap_reclaim.py): the next-open fill and gap-veto stamps,
+    # frozen at creation; reclaim_session records the live resting session.
+    # Omitted while None so plans without the feature retain their document shape.
+    reclaim_atr: float | None = None
+    reclaim_level: float | None = None
+    reclaim_session: str | None = None
+    waits_next_open: bool | None = None
     # v200: where issued_at came from. "live" = attach_plan_v2 stamped the wall
     # clock; "discord" = a pre-v87 plan whose issue time revision v200_001
     # recovered from its Discord alert message. None = replayed (no issued_at),
@@ -236,7 +243,8 @@ _PLAN_FIELDS = None   # cached field list
 # v183: optional fields written only when set -- a None here is omitted, never
 # stored as null, so every plan doc without them (every long) stays
 # byte-identical to its pre-v183 shape. plan_from_dict defaults them back.
-_OMIT_WHEN_NONE = ("gap_sizing", "risk_notice", "issued_at_source")
+_OMIT_WHEN_NONE = ("gap_sizing", "risk_notice", "issued_at_source", "reclaim_atr",
+                   "reclaim_level", "reclaim_session", "waits_next_open")
 
 
 def plan_to_dict(plan: TradePlanV2) -> dict:

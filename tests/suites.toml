@@ -27,8 +27,12 @@ description = "the scan engine and everything it posts"
 paths = ["tests/scanning/"]
 
 [suites.planning]
-description = "trade-plan construction and lifecycle"
-paths = ["tests/planning/"]
+description = "trade-plan construction, exits and sizing: tests/planning/ files test_a* .. test_o* and test_q* .. test_z*"
+paths = ["tests/planning/test_[a-o]*.py", "tests/planning/test_[q-z]*.py"]
+
+[suites.planning-plans]
+description = "the plan engine, plan manager, plan feed and plan params: tests/planning/ files test_p*"
+paths = ["tests/planning/test_p*.py"]
 
 # tests/backtesting/ is ~40% of the suite's wall-clock, so it is four legs, cut by
 # measured per-file time (~320/290/270/190 CPU-s) rather than by feature -- one leg

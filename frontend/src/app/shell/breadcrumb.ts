@@ -88,7 +88,8 @@ export function crumbsFor(url: string, detail: string | null, title: string): Cr
     a:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
     /* A divider, not text (correction 13): the rule colour is right here. */
     .sep { color: var(--text-faint); }
-    @media (max-width: 639px) {
+    /* v203: the bar also holds the wordmark, so below 1024px only the current crumb shows (the rail names the parents). */
+    @media (max-width: 1023px) {
       li:not(.current) { display: none; }
     }
   `,

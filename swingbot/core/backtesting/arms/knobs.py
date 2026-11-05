@@ -27,6 +27,16 @@ def parse_knob(text: str) -> tuple[str, object]:
     return attr, config._cast(field, raw)
 
 
+#: v192: the veto decides at the next open, which only MARKET_ENTRY_NEXT_OPEN creates.
+GAP_RECLAIM_NEEDS_NEXT_OPEN = "GAP_RECLAIM_ATR > 0 needs MARKET_ENTRY_NEXT_OPEN on"
+
+
+def _check_coupling() -> None:
+    """Refuse an arm whose merged config would run the veto without the next-open fill."""
+    if getattr(config, "GAP_RECLAIM_ATR", 0.0) > 0 and not getattr(config, "MARKET_ENTRY_NEXT_OPEN", False):
+        raise ValueError(GAP_RECLAIM_NEEDS_NEXT_OPEN)
+
+
 @contextmanager
 def apply_knobs(delta: dict):
     """Temporarily apply config-global deltas and restore them reliably."""
@@ -35,6 +45,7 @@ def apply_knobs(delta: dict):
     try:
         for attr, value in delta.items():
             setattr(config, attr, value)
+        _check_coupling()
         yield
     finally:
         for attr, value in saved.items():

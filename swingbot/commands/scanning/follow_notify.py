@@ -26,7 +26,7 @@ from swingbot.core.presentation.kinds import Kind
 
 log = logging.getLogger(__name__)
 
-NOTIFY_EVENTS = ("near_stop", "tp1", "tp2", "stopped", "expired", "closed_other")
+NOTIFY_EVENTS = ("near_stop", "tp1", "tp2", "stopped", "expired", "reclaim_order", "closed_other")
 
 # What the channel announces, in /notify's words (factual, no imperatives).
 EVENT_LABELS = {
@@ -35,6 +35,7 @@ EVENT_LABELS = {
     "tp2": "Closed at TP2",
     "stopped": "Closed at its stop (initial, breakeven or trailing)",
     "expired": "Expired unfilled",
+    "reclaim_order": "Opened toward its stop: entry moved to a DAY stop order at the planned entry",
     "closed_other": "Closed or cancelled for any other reason (Following only)",
 }
 
@@ -56,6 +57,9 @@ _BY_TRANSITION: dict[str, str] = {
     "cancelled_limit": "closed_other",
     "cancelled_gap_through_stop": "closed_other",
     "cancelled_trade_deleted": "closed_other",
+    "cancelled_open_through_stop": "closed_other",      # v192
+    "cancelled_gap_no_reclaim": "closed_other",         # v192
+    "gap_reclaim_order": "reclaim_order",               # v192
     "closed": "closed_other",
 }
 
@@ -65,6 +69,7 @@ _KIND_BY_EVENT = {
     "tp2": Kind.WIN,
     "stopped": Kind.STOPPED,
     "expired": Kind.EXPIRED,
+    "reclaim_order": Kind.RECLAIM_ORDER,
 }
 # v187: limit cancels withdraw the plan before entry; the channel stays factual.
 _CLOSED_OTHER_KIND = {
@@ -74,6 +79,8 @@ _CLOSED_OTHER_KIND = {
     "cancelled_limit": Kind.INVALIDATED,
     "cancelled_gap_through_stop": Kind.INVALIDATED,
     "cancelled_trade_deleted": Kind.INVALIDATED,
+    "cancelled_open_through_stop": Kind.INVALIDATED,    # v192
+    "cancelled_gap_no_reclaim": Kind.EXPIRED,           # v192
 }
 
 # v189 A7: closes with no exit behind them -- the trade record was deleted.
@@ -88,6 +95,7 @@ WATCH_DEFAULTS: dict[str, bool] = {
     "tp2": True,
     "stopped": True,
     "expired": False,
+    "reclaim_order": False,
     "closed_other": False,
 }
 
@@ -155,6 +163,8 @@ _CANCEL_LABELS = {
     "cancelled_limit": "limit cancelled before fill",
     "cancelled_gap_through_stop": "gapped through the stop before fill",
     "cancelled_trade_deleted": "trade record deleted before fill",
+    "cancelled_open_through_stop": "opened at or through its stop",
+    "cancelled_gap_no_reclaim": "opened toward stop, no reclaim",
 }
 
 
@@ -203,6 +213,13 @@ def _expired_copy(plan, transition: str, detail: dict) -> str:
     return "expired unfilled."
 
 
+def _reclaim_order_copy(plan, transition: str, detail: dict) -> str:
+    order = "buy-stop" if plan.direction == "bullish" else "sell-stop"
+    return (f"opened at {ui.fmt_price(detail.get('open_price'))}, toward its stop; it now "
+            f"enters only on a DAY {order} at {ui.fmt_price(detail.get('entry_price'))} "
+            "this session.")
+
+
 def _other_copy(plan, transition: str, detail: dict) -> str:
     if transition != "closed":
         label = _CANCEL_LABELS.get(transition, "withdrawn before entry")
@@ -222,6 +239,7 @@ COPY = {
     "tp2": _tp2_copy,
     "stopped": _stopped_copy,
     "expired": _expired_copy,
+    "reclaim_order": _reclaim_order_copy,
     "closed_other": _other_copy,
 }
 

@@ -74,6 +74,7 @@ import {
   TradeJournal,
   TuneDefaults,
   VersionHistory,
+  LiveSnapshot,
 } from './models';
 
 /** Omits unset scope fields so one state has one request URL (v94 D2/D5). */
@@ -125,6 +126,14 @@ export class ApiClient {
 
   health(): Observable<Health> {
     return this.http.get<Health>(`${this.base}/health`);
+  }
+
+  /** v203: the dock's one read -- heat, plans awaiting order, the killswitch
+   *  and recent activity, from Postgres only (spec v202 §5). The server
+   *  defaults `limit` to 8 and caps it at 50. */
+  live(limit?: number): Observable<LiveSnapshot> {
+    const params = limit === undefined ? new HttpParams() : new HttpParams().set('limit', String(limit));
+    return this.http.get<LiveSnapshot>(`${this.base}/live`, { params });
   }
 
   /* -- v201: live market values ------------------------------------------ */

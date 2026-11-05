@@ -173,6 +173,16 @@ def test_quote_currency_code_is_none_when_unknown_and_not_remembered(monkeypatch
     assert calls == ["XYZ", "XYZ"]
 
 
+@pytest.mark.parametrize("fetch", [True, False])
+@pytest.mark.parametrize("ticker", ["XAUUSD", " xagusd "])
+def test_spot_metals_are_quoted_in_usd_without_any_lookup(monkeypatch, ticker, fetch):
+    def boom(*a, **k):
+        raise AssertionError("no provider or store lookup for a spot metal")
+    monkeypatch.setattr(fx.data, "_provider_currency_code", boom)
+    monkeypatch.setattr(fx, "_stored_code", boom)
+    assert fx.quote_currency_code(ticker, fetch=fetch) == "USD"
+
+
 def test_quote_currency_code_survives_a_failed_lookup(monkeypatch):
     def boom(key):
         raise RuntimeError("metadata down")

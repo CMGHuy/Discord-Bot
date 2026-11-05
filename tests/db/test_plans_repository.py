@@ -74,3 +74,29 @@ def test_v139_stop_ceiling_pct_rides_in_the_doc(repo, db_conn):
     record = _plan("P1", source="confluence", stop_ceiling_pct=4.0)
     repo.insert(record, conn=db_conn)
     assert diff_records(record, repo.get("P1", conn=db_conn)) == []
+
+
+def test_v192_reclaim_fields_ride_in_the_doc(repo, db_conn):
+    """The next-open stamps survive plans.doc and reload as a TradePlanV2."""
+    from swingbot.core.planning.plan_types import plan_from_dict, plan_to_dict
+    from tests.db_diff import diff_records
+    from tests.planning.test_plan_engine_model import _plan as model_plan
+
+    record = plan_to_dict(model_plan(plan_id="P192", reclaim_atr=1.2345, reclaim_level=99.69,
+                                     reclaim_session="2026-10-26", waits_next_open=True))
+    record["created_at"] = "2026-10-26T14:00:00+00:00"   # the store stamps one when absent
+    repo.insert(record, conn=db_conn)
+    stored = repo.get("P192", conn=db_conn)
+    assert diff_records(record, stored) == []
+    plan = plan_from_dict(stored)
+    assert (plan.reclaim_atr, plan.reclaim_level, plan.reclaim_session, plan.waits_next_open) == (
+        1.2345, 99.69, "2026-10-26", True)
+
+
+def test_v192_plan_without_the_fields_stores_no_key(repo, db_conn):
+    from swingbot.core.planning.plan_types import plan_to_dict
+    from tests.planning.test_plan_engine_model import _plan as model_plan
+
+    repo.insert(plan_to_dict(model_plan(plan_id="P0")), conn=db_conn)
+    stored = repo.get("P0", conn=db_conn)
+    assert not {"reclaim_atr", "reclaim_level", "reclaim_session", "waits_next_open"} & set(stored)

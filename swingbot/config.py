@@ -306,6 +306,27 @@ FIELDS: list[Field] = [
                "this multiple of the plan's risk. 0 turns the veto off whatever the scope. "
                "v135's frozen grid is 0.5 / 0.75 / 1.0; the field stops at 1.0 so a plan's "
                "own first target can never be its blocker."),
+    Field("MARKET_ENTRY_NEXT_OPEN", "MARKET_ENTRY_NEXT_OPEN", "Trade Filters & Risk",
+          "Market plans wait for the next open (v192)",
+          type="checkbox", default="false",
+          help="v192. When on, every market plan is built PENDING and the alert reads "
+               "'Enter at the open (market-on-open)': at the next session's open it fills "
+               "at the open, or cancels when the open is at or through the stop or the "
+               "stop sits past the 2% ceiling from the open. Stop-entry, limit and v180 "
+               "Turtle Soup plans are untouched. Ships OFF: it changes every market "
+               "plan's fill and needs its own non-inferiority pre-registration before "
+               "it can go live."),
+    Field("GAP_RECLAIM_ATR", "GAP_RECLAIM_ATR", "Trade Filters & Risk",
+          "Gap-toward-stop reclaim threshold g x ATR14 (v192)",
+          type="float", default="0", min=0, max=1.0, step=0.05,
+          help="v192. With MARKET_ENTRY_NEXT_OPEN on: when the next open sits at or "
+               "beyond entry -/+ g x ATR14 toward the stop, the plan does not fill at "
+               "the open but rests as a DAY buy-stop (sell-stop for a short) at the "
+               "planned entry and cancels at the close without a reclaim. 0 turns it "
+               "off. Honoured only with MARKET_ENTRY_NEXT_OPEN on -- otherwise it is "
+               "set to 0 at load with an error in the log. Frozen grid 0.10 / 0.25 / 0.50. "
+               "v192 result: NO-LIFT at Stage 1 (docs/superpowers/results/2026-10-24-v192-gap-reclaim.md); "
+               "stays 0 until the partner decides."),
     Field("FIB_SR_CONFLUENCE_ATR", "FIB_SR_CONFLUENCE_ATR", "Trade Filters & Risk",
           "Fibonacci: Rolling S/R confluence tolerance (x ATR)",
           type="float", default="0.0", min=0.0, max=2.0, step=0.25,
@@ -1516,6 +1537,7 @@ _SEARCH_CLASSES = {
         "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",
         "FIB_TARGET_1_0_EXTENSION", "PULLBACK_DRYUP_SCOPE", "PULLBACK_DRYUP_MAX_RATIO",
         "HEADROOM_SCOPE", "HEADROOM_MIN_R",
+        "MARKET_ENTRY_NEXT_OPEN", "GAP_RECLAIM_ATR",
         "SHORT_UNIVERSE_RESEARCH_MODE",
         "COMPRESSION_SHORT_RESEARCH_MODE",
         "TURTLE_SOUP_RESEARCH_MODE",
@@ -1618,6 +1640,28 @@ def _cast(f: Field, raw: str):
     return caster(raw) if caster else raw
 
 
+def enforce_gap_reclaim_coupling() -> bool:
+    """v192: GAP_RECLAIM_ATR > 0 is honoured only with MARKET_ENTRY_NEXT_OPEN on
+    (the veto decides at the next open, which only that knob creates). Otherwise
+    set it to 0.0 and log at ERROR. True when it zeroed the value."""
+    g = globals()
+    if g.get("GAP_RECLAIM_ATR", 0.0) > 0 and not g.get("MARKET_ENTRY_NEXT_OPEN", False):
+        log.error("GAP_RECLAIM_ATR=%r needs MARKET_ENTRY_NEXT_OPEN on -- treated as 0",
+                  g["GAP_RECLAIM_ATR"])
+        g["GAP_RECLAIM_ATR"] = 0.0
+        return True
+    return False
+
+
+def _settle_change(changed: dict, attr: str, before) -> None:
+    """Rewrite `changed[attr]` after a coupling rule moved the value the loop set."""
+    now = globals()[attr]
+    if before == now:
+        changed.pop(attr, None)
+    else:
+        changed[attr] = (before, now)
+
+
 def _apply_env() -> dict:
     """
     Reads every FIELDS entry from the current environment (after
@@ -1627,6 +1671,7 @@ def _apply_env() -> dict:
     """
     changed = {}
     g = globals()
+    gap_before = g.get("GAP_RECLAIM_ATR")
     for f in FIELDS:
         raw = os.getenv(f.key, f.default)
         try:
@@ -1651,6 +1696,8 @@ def _apply_env() -> dict:
         g[f.attr] = new_value
         if old_value != new_value:
             changed[f.attr] = (old_value, new_value)
+    if enforce_gap_reclaim_coupling():
+        _settle_change(changed, "GAP_RECLAIM_ATR", gap_before)
     return changed
 
 
