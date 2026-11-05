@@ -238,7 +238,7 @@ QUIET_S = 2.0
 IDLE_ROUTE = "dashboard"
 IDLE_WINDOW_S = 120.0
 VIEWPORT = {"width": 1440, "height": 900}
-_ENV_LINE = re.compile(r"\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$")
+_ENV_LINE = re.compile(r"\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$")
 
 
 class LoginFailed(Exception):
@@ -410,7 +410,10 @@ def _scan_sample(context, base: str) -> bool | None:
 
 def _login(context, base: str, credentials: tuple[str, str]) -> int:
     user, password = credentials
-    response = context.request.post(f"{base}/api/v1/session", data={"username": user, "password": password})
+    try:
+        response = context.request.post(f"{base}/api/v1/session", data={"username": user, "password": password})
+    except Exception as exc:  # network/DNS/TLS: report the type only, its text may echo the request
+        raise LoginFailed(f"request error: {type(exc).__name__}") from None
     if response.status != 200:
         raise LoginFailed(f"HTTP {response.status}")
     return response.status
@@ -433,7 +436,10 @@ def _idle(page, recorder: _Recorder, base: str, cap_s: float) -> dict:
 
 def run_browser(args, credentials: tuple[str, str]) -> dict:
     """The live loop. Logs in before any page exists, so a failed login loads nothing."""
-    from playwright.sync_api import sync_playwright  # lazy: not a declared dependency
+    try:
+        from playwright.sync_api import sync_playwright  # lazy: not a declared dependency
+    except ImportError:
+        raise LoginFailed("playwright is not installed") from None
 
     base = args.base.rstrip("/")
     with sync_playwright() as playwright:

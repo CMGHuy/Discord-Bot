@@ -301,6 +301,48 @@ def test_missing_credentials_fail_before_the_browser_starts(tmp_path):
     assert probe.main(ARGV + [str(tmp_path / "run")], runner=runner, env_path=env) == 2
 
 
+class _ExplodingContext:
+    class request:  # noqa: N801 - stands in for context.request
+        @staticmethod
+        def post(*_, **__):
+            raise RuntimeError(f"net::ERR for {SENTINEL_USER} {SENTINEL_PASS}")
+
+
+def test_a_request_error_during_login_exits_2_with_the_type_only(tmp_path, capsys):
+    def runner(args, credentials):
+        probe._login(_ExplodingContext(), "https://x", credentials)
+    out = tmp_path / "run"
+    assert probe.main(ARGV + [str(out)], runner=runner, env_path=_env(tmp_path)) == 2
+    assert not out.exists()
+    printed = capsys.readouterr()
+    assert "RuntimeError" in printed.err
+    for text in (printed.out, printed.err):
+        assert SENTINEL_USER not in text and SENTINEL_PASS not in text
+
+
+def test_a_missing_playwright_install_exits_2(tmp_path, capsys, monkeypatch):
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", None)  # import raises ImportError
+    out = tmp_path / "run"
+    assert probe.main(ARGV + [str(out)], env_path=_env(tmp_path)) == 2
+    assert not out.exists()
+    printed = capsys.readouterr()
+    assert "playwright is not installed" in printed.err
+    for text in (printed.out, printed.err):
+        assert SENTINEL_USER not in text and SENTINEL_PASS not in text
+
+
+@pytest.mark.parametrize("line", [
+    "ADMIN_USERNAME=u1\nexport ADMIN_PASSWORD=p#1",
+    "export ADMIN_USERNAME=u1\nexport ADMIN_PASSWORD=\"p#1\"",
+    "ADMIN_USERNAME='u1'\nADMIN_PASSWORD='p#1'",
+    "  export   ADMIN_USERNAME = u1\nADMIN_PASSWORD=\"p#1\"",
+])
+def test_load_credentials_accepts_export_prefix_quotes_and_hash(tmp_path, line):
+    env = tmp_path / ".env"
+    env.write_text(line + "\n", encoding="utf-8")
+    assert probe.load_credentials(env) == ("u1", "p#1")
+
+
 def test_default_env_path_prefers_this_checkout(tmp_path, monkeypatch):
     (tmp_path / ".env").write_text("X=1\n", encoding="utf-8")
     monkeypatch.setattr(probe, "ROOT", tmp_path)
