@@ -1,10 +1,15 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   TemplateRef,
   computed,
+  effect,
   inject,
+  input,
+  output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 
@@ -16,7 +21,9 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, EmptyState, RowContext } from '../../ui/data-table/data-table.types';
 import { date, dateTime } from '../../ui/format';
 import { Icon } from '../../ui/icon';
-import { Panel } from '../../ui/layout';
+import { FocusTrap } from '../../ui/focus-trap';
+import { TextInput } from '../../ui/form-controls';
+import { ControlRow, Panel } from '../../ui/layout';
 
 /**
  * System → Users (spec v207 § SPA "Users page"): the viewer accounts, one
@@ -38,20 +45,117 @@ const USER_COLUMNS: ColumnDef<AdminUser>[] = [
   { key: 'actions', header: 'Actions' },
 ];
 
+export type UserForm = { kind: 'create' } | { kind: 'reset'; user: AdminUser };
+
+@Component({
+  selector: 'sb-user-form-dialog',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Button, ControlRow, FocusTrap, TextInput],
+  template: `
+    <dialog #dialog class="elev-overlay" (close)="form() && cancelled.emit()">
+      @if (form(); as f) {
+        <form sbFocusTrap (submit)="$event.preventDefault(); send()">
+          <h2>{{ f.kind === 'create' ? 'New viewer' : 'Reset password for ' + f.user.username }}</h2>
+          @if (f.kind === 'create') {
+            <sb-text-input label="Username" name="username" autocomplete="off" [(value)]="username" />
+          }
+          <sb-text-input
+            [label]="f.kind === 'create' ? 'Password' : 'New password'"
+            type="password"
+            name="password"
+            autocomplete="new-password"
+            [(value)]="password"
+          />
+          <p class="rule">At least 12 characters.{{ f.kind === 'reset' ? ' Saving signs this viewer out everywhere.' : '' }}</p>
+          @if (problem(); as text) {
+            <p class="problem" role="alert">{{ text }}</p>
+          }
+          <sb-control-row class="actions">
+            <button sb-button variant="ghost" type="button" (click)="cancelled.emit()">Cancel</button>
+            <button sb-button variant="primary" type="submit" data-action="submit-user" [loading]="working()">
+              {{ f.kind === 'create' ? 'Create viewer' : 'Reset password' }}
+            </button>
+          </sb-control-row>
+        </form>
+      }
+    </dialog>
+  `,
+  styles: `
+    dialog {
+      width: min(420px, calc(100vw - 2 * var(--space-20)));
+      padding: var(--space-20);
+      color: var(--text);
+    }
+    dialog::backdrop {
+      background: var(--scrim);
+    }
+    form {
+      display: grid;
+      gap: var(--space-10);
+    }
+    sb-text-input {
+      display: block;
+    }
+    .rule {
+      color: var(--text-secondary);
+      font-size: var(--text-table);
+    }
+    .problem {
+      color: var(--neg);
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+  `,
+})
+export class UserFormDialog {
+  readonly form = input<UserForm | null>(null);
+  readonly problem = input<string | null>(null);
+  readonly working = input(false);
+  readonly submitted = output<{ username: string; password: string }>();
+  readonly cancelled = output<void>();
+  protected readonly username = signal('');
+  protected readonly password = signal('');
+  private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+
+  constructor() {
+    effect(() => {
+      const element = this.dialog().nativeElement;
+      const open = this.form() !== null;
+      if (open && !element.open) {
+        untracked(() => {
+          this.username.set('');
+          this.password.set('');
+        });
+        element.showModal();
+      } else if (!open && element.open) element.close();
+    });
+  }
+
+  protected send(): void {
+    this.submitted.emit({ username: this.username(), password: this.password() });
+  }
+}
+
 @Component({
   selector: 'sb-users-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [UsersStore],
-  imports: [Panel, DataTable, Button, Icon, ConfirmDialog],
+  imports: [Panel, DataTable, Button, Icon, ConfirmDialog, UserFormDialog],
   template: `
     <sb-panel
       heading="Viewer accounts"
       description="Read-only sign-ins. A viewer sees Dashboard, Trades, Watchlist, Risk and Insights, never System, and can change nothing. The .env admin is not listed and cannot be changed here."
     >
+      <button panel-actions sb-button variant="primary" type="button" data-action="new-viewer" (click)="openCreate()">
+        New viewer
+      </button>
       @if (store.notice(); as text) {
         <p class="notice" role="status">{{ text }}</p>
       }
-      @if (store.actionError(); as text) {
+      @if (!form() && store.actionError(); as text) {
         <p class="problem" role="alert">{{ text }}</p>
       }
       @if (store.status() === 'error') {
@@ -73,6 +177,16 @@ const USER_COLUMNS: ColumnDef<AdminUser>[] = [
 
     <ng-template #actionsCell let-user>
       <span class="row-actions">
+        <button
+          sb-button
+          variant="ghost"
+          type="button"
+          data-action="reset-password"
+          [attr.aria-label]="'Reset password for ' + user.username"
+          (click)="openReset(user)"
+        >
+          Reset password
+        </button>
         <button
           sb-button
           variant="ghost"
@@ -106,6 +220,13 @@ const USER_COLUMNS: ColumnDef<AdminUser>[] = [
       [working]="store.busy() !== null"
       (confirmed)="confirmDelete()"
       (cancelled)="deleting.set(null)"
+    />
+    <sb-user-form-dialog
+      [form]="form()"
+      [problem]="store.actionError()"
+      [working]="store.busy() !== null"
+      (submitted)="submit($event)"
+      (cancelled)="closeForm()"
     />
   `,
   styles: `
@@ -142,6 +263,7 @@ export class UsersTab {
     hint: 'New viewer creates a read-only sign-in for someone who should see the book but change nothing.',
   };
   readonly deleting = signal<AdminUser | null>(null);
+  protected readonly form = signal<UserForm | null>(null);
   protected readonly deleteText = computed(() => {
     const u = this.deleting();
     return u ? deleteConsequence(u.username) : '';
@@ -153,6 +275,31 @@ export class UsersTab {
 
   constructor() {
     this.store.load();
+  }
+
+  protected openCreate(): void {
+    this.store.clearMessages();
+    this.form.set({ kind: 'create' });
+  }
+
+  protected openReset(user: AdminUser): void {
+    this.store.clearMessages();
+    this.form.set({ kind: 'reset', user });
+  }
+
+  protected closeForm(): void {
+    this.form.set(null);
+    this.store.clearMessages();
+  }
+
+  protected async submit({ username, password }: { username: string; password: string }): Promise<void> {
+    const f = this.form();
+    if (f === null) return;
+    const ok =
+      f.kind === 'create'
+        ? await this.store.create(username, password)
+        : await this.store.resetPassword(f.user, password);
+    if (ok) this.form.set(null);
   }
 
   protected toggle(user: AdminUser): void {

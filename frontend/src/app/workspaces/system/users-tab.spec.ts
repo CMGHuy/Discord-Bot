@@ -7,11 +7,13 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { errorInterceptor } from '../../api/interceptors';
 import { AdminUser } from '../../api/models';
+import { PASSWORD_RULE } from '../../stores/users.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 import { UsersTab, deleteConsequence, lastSignIn } from './users-tab';
 
 const URL = '/api/v1/users';
+const PW = 'long-enough-pw';
 const NO_CONTENT = { status: 204, statusText: 'No Content' };
 const user = (over: Partial<AdminUser> = {}): AdminUser => ({
   id: 1, username: 'alice', role: 'viewer', disabled: false,
@@ -40,6 +42,15 @@ async function press(selector: string): Promise<void> {
 }
 const dialogButton = (label: string) => [...openDialog()!.querySelectorAll<HTMLButtonElement>('button')]
   .find((button) => button.textContent!.trim() === label)!;
+function type(name: string, value: string): void {
+  const input = openDialog()!.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+  input.value = value;
+  input.dispatchEvent(new Event('input'));
+}
+async function submitForm(): Promise<void> {
+  openDialog()!.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+  await settle();
+}
 
 async function mount(answer: AdminUser[] | 'down', phone = false): Promise<void> {
   TestBed.resetTestingModule();
@@ -152,5 +163,86 @@ describe('System → Users tab (v207)', () => {
     backend.expectOne({ method: 'DELETE', url: `${URL}/1` }).flush(null, NO_CONTENT);
     await settle();
     expect(q<HTMLDialogElement>('sb-drawer.row-drawer dialog')?.open ?? false).toBe(false);
+  });
+});
+
+describe('System → Users dialogs (v207)', () => {
+  beforeAll(() => installDialogPolyfill());
+
+  it('creates a viewer from the dialog and closes it', async () => {
+    await mount([]);
+    await press('[data-action="new-viewer"]');
+    expect(openDialog()!.querySelector('h2')!.textContent!.trim()).toBe('New viewer');
+    type('username', 'bob');
+    type('password', PW);
+    await submitForm();
+    const req = backend.expectOne({ method: 'POST', url: URL });
+    expect(req.request.body).toEqual({ username: 'bob', password: PW });
+    req.flush(user({ id: 2, username: 'bob' }), { status: 201, statusText: 'Created' });
+    await settle();
+    expect(openDialog()).toBeNull();
+    expect(q('tbody')!.textContent).toContain('bob');
+    expect(q('[role="status"]')!.textContent).toContain('Created viewer bob.');
+  });
+
+  it('keeps the dialog and the typed name on a 409, and says why', async () => {
+    await mount([user()]);
+    await press('[data-action="new-viewer"]');
+    type('username', 'Alice');
+    type('password', PW);
+    await submitForm();
+    backend.expectOne({ method: 'POST', url: URL }).flush(...failure('conflict', 409, 'username is already taken.'));
+    await settle();
+    expect(openDialog()).toBeTruthy();
+    expect(openDialog()!.querySelector('[role="alert"]')!.textContent).toContain('names are case-insensitive');
+    expect(openDialog()!.querySelector<HTMLInputElement>('input[name="username"]')!.value).toBe('Alice');
+    expect(el().querySelectorAll('[role="alert"]')).toHaveLength(1);
+  });
+
+  it('refuses a short password in the dialog without a request', async () => {
+    await mount([]);
+    await press('[data-action="new-viewer"]');
+    type('username', 'bob');
+    type('password', 'short');
+    await submitForm();
+    backend.expectNone({ method: 'POST', url: URL });
+    expect(openDialog()!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(PASSWORD_RULE);
+  });
+
+  it('opens empty again after Cancel, with no stale error', async () => {
+    await mount([]);
+    await press('[data-action="new-viewer"]');
+    type('username', 'b b');
+    type('password', PW);
+    await submitForm();
+    dialogButton('Cancel').click();
+    await settle();
+    expect(openDialog()).toBeNull();
+    await press('[data-action="new-viewer"]');
+    expect(openDialog()!.querySelector<HTMLInputElement>('input[name="username"]')!.value).toBe('');
+    expect(openDialog()!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('resets a password from the row, naming the account, with no username field', async () => {
+    await mount([user()]);
+    await press('[data-action="reset-password"]');
+    expect(openDialog()!.querySelector('h2')!.textContent!.trim()).toBe('Reset password for alice');
+    expect(openDialog()!.querySelector('input[name="username"]')).toBeNull();
+    expect(openDialog()!.textContent).toContain('Saving signs this viewer out everywhere.');
+    type('password', PW);
+    await submitForm();
+    const req = backend.expectOne({ method: 'POST', url: `${URL}/1/password` });
+    expect(req.request.body).toEqual({ password: PW });
+    req.flush(null, NO_CONTENT);
+    await settle();
+    expect(openDialog()).toBeNull();
+    expect(q('[role="status"]')!.textContent).toContain('Password reset for alice.');
+  });
+
+  it('offers Reset password in the phone row drawer too', async () => {
+    await mount([user()], true);
+    openRowDrawer(q('sb-data-table')!);
+    await settle();
+    expect(q('sb-drawer.row-drawer [data-action="reset-password"]')).toBeTruthy();
   });
 });
