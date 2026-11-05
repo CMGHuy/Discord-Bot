@@ -12,7 +12,7 @@ import logging
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Callable, Iterable
+from typing import TYPE_CHECKING, Callable, Iterable, Mapping, Sequence
 
 from swingbot import config
 from swingbot.core.analytics import admin_snapshots
@@ -238,3 +238,104 @@ class SnapshotWorker:
                 swallowed(log, "refresher.snapshot.worker", exc)
                 with self._lock:  # never leave a key stuck as active
                     self._active.difference_update(batch)
+
+
+# --- scheduling: which keys the refresher cycle hands the worker -------------------
+
+_last_runs: dict[str, datetime] = {}
+_trades_fp: tuple | None = None
+_was_scanning: bool = False
+_pruned_for: tuple[str, str] | None = None
+_WORKER: SnapshotWorker | None = None
+_WORKER_LOCK = threading.Lock()
+
+
+def worker() -> SnapshotWorker:
+    """The refresher process's one SnapshotWorker, created on first call."""
+    global _WORKER
+    with _WORKER_LOCK:
+        if _WORKER is None:
+            _WORKER = SnapshotWorker()
+        return _WORKER
+
+
+def due_keys(now: datetime, last_runs: Mapping[str, datetime], *, session: str,
+             builder_keys: Sequence[str], trades_changed: bool, scan_completed: bool,
+             queued: Iterable[str]) -> list[str]:
+    """Keys to build this cycle: forced, never built or past cadence; then queued keys."""
+    cadence = admin_refresh.snapshot_cadence_s(session)
+    force = trades_changed or scan_completed
+    due = [k for k in builder_keys
+           if force or k not in last_runs
+           or (now - last_runs[k]).total_seconds() >= cadence]
+    known = set(builder_keys)
+    for key in queued:
+        if key in known and key not in due:
+            due.append(key)
+    return due
+
+
+def _trades_fingerprint() -> tuple | None:
+    """(row count, newest updated_at) of trades; None when the database cannot say."""
+    try:
+        import sqlalchemy as sa
+
+        from swingbot.core.db import engine
+        with engine.get_engine().connect() as conn:
+            row = conn.execute(sa.text("SELECT count(*), max(updated_at) FROM trades")).one()
+        return (row[0], row[1])
+    except Exception as exc:  # noqa: BLE001 - an unknown fingerprint is never a change
+        swallowed(log, "refresher.snapshot.trades_fp", exc, level=logging.DEBUG)
+        return None
+
+
+def _triggers(ctx: CycleContext) -> tuple[bool, bool]:
+    """(trades_changed, scan_completed) for this cycle; updates the remembered state."""
+    global _trades_fp, _was_scanning
+    fp = _trades_fingerprint()
+    trades_changed = fp is not None and _trades_fp is not None and fp != _trades_fp
+    if fp is not None:
+        _trades_fp = fp
+    scan_completed = _was_scanning and not ctx.scan_running
+    _was_scanning = bool(ctx.scan_running)
+    return trades_changed, scan_completed
+
+
+def _prune_months(now: datetime) -> None:
+    """Drop calendar rows outside this and last month, once per month pair."""
+    global _pruned_for
+    months = admin_refresh.calendar_months(now)
+    if months == _pruned_for:
+        return
+    try:
+        admin_snapshot_repo().prune("calendar.pnl:", [admin_refresh.calendar_key(m) for m in months])
+    except Exception as exc:  # noqa: BLE001 - retried next cycle
+        swallowed(log, "refresher.snapshot.prune", exc)
+        return
+    _pruned_for = months
+
+
+def _submit_due(ctx: CycleContext, due: list[str]) -> None:
+    accepted = set(worker().submit(due))
+    for key in due:
+        if key in accepted:
+            _last_runs[key] = ctx.now
+        else:  # busy: due again next cycle, so a trigger is never lost
+            _last_runs.pop(key, None)
+    if accepted:
+        ctx.report.changed = True
+
+
+def snapshot_step(ctx: CycleContext) -> None:
+    """The cycle's snapshot step: schedule keys on the worker; never builds, never publishes."""
+    if not admin_refresh.refresher_on():
+        return
+    trades_changed, scan_completed = _triggers(ctx)
+    due = due_keys(ctx.now, _last_runs, session=ctx.session,
+                   builder_keys=list(admin_snapshots.builders(ctx.now)),
+                   trades_changed=trades_changed, scan_completed=scan_completed,
+                   queued=ctx.queued_snapshots)
+    if due:
+        _submit_due(ctx, due)
+    ctx.report.snapshots_written = tuple(worker().drain_landed())
+    _prune_months(ctx.now)

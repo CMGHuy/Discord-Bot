@@ -4,7 +4,7 @@ import signal
 import threading
 
 from swingbot import config
-from swingbot.refresher import loop
+from swingbot.refresher import loop, snapshot_job
 
 
 def main() -> int:
@@ -15,7 +15,12 @@ def main() -> int:
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     if hasattr(signal, "SIGHUP"):
         signal.signal(signal.SIGHUP, lambda *_: config.reload())
-    loop.run_forever(stop)
+    job = snapshot_job.worker()  # refresher process only, never the admin or bot containers
+    job.start()
+    try:
+        loop.run_forever(stop)
+    finally:
+        job.stop()
     return 0
 
 

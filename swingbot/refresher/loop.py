@@ -11,7 +11,8 @@ looks like a quiet market.
 A full cycle (the whole symbol set) runs once per session cadence; a cycle in
 between carries ``SymbolSet((), ())`` and only the queued keys, so a user's
 Refresh is served within ``QUEUE_POLL_S`` without refetching everything.
-``STEPS`` starts with the quote and FX steps (``quotes``); a cycle that
+``STEPS`` runs the quote and FX steps (``quotes``), then the snapshot step
+(``snapshot_job``, v204), so snapshots see this cycle's FX codes; a cycle that
 changed something raises one ``market`` NOTIFY at its end.
 """
 from __future__ import annotations
@@ -32,7 +33,7 @@ from swingbot.core.db.repositories.market_refresh import (refresh_queue_repo,
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import session
 from swingbot.core.marketdata.shared import admin_refresh
-from swingbot.refresher import lock, quotes
+from swingbot.refresher import lock, quotes, snapshot_job
 from swingbot.refresher.symbols import SymbolSet, symbol_set
 
 log = logging.getLogger(__name__)
@@ -66,7 +67,8 @@ class CycleContext:
     marks_announced: bool = False
 
 
-STEPS: list[Callable[[CycleContext], None]] = [quotes.quote_step, quotes.fx_step]
+STEPS: list[Callable[[CycleContext], None]] = [quotes.quote_step, quotes.fx_step,
+                                               snapshot_job.snapshot_step]
 
 _last_full: datetime | None = None
 
