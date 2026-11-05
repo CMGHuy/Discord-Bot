@@ -2,7 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { Params, Router } from '@angular/router';
 
 import { AnalyticsUnit, BookScope } from '../../api/models';
+import { IfAdminDirective } from '../../auth/if-admin.directive';
 import { AnalyticsStore } from '../../stores/analytics.store';
+import { SessionStore } from '../../stores/session.store';
 import { Tab, TabBar } from '../../ui/layout';
 import { Page } from '../../ui/page';
 import { ScopeBar, fxMissingOf } from './scope-bar';
@@ -22,6 +24,19 @@ import { TuningTab } from './tabs/tuning';
  *  without this list being touched. */
 const FALLBACK_HORIZONS = ['2w', '4w', '2m', '3m', '4m', '5m', '6m', '7m', '8m', '9m'] as const;
 
+export const ANALYTICS_TAB_LIST: readonly Tab[] = [
+  { id: 'overview', label: 'Overview' }, { id: 'attribution', label: 'Attribution' },
+  { id: 'execution', label: 'Execution' }, { id: 'edge', label: 'Edge' },
+  { id: 'pipeline', label: 'Pipeline' }, { id: 'tuning', label: 'Tuning' },
+  { id: 'partials', label: 'Partials' },
+];
+
+/** v207: Tuning runs tune jobs and saves proposals, an admin tool (spec
+ *  Decision 3); a viewer gets the other six, in the same order. */
+export function visibleAnalyticsTabs(isAdmin: boolean): readonly Tab[] {
+  return isAdmin ? ANALYTICS_TAB_LIST : ANALYTICS_TAB_LIST.filter((tab) => tab.id !== 'tuning');
+}
+
 /**
  * Analytics — seven tabs in the order a trader asks (spec v94 D1; v142 adds
  * Partials last), one scope
@@ -40,18 +55,18 @@ const FALLBACK_HORIZONS = ['2w', '4w', '2m', '3m', '4m', '5m', '6m', '7m', '8m',
   // the tabs are projected into this host, and a register declared six times
   // is six chances for two tabs to disagree about their own density.
   host: { class: 'register-instrument' },
-  imports: [Page, TabBar, ScopeBar, OverviewTab, AttributionTab, ExecutionTab, EdgeTab, PipelineTab, TuningTab, PartialsTab],
+  imports: [Page, TabBar, ScopeBar, OverviewTab, AttributionTab, ExecutionTab, EdgeTab, PipelineTab, TuningTab, PartialsTab, IfAdminDirective],
   template: `
     <!-- v195 Phase 4: the route title is the page's one h1. The tab strip
          and the one scope bar are the page's scope (filters and tabs only);
          the open tab is the primary panel and owns its own panels. -->
     <sb-page>
       <div page-scope class="scope">
-        <sb-tab-bar [tabs]="tabs" [active]="store.tab()" (activeChange)="goToTab($event)" />
+        <sb-tab-bar [tabs]="tabs()" [active]="store.tab()" (activeChange)="goToTab($event)" />
         <sb-scope-bar
           [scope]="store.scope()" [unit]="store.unit()" [n]="store.scopeN()"
           [allTimePanels]="store.allTimePanelCount()" [strategies]="strategyNames()"
-          [horizons]="horizons()" [asOf]="store.asOf()" [fxMissing]="fxMissing()" [tuning]="store.tab() === 'tuning'"
+          [horizons]="horizons()" [asOf]="store.asOf()" [fxMissing]="fxMissing()" [tuning]="store.tab() === 'tuning' && session.isAdmin()"
           (scopeChange)="onScope($event)" (unitChange)="onUnit($event)" (cleared)="store.clearScope()" />
       </div>
       <div page-primary class="tab-body">
@@ -61,7 +76,7 @@ const FALLBACK_HORIZONS = ['2w', '4w', '2m', '3m', '4m', '5m', '6m', '7m', '8m',
           @case ('execution') { <sb-execution-tab /> }
           @case ('edge') { <sb-edge-tab /> }
           @case ('pipeline') { <sb-pipeline-tab /> }
-          @case ('tuning') { <sb-tuning-tab /> }
+          @case ('tuning') { <sb-tuning-tab *ifAdmin /> }
           @case ('partials') { <sb-partials-tab /> }
         }
       </div>
@@ -78,12 +93,14 @@ export class Analytics {
   protected readonly fxMissing = computed(() =>
     fxMissingOf(this.store.performance(), this.store.equityCurve(), this.store.byDimension()));
   private readonly router = inject(Router);
-  protected readonly tabs: Tab[] = [
-    { id: 'overview', label: 'Overview' }, { id: 'attribution', label: 'Attribution' },
-    { id: 'execution', label: 'Execution' }, { id: 'edge', label: 'Edge' },
-    { id: 'pipeline', label: 'Pipeline' }, { id: 'tuning', label: 'Tuning' },
-    { id: 'partials', label: 'Partials' },
-  ];
+  protected readonly session = inject(SessionStore);
+  protected readonly tabs = computed(() => visibleAnalyticsTabs(this.session.isAdmin()));
+
+  constructor() {
+    const requested = this.router.parseUrl(this.router.url).queryParamMap.get('tab');
+    if (requested === 'tuning' && !this.session.isAdmin()) this.goToTab('overview');
+  }
+
   /** The axis the server actually aggregated, falling back to the mirrored
    *  keys before the first heat-grid response. */
   protected readonly horizons = computed<readonly string[]>(

@@ -9,7 +9,7 @@ import {
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Provider, provideZonelessChangeDetection, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   authInterceptor,
@@ -25,6 +25,7 @@ import { By } from '@angular/platform-browser';
 
 import { RouteTitleService } from '../../routing/route-title.service';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { KillswitchChip } from '../../shell/killswitch-chip';
 import { StatTile } from '../../ui/stat-tile';
 
 import { ConnectionStore } from '../../stores/connection.store';
@@ -32,6 +33,19 @@ import { RiskStore } from '../../stores/risk.store';
 import { ViewportService } from '../../ui/breakpoints';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
+
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
+import { Role } from '../../api/models';
+import { SessionStore } from '../../stores/session.store';
+
+let role: Role = 'admin';
+beforeEach(() => { role = 'admin'; });
+function signInAs(as: Role): void {
+  patchState(unprotected(TestBed.inject(SessionStore)), {
+    status: 'authenticated', username: as === 'admin' ? 'admin' : 'viewer1', role: as,
+  });
+}
 
 /* v85 D37: every metric a {value, n} pair -- a fixture with real, distinct
  * sample sizes across the distributional (n=118) and trade (n=782) families,
@@ -79,6 +93,7 @@ function seed(extra: Provider[] = []): { fixture: ComponentFixture<Risk>; backen
       RiskStore, ...extra,
     ],
   });
+  signInAs(role);
   const fixture = TestBed.createComponent(Risk);
   TestBed.inject(RiskStore).load();
   const backend = TestBed.inject(HttpTestingController);
@@ -1128,5 +1143,56 @@ describe('Risk on sb-page, source (v195 Phase 4)', () => {
   it('never puts a slot attribute on an element inside a conditional', () => {
     // Each slot is one stable element; a conditional sits inside it.
     expect(src).not.toMatch(/@if \([^)]*\) \{\s*<[^>]*\bpage-(actions|scope|kpis|primary|secondary)\b/);
+  });
+});
+
+/* -- v207 -- a viewer sees the killswitch state and cannot change it ----- */
+
+describe('Risk for a viewer (v207)', () => {
+  beforeAll(() => installDialogPolyfill());
+  const panel = (el: HTMLElement) => el.querySelector('sb-panel[heading="Killswitch"]')!;
+
+  it('gives the admin Engage and the pointer to it (unchanged)', async () => {
+    const el = (await renderPage()).nativeElement as HTMLElement;
+    expect(headerActions(el).querySelector('.kill-actions button[data-action="killswitch"]')).not.toBeNull();
+    expect(panel(el).querySelector('.kill-where')).not.toBeNull();
+  });
+
+  it('hides Engage and Release from a viewer and keeps the state', async () => {
+    role = 'viewer';
+    for (const on of [false, true]) {
+      const el = (await renderPage({ killswitch: { on, reason: null, at: null, availability: OK } }))
+        .nativeElement as HTMLElement;
+      expect(el.querySelector('.kill-actions')).toBeNull();
+      expect(el.querySelector('button[data-action="killswitch"]')).toBeNull();
+      expect(headerActions(el).querySelectorAll('button')).toHaveLength(0);
+      expect(panel(el).textContent).toContain(on ? 'ENGAGED' : 'Clear');
+      expect(panel(el).querySelector('.kill-where')).toBeNull();
+    }
+  });
+
+  it('never tells a viewer to choose an action in the unknown state', async () => {
+    const unknown = { killswitch: { on: null, reason: null, at: null, availability: OK } };
+    const adminText = panel((await renderPage(unknown)).nativeElement as HTMLElement).textContent!;
+    expect(adminText).toContain('Choose an explicit action if needed.');
+    role = 'viewer';
+    const viewerText = panel((await renderPage(unknown)).nativeElement as HTMLElement).textContent!;
+    expect(viewerText).toContain('Current killswitch state is unavailable.');
+    expect(viewerText).not.toContain('Choose an explicit action');
+  });
+
+  it('leaves the shell KillswitchChip rendered for a viewer: a read-only link, not a control', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    });
+    signInAs('viewer');
+    const chip = TestBed.createComponent(KillswitchChip);
+    chip.componentRef.setInput('on', false);
+    chip.detectChanges();
+    const link = (chip.nativeElement as HTMLElement).querySelector('a')!;
+    expect(link.textContent!.trim()).toBe('Armed');
+    expect(link.getAttribute('href')).toBe('/risk');
+    expect((chip.nativeElement as HTMLElement).querySelector('button')).toBeNull();
   });
 });

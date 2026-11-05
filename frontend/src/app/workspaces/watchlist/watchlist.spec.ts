@@ -32,6 +32,17 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RouteTitleService } from '../../routing/route-title.service';
 
+import { Role } from '../../api/models';
+import { SessionStore } from '../../stores/session.store';
+
+let role: Role = 'admin';
+beforeEach(() => { role = 'admin'; });
+function signInAs(as: Role): void {
+  patchState(unprotected(TestBed.inject(SessionStore)), {
+    status: 'authenticated', username: as === 'admin' ? 'admin' : 'viewer1', role: as,
+  });
+}
+
 function ticker(overrides: Partial<Ticker>): Ticker {
   return {
     symbol: 'AAPL', company_name: 'Apple Inc.', open_trades: 0, closed_trades: 0,
@@ -60,6 +71,7 @@ function rows(list: Partial<Ticker>[]): Element[] {
       WatchlistStore,
     ],
   });
+  signInAs(role);
   const fixture = TestBed.createComponent(Watchlist);
   patchState(unprotected(TestBed.inject(WatchlistStore)), {
     tickers: list.map((overrides) => ticker(overrides)),
@@ -179,6 +191,7 @@ function seed(): { fixture: ComponentFixture<Watchlist>; backend: HttpTestingCon
       WatchlistStore,
     ],
   });
+  signInAs(role);
   const fixture = TestBed.createComponent(Watchlist);
   TestBed.inject(WatchlistStore).load();
   const backend = TestBed.inject(HttpTestingController);
@@ -255,6 +268,7 @@ describe('Watchlist tape column', () => {
         { provide: TapeStore, useValue: tapeStub },
       ],
     });
+    signInAs(role);
     routerStub = { navigate: vi.spyOn(TestBed.inject(Router), 'navigate') };
     fixture = TestBed.createComponent(Watchlist);
     TestBed.inject(WatchlistStore).load();
@@ -306,6 +320,7 @@ describe('Watchlist tape column sorting', () => {
         { provide: TapeStore, useValue: { toggle: vi.fn(), symbols: () => ['NVDA'] } },
       ],
     });
+    signInAs(role);
     fixture = TestBed.createComponent(Watchlist);
     TestBed.inject(WatchlistStore).load();
     fixture.detectChanges();
@@ -470,6 +485,7 @@ function render(opts: RenderOpts = {}): ComponentFixture<Watchlist> {
       PreferencesStore,
     ],
   });
+  signInAs(role);
   const fixture = TestBed.createComponent(Watchlist);
   const list = opts.rows
     ? opts.rows.map((overrides) => ticker(overrides))
@@ -594,6 +610,7 @@ describe('Watchlist on a phone (v179 §3.1)', () => {
         phoneViewport(),
       ],
     });
+    signInAs(role);
     fixture = TestBed.createComponent(Watchlist);
     TestBed.inject(WatchlistStore).load();
     fixture.detectChanges();
@@ -645,6 +662,7 @@ describe('Watchlist on sb-page (v195 Phase 4, §5.2)', () => {
         WatchlistStore,
       ],
     });
+    signInAs(role);
     const fixture = TestBed.createComponent(Watchlist);
     if (tab) fixture.componentRef.setInput('tab', tab);
     TestBed.inject(RouteTitleService).set('Watchlist', 'The symbols being scanned');
@@ -713,5 +731,57 @@ describe('Watchlist on sb-page (v195 Phase 4, §5.2)', () => {
     expect(src).toContain('<sb-page');
     expect(src).not.toContain('<sb-section-head');
     expect(src).not.toMatch(/:host \{[^}]*grid-template-columns/);
+  });
+});
+
+/* -- v207 -- a viewer reads the watchlist and changes nothing ----------- */
+
+describe('Watchlist for a viewer (v207)', () => {
+  function mountList(list: Partial<Ticker>[]): ComponentFixture<Watchlist> {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+        provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
+        WatchlistStore,
+      ],
+    });
+    signInAs(role);
+    const fixture = TestBed.createComponent(Watchlist);
+    patchState(unprotected(TestBed.inject(WatchlistStore)), {
+      tickers: list.map((overrides) => ticker(overrides)),
+      loaded: true,
+    });
+    fixture.detectChanges();
+    return fixture;
+  }
+  const columnKeys = (f: ComponentFixture<Watchlist>): string[] =>
+    (f.componentInstance as unknown as { columns: () => { key: string }[] }).columns().map((c) => c.key);
+
+  it('gives the admin the Add tickers panel and the remove column (unchanged)', () => {
+    const f = mountList([{ symbol: 'AAPL' }]);
+    const el = f.nativeElement as HTMLElement;
+    expect(el.querySelector('sb-page div.secondary.slot sb-panel.add-panel')).not.toBeNull();
+    expect(columnKeys(f)).toContain('actions');
+  });
+
+  it('leaves a viewer no Add tickers panel and an empty secondary slot', () => {
+    role = 'viewer';
+    const el = mountList([{ symbol: 'AAPL' }]).nativeElement as HTMLElement;
+    expect(el.querySelector('sb-panel.add-panel')).toBeNull();
+    expect(el.querySelector('sb-page div.secondary.slot')!.children).toHaveLength(0);
+    expect(el.querySelector('input[aria-label="Ticker symbols to add"]')).toBeNull();
+  });
+
+  it('drops only the remove column for a viewer: every read column stays', () => {
+    const adminKeys = columnKeys(mountList([{ symbol: 'AAPL' }]));
+    role = 'viewer';
+    const viewer = mountList([{ symbol: 'AAPL' }]);
+    expect(columnKeys(viewer)).toEqual(adminKeys.filter((key) => key !== 'actions'));
+    expect((viewer.nativeElement as HTMLElement).querySelector('button[aria-label="Remove AAPL"]')).toBeNull();
+    expect((viewer.nativeElement as HTMLElement).textContent).toContain('AAPL');
   });
 });

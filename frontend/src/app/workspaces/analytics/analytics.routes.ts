@@ -3,7 +3,8 @@ import { ActivatedRouteSnapshot, Routes } from '@angular/router';
 
 import { RefreshPredicate, routeData } from '../../routing/route-metadata';
 import { startRoute } from '../../routing/route-resolver';
-import { AnalyticsStore } from '../../stores/analytics.store';
+import { AnalyticsStore, AnalyticsTab } from '../../stores/analytics.store';
+import { SessionStore } from '../../stores/session.store';
 import { scopeFromParams, scopePatchFromParams } from './scope-url';
 
 /** The URL is the whole state of this workspace (spec v94 D2): the tab, the
@@ -21,6 +22,12 @@ const analyticsState = (route: ActivatedRouteSnapshot) => scopePatchFromParams(r
 const refreshOnAnalytics: RefreshPredicate = (event, route) =>
   scopeFromParams(route.queryParamMap).tab === 'tuning' ? event === 'jobs' : event === 'analytics';
 
+/** v207: a viewer asking for the admin-only Tuning tab gets Overview, so the
+ *  resolver never issues the tuning reads (403 for a viewer). */
+export function analyticsTabFor(tab: AnalyticsTab, isAdmin: boolean): AnalyticsTab {
+  return tab === 'tuning' && !isAdmin ? 'overview' : tab;
+}
+
 export const analyticsRoutes: Routes = [{
   path: '', providers: [AnalyticsStore], runGuardsAndResolvers: 'always',
   data: routeData('Analytics', refreshOnAnalytics),
@@ -29,7 +36,7 @@ export const analyticsRoutes: Routes = [{
       const store = inject(AnalyticsStore);
       const { tab, scope, unit } = analyticsState(route);
       store.hydrate(scope, unit);          // sets state without firing a request
-      return store.resolveTab(tab);
+      return store.resolveTab(analyticsTabFor(tab, inject(SessionStore).isAdmin()));
     }),
   },
   loadComponent: () => import('./analytics').then((m) => m.Analytics),
