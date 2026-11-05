@@ -110,9 +110,8 @@ def _next_expiry(pending: list[dict], now: datetime) -> str | None:
 def _awaiting_values(now: datetime) -> dict:
     """A state count, not a since-last-visit badge: it drops only when a plan
     fills, expires or is cancelled."""
-    from swingbot.core.db.repositories.plans import plans_repo
-    from swingbot.core.db.schema import plans
-    pending = plans_repo().list_all(where=plans.c.status == "PENDING")
+    from swingbot.core.planning.plan_store import PlanStore
+    pending = [p for p in PlanStore().records() if p.get("status") == "PENDING"]
     return {"count": len(pending), "next_expiry": _next_expiry(pending, now)}
 
 

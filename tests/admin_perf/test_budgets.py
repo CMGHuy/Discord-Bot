@@ -23,7 +23,7 @@ BUDGETS: dict[str, tuple[int, int]] = {
     "dashboard_today": (12, 4),  # list_all: TradeRepository x2, PlanRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
     "trades": (3, 3),  # list_all: PlanRepository x1, TradeRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
     "trades_open": (3, 3),  # list_all: PlanRepository x1, TradeRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
-    "live": (12, 7),  # list_all: PlanRepository x2, TradeRepository x5 (probe, v205 V205-9 scoped)
+    "live": (12, 3),  # list_all: PlanRepository x1, TradeRepository x2 (probe, v205 V205-9 scoped)
     "calendar_month": (2, 2),  # list_all: TradeRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
     "calendar_day": (2, 2),  # list_all: TradeRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
     "calendar_sparklines": (2, 2),  # list_all: TradeRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
