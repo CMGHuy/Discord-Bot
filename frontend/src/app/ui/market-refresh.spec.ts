@@ -15,19 +15,27 @@ describe('sb-market-refresh (v201)', () => {
     });
   });
 
-  function button(symbols: string[]): HTMLButtonElement {
+  function button(symbols: string[], snapshots: string[] = []): HTMLButtonElement {
     const f = TestBed.createComponent(MarketRefresh);
     f.componentRef.setInput('symbols', symbols);
+    f.componentRef.setInput('snapshots', snapshots);
     f.detectChanges();
     return (f.nativeElement as HTMLElement).querySelector('button') as HTMLButtonElement;
   }
 
   it('a click requests a refresh of its symbols', () => {
     button(['MSFT']).click();
-    expect(requestRefresh).toHaveBeenCalledWith(['MSFT']);
+    expect(requestRefresh).toHaveBeenCalledWith(['MSFT'], []);
   });
 
-  it('is disabled with an empty list', () => {
+  it('requests a snapshot refresh without symbols', () => {
+    const b = button([], ['risk']);
+    expect(b.disabled).toBe(false);
+    b.click();
+    expect(requestRefresh).toHaveBeenCalledWith([], ['risk']);
+  });
+
+  it('is disabled with both lists empty', () => {
     const b = button([]);
     expect(b.disabled).toBe(true);
     b.click();

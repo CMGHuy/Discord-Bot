@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, TemplateRef, computed, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Directive, TemplateRef, computed, inject, input, signal, viewChild } from '@angular/core';
 
-import { ChartResponse } from '../../api/models';
+import { ChartResponse, MarketStatus } from '../../api/models';
+import { LiveValuesStore } from '../../stores/live-values.store';
 import { Async, AsyncEmptyReason } from '../../ui/async';
 import { BarList, BarRow } from '../../ui/bar-list';
 import { Button, ButtonVariant } from '../../ui/button';
@@ -29,6 +30,9 @@ import { AgeHint } from '../../ui/age-hint';
 import { IncompleteNote } from '../../ui/incomplete-note';
 import { MarketRefresh } from '../../ui/market-refresh';
 import { MarketValue } from '../../ui/market-value';
+import { CLOCK } from '../../ui/clock';
+import { lowerBoundLabel } from '../../ui/lower-bound';
+import { PnlBasis } from '../../ui/pnl-basis';
 import { Freshness } from '../../ui/freshness';
 import { Gauge } from '../../ui/gauge';
 import { HeatCell, HeatGrid } from '../../ui/heat-grid';
@@ -69,6 +73,32 @@ import { StripGroup, StripPlot } from '../../ui/strip-plot';
 import { Timeline, TimelineItem } from '../../ui/timeline';
 import { Toolbar, ToolbarControl } from '../../ui/toolbar';
 import { Waterfall, WaterfallStep } from '../../ui/waterfall';
+
+const SNAPSHOT_DEMO_AT = '2026-10-30T21:10:00Z';
+
+@Directive({
+  selector: '[gallerySnapshotSession]',
+  providers: [
+    { provide: CLOCK, useValue: signal(Date.parse('2026-10-30T21:13:00Z')) },
+    {
+      provide: LiveValuesStore,
+      useFactory: () => {
+        const example = inject(GallerySnapshotSession);
+        return { status: example.status };
+      },
+    },
+  ],
+})
+export class GallerySnapshotSession {
+  readonly gallerySnapshotSession = input.required<MarketStatus['session']>();
+  readonly status = computed<MarketStatus>(() => ({
+    session: this.gallerySnapshotSession(),
+    last_close_at: '2026-10-30T20:00:00Z',
+    stale_price_s: 120,
+    stale_snapshot_s: 600,
+    heartbeat: { beat_at: null, cadence_s: 30, stalled: false },
+  }));
+}
 
 interface GalleryRow {
   id: string;
@@ -138,6 +168,8 @@ interface ContractRow {
     Freshness,
     AgeHint,
     MarketValue,
+    GallerySnapshotSession,
+    PnlBasis,
     IncompleteNote,
     MarketRefresh,
     Gauge,
@@ -571,6 +603,24 @@ interface ContractRow {
       <sb-market-value [asOf]="marketAsOf" error="no quote">187.42</sb-market-value>
       <sb-market-value [asOf]="null" [refreshing]="true">187.42</sb-market-value>
       <sb-market-value [asOf]="'2026-10-30T19:59:58Z'">187.42</sb-market-value>
+      <div class="snapshot-example">
+        <div gallerySnapshotSession="regular">
+          <sb-market-value kind="snapshot" [computedAt]="snapshotDemoAt">$1,200</sb-market-value>
+        </div>
+        <div gallerySnapshotSession="regular">
+          <sb-market-value kind="snapshot" [computedAt]="snapshotDemoAt" [staleInputs]="true">
+            $1,200
+          </sb-market-value>
+        </div>
+        <div gallerySnapshotSession="closed">
+          <sb-market-value kind="snapshot" [computedAt]="snapshotDemoAt">$1,200</sb-market-value>
+        </div>
+        <div>{{ snapshotLowerBound }}</div>
+        <div>
+          <div class="num">$1,200</div>
+          <sb-pnl-basis />
+        </div>
+      </div>
       <sb-incomplete-note [missing]="2" />
       <sb-market-refresh [symbols]="['AAPL', 'MSFT']" />
       <sb-control-bar [activeCount]="2">
@@ -1083,6 +1133,8 @@ export class Gallery {
 
   /** v85 R2-04 -- sb-matrix demo. */
   protected readonly matrixLabels = ['AAPL', 'MSFT', 'XOM'];
+  protected readonly snapshotDemoAt = SNAPSHOT_DEMO_AT;
+  protected readonly snapshotLowerBound = lowerBoundLabel('$1,200', 2);
   protected readonly marketAsOf = new Date(Date.now() - 12_000).toISOString();
   protected readonly matrixValues: (number | null)[][] = [
     [1, 0.68, 0.12],

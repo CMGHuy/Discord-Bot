@@ -68,12 +68,13 @@ describe('AgeHint (sb-age-hint)', () => {
   });
 });
 
+const NOW = Date.parse('2026-10-31T15:00:00Z'); // a Saturday
+
 describe('marketAgeLabel (v201)', () => {
   const st = (session: MarketStatus['session'], stalled = false): MarketStatus => ({
     session, last_close_at: '2026-10-30T20:00:00Z', stale_price_s: 120,
     heartbeat: { beat_at: null, cadence_s: 30, stalled },
   });
-  const NOW = Date.parse('2026-10-31T15:00:00Z'); // a Saturday
 
   it('fresh price in regular hours reads its age', () =>
     expect(marketAgeLabel(new Date(NOW - 12_000).toISOString(), NOW, st('regular'))).toEqual({ text: '12 s ago', tone: 'fresh' }));
@@ -88,4 +89,35 @@ describe('marketAgeLabel (v201)', () => {
   it('no as-of gives no text', () => expect(marketAgeLabel(null, NOW, st('regular')).text).toBeNull());
   it('no status yet reads the age, fresh', () =>
     expect(marketAgeLabel(new Date(NOW - 5_000).toISOString(), NOW, null)).toEqual({ text: '5 s ago', tone: 'fresh' }));
+});
+
+describe('marketAgeLabel snapshot', () => {
+  const status = (session: MarketStatus['session'], stalled = false): MarketStatus => ({
+    session, last_close_at: '2026-10-30T20:00:00Z', stale_price_s: 120, stale_snapshot_s: 600,
+    heartbeat: { beat_at: null, cadence_s: 30, stalled },
+  });
+  const ago = (s: number) => new Date(NOW - s * 1000).toISOString();
+  const snap = (computedAt: string | null, staleInputs = false) =>
+    ({ kind: 'snapshot' as const, computedAt, staleInputs });
+
+  it('takes snapshot age from computed_at, regardless of the input date', () =>
+    expect(marketAgeLabel('2026-10-28', NOW, status('regular'), snap(ago(180))))
+      .toEqual({ text: '3 min ago', tone: 'fresh' }));
+  it('uses the snapshot age limit', () =>
+    expect(marketAgeLabel(null, NOW, status('regular'), snap(ago(700))).tone).toBe('stale'));
+  it('flags stale inputs even for a recent snapshot', () =>
+    expect(marketAgeLabel(null, NOW, status('extended'), snap(ago(5), true)).tone).toBe('stale'));
+  it('shows the last close when built after the close', () =>
+    expect(marketAgeLabel(null, NOW, status('closed'), snap('2026-10-30T21:10:00Z')))
+      .toEqual({ text: 'as of last close · Fri 16:00 ET', tone: 'closed' }));
+  it('shows its own time as stale when built before the close', () =>
+    expect(marketAgeLabel(null, NOW, status('closed'), snap('2026-10-30T19:00:00Z')))
+      .toEqual({ text: 'as of Fri 15:00 ET', tone: 'stale' }));
+  it('flags stale inputs even when built after the close', () =>
+    expect(marketAgeLabel(null, NOW, status('closed'), snap('2026-10-30T21:10:00Z', true)).tone).toBe('stale'));
+  it('gives a stalled heartbeat priority over stale inputs', () =>
+    expect(marketAgeLabel(null, NOW, status('regular', true), snap(ago(5), true)).tone).toBe('stalled'));
+  it('shows no age when computed_at is null', () =>
+    expect(marketAgeLabel('2026-10-28', NOW, status('regular'), snap(null)))
+      .toEqual({ text: null, tone: 'fresh' }));
 });

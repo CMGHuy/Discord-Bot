@@ -537,7 +537,7 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
         Pairs outlined together sit in the same cluster listed beside it.
       </p>
       @if (store.correlation(); as corr) {
-        @if (corr.labels.length) {
+        @if (corr.labels.length && corr.values) {
           <sb-matrix
             [labels]="corr.labels"
             [values]="corr.values"
@@ -804,7 +804,7 @@ export class Risk {
 
   /** v194 B6: shown through the panel's `problem` slot, which renders it as a
    *  visible status line and never lets the panel fold it away. */
-  protected domainProblem(key: keyof RiskAvailability, label: string): string | null {
+  protected domainProblem(key: Exclude<keyof RiskAvailability, 'beta_spy'>, label: string): string | null {
     if (this.store.error()) return `${label}: last observation is stale.`;
     const status = this.store.availability()?.[key];
     if (!status) return `${label}: unavailable`;
