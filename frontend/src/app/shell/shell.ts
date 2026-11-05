@@ -31,13 +31,12 @@ import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteRefreshService } from '../routing/route-refresh.service';
 import { SessionStore } from '../stores/session.store';
 import { Breadcrumb } from './breadcrumb';
-import { FreshnessChip } from './freshness-chip';
 import { KillswitchChip } from './killswitch-chip';
 import { MoreSheet } from './more-sheet';
 import { CommandPalette, isPaletteShortcut, shortcutLabel } from './palette/command-palette';
 import { PhoneTabBar } from './phone-tab-bar';
 import { RefresherBanner } from './refresher-banner';
-import { ConnectionStatus } from './connection-status';
+import { AlarmChip } from './alarm-chip';
 import { NAV_ENTRIES, navEntryFor } from './nav';
 import { SectionTabs } from './section-tabs';
 import { ScanProgressStrip } from './scan-progress';
@@ -47,7 +46,7 @@ import { LiveDock } from './live/live-dock';
 import { LiveEdgeTab } from './live/live-edge-tab';
 import { LiveSheet } from './live/live-sheet';
 import { LiveStrip } from './live/live-strip';
-import { heatStripText, liveWarnings } from './live/live-state';
+import { alarmFor, heatStripText, liveWarnings } from './live/live-state';
 import { Tape } from './tape/tape';
 import { ToastHost } from './toast-host';
 
@@ -78,8 +77,8 @@ const ZOOM_DEFAULT = 100;
 @Component({
   selector: 'sb-shell',
   imports: [
-    RouterOutlet, RouterLink, ConnectionStatus, ToastHost,
-    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, FreshnessChip, ProfileMenu, Tape,
+    RouterOutlet, RouterLink, AlarmChip, ToastHost,
+    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, ProfileMenu, Tape,
     Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
     LiveDock, LiveEdgeTab, LiveStrip, LiveSheet,
   ],
@@ -99,24 +98,6 @@ export class Shell {
   private readonly tape = inject(TapeStore);
   private readonly marketIndex = inject(MarketIndexStore);
   protected readonly clock = inject(CLOCK);
-
-  /** `Thu, Sep 11, 2026 16:58` -- one string, so the bar cannot render a date
-   *  and a time from two different reads of the clock. Locale pinned to
-   *  `en-US` rather than left to the host's default -- the same build
-   *  otherwise renders "11 Sept 2026" on a machine set to en-GB, and a
-   *  monitoring surface should not reformat itself by viewer. 24-hour and
-   *  zero-padded via hourCycle: 4:58 next to a 16:58 market close reads as
-   *  an error. */
-  protected readonly now = computed(() => {
-    const at = new Date(this.clock());
-    const date = at.toLocaleDateString('en-US', {
-      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
-    });
-    const time = at.toLocaleTimeString('en-US', {
-      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-    });
-    return `${date} ${time}`;
-  });
 
   /** The rail's five work destinations and its foot (System), from the one
    *  nav model the phone bar, More sheet, palette and breadcrumb read
@@ -345,6 +326,16 @@ export class Shell {
   }));
   protected readonly heatText = computed(() => heatStripText(this.live.heat(), this.connection.currency()));
   protected readonly awaitingCount = computed(() => this.live.awaiting()?.count ?? null);
+
+  /** The top bar's alarm (spec v202 §3): bot down, stream down or stale data,
+   *  worded once by alarmFor. Null while all is well and before /health
+   *  answers, so a healthy bar carries no alarm. */
+  protected readonly alarm = computed(() => alarmFor({
+    lastSuccess: this.connection.botLastSuccess(),
+    now: this.liveNow(),
+    streamState: this.connection.state(),
+    botAlive: this.connection.botAlive(),
+  }));
 
   constructor() {
     // Read once, here rather than in an app initializer: preferences are

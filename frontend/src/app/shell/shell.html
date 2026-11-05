@@ -62,23 +62,13 @@
           <kbd class="shortcut" aria-hidden="true">{{ paletteShortcut }}</kbd>
         </button>
       }
-      <!-- v195 Phase 3: the right cluster. The killswitch and freshness chips
-           show on every device, phone included: the halt control is on Risk,
-           one tap from the chip, and Scan health has left the Risk page
-           (§5.1). The dot answers only "is the event stream connected" (D30). -->
+      <!-- v203 (spec v202 D5): only the killswitch chip stays, plus the alarm
+           chip while the bot is down, the stream is down or data is stale.
+           Freshness, connection and the clock live in the Live dock and the
+           strip. The alarm opens the dock (DockState.reveal). -->
       <div class="status-cluster">
+        <sb-alarm-chip [alarm]="alarm()" (reveal)="dock.reveal()" />
         <sb-killswitch-chip [on]="killswitchOn()" [stale]="killswitchStale()" />
-        <sb-freshness-chip [at]="connection.botLastSuccess() ?? connection.botLastSeen()" [now]="clock()" />
-        <sb-connection-status
-          [state]="connection.state()"
-          [botAlive]="connection.botAlive()"
-          [botHealthy]="connection.botHealthy()"
-          [marketActive]="connection.marketActive()"
-        />
-        <span class="clock">
-          <sb-icon name="clock" />
-          {{ now() }}
-        </span>
       </div>
       <!-- Phone only: the bar collapses to the title, the two chips, this
            search icon and the avatar (the one place to sign out there). -->

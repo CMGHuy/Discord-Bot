@@ -134,15 +134,14 @@ describe('shell navigation', () => {
     expect(el.querySelector('header.topbar sb-tape')).toBeNull();
   });
 
-  it('shows the date and time from the ambient clock', () => {
-    // A fixed instant, so the assertion is not a function of when the suite runs.
-    const fixed = new Date('2026-09-11T16:58:00').getTime();
-    TestBed.overrideProvider(CLOCK, { useValue: signal(fixed) });
+  it('keeps no clock in the bar: times live in the dock and the strip', () => {
+    // v203 Retired 'shows the date and time from the ambient clock' (spec v202 D5).
     const f = TestBed.createComponent(Shell);
     f.detectChanges();
-    const text = (f.nativeElement as HTMLElement).querySelector('.clock')?.textContent ?? '';
-    expect(text).toContain('Sep 11, 2026');
-    expect(text).toContain('16:58');
+    expect((f.nativeElement as HTMLElement).querySelector('header.topbar .clock')).toBeNull();
+    expect(readSource('src/app/shell/shell.css').replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/\.clock\b/);
+    const code = readSource('src/app/shell/shell.ts').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+    expect(code).not.toMatch(/readonly now\b/);
   });
 
   it('renders the killswitch as a full-width strip below the bar, only when engaged', () => {
@@ -327,11 +326,10 @@ describe('shell navigation', () => {
     expect(el.querySelector('.version-row')).toBeNull();
   });
 
-  it('drops the clock and the tape on a phone before it lets the bar overflow', () => {
+  it('drops the tape on a phone before it lets the bar overflow', () => {
     const css = readSource('src/app/shell/shell.css');
     // v95 A2's declared breakpoint. The subtitle it used to drop at 1023px
     // has left the bar (v195: the breadcrumb leads, sb-page carries the title).
-    expect(css).toMatch(/max-width:\s*639px[\s\S]*\.clock[\s\S]*display:\s*none/);
     expect(css).toMatch(/max-width:\s*639px[\s\S]*\.tape-strip[\s\S]*display:\s*none/);
     expect(css).not.toContain('.page-subtitle');
   });
@@ -684,14 +682,49 @@ describe('shell top-bar cluster (v195 Phase 3)', () => {
     bot_session_active: true, bot_scan_paused: false, progress: null, ...overrides,
   });
 
-  it('puts the killswitch and freshness chips in the cluster, hidden at no width', async () => {
+  it('keeps only the alarm and killswitch chips in the cluster, hidden at no width', async () => {
+    // v203 Retired 'puts the killswitch and freshness chips in the cluster' and
+    // 'ages the freshness chip …' (spec v202 D5: freshness, connection and the clock
+    // live in the dock and strip; V203-4's botRows pins the freshness words).
     const { el } = await mount();
     const cluster = el.querySelector('header.topbar > .status-cluster')!;
-    expect(cluster.querySelector('sb-killswitch-chip')).not.toBeNull();
-    expect(cluster.querySelector('sb-freshness-chip')).not.toBeNull();
-    expect(cluster.querySelector('sb-connection-status')).not.toBeNull();
+    expect([...cluster.children].map((c) => c.tagName.toLowerCase())).toEqual(['sb-alarm-chip', 'sb-killswitch-chip']);
+    expect(el.querySelector('header.topbar sb-freshness-chip, header.topbar sb-connection-status')).toBeNull();
     const css = readSource('src/app/shell/shell.css').replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(css).not.toMatch(/(sb-killswitch-chip|sb-freshness-chip|\.status-cluster)[^{}]*\{[^}]*display:\s*none/);
+    expect(css).not.toMatch(/(sb-killswitch-chip|sb-alarm-chip|\.status-cluster)[^{}]*\{[^}]*display:\s*none/);
+  });
+
+  const alarmText = (el: HTMLElement) =>
+    el.querySelector('header.topbar > .status-cluster > sb-alarm-chip button.alarm-chip .text')?.textContent?.trim() ?? null;
+
+  it('raises no alarm before /health answers, nor while all is well', async () => {
+    const { fixture, el, backend } = await mount();
+    expect(alarmText(el)).toBeNull();                  // botAlive still null: a cold load is no alarm
+    for (const request of backend.match((r) => r.url.endsWith('/system/scan'))) request.flush(scanStatus({}));
+    await settle(fixture);
+    expect(alarmText(el)).toBeNull();                  // last success 12 min ago, under the 900 s rule
+  });
+
+  it.each([
+    ['the bot is not alive', { bot_alive: false }, 'Bot down'],
+    ['the last success is older than 900 s', { bot_last_success: '2026-10-27T11:40:00Z' }, 'Data stale 20 min'],
+    ['no tick ever succeeded', { bot_last_success: null }, 'Data stale'],
+  ])('raises the alarm chip when %s', async (_, overrides, text) => {
+    const { fixture, el, backend } = await mount();
+    for (const request of backend.match((r) => r.url.endsWith('/system/scan'))) request.flush(scanStatus(overrides));
+    await settle(fixture);
+    expect(alarmText(el)).toBe(text);
+  });
+
+  it('raises Disconnected when the event stream degrades', async () => {
+    class DegradedStream extends FakeEventStream {
+      override state(): 'degraded' {
+        return 'degraded';
+      }
+    }
+    TestBed.overrideProvider(EventStream, { useValue: new DegradedStream() });
+    const { el } = await mount();
+    expect(alarmText(el)).toBe('Disconnected');
   });
 
   it('shows no killswitch state until the risk endpoint answers, then the answer', async () => {
@@ -704,26 +737,6 @@ describe('shell top-bar cluster (v195 Phase 3)', () => {
     await settle(fixture);
     expect(chip()!.textContent!.trim()).toBe('Halted');
     expect(el.querySelector('.killswitch-strip')).not.toBeNull();
-  });
-
-  it('ages the freshness chip from the last successful tick, else the last heartbeat', async () => {
-    const { fixture, el, backend } = await mount();
-    const text = () => el.querySelector('sb-freshness-chip')!.textContent!.replace(/\s+/g, ' ').trim();
-    expect(text()).toBe('No scan yet');
-    for (const request of backend.match((r) => r.url.endsWith('/system/scan'))) {
-      request.flush(scanStatus({}));
-    }
-    await settle(fixture);
-    expect(text()).toBe('Scan 12m ago');
-
-    // A bot that has never completed a tick still has a heartbeat age.
-    (TestBed.inject(EventStream) as unknown as FakeEventStream).emit('bot');
-    await settle(fixture);
-    for (const request of backend.match((r) => r.url.endsWith('/system/scan'))) {
-      request.flush(scanStatus({ bot_last_success: null }));
-    }
-    await settle(fixture);
-    expect(text()).toBe('Scan 3m ago');
   });
 
   it('writes ui.density and data-density from the profile menu', async () => {
@@ -793,7 +806,7 @@ describe('shell on a phone (v195 Phase 3)', () => {
     // The magnifier: sb-icon's default label for 'search' (V195-14).
     expect(search.querySelector('sb-icon')!.getAttribute('title')).toBe('Search');
     expect(bar.querySelector('.status-cluster sb-killswitch-chip')).not.toBeNull();
-    expect(bar.querySelector('.status-cluster sb-freshness-chip')).not.toBeNull();
+    expect(bar.querySelector('.status-cluster sb-alarm-chip')).not.toBeNull();
   });
 
   it('opens the More sheet from the More tab, and the tab closes it again', async () => {
@@ -1191,5 +1204,24 @@ describe('shell live dock (v203)', () => {
     const { el } = await mount('/trades');
     expect(el.querySelector('sb-live-strip')).toBeNull();
     expect(el.querySelector('sb-live-sheet [role=dialog]')).toBeNull();
+  });
+
+  it('opens the collapsed dock from the alarm chip', async () => {
+    const { fixture, el, backend } = await mount('/trades');
+    for (const request of backend.match((r) => r.url.endsWith('/system/scan'))) request.flush(scan(false));
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('sb-alarm-chip button.alarm-chip')!.click();
+    await settle(fixture);
+    expect(el.querySelector('aside.live-column > sb-live-dock')).not.toBeNull();
+  });
+
+  it('opens the sheet from the alarm chip below 1024 px', async () => {
+    narrow.set(true);
+    const { fixture, el, backend } = await mount('/trades');
+    for (const request of backend.match((r) => r.url.endsWith('/system/scan'))) request.flush(scan(false));
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('sb-alarm-chip button.alarm-chip')!.click();
+    await settle(fixture);
+    expect(el.querySelector('sb-live-sheet [role=dialog] sb-live-dock')).not.toBeNull();
   });
 });
