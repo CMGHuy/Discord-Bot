@@ -29,6 +29,18 @@ import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { RouteTitleService } from '../../routing/route-title.service';
 import { TradeDetail, arrivalBanner, tradeCrumb } from './trade-detail';
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
+import { Role } from '../../api/models';
+import { SessionStore } from '../../stores/session.store';
+
+let role: Role = 'admin';
+beforeEach(() => { role = 'admin'; });
+function signInAs(as: Role): void {
+  patchState(unprotected(TestBed.inject(SessionStore)), {
+    status: 'authenticated', username: as === 'admin' ? 'admin' : 'viewer1', role: as,
+  });
+}
 
 // The Chart tab now mounts the shared chart, which asks for matchMedia the
 // moment a chart exists. See the polyfill for why.
@@ -149,6 +161,7 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
         { provide: EventStream, useValue: new FakeEventStream() },
       ],
     });
+    signInAs(role);
     backend = TestBed.inject(HttpTestingController);
   });
 
@@ -301,6 +314,7 @@ describe('TradeDetail — identity line (v166 TD6)', () => {
         { provide: EventStream, useValue: new FakeEventStream() },
       ],
     });
+    signInAs(role);
     backend = TestBed.inject(HttpTestingController);
   });
 
@@ -398,6 +412,7 @@ describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
         { provide: EventStream, useValue: new FakeEventStream() },
       ],
     });
+    signInAs(role);
     backend = TestBed.inject(HttpTestingController);
   });
 
@@ -503,6 +518,7 @@ describe('TradeDetail — banked leg and open runner', () => {
         { provide: EventStream, useValue: new FakeEventStream() },
       ],
     });
+    signInAs(role);
     backend = TestBed.inject(HttpTestingController);
   });
 
@@ -570,6 +586,7 @@ describe('TradeDetail states', () => {
         { provide: EventStream, useValue: new FakeEventStream() },
       ],
     });
+    signInAs(role);
   });
 
   it('shows a skeleton in the tab body while loading, before the first response', () => {
@@ -613,6 +630,7 @@ describe('TradeDetail — the shared Why components (v151)', () => {
         { provide: EventStream, useValue: new FakeEventStream() },
       ],
     });
+    signInAs(role);
     backend = TestBed.inject(HttpTestingController);
   });
 
@@ -946,6 +964,7 @@ describe('TradeDetail — arrival banner from the plan page (v151)', () => {
         { provide: EventStream, useValue: new FakeEventStream() },
       ],
     });
+    signInAs(role);
     backend = TestBed.inject(HttpTestingController);
   });
 
@@ -1136,6 +1155,7 @@ describe('TradeDetail on sb-page (v195 Phase 4, §5.2, §1.4)', () => {
         { provide: EventStream, useValue: new FakeEventStream() },
       ],
     });
+    signInAs(role);
     backend = TestBed.inject(HttpTestingController);
     TestBed.inject(RouteTitleService).set('Trade detail', 'One position, end to end');
   });
@@ -1216,5 +1236,83 @@ describe('TradeDetail on sb-page (v195 Phase 4, §5.2, §1.4)', () => {
   it('sets its order figures on the 14px body step, in both densities', () => {
     const src = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trade-detail.ts'), 'utf8');
     expect(src).toMatch(/:host \{[^}]*--text-table: var\(--text-body\);/);
+  });
+});
+
+/* -- v207 -- a viewer reads a trade and changes nothing ----------------- */
+
+describe('TradeDetail for a viewer (v207)', () => {
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor])),
+        provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
+        TradeDetailStore,
+        ChartStore,
+        { provide: EventStream, useValue: new FakeEventStream() },
+      ],
+    });
+    signInAs(role);
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  function mount(tab: string, status = 'ACTIVE', detail: object = DETAIL) {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.componentRef.setInput('tab', tab);
+    fixture.detectChanges();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(detail, status));
+    fixture.detectChanges();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+  const header = (el: HTMLElement) => el.querySelector('sb-page header.bar .actions')!;
+
+  it('gives the admin Refresh and both commands on a live trade (unchanged)', () => {
+    const { el } = mount('overview');
+    expect(header(el).querySelector('sb-market-refresh')).not.toBeNull();
+    expect(header(el).querySelectorAll('button[sb-button]:not(sb-market-refresh button)')).toHaveLength(2);
+  });
+
+  it('leaves a viewer an empty header slot on a live trade', () => {
+    signInAs('viewer');
+    const { el } = mount('overview');
+    expect(header(el).children).toHaveLength(0);
+    expect(header(el).textContent!.trim()).toBe('');
+  });
+
+  it('never offers a viewer Delete on a closed trade', () => {
+    signInAs('viewer');
+    const { el } = mount('overview', 'CLOSED');
+    expect([...el.querySelectorAll('button')].map((b) => b.textContent!.trim())).not.toContain('Delete');
+  });
+
+  it('keeps the note textarea for the admin', () => {
+    const { el } = mount('journal');
+    expect(el.querySelector('textarea#trade-note')).not.toBeNull();
+    expect(el.querySelector('[data-testid="note-readonly"]')).toBeNull();
+  });
+
+  it('shows a viewer the note as read-only text, never a field', () => {
+    signInAs('viewer');
+    const { el } = mount('journal', 'CLOSED', { ...DETAIL, note: 'Exit management.\nTrail sooner.' });
+    expect(el.querySelector('textarea')).toBeNull();
+    expect(el.querySelector('.note-state')).toBeNull();
+    const note = el.querySelector('[data-testid="note-readonly"]')!;
+    expect(note.textContent).toContain('Exit management.');
+    expect(note.textContent).toContain('Trail sooner.');
+    expect(note.classList).toContain('note-readonly');          // white-space: pre-wrap keeps the lines
+    backend.expectNone((r) => r.method === 'PUT');
+  });
+
+  it('says "No note yet." to a viewer when the trade has none', () => {
+    signInAs('viewer');
+    const { el } = mount('journal', 'CLOSED');
+    expect(el.querySelector('[data-testid="note-readonly"]')!.textContent!.trim()).toBe('No note yet.');
   });
 });

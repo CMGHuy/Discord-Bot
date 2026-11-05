@@ -16,6 +16,8 @@ import { ApiClient } from '../../api/api-client';
 import { RouteTitleService } from '../../routing/route-title.service';
 import { detailCrumb } from '../../shell/nav';
 import { ChartStore } from '../../stores/chart.store';
+import { SessionStore } from '../../stores/session.store';
+import { IfAdminDirective } from '../../auth/if-admin.directive';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
 import { liveTickers } from '../../stores/trades.store';
 import { asyncInputs, Async } from '../../ui/async';
@@ -147,6 +149,7 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
     ScoresCard,
     LevelSourcesCard,
     StrategyRecordCard,
+    IfAdminDirective,
   ],
   template: `
     <!-- v195 Phase 4: the route title is the page's one h1; the
@@ -157,7 +160,7 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
       <!-- The trade's commands, at the header's right: Delete last, as
            danger-quiet, each behind the confirm below (Global Constraints:
            any delete lives here). None until the trade has loaded. -->
-      <div page-actions class="page-actions">
+      <div *ifAdmin page-actions class="page-actions">
         @if (store.trade(); as trade) {
           <!-- v201: only while the price still moves (not on a closed trade). -->
           @if (refreshSymbols().length > 0) {
@@ -346,37 +349,43 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
                 </p>
               }
 
-              <label class="note-label" for="trade-note">Note</label>
-              <textarea
-                id="trade-note"
-                class="note-field"
-                rows="10"
-                [value]="store.noteText()"
-                [disabled]="store.noteStatus() === 'unjournaled'"
-                (input)="onNoteInput($event)"
-                (blur)="flushNote()"
-                placeholder="Why this trade, what happened, what to do differently."
-              ></textarea>
+              @if (session.isAdmin()) {
+                <label class="note-label" for="trade-note">Note</label>
+                <textarea
+                  id="trade-note"
+                  class="note-field"
+                  rows="10"
+                  [value]="store.noteText()"
+                  [disabled]="store.noteStatus() === 'unjournaled'"
+                  (input)="onNoteInput($event)"
+                  (blur)="flushNote()"
+                  placeholder="Why this trade, what happened, what to do differently."
+                ></textarea>
 
-              <p class="note-state" [class.note-state-bad]="store.noteStatus() === 'error'">
-                @switch (store.noteStatus()) {
-                  @case ('saving') {
-                    Saving…
+                <p class="note-state" [class.note-state-bad]="store.noteStatus() === 'error'">
+                  @switch (store.noteStatus()) {
+                    @case ('saving') {
+                      Saving…
+                    }
+                    @case ('unsaved') {
+                      Unsaved changes
+                    }
+                    @case ('error') {
+                      {{ store.noteError() }}
+                    }
+                    @case ('unjournaled') {
+                      Not journaled yet
+                    }
+                    @default {
+                      Saved
+                    }
                   }
-                  @case ('unsaved') {
-                    Unsaved changes
-                  }
-                  @case ('error') {
-                    {{ store.noteError() }}
-                  }
-                  @case ('unjournaled') {
-                    Not journaled yet
-                  }
-                  @default {
-                    Saved
-                  }
-                }
-              </p>
+                </p>
+              } @else {
+                <!-- v207: a viewer reads the note; there is no field to type into. -->
+                <p class="note-label">Note</p>
+                <p class="note-readonly" data-testid="note-readonly">{{ store.noteText() || 'No note yet.' }}</p>
+              }
             </div>
           }
           @case ('why') {
@@ -572,6 +581,14 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
       color: var(--text-faint);
       cursor: not-allowed;
     }
+    .note-readonly {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: var(--text);
+      font-size: var(--text-table);
+      line-height: 1.6;
+    }
     .note-state {
       margin-top: var(--space-6);
       color: var(--text-faint);
@@ -621,6 +638,7 @@ export class TradeDetail {
   private readonly router = inject(Router);
   private readonly api = inject(ApiClient);
   protected readonly store = inject(TradeDetailStore);
+  protected readonly session = inject(SessionStore);
   /** v201: the ticker to refresh, empty once the trade is terminal. */
   protected readonly refreshSymbols = computed(() => {
     const trade = this.store.trade();
