@@ -1,7 +1,7 @@
 # v205 — Admin read performance: Dashboard and Calendar in seconds, not a minute
 
 **Version:** ui 1.38.0 · bot 2.16.1
-**Bump:** bot patch, ui patch
+**Bump:** bot patch (was `bot patch, ui patch`: v205 changed no frontend file)
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, quant-engineer
@@ -407,6 +407,34 @@ role and is recorded as applied or rejected.
 - quant-engineer [ADVISORY]: the DST gate needs an injected clock, two
   cycles a day, and a definition of "in use" -- **applied** (L1-a Snap;
   Testing).
+
+### Pre-close-out panel (2026-11-05, staff-engineer, quant-engineer)
+
+Over the plan's diff (`891d860b..92e35a03`, the `2fc79125` merge fix, `27568e0a`).
+
+- quant-engineer BLOCKING: `fx_snap._is_current` could freeze a non-final D-1
+  bar into the insert-if-absent table, so snap(D) != backfill(D) -- **applied**
+  (`4afb9a67`: a row is written only from a bar known final, in snap and
+  backfill; a weekday file mtime is not accepted as proof, because a failed
+  ranged fetch also touches the file). Re-reviewed: no BLOCKING. Production's
+  2026-11-05 row was read-only checked: equal to the final 2026-11-04 close.
+- staff-engineer: CURRENCY_SYMBOL change needs a backfill re-run; rollback order
+  and downgrade scope unwritten -- **applied** (`fe7997b8`, DEPLOY_HETZNER.md).
+- staff-engineer: bump level vs the manual backfill step -- partner chose
+  `bot patch`; the spec's `ui patch` prediction is amended to none (backend only).
+- staff-engineer: `snap` pulls each pair's whole day history every cycle
+  (`fx_snap.py:97`, `market_refresh.py:115`); no repair path for a wrong
+  permanent row; `fx_daily.lookup` swallows every failure at DEBUG
+  (`fx_daily.py:137`) -- **carried**: a single-row EXISTS or a per-day flag, a
+  documented repair statement, and a rate-limited WARNING belong in a follow-up.
+- staff-engineer: Layer 2 must profile the application-side time of `dashboard`
+  and `dashboard_today` (about 2.1-3.0 s with 0.4-0.6 s of database) before
+  building the snapshot machinery -- **carried** to the Layer 2 plan.
+- quant-engineer: `_day_rate` returns the nearest earlier row when D's own row
+  is absent, so a past amount can shift once D's row is written; `snap` never
+  fills a skipped weekday (documented: run the backfill); `_stale_logged` is
+  never pruned; `_final_through` counts a junk-close later bar as proof -- **carried**
+  (the skipped-weekday note is **applied** in the runbook).
 
 ## Results
 
