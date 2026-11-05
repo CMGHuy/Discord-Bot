@@ -52,6 +52,7 @@ from swingbot.core.presentation.short_notice import risk_notice_lines
 
 from . import api_v1, collection, error, parse_collection_params, ApiError
 from .auth import require_auth
+from .read_scope import read_scope
 from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
 from .money import convert_amount, missing_count, to_account_currency
 
@@ -1078,6 +1079,7 @@ def _filter_by_status(rows: list[dict], value: str) -> list[dict]:
 
 @api_v1.route("/trades", methods=["GET"])
 @require_auth
+@read_scope
 def list_trades():
     params = parse_collection_params(
         request.args, allowed_filters=FILTERS, sortable=SORTABLE

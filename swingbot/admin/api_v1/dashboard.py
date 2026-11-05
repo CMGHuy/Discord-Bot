@@ -42,6 +42,7 @@ from swingbot.core.tracking.performance import TradeLog, expand_realized_legs
 
 from . import ApiError, api_v1, iso
 from .auth import require_auth
+from .read_scope import read_scope
 from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
 from .money import convert_amount, missing_count, to_account_currency
 
@@ -372,6 +373,7 @@ def _open_figures(all_trades: list[dict], account_cfg: dict) -> dict:
 
 @api_v1.route("/dashboard", methods=["GET"])
 @require_auth
+@read_scope
 def dashboard():
     mode = _scope()
     window = _parse_range_window(mode)

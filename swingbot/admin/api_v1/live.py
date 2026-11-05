@@ -18,6 +18,7 @@ from swingbot.core.infra.swallowed import swallowed
 
 from . import api_v1, error, iso
 from .auth import require_auth
+from .read_scope import read_scope
 from .live_events import EVENT_KINDS, collect_events, iso_at
 
 log = logging.getLogger(__name__)
@@ -150,6 +151,7 @@ def _events(limit: int, now: datetime) -> tuple[list, dict]:
 
 @api_v1.route("/live", methods=["GET"])
 @require_auth
+@read_scope
 def get_live():
     """The Live dock in one read; the shape is `LiveSnapshot` in models.ts."""
     limit = parse_limit(request.args.get("limit"))

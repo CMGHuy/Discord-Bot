@@ -20,6 +20,7 @@ from flask import jsonify, request
 
 from . import ApiError, api_v1
 from .auth import require_auth
+from .read_scope import read_scope
 
 # `month` is handled separately from the filters: it scopes the grid rather
 # than narrowing the population, and it has its own format.
@@ -70,6 +71,7 @@ def _filter_args() -> tuple[str | None, str | None]:
 
 @api_v1.route("/calendar/pnl", methods=["GET"])
 @require_auth
+@read_scope
 def calendar_pnl():
     """One month's day grid, plus the full-history context beside it.
 
@@ -125,6 +127,7 @@ def _date_param() -> str:
 
 @api_v1.route("/calendar/pnl/day", methods=["GET"])
 @require_auth
+@read_scope
 def calendar_pnl_day():
     """Every trade closed on one day -- the drawer and the `/calendar/:date`
     page.
@@ -170,6 +173,7 @@ def calendar_pnl_day():
 
 @api_v1.route("/calendar/pnl/day/sparklines", methods=["GET"])
 @require_auth
+@read_scope
 def calendar_pnl_day_sparklines():
     """Daily-close sparklines for one day's rows -- the day page's cards.
 
