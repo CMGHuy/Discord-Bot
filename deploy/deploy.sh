@@ -171,27 +171,20 @@ docker compose pull cloudflared || echo "WARNING: could not pull cloudflared -- 
 # up. The previous image's watcher drains the queue with DELETE ... RETURNING,
 # and the new one polls the new schema, so a migration applied after `up` races
 # both. Stop bot and admin first, migrate with the new image, then start. Legacy
-# queue rows need their historical destination: export LIFECYCLE_CHANNEL_ID
-# (reviewed channel id) before running this script; unset means no -x argument
-# and any legacy rows stay blocked for the audited retarget
-# (docs/deploy/LIFECYCLE_NOTIFICATIONS.md).
+# queue rows (normally none: the old watcher drained them every 30 s) stay
+# blocked for the audited retarget (docs/deploy/LIFECYCLE_NOTIFICATIONS.md).
 echo "==> Ensuring the database is up for the schema migration"
 docker compose up -d --no-build --wait db
 echo "==> Stopping writers for the schema migration"
 docker compose stop bot admin refresher
 echo "==> Applying database migrations before start (alembic upgrade head)"
-MIGRATE_ARGS=""
-if [ -n "${LIFECYCLE_CHANNEL_ID:-}" ]; then
-  MIGRATE_ARGS="-x lifecycle_channel_id=${LIFECYCLE_CHANNEL_ID}"
-fi
 # A rollback by image alone (SWING_BOT_IMAGE=<older sha>) runs an image that does
 # not know the database's revision: alembic fails "Can't locate revision". That
 # rollback is unsupported from v197 (the old image would start the DELETE-drain
 # consumer against the v197 queue), so fail with the recovery steps instead of
 # a bare traceback. bot/admin/refresher are stopped at this point.
 MIGRATE_LOG="$(mktemp)"
-# shellcheck disable=SC2086
-if ! docker compose run --rm --no-deps -T bot alembic $MIGRATE_ARGS upgrade head >"$MIGRATE_LOG" 2>&1; then
+if ! docker compose run --rm --no-deps -T bot alembic upgrade head >"$MIGRATE_LOG" 2>&1; then
   cat "$MIGRATE_LOG" >&2
   if grep -q "Can't locate revision" "$MIGRATE_LOG"; then
     echo "ERROR: the database is ahead of image $IMAGE -- an image-only rollback is unsupported." >&2

@@ -83,14 +83,15 @@ def test_lf_line_endings():
 def test_it_migrates_with_bot_and_admin_stopped_before_compose_up(src):
     """v197: the lifecycle queue migration runs with no consumer or writer up."""
     stop = src.index("docker compose stop bot admin refresher")
-    migrate = src.index("run --rm --no-deps -T bot alembic $MIGRATE_ARGS")
+    migrate = src.index("run --rm --no-deps -T bot alembic upgrade head")
     up = src.index("docker compose up -d --no-build --wait $SERVICES")
     assert stop < migrate < up
 
 
-def test_it_passes_the_lifecycle_destination_only_when_exported(src):
-    assert 'LIFECYCLE_CHANNEL_ID:-' in src
-    assert 'MIGRATE_ARGS="-x lifecycle_channel_id=${LIFECYCLE_CHANNEL_ID}"' in src
+def test_deploy_takes_no_lifecycle_channel_variable(src):
+    """Legacy queue rows stay blocked for the audited retarget; deploy.sh passes no -x."""
+    assert "LIFECYCLE_CHANNEL_ID" not in src
+    assert "MIGRATE_ARGS" not in src
 
 
 def test_it_fails_with_recovery_steps_when_the_database_is_ahead_of_the_image(src):

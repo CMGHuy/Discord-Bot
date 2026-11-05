@@ -405,7 +405,7 @@ no per-store stage and no import step. Only `analytics_snapshot.json`,
 
 ### Lifecycle notification queue (v197)
 
-`deploy.sh` stops bot and admin, migrates with the new image, then starts them. Export `LIFECYCLE_CHANNEL_ID` before the first v197 deploy if the queue holds rows, and never roll back by image alone: see `LIFECYCLE_NOTIFICATIONS.md` (Rollout prerequisites, Rollback).
+`deploy.sh` stops bot and admin, migrates with the new image, then starts them. Legacy queue rows, if any, stay blocked for the audited retarget. Never roll back by image alone: see `LIFECYCLE_NOTIFICATIONS.md` (Rollout prerequisites, Rollback).
 
 ### Point-in-time rollback
 
