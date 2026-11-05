@@ -804,19 +804,29 @@ describe('Trades for a viewer (v207)', () => {
     expect(columnKeys(f)).not.toContain('actions');
   });
 
-  it('puts no command in a viewer phone drawer', () => {
-    const drawerButtons = (f: ComponentFixture<Trades>): string[] => {
+  it('offers Close in the admin phone drawer and no command in a viewer one', () => {
+    // `actions` is not in the phone baseline: a saved layout that lists it is
+    // what puts the column in the drawer, so seed that.
+    const withActions = (f: ComponentFixture<Trades>): ComponentFixture<Trades> => {
+      (f.componentInstance as unknown as { visible: { update: (fn: (v: string[]) => string[]) => void } })
+        .visible.update((keys) => [...keys, 'actions']);
+      f.detectChanges();
+      return f;
+    };
+    const drawer = (f: ComponentFixture<Trades>) => {
       openRowDrawer(tradesTable(f));
       f.detectChanges();
-      const drawer = (f.nativeElement as HTMLElement).querySelector('sb-drawer.row-drawer')!;
-      return [...drawer.querySelectorAll('button')].map((b) => b.textContent!.trim());
+      const el = (f.nativeElement as HTMLElement).querySelector('sb-drawer.row-drawer')!;
+      return { keys: drawerKeys(tradesTable(f)), labels: [...el.querySelectorAll('button')].map((b) => b.textContent!.trim()) };
     };
     const active = row({ status: 'ACTIVE', status_label: 'ACTIVE', exit_price: null, pnl_pct: null });
+    const admin = drawer(withActions(renderPhone([active])));
+    expect(admin.keys).toContain('actions');
+    expect(admin.labels).toContain('Close');
     role = 'viewer';
-    const viewer = renderPhone([active]);
-    const labels = drawerButtons(viewer);
-    expect(labels).not.toContain('Close');
-    expect(labels).not.toContain('Delete');
-    expect(drawerKeys(tradesTable(viewer))).not.toContain('actions');
+    const viewer = drawer(withActions(renderPhone([active])));
+    expect(viewer.keys).not.toContain('actions');
+    expect(viewer.labels).not.toContain('Close');
+    expect(viewer.labels).not.toContain('Delete');
   });
 });
