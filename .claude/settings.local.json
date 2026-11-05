@@ -21,6 +21,8 @@
       "Bash(\"E:/Claude/claude-config/*/plugins/cache/claude-plugins-official/superpowers/*/skills/subagent-driven-development/scripts/task-brief\" *)",
       "Bash(\"E:/Claude/claude-config/*/plugins/cache/claude-plugins-official/superpowers/*/skills/subagent-driven-development/scripts/review-package\" *)",
       "Read(//e/Claude/claude-config/**/plugins/cache/claude-plugins-official/superpowers/**)",
+      "Read(//e/Documents/Private/Projects/Discord-Bot/**)",
+      "Edit(//e/Documents/Private/Projects/Discord-Bot/.superpowers/sdd/**)",
       "Read(//c/Users/HuyCao/AppData/Local/Temp/claude/E--Documents-Private-Projects-Discord-Bot/**)",
       "Edit(//c/Users/HuyCao/AppData/Local/Temp/claude/E--Documents-Private-Projects-Discord-Bot/**)",
       "Bash(mkdir -p /c/Users/HuyCao/AppData/Local/Temp/claude/**)",
