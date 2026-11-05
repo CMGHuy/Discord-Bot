@@ -174,3 +174,31 @@ No Stage 1 report exists, so there are no component-side dollar-exceedance count
 ### Observations
 
 Every cell has observed N above its target N, yet none meets the 0.10R MDE ceiling. The cause is paired-row scarcity: only 728 / 357 / 77 paired rows come from tens of thousands of stratum rows, because most band plans are newly admitted and have no baseline twin. The ceiling, windows and cells are frozen and are not widened.
+
+## Arm R (second)
+
+**Verdict: UNDERPOWERED at Stage 0, budget intact.** Arm R closes at Stage 0; Stages 1-3 did not run, so its VALIDATION shot is not spent. Evidence: `docs/superpowers/results/v191/2026-10-24-v191-armR-stage0.json`.
+
+### Stage 0
+
+**arm R stage 0: UNDERPOWERED** (instrument v1, data alpaca)
+
+| cell | stratum N | paired N | newly admitted | observed N | target N | MDE R |
+|---|---|---|---|---|---|---|
+| k0.75 | 43188 | 1487 | 35742 | 1487 | 649 | 0.1744 |
+| k1 | 29092 | 997 | 20445 | 997 | 435 | 0.2254 |
+| k1.5 | 15732 | 342 | 6418 | 342 | 149 | 0.4703 |
+
+powered cells [] (ceiling 0.1R, power 0.8)
+
+### Prediction
+
+Prediction not scored (closed before Stage 1).
+
+### Disclosures
+
+No Stage 1 report exists, so there are no component-side dollar-exceedance counts to disclose. Sanity conditions passed: no cell has `paired_n > stratum_n`, none has `observed_n == 0`, and every cell is in Stage −1's `reachable_cells`.
+
+### Observations
+
+Every cell has observed N above its target N, yet none meets the 0.10R MDE ceiling. As with arm K, paired-row scarcity is the cause: only 1487 / 997 / 342 paired rows come from tens of thousands of stratum rows, because most band plans are newly admitted and have no baseline twin. The ceiling, windows and cells are frozen and are not widened.
