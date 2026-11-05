@@ -667,6 +667,16 @@ export class DataTable<T> {
     inject(Router).events
       .pipe(filter((event) => event instanceof NavigationStart), takeUntilDestroyed())
       .subscribe(() => this.drawerRow.set(null));
+    // v207: the drawer follows its row by key. A replaced row (a status
+    // change) shows its new values; a row that left `rows` (a deleted
+    // account) closes the drawer instead of offering commands on it.
+    effect(() => {
+      const open = this.drawerRow();
+      if (open === null) return;
+      const key = this.rowKey()(open);
+      const fresh = this.rows().find((row) => this.rowKey()(row) === key) ?? null;
+      if (fresh !== open) this.drawerRow.set(fresh);
+    });
 
   }
 

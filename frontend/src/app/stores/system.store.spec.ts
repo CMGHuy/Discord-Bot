@@ -834,8 +834,8 @@ const routeFor = (tab: string | null) =>
   ({ queryParamMap: convertToParamMap(tab === null ? {} : { tab }) }) as ActivatedRouteSnapshot;
 
 describe('System tabs (v195 §5.1, correction 4)', () => {
-  it('orders the bar Scan, Providers, Settings, Logs', () => {
-    expect([...SYSTEM_TABS]).toEqual(['scan', 'providers', 'settings', 'logs']);
+  it('orders the bar Scan, Providers, Settings, Logs, Users', () => {
+    expect([...SYSTEM_TABS]).toEqual(['scan', 'providers', 'settings', 'logs', 'users']);
   });
 
   it('opens every known tab by its query value', () => {

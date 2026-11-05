@@ -21,7 +21,7 @@ export const ROUTES = Object.freeze([
   '/insights/research', '/insights/reports', '/insights/reports?tab=gates',
   '/watchlist', '/watchlist/:symbol',
   '/risk',
-  '/system', '/system?tab=logs', '/system?tab=scan', '/system?tab=providers', '/system/versions',
+  '/system', '/system?tab=logs', '/system?tab=scan', '/system?tab=providers', '/system?tab=users', '/system/versions',
   '/ui',
 ]);
 
