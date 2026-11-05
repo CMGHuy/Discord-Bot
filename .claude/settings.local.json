@@ -56,7 +56,9 @@
       "Bash(docker ps:*)",
       "Read(//e/Documents/Private/Projects/Discord-Bot/.env)",
       "Read(//e/Documents/Private/Projects/Discord-Bot/.claude/worktrees/*/.env)",
-      "Bash(bash scripts/ops/replicate_prod_db.sh:*)"
+      "Bash(bash scripts/ops/replicate_prod_db.sh:*)",
+      "Read(//e/Documents/Private/Projects/Discord-Bot/**)",
+      "Edit(//e/Documents/Private/Projects/Discord-Bot/.superpowers/sdd/**)"
     ],
     "deny": [
       "Bash(cat .env.bak:*)",

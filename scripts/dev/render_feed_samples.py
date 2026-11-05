@@ -29,6 +29,9 @@ STALL = dict(status="CLOSED", entry_price=182.40, legs_realized=[
     TP1_LEG, {"fraction": 0.5, "exit_price": 187.00, "r": 1.0, "reason": "tp1_runner_progress_stall"}])
 DUE = {"cover_fraction": 1.0, "auction_time": "2026-10-16T16:00:00-04:00", "late": False,
        "notice_id": f"{PID}:time_exit_due:2026-10-16"}
+#: v192: a market plan built to wait for its next open, with the veto armed.
+WAITING = dict(entry_type="market", waits_next_open=True, reclaim_level=181.10, reclaim_atr=2.6)
+WAITING_SHORT = {**SHORT, **WAITING, "reclaim_level": 51.30}
 
 
 def _closed(reason: str, exit_price: float, stop: float) -> tuple:
@@ -55,6 +58,23 @@ SAMPLES = [
     ("cancel invalidated", {"status": "CANCELLED"}, ("cancelled_invalidated", {}), None, None),
     ("time exit due", {**SHORT, "status": "ACTIVE", "entry_price": 50.0},
      ("time_exit_due", DUE), None, None),
+    ("reclaim order long", WAITING,
+     ("gap_reclaim_order", {"entry_price": 182.40, "open_price": 180.90, "reclaim_level": 181.10,
+                            "order": "buy_stop", "tif": "DAY"}), None, None),
+    ("reclaim order short", WAITING_SHORT,
+     ("gap_reclaim_order", {"entry_price": 50.0, "open_price": 51.60, "reclaim_level": 51.30,
+                            "order": "sell_stop", "tif": "DAY"}), None, None),
+    ("cancel open through stop", {**WAITING, "status": "CANCELLED"},
+     ("cancelled_open_through_stop", {"live_price": 177.20, "phase": "open"}), None, None),
+    ("cancel premarket through stop", {**WAITING, "status": "CANCELLED"},
+     ("cancelled_open_through_stop", {"live_price": 177.60, "phase": "premarket"}), None, None),
+    ("cancel no reclaim", {**WAITING, "status": "CANCELLED"},
+     ("cancelled_gap_no_reclaim", {"entry_price": 182.40, "session": "2026-10-15"}), None, None),
+    ("cancel missed open", {**WAITING, "status": "CANCELLED"},
+     ("cancelled_expired", {"reason": "missed_open", "bars_waited": 0, "session": "2026-10-15",
+                            "cancel_resting_order": True}), None, None),
+    ("closed gap target", {**WAITING, "status": "CLOSED", "entry_price": 189.50},
+     _closed("gap_target", 189.50, 177.80), None, 0.0),
 ]
 
 

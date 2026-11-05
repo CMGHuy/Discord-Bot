@@ -42,7 +42,7 @@
 
 **Re-priced dollars (spec § Reporting).** Sizing is unchanged live: `gap_sizing.size_for_plan` sizes on `E` and the stop, so both arms hold `shares = risk$ / |E − stop|` with `risk$ = reference_account × risk_pct / 100`. A baseline twin filled at the open books `r × |open − stop| × shares`; the re-priced trade filled at the reclaim price books `r × |fill − stop| × shares`. That is the one view in which the two arms' R units (`Open − stop` vs `E − stop`) compare.
 
-- [ ] **Step 1: Write the failing tests** — create `tests/backtesting/arms/test_gap_reclaim_report.py`
+- [x] **Step 1: Write the failing tests** — create `tests/backtesting/arms/test_gap_reclaim_report.py`
 
 ```python
 """V192-17: the re-priced-fixed permutation null, the Stage 1 cell, the ambiguous-bar
@@ -255,7 +255,7 @@ def test_the_report_of_an_empty_pair_does_not_crash():
     assert out["census"]["verdict"] == census_mod.ZERO_DIFF and out["removed_top2_horizon_share"] == 0.0
 ```
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 ```bash
 python scripts/dev/testrun.py file tests/backtesting/arms/test_gap_reclaim_report.py
@@ -263,7 +263,7 @@ python scripts/dev/testrun.py file tests/backtesting/arms/test_gap_reclaim_repor
 
 Expected: FAIL — `AttributeError: module '...gap_reclaim_clauses' has no attribute 'repriced_permutation'` (and the other new names).
 
-- [ ] **Step 3: Append to `swingbot/core/backtesting/arms/gap_reclaim_clauses.py`**
+- [x] **Step 3: Append to `swingbot/core/backtesting/arms/gap_reclaim_clauses.py`**
 
 Extend the imports at the top of the module (keep V192-16's):
 
@@ -446,7 +446,7 @@ Check the dollar test by hand: risk $1,000 (100,000 × 1%); `|E − stop| = 5` �
 
 `acceptance.bootstrap_delta` on two empty arms returns `point=None` without resampling (`draws.size == 0`), which `test_the_report_of_an_empty_pair_does_not_crash` relies on.
 
-- [ ] **Step 4: Run the report tests, V192-15/16's tests and the gate**
+- [x] **Step 4: Run the report tests, V192-15/16's tests and the gate**
 
 ```bash
 python scripts/dev/testrun.py file tests/backtesting/arms/test_gap_reclaim_report.py
@@ -457,7 +457,7 @@ python scripts/dev/complexity_gate.py
 
 Expected: `0 failed` each; the gate passes (`repriced_permutation` cc 5, `repriced_dollars` cc 6, `report` cc 2). If `test_removing_losers_is_distinguishable_from_luck` lands at `p ≥ 0.05`, print `out` and the null's spread before touching anything: the fixture, not the rule, is what may be changed (more tickers), and the rule's null must keep the held and added trades in every draw.
 
-- [ ] **Step 5: Commit (in the worktree)**
+- [x] **Step 5: Commit (in the worktree)**
 
 ```bash
 git add swingbot/core/backtesting/arms/gap_reclaim_clauses.py tests/backtesting/arms/test_gap_reclaim_report.py
@@ -485,7 +485,7 @@ git commit -m "feat(v192): re-priced-fixed permutation null, Stage 1 cell on the
 
 **What part 4 runs with these (for orientation; part 4 owns the exact commands):** Stage −1 `validate_component.py --stage reachability --gap-reclaim --arms <g pilot>`; Stage 0 `--stage mde --gap-reclaim --train-effect-from-arms --arms <g selection>`; Stage 1 `--stage selection --gap-reclaim --grid-arms 0.1=<..> --grid-arms 0.25=<..> --grid-arms 0.5=<..>`; Stage 2 `--stage walkforward` (unchanged, `gate_win_rate` over the 2021/2022/2023 folds); Stage 3 `permutation_test.py --arms <validation> --gap-reclaim --out-json ...` then `validate_component.py --stage validation --gap-reclaim --permutation-p <p>`; the report on the selection and validation pairs, with `--basis` on the fold-train basis pair only.
 
-- [ ] **Step 1: Write the failing tests** — create `tests/backtest_scripts/test_gap_reclaim_cli.py`
+- [x] **Step 1: Write the failing tests** — create `tests/backtest_scripts/test_gap_reclaim_cli.py`
 
 ```python
 """V192-18: --gap-reclaim in the funnel judge and the permutation CLI, and the report script."""
@@ -713,7 +713,7 @@ def test_the_report_refuses_arms_without_a_census_or_whole_window_rows(tmp_path,
     assert "refused:no-whole-window" in capsys.readouterr().err
 ```
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 ```bash
 python scripts/dev/testrun.py file tests/backtest_scripts/test_gap_reclaim_cli.py
@@ -721,7 +721,7 @@ python scripts/dev/testrun.py file tests/backtest_scripts/test_gap_reclaim_cli.p
 
 Expected: FAIL at collection — `FileNotFoundError` for `scripts/reports/gap_reclaim_report.py`; once it exists, `unrecognized arguments: --gap-reclaim`.
 
-- [ ] **Step 3: `validate_component.py`**
+- [x] **Step 3: `validate_component.py`**
 
 Import line `:18` becomes:
 
@@ -870,7 +870,7 @@ and after the `--wr-statistic`/harvest `parser.error` check:
         parser.error(conflict)
 ```
 
-- [ ] **Step 4: `permutation_test.py`**
+- [x] **Step 4: `permutation_test.py`**
 
 Add after `arm_pair_permutation` (`:97`):
 
@@ -934,7 +934,7 @@ In `main`, after the `--shift-replay` block:
 
 Add a docstring usage line: `python scripts/backtest/permutation_test.py --arms stamped.json --gap-reclaim [--n 200 --seed 42 --out-json F]`.
 
-- [ ] **Step 5: Create `scripts/reports/gap_reclaim_report.py`**
+- [x] **Step 5: Create `scripts/reports/gap_reclaim_report.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -1137,7 +1137,7 @@ if __name__ == "__main__":
 
 `test_the_report_cuts_by_regime_when_spy_is_available` monkeypatches the module-level `regime_series` name, which `regime_section` reads at call time; the added trades in `veto_arms` sit one day after a Monday (a Tuesday the fake SPY index lacks), so they land in `unknown`.
 
-- [ ] **Step 6: Run the CLI tests, the judges' existing tests and the gate**
+- [x] **Step 6: Run the CLI tests, the judges' existing tests and the gate**
 
 ```bash
 python scripts/dev/testrun.py file tests/backtest_scripts/test_gap_reclaim_cli.py
@@ -1152,7 +1152,7 @@ python scripts/dev/complexity_gate.py
 
 Expected: `0 failed` each; the gate passes (`validate_component.main` gains one branch, `_gap_reclaim_conflict` cc 6, `_arms_main` cc 6, `render_markdown` cc 3).
 
-- [ ] **Step 7: Commit (in the worktree)**
+- [x] **Step 7: Commit (in the worktree)**
 
 ```bash
 git add scripts/backtest/validate_component.py scripts/backtest/permutation_test.py scripts/reports/gap_reclaim_report.py tests/backtest_scripts/test_gap_reclaim_cli.py

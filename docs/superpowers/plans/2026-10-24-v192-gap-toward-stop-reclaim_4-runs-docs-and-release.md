@@ -77,7 +77,7 @@ git -C "$WT" grep -n "def strata_split\|def evaluate_gap_reclaim\|def repriced_p
 
 Expected: at least one hit per command. A command with no hit means an earlier task is missing from this worktree: stop and report it.
 
-- [ ] **Step 1: Append the known-traps section**
+- [x] **Step 1: Append the known-traps section**
 
 Append this section at the very end of `"$WT/docs/claude/known-traps.md"` (one blank line before the heading):
 
@@ -151,7 +151,7 @@ change, never a fixture to refresh.
   (next-open vs close fill) before the partner flips both.
 ```
 
-- [ ] **Step 2: Architecture**
+- [x] **Step 2: Architecture**
 
 In `"$WT/docs/claude/architecture.md"`, `## Plan engine, registry and scan pipeline`, directly before the line that starts `- **Opex-day caution (v44):**`, insert:
 
@@ -167,7 +167,7 @@ In `"$WT/docs/claude/architecture.md"`, `## Plan engine, registry and scan pipel
   gap-reclaim veto (v192).
 ```
 
-- [ ] **Step 3: The Codex mirror**
+- [x] **Step 3: The Codex mirror**
 
 In `"$WT/AGENTS.md"`, the bullet that starts ``- `known-traps.md`: data caching`` today ends with ``production `.env` (never `sed -i`).``. Insert this clause directly before ``production `.env` ``:
 
@@ -203,7 +203,7 @@ python "$WT/scripts/dev/testrun.py" changed
 
 Expected: the section heading prints; `1`; `1`; `0 failed` in both runs (`changed` selects whatever tests read these docs).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -228,7 +228,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Why:** the motivating `open_gap_bucket=favourable` cell pools stop-entry, limit and market rows, and for live market plans it compares the alert-day open with the alert price (spec § Edge, panel). The spec requires the cells re-cut to market plans only, as disclosure, before TRAIN. The re-cut motivates and never selects: both windows overlap the 2026 holdout, and nothing in it changes the frozen grid, a threshold or the prediction.
 
-- [ ] **Step 1: Pre-flight**
+- [x] **Step 1: Pre-flight**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -240,7 +240,7 @@ ls "$WT/docs/superpowers/results/2026-10-24-v192-gap-reclaim.md" "$WT/docs/super
 
 Expected: empty status; every V192-1..V192-19 id present; `1`; both `ls` targets absent ("No such file or directory"). An existing results doc or `v192/` directory means a run happened outside this task: stop and report it.
 
-- [ ] **Step 2: Export the live book, read-only**
+- [x] **Step 2: Export the live book, read-only**
 
 The export runs on the VM through the wrapper (CLAUDE.md: never a raw `ssh`), opens its psql session READ ONLY and writes nothing there. Raw CSVs stay under the worktree's git-ignored `logs/`:
 
@@ -255,7 +255,7 @@ wc -l "$WT/logs/v192/autopsy/rows.csv" "$WT/logs/v192/autopsy/rejections.csv"
 
 Expected: `1` (the `entry_type` column is there) and both files non-empty. `scripts/ops/ssh-hetzner.sh` is uncommitted and lives in the main checkout; if the worktree has no copy, call it as `bash E:/Documents/Private/Projects/Discord-Bot/scripts/ops/ssh-hetzner.sh` with the same arguments.
 
-- [ ] **Step 3: Cut the export to the two 2026-10-21 windows (scratch)**
+- [x] **Step 3: Cut the export to the two 2026-10-21 windows (scratch)**
 
 Create `"$WT/logs/v192/cut_autopsy.py"` with exactly this content. It reproduces the two committed windows: the full book as of 2026-10-21 (every trade closed on or before that Eastern date, every plan created on or before it), and the current exit-model era (the same, restricted to trades opened on or after 2026-09-01 whose plan, when it has one, was created on or after that date, and plans created on or after it). Rejection tallies are cut at 2026-10-21 and carry no entry type:
 
@@ -330,7 +330,7 @@ python "$WT/logs/v192/cut_autopsy.py" "$WT"
 
 Expected: four `<name>: <n> rows` lines with non-zero counts, then the ticker count and the first plan date (2026-07-20 or earlier).
 
-- [ ] **Step 4: Fetch bars into a scratch cache (never `data/backtest_cache/`)**
+- [x] **Step 4: Fetch bars into a scratch cache (never `data/backtest_cache/`)**
 
 The fetcher needs 260 daily bars, so start at least 550 calendar days before the first plan date Step 3 printed (for 2026-07-20 that is 2025-01-16 or earlier; `2025-01-01` covers it):
 
@@ -342,7 +342,7 @@ ls "$WT/logs/v192/autopsy/bars" | wc -l
 
 Expected: about one CSV per ticker. If Step 3 printed a first plan date before 2026-07-01, move `--start` back to 550 days before it. A ticker the provider cannot serve is left uncovered; the autopsy counts it under `bar_covered_n`.
 
-- [ ] **Step 5: Run the autopsy four times — market only and the same-export control, per window**
+- [x] **Step 5: Run the autopsy four times — market only and the same-export control, per window**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -357,7 +357,7 @@ Expected: each prints two `wrote ...` lines and `N <n>, bar-covered <b>, cells t
 
 The controls exist because the book has moved since 2026-10-21 (late closes, re-journaled rows): the market-only cut is compared against the same export unfiltered, never against the committed file alone.
 
-- [ ] **Step 6: Write the renderer (scratch) and print the disclosure tables**
+- [x] **Step 6: Write the renderer (scratch) and print the disclosure tables**
 
 Create `"$WT/logs/v192/render_autopsy.py"` with exactly this content:
 
@@ -428,7 +428,7 @@ Expected: two `### full` / `### sep-era` blocks, each a header table with three 
 - The same-export N differs from the committed N (776 full, 221 era) by more than 5%: disclose it in Step 7 as book drift since 2026-10-21; it does not stop the task.
 - No market-only `favourable` row (N 0) is a reading, not a failure: it says the motivating cell carried no market rows, and Step 7 says so in words.
 
-- [ ] **Step 7: Write the results doc (header, frozen block, disclosure) and commit it before any run**
+- [x] **Step 7: Write the results doc (header, frozen block, disclosure) and commit it before any run**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -500,7 +500,7 @@ Order: V192-22 (Stage −1, three pilot runs), then V192-23 (fold-train: three v
 - Consumes: `measure_arms.py --knob ... --baseline-knob ... --stage pilot --out F --preregistration F --data-source alpaca` (V192-14), which writes `F`, `F.provenance.json` and (component delta with `GAP_RECLAIM_ATR > 0`) the census `<F stem>.gap_reclaim.json` (V192-15), and on the pilot stage exits 1 with `refused:zero-diff` when no outcome changed, after writing those files; `validate_component.py --gap-reclaim --stage reachability` (V192-18), which prints the `knobs:` / `baseline knobs:` / `split` lines, the census summary as JSON, then `REACHABLE -- the veto arms on market plans; Stage 0 may proceed.` (exit 0) or a `refused:zero-diff -- ...` line (exit 1); the census keys `knob_delta`, `baseline_knob_delta`, `signal_window`, `universe_count`, `summary` (`cells`, `total`, `gap_atr`, `verdict`), `repriced_in_component`, `repriced_absent_from_component`, `rows`; the results doc and its frozen block (V192-21).
 - Produces: one reachability verdict per cell, which V192-23 reads from the results doc: a cell is **REACHABLE** only when its producer exited 0 (outcomes changed) **and** its judge printed `REACHABLE`; otherwise it is closed `refused:zero-diff` at Stage −1.
 
-- [ ] **Step 1: Pre-flight — frozen block committed, code frozen, nothing closed covers this**
+- [x] **Step 1: Pre-flight — frozen block committed, code frozen, nothing closed covers this**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -524,7 +524,7 @@ python "$WT/scripts/dev/doc_section.py" "$WT/docs/claude/backtest-methodology.md
 
 Expected: no row closes "a same-session reclaim of the planned entry after a next-open gap toward the stop on market plans". v180's Turtle Soup row (a next-open fill on one strategy, no veto) and the `gap_volume` screen (buying after a gap *up*, which the spec says is not evidence here) are different mechanisms. If another row does close this mechanism, stop and ask the partner (`AskUserQuestion`, one question, recommended option first: "Stop: v192 re-runs <row> (Recommended)" / "Proceed: the mechanism differs because <reason>").
 
-- [ ] **Step 2: Write the census renderer (scratch)**
+- [x] **Step 2: Write the census renderer (scratch)**
 
 Create `"$WT/logs/v192/render_census.py"` with exactly this content. It prints one cell's census and stamp from the files the producer wrote, so no number is retyped:
 
@@ -591,7 +591,7 @@ if __name__ == "__main__":
     main(sys.argv[1])
 ```
 
-- [ ] **Step 3: Pilot for g = 0.10**
+- [x] **Step 3: Pilot for g = 0.10**
 
 Confirm `git -C "$WT" status --short -- swingbot/ scripts/` prints nothing. Invoke `backtest-gate`. Dispatch `backtest-runner` with the worktree path, the progress file (the newest `"$WT"/logs/measure_arms.*.progress`; after the two arms the census writes no percent, so the runner reports "census running" until the process exits), and:
 
@@ -602,7 +602,7 @@ MEASURE_ARMS_UNIVERSE=cache HISTORY_STORE_DIR=E:/Documents/Private/Projects/Disc
 
 Expected: `exit 0`, or `refused:zero-diff -- the component changed no trade on the pilot slice. Budget intact.` and `exit 1`. Either way the three files exist: `ls "$WT"/docs/superpowers/results/v192/2026-10-24-v192-g010-pilot*`. Ask the runner to report the wall time; Step 7 uses it.
 
-- [ ] **Step 4: Pilot for g = 0.25**
+- [x] **Step 4: Pilot for g = 0.25**
 
 After the first runner has returned, confirm the frozen-code status again, invoke `backtest-gate`, and dispatch `backtest-runner` the same way with:
 
@@ -613,7 +613,7 @@ MEASURE_ARMS_UNIVERSE=cache HISTORY_STORE_DIR=E:/Documents/Private/Projects/Disc
 
 Expected: as in Step 3, for `g025`.
 
-- [ ] **Step 5: Pilot for g = 0.50**
+- [x] **Step 5: Pilot for g = 0.50**
 
 After the second runner has returned, the same checks, then:
 
@@ -624,7 +624,7 @@ MEASURE_ARMS_UNIVERSE=cache HISTORY_STORE_DIR=E:/Documents/Private/Projects/Disc
 
 Expected: as in Step 3, for `g050`.
 
-- [ ] **Step 6: The judge's reachability reading, per cell (inline, quick)**
+- [x] **Step 6: The judge's reachability reading, per cell (inline, quick)**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -638,7 +638,7 @@ done
 
 Expected per cell: `exit 0` with `REACHABLE -- the veto arms on market plans; Stage 0 may proceed.`, or `exit 1` with a `refused:...` line. A `refused:no-gap-reclaim-sidecar` or a stamp-gate token (`refused:...stamp...`) is a code or environment fault, not a reading: stop and report it with the file.
 
-- [ ] **Step 7: Sanity checks before anything is read as a result**
+- [x] **Step 7: Sanity checks before anything is read as a result**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -686,7 +686,7 @@ WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-g
 MEASURE_ARMS_UNIVERSE=cache HISTORY_STORE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/market_data BACKTEST_CACHE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache python -c "import sys; w=sys.argv[1]; sys.path[:0] = [w, w + '/scripts/backtest', w + '/scripts/data']; import measure_arms; print(len(measure_arms.cached_universe()))" "$WT"
 ```
 
-- [ ] **Step 8: Write the Stage −1 section**
+- [x] **Step 8: Write the Stage −1 section**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim
@@ -709,7 +709,7 @@ Append to the results doc:
 
 Note any evidence file of 50 MB or more (part rule: excluded locally, size and `sha256sum` recorded here).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 WT=E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim

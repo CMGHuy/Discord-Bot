@@ -532,3 +532,71 @@ Two things that look broken in the live book but aren't. Don't "fix" either one.
 - **Two daily caches, one adjustment basis each.** `market_data/daily_alpaca/` is Alpaca `Adjustment.ALL`, 10 years, written only by `daily_delta.write_daily` under the key's lease; `market_data/daily/` is yfinance `auto_adjust`, full history, written by its existing yfinance writers. Never splice or write a frame across them. The admin reads only the yfinance file (`freshness.page_daily`). Each file has a `.meta.json` sidecar; a failed D4 delta check means a full refetch, never `history_splice`'s shallow live-only path.
 - **`count` mode is the D9 baseline**: it must make exactly today's provider calls. Anything that shares or caches belongs behind `on`.
 - **The admin's fresh mark** (`X-Swingbot-Fresh: 1`) lasts one request (`freshness.install`); a background thread keeps it only through `contextvars.copy_context()`.
+
+## Market-on-open and the gap-reclaim veto (v192): two knobs, both off
+
+Two knobs, inert by default: `MARKET_ENTRY_NEXT_OPEN` (`"false"`) and
+`GAP_RECLAIM_ATR` (`g`, `"0"`). With both at default, replay `ExitResult`s,
+arm rows and plan dicts are byte-identical to before v192, pinned by the
+goldens in `tests/fixtures/v192/`. A golden that moves is a behaviour
+change, never a fixture to refresh.
+
+- **Coupling.** `GAP_RECLAIM_ATR > 0` is honoured only with
+  `MARKET_ENTRY_NEXT_OPEN` on. At import and at every SIGHUP reload
+  `config.enforce_gap_reclaim_coupling()` sets it to 0 and logs an ERROR; in
+  measurement `arms.knobs.apply_knobs` raises
+  `ValueError(GAP_RECLAIM_NEEDS_NEXT_OPEN)` on the merged arm config. A veto
+  that "does nothing" live is this guard first. `gap_reclaim.effective_g()`
+  is the one reader that applies it.
+- **What "waiting" means.** With the first knob on, a market plan (v180
+  Turtle Soup excepted) is built PENDING with `entry_price=None` and
+  `waits_next_open=True`. `gap_reclaim.waits_for_open(plan)` reads that
+  marker, not status and entry type alone: about ten test modules build
+  PENDING market plans that must keep the close fill. The marker, `a_t`
+  (`reclaim_atr`) and `X` (`reclaim_level`) are stamped once at creation
+  and never rewritten by a reload, a knob flip or a restart.
+- **`a_t` reads bars through `t` only** (Wilder ATR14,
+  `market/indicators.atr`). Under 15 bars, NaN or ≤ 0 gives no
+  `reclaim_level`: the plan fills at the open like the baseline, never a
+  crash. Live re-derives `E`, `a_t`, `X` from the completed frame, and a
+  parity test pins them against the replay.
+- **One decision for live and replay.** `gap_reclaim.decide_at_open` runs in
+  this order: open at or through the stop → `open_through_stop`; `X` set and
+  the open at or beyond it → `reclaim_wait`; past the stop ceiling →
+  `risk_cap`; else fill at the open. Replay fills a reclaim at `E ± 1 tick`
+  (the stop order's slippage; the v1 arm replay applies no other frictions);
+  live fills at `E` on the first RTH poll one tick through it.
+- **The fill bar is walked in both arms**
+  (`market_next_open.next_open_fill_bar`): stop first, then TP1 (scale-out
+  plans bank TP1 and continue the runner from the fill bar), so an ambiguous
+  reclaim bar is −1R. An open at or beyond TP1 is v180's 0R `gap_target`.
+  `_fill_bar_exit`'s 0R `gap_through_stop` scratch is not reused.
+- **Live timing.** `market_open.deciding_session(plan)` is the first NYSE
+  session whose 09:30 ET open is at or after `issued_at`
+  (`strategy_pass._stamp_issued_for_open` stamps it). Extended-hours polls
+  before that open run a two-poll stop-cross debounce
+  (`PREMARKET_STOP_CONFIRM_POLLS`), new code: the old
+  `EXTENDED_HOURS_EXIT_CHECK` / `EXTENDED_HOURS_DEBOUNCE_TICKS` fields are
+  still read by nothing. A first RTH poll on a later session cancels
+  `cancelled_expired` / `missed_open`; a plan resting for its reclaim
+  cancels `gap_no_reclaim` on the first poll after that session's close.
+  `PlanManager._step_market_open` runs ahead of `_step_pending`, whose
+  stop-entry fill would otherwise fill a waiting market plan at any price.
+- **Feed and followers.** `cancelled_open_through_stop`,
+  `cancelled_gap_no_reclaim` and `gap_reclaim_order` are `NOTICE_EVENTS`
+  (re-sent until acked), have `instructions` builders and the
+  `Kind.RECLAIM_ORDER` copy, and the two cancels are in
+  `PLACEHOLDER_DISCARD_EVENTS`, so the alert-time placeholder trade never
+  sits open after a cancel. A cancel transition added later must join that
+  set and `_CANCEL_LEADS`, or `_cancel_why` raises KeyError.
+- **Measurement needs a baseline delta.** Both arms run with
+  `MARKET_ENTRY_NEXT_OPEN=true`; the component adds `GAP_RECLAIM_ATR=g`
+  (`measure_arms.py --baseline-knob`, stamped `baseline_knob_delta`). The
+  veto is not a subset feature: the census sidecar
+  `<out stem>.gap_reclaim.json` names the re-priced (reclaimed) keys, and
+  `gap_reclaim_clauses.strata_split` scores removed / re-priced / added /
+  unchanged, with a SKIPPED clause failing. The verdict is in
+  `docs/superpowers/results/2026-10-24-v192-gap-reclaim.md`.
+- **A pass licenses neither knob.** `MARKET_ENTRY_NEXT_OPEN` changes every
+  market plan's fill and needs its own non-inferiority pre-registration
+  (next-open vs close fill) before the partner flips both.

@@ -1,0 +1,48 @@
+{
+ "stage": "mde",
+ "window": "2018-06-01..2022-12-31",
+ "statistic": "standardised dWR",
+ "cluster": "week",
+ "cells": {
+  "0.1": {
+   "verdict": "RESOLVABLE",
+   "exit": 0,
+   "lines": [
+    "train effect (standardised, from --arms): +3.4894pp",
+    "observed N         : 6198 over 1675d",
+    "projected target N : 2701 over 730d",
+    "paired MDE   (dWR): 1.9326pp",
+    "unpaired MDE (dWR): 7.5363pp",
+    "gating on: paired"
+   ]
+  },
+  "0.25": {
+   "verdict": "RESOLVABLE",
+   "exit": 0,
+   "lines": [
+    "train effect (standardised, from --arms): +1.8500pp",
+    "observed N         : 6198 over 1675d",
+    "projected target N : 2701 over 730d",
+    "paired MDE   (dWR): 1.5730pp",
+    "unpaired MDE (dWR): 7.5363pp",
+    "gating on: paired"
+   ]
+  },
+  "0.5": {
+   "verdict": "REFUSED",
+   "exit": 1,
+   "lines": [
+    "train effect (standardised, from --arms): +0.4437pp",
+    "observed N         : 6198 over 1675d",
+    "projected target N : 2701 over 730d",
+    "paired MDE   (dWR): 0.4951pp",
+    "unpaired MDE (dWR): 7.5363pp",
+    "gating on: paired"
+   ]
+  }
+ },
+ "mde_refused": [
+  "0.5"
+ ],
+ "verdict": "continue"
+}

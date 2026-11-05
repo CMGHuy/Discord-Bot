@@ -277,6 +277,8 @@ CLOSED_PREREGISTRATION_KNOBS = frozenset({
     "GIVEBACK_K",
     "GIVEBACK_F",
     "TURTLE_SOUP_RESEARCH_MODE",   # v180: Turtle Soup structural arm, closed
+    "MARKET_ENTRY_NEXT_OPEN",   # v192: next-open fill + gap-toward-stop reclaim veto, closed
+    "GAP_RECLAIM_ATR",
 })
 _BACKTEST_SCRIPT_RE = re.compile(r"(?:tune_strategy|run_backtest_range)\.py")
 

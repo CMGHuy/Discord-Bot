@@ -51,8 +51,9 @@ def test_every_stopped_reason_is_mapped():
         _STOPPED_REASONS)
 
 
-def test_the_six_events_share_one_table():
-    assert fn.NOTIFY_EVENTS == ("near_stop", "tp1", "tp2", "stopped", "expired", "closed_other")
+def test_the_seven_events_share_one_table():
+    assert fn.NOTIFY_EVENTS == ("near_stop", "tp1", "tp2", "stopped", "expired",
+                                "reclaim_order", "closed_other")
     assert tuple(fn.EVENT_LABELS) == fn.NOTIFY_EVENTS
     assert tuple(fn.WATCH_DEFAULTS) == fn.NOTIFY_EVENTS
     assert set(fn._BY_TRANSITION.values()) | set(fn._BY_REASON.values()) == set(fn.NOTIFY_EVENTS)

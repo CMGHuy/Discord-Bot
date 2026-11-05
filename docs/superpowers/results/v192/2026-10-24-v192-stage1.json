@@ -1,0 +1,127 @@
+{
+ "cells": [
+  {
+   "value": 0.1,
+   "eligible": false,
+   "delta_win_rate_pp": 3.4893509584623885,
+   "expectancy_r": 0.014280591735005631,
+   "failed": [
+    "expectancy_floor"
+   ],
+   "disclosure": {
+    "delta_expectancy_r": -0.12904180263119153,
+    "delta_win_rate_ci": [
+     2.5006240731992824,
+     4.495323079668752
+    ],
+    "removed": 889,
+    "added": 8,
+    "changed": 67,
+    "is_subset": false,
+    "removed_by_direction": {
+     "bearish": 308,
+     "bullish": 581
+    },
+    "top2_horizon_share": 0.2373453318335208,
+    "one_direction": null,
+    "per_direction": {
+     "bullish": {
+      "n_baseline": 4215,
+      "n_component": 3642,
+      "delta_win_rate_pp": 3.5918872411062814,
+      "delta_expectancy_r": -0.10605918925309898
+     },
+     "bearish": {
+      "n_baseline": 2885,
+      "n_component": 2577,
+      "delta_win_rate_pp": 3.179032297875196,
+      "delta_expectancy_r": -0.16280772881556552
+     }
+    }
+   }
+  },
+  {
+   "value": 0.25,
+   "eligible": false,
+   "delta_win_rate_pp": 1.8500339502225813,
+   "expectancy_r": 0.0655485436893204,
+   "failed": [
+    "expectancy_floor"
+   ],
+   "disclosure": {
+    "delta_expectancy_r": -0.07777385067687675,
+    "delta_win_rate_ci": [
+     1.0541324461096375,
+     2.683090771856772
+    ],
+    "removed": 514,
+    "added": 6,
+    "changed": 48,
+    "is_subset": false,
+    "removed_by_direction": {
+     "bearish": 134,
+     "bullish": 380
+    },
+    "top2_horizon_share": 0.2490272373540856,
+    "one_direction": null,
+    "per_direction": {
+     "bullish": {
+      "n_baseline": 4215,
+      "n_component": 3841,
+      "delta_win_rate_pp": 2.081821798347118,
+      "delta_expectancy_r": -0.05320035238203771
+     },
+     "bearish": {
+      "n_baseline": 2885,
+      "n_component": 2751,
+      "delta_win_rate_pp": 1.3320100963437724,
+      "delta_expectancy_r": -0.11382823400597358
+     }
+    }
+   }
+  },
+  {
+   "value": 0.5,
+   "eligible": false,
+   "delta_win_rate_pp": 0.44367410409623886,
+   "expectancy_r": 0.14444653096330276,
+   "failed": [
+    "mde"
+   ],
+   "disclosure": {
+    "delta_expectancy_r": 0.0011241365971056128,
+    "delta_win_rate_ci": [
+     0.2023918457650235,
+     0.7159832665023567
+    ],
+    "removed": 127,
+    "added": 3,
+    "changed": 13,
+    "is_subset": false,
+    "removed_by_direction": {
+     "bearish": 10,
+     "bullish": 117
+    },
+    "top2_horizon_share": 0.3228346456692913,
+    "one_direction": "bullish",
+    "per_direction": {
+     "bullish": {
+      "n_baseline": 4215,
+      "n_component": 4101,
+      "delta_win_rate_pp": 0.71517296688409,
+      "delta_expectancy_r": 0.0031712383317670095
+     },
+     "bearish": {
+      "n_baseline": 2885,
+      "n_component": 2875,
+      "delta_win_rate_pp": 0.008980552458801583,
+      "delta_expectancy_r": -0.0027267455353778836
+     }
+    }
+   }
+  }
+ ],
+ "selected": null,
+ "plateau": null,
+ "verdict": "no-eligible-cell"
+}

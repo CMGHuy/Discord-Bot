@@ -295,3 +295,27 @@ def test_mechanism_clause_rejects_a_removed_population_with_positive_expectancy(
     assert clause.value == pytest.approx(20.0, abs=1e-9)       # removed WR
     assert clause.threshold == pytest.approx(60.0, abs=1e-9)   # retained WR
     assert res.verdict == "FAIL"
+
+
+def test_verdict_of_ignores_skipped_by_default_and_fails_it_on_request():
+    from swingbot.core.backtesting.acceptance import ClauseResult, verdict_of
+    passed, skipped, failed = (ClauseResult("a", "PASS", ""), ClauseResult("b", "SKIPPED", ""),
+                               ClauseResult("c", "FAIL", ""))
+    assert verdict_of((passed, skipped)) == "PASS"
+    assert verdict_of((passed, skipped), skipped_fails=True) == "FAIL"
+    assert verdict_of((passed,), skipped_fails=True) == "PASS"
+    assert verdict_of((passed, failed)) == "FAIL" == verdict_of((failed,), skipped_fails=True)
+    assert verdict_of(()) == "PASS"
+
+
+def test_evaluate_with_skipped_fails_fails_a_non_subset_feature():
+    """The v192 opt-in: the same non-subset arms the default passes (mechanism SKIPPED) fail."""
+    b, c = [], []
+    for t in range(30):
+        for i in range(10):
+            b.append(mk(f"T{t}", "win" if i < 4 else "loss", date=f"2021-03-{i + 1:02d}"))
+            c.append(mk(f"T{t}", "win" if i < 6 else "loss", date=f"2021-03-{i + 1:02d}"))
+    default = evaluate(b, c, stage="walkforward", n_resamples=300, seed=42)
+    strict = evaluate(b, c, stage="walkforward", n_resamples=300, seed=42, skipped_fails=True)
+    assert default.verdict == "PASS" and strict.verdict == "FAIL"
+    assert strict.clauses == default.clauses
