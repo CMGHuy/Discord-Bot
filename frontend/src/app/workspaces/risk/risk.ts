@@ -233,10 +233,6 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
                killswitch's. -->
           <span class="stale" role="status">{{ message }}</span>
         }
-        <!-- Both directions go through the dialog. Releasing is as
-             consequential as engaging -- it puts money back at risk -- and a
-             one-click release beside a guarded engage is an invitation to
-             undo a deliberate stop by accident. -->
         @if (store.data()?.market_meta) {
           <div class="clocks" role="group" aria-label="Risk data clocks">
             <sb-market-value kind="snapshot" [asOf]="null" [computedAt]="store.computedAt()"
@@ -251,6 +247,10 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
             <sb-market-refresh [symbols]="store.positionTickers()" [snapshots]="riskKey" />
           </div>
         }
+        <!-- Both directions go through the dialog. Releasing is as
+             consequential as engaging -- it puts money back at risk -- and a
+             one-click release beside a guarded engage is an invitation to
+             undo a deliberate stop by accident. -->
         <div class="kill-actions">
           @if (store.killswitchOn() !== true) {
             <button sb-button data-action="killswitch" variant="danger" type="button" class="sb-hit"
@@ -1066,7 +1066,10 @@ export class Risk {
         hint: drawdownFxNote(ddAmount?.fx_missing_count ?? 0),
       },
     ];
-    return tiles.map((tile, i) => this.markLowerBound(tile, i < 4 ? 'metrics.distribution' : 'metrics.closed'));
+    const betaNote = this.store.betaNote();
+    return tiles.map((tile, i) => (betaNote !== null && tile.value === betaNote)
+      ? tile
+      : this.markLowerBound(tile, i < 4 ? 'metrics.distribution' : 'metrics.closed'));
   });
 
   protected readonly metricDomains = ['distribution_metrics', 'drawdown_r', 'drawdown_amount'] as const;

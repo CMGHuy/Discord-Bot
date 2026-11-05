@@ -1205,6 +1205,30 @@ describe('Risk snapshot clocks and warnings (v204)', () => {
     expect(tile(el, 'Sharpe').textContent).not.toContain('≥');
   });
 
+  it('a closed-trade lower bound marks Sharpe and drawdown, not VaR', async () => {
+    const el = await root({ lower_bound: ['metrics.closed'], ...withMeta(1) });
+    expect(tile(el, 'Sharpe').textContent).toContain('≥');
+    expect(tile(el, 'Max drawdown').textContent).toContain('≥');
+    expect(tile(el, 'VaR 95%').textContent).not.toContain('≥');
+  });
+
+  it('a marked family with nothing unpriced keeps the tile secondary unchanged', async () => {
+    const el = await root({ lower_bound: ['metrics.closed'], ...withMeta(0) });
+    expect(tile(el, 'Max drawdown').textContent).not.toContain('≥');
+    expect(tile(el, 'Max drawdown').textContent).not.toContain('unpriced');
+  });
+
+  it('an unavailable beta is never marked a lower bound', async () => {
+    const el = await root({
+      lower_bound: ['metrics.distribution'], ...withMeta(1),
+      availability: { ...AVAILABILITY, beta_spy: 'zero_variance' } as unknown as RiskAvailability,
+      metrics: { ...DEFAULT_METRICS, beta_spy: { value: null, n: 118 } } as unknown as RiskMetrics,
+    });
+    const text = tile(el, 'Beta vs').textContent!;
+    expect(text).toContain('unavailable: benchmark did not move');
+    expect(text).not.toContain('≥');
+  });
+
   it('marked correlation and clusters panels show the incomplete note', async () => {
     const el = await root({ lower_bound: ['correlation', 'clusters'], ...withMeta(2) });
     const notes = [...el.querySelectorAll('sb-incomplete-note')].filter((n) => !n.closest('.clocks'));
