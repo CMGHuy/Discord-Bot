@@ -24,6 +24,10 @@ function unionOf(owners: ReadonlyMap<string, Signal<string[]>>): string[] {
  * `TapeStore` (lane B) and `MarketIndexStore` (lane A) each register their
  * symbols; the feed asks for the union once per poll. Refreshes coalesce in
  * one microtask, so every caller in the same tick shares a single request.
+ * A refresh from a later tick while the same request is still in flight joins
+ * it (v206: the boot fired the same 60-symbol request twice within 30 ms, from
+ * the registration effect and a store's load()); an event that lands meanwhile
+ * is caught by the next throttled tick.
  * A failed refetch keeps the previous rows: blanking the strip would read as
  * "every position closed", the dangerous direction to be wrong in.
  */
@@ -37,6 +41,8 @@ export class TapeFeed {
   private readonly _loading = signal(false);
   private latestRequest = 0;
   private queued = false;
+  /** The symbol set of the request in flight, or null (v206 P1-e). */
+  private inflight: string | null = null;
 
   readonly rows = this._rows.asReadonly();
   readonly asOf = this._asOf.asReadonly();
@@ -70,12 +76,16 @@ export class TapeFeed {
 
   private fetch(): void {
     const symbols = this.merged();
+    const key = symbols.join(',');
+    if (symbols.length && this.inflight === key) return;
     const request = ++this.latestRequest;
     if (!symbols.length) {
+      this.inflight = null;
       this._rows.set({});
       this._loading.set(false);
       return;
     }
+    this.inflight = key;
     this._loading.set(true);
     this.api.tape(symbols).subscribe({
       next: (response) => {
@@ -87,8 +97,16 @@ export class TapeFeed {
       },
       // Silent and non-destructive: see the class comment.
       error: () => {
+        this.settle(request);
         if (request === this.latestRequest) this._loading.set(false);
       },
+      complete: () => this.settle(request),
     });
+  }
+
+  /** The newest request has ended: the next refresh may send again. An
+   *  older request ending says nothing about the one now in flight. */
+  private settle(request: number): void {
+    if (request === this.latestRequest) this.inflight = null;
   }
 }
