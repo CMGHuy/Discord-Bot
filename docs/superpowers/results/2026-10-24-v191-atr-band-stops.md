@@ -1,7 +1,7 @@
 # v191 — Confluence ATR-band stops: results
 
-**Spec (the pre-registration):** `docs/superpowers/specs/2026-10-24-v191-confluence-atr-band-stops-design.md`, last changed in `6966724d`. Stage 3 runs only with `--preregistration` naming that file.
-**Plan:** `docs/superpowers/plans/2026-10-24-v191-confluence-atr-band-stops_0-index.md` (§ Global Constraints carries the frozen block below).
+**Spec (the pre-registration):** `docs/superpowers/specs/implemented/2026-10-24-v191-confluence-atr-band-stops-design.md`, last changed in `6966724d`. Stage 3 runs only with `--preregistration` naming that file.
+**Plan:** `docs/superpowers/plans/implemented/2026-10-24-v191-confluence-atr-band-stops_0-index.md` (§ Global Constraints carries the frozen block below).
 **Driver:** `scripts/backtest/measure_atr_band_stop.py`; stage files under `docs/superpowers/results/v191/`.
 **Verdict:** arm K NO-LIFT (UNDERPOWERED at Stage 0); arm R NO-LIFT (UNDERPOWERED at Stage 0). Knob defaults stay 0 / rechoose / false.
 

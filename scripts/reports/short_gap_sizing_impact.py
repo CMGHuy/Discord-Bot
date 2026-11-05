@@ -52,7 +52,7 @@ NY = "America/New_York"
 WORST_N = 5
 SPEC = "../specs/2026-10-21-v183-short-gap-sizing-and-squeeze-notice-design.md"
 
-LONG_SPEC = "../specs/2026-10-24-v191-confluence-atr-band-stops-design.md"
+LONG_SPEC = "../specs/implemented/2026-10-24-v191-confluence-atr-band-stops-design.md"
 #: A loss past the fixed risk by more than this is an exceedance; less is the
 #: rounding noise of 0.01-share sizing.
 EXCEED_TOL_DOLLARS = 0.5

@@ -1,6 +1,6 @@
 # v191 gap sizing impact: the live book's closed longs re-sized
 
-**Spec:** [v191 design](../specs/2026-10-24-v191-confluence-atr-band-stops-design.md) § "Part B — gap-aware dollar sizing for longs and shorts"
+**Spec:** [v191 design](../specs/implemented/2026-10-24-v191-confluence-atr-band-stops-design.md) § "Part B — gap-aware dollar sizing for longs and shorts"
 **Run:** 2026-11-05 on `swingbot_prod_replica` (read-only replica of production), `scripts/reports/short_gap_sizing_impact.py --side long`
 **Status:** descriptive, not a gate. `LONG_GAP_SIZING=false` is the revert path.
 
