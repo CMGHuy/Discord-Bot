@@ -47,6 +47,19 @@ PRICES: dict[str, float] = {"AAPL": 104.0, "SAP.DE": 212.0}
 FX_CLOSES: dict[str, dict[str, float]] = {"USDEUR=X": {
     "2026-10-26": 0.8600, "2026-10-27": 0.8620, "2026-10-28": 0.0, "2026-10-29": 0.8650,
     "2026-10-30": 0.8640, "2026-11-02": 0.8680, "2026-11-03": 0.8700, "2026-11-04": 0.8720}}
+#: fx_daily_rates rows for USD -> EUR, written by hand from FX_CLOSES (v205 V205-15):
+#: Berlin day -> (rate, bar_date), the last positive close dated strictly before the day.
+FX_DAILY_ROWS: dict[str, tuple[float, str]] = {
+    "2026-10-27": (0.8600, "2026-10-26"),
+    "2026-10-28": (0.8620, "2026-10-27"),
+    "2026-10-29": (0.8620, "2026-10-27"),   # the 10-28 close is 0.0: skipped
+    "2026-10-30": (0.8650, "2026-10-29"),
+    "2026-10-31": (0.8640, "2026-10-30"),
+    "2026-11-01": (0.8640, "2026-10-30"),
+    "2026-11-02": (0.8640, "2026-10-30"),   # Monday: Friday's close
+    "2026-11-03": (0.8680, "2026-11-02"),
+    "2026-11-04": (0.8700, "2026-11-03"),   # FROZEN_NOW's Berlin day
+}
 BARS: dict[str, dict[str, float]] = {
     "AAPL": {"2026-10-28": 99.0, "2026-10-29": 101.0, "2026-10-30": 100.5,
              "2026-11-02": 102.0, "2026-11-03": 104.0},
@@ -60,6 +73,30 @@ def frame(closes: dict[str, float]) -> pd.DataFrame:
     values = list(closes.values())
     return pd.DataFrame({"Open": values, "High": values, "Low": values, "Close": values,
                          "Volume": [0] * len(values)}, index=pd.DatetimeIndex(list(closes)))
+
+
+def fx_daily_rows(scale: float = 1.0) -> list[dict]:
+    return [{"base": "USD", "account": ACCOUNT_CODE, "day": _dt.date.fromisoformat(day),
+             "rate": rate * scale, "bar_date": _dt.date.fromisoformat(bar),
+             "snapped_at": FROZEN_NOW, "source": "backfill"}
+            for day, (rate, bar) in FX_DAILY_ROWS.items()]
+
+
+def seed_fx_daily(scale: float = 1.0) -> None:
+    """Replace fx_daily_rates with FX_DAILY_ROWS x scale and load the process memo.
+
+    Loading it here models production's steady state (one table read per minute,
+    not per request), so V205-5's statement budgets stay as they are."""
+    import sqlalchemy as sa
+
+    from swingbot.core.db import engine, schema
+    from swingbot.core.db.repositories.market_refresh import fx_daily_rate_repo
+    from swingbot.core.marketdata import fx_daily
+    with engine.get_engine().begin() as conn:
+        conn.execute(sa.delete(schema.fx_daily_rates))
+        fx_daily_rate_repo().insert_if_absent(fx_daily_rows(scale), conn=conn)
+    fx_daily.reset_memo()
+    fx_daily.lookup("USD", ACCOUNT_CODE, FROZEN_NOW.date())
 
 
 def fx_frames(scale: float = 1.0) -> dict[str, pd.DataFrame]:

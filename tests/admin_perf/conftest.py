@@ -59,7 +59,7 @@ def golden_seed(admin_app, tmp_path, monkeypatch):
     import swingbot.admin.dashboard as dash
     from swingbot.admin.api_v1 import risk
     from swingbot.core.analytics import snapshots
-    from swingbot.core.marketdata import data, data_refresh, data_store, fx
+    from swingbot.core.marketdata import data, data_refresh, data_store, fx, fx_daily
     from tests.admin_perf import golden_book as gb
 
     snapshot = tmp_path / "analytics_snapshot.json"
@@ -94,8 +94,10 @@ def golden_seed(admin_app, tmp_path, monkeypatch):
         frames.update(gb.bars())
         frames.update(gb.fx_frames(scale))
         monkeypatch.setattr(fx, "_frames", {})
+        gb.seed_fx_daily(scale)
         risk._invalidate_cache()
 
     set_fx(1.0)
     yield types.SimpleNamespace(set_fx=set_fx)
     risk._invalidate_cache()
+    fx_daily.reset_memo()
