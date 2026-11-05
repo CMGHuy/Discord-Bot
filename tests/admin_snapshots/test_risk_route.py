@@ -126,6 +126,11 @@ def test_risk_on_all_account_currency_book_dates_market_meta_by_its_bars(on_clie
     assert body["market_meta"]["as_of"] != body["computed_at"]
 
 
+def test_risk_on_keeps_the_fx_date_as_market_meta_as_of(on_client, market, snapshot_store):
+    snapshot_store.rows["risk"] = snapshot_row("risk", doc(), age_s=60, inputs=inputs())
+    assert on_client.get("/api/v1/risk").get_json()["market_meta"]["as_of"] == "2026-10-29"
+
+
 def test_risk_on_with_no_inputs_has_no_market_date(on_client, market, snapshot_store):
     assert on_client.get("/api/v1/risk").get_json()["market_meta"]["as_of"] is None
 
@@ -192,5 +197,6 @@ def test_snapshot_body_matches_the_off_body_and_the_golden(golden_book, market, 
     assert set(on) == set(off)
     for key in ("bars_meta", "fx_meta", "lower_bound"):
         assert on[key] == off[key], key
+    assert on["market_meta"]["as_of"] == off["market_meta"]["as_of"]
     assert_matches_golden("risk", on)
     assert on["market_meta"]["source"] == "snapshot" and golden_book.network_calls == []
