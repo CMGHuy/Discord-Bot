@@ -97,9 +97,11 @@ Measured with the committed browser probe (below) **while a scan runs**:
   warm caches), and so are capped pages: the share of capped pages, and
   settle statistics over **uncapped pages only**.
 - Each result records the git SHA of the probe, the production image tag,
-  the Berlin time, the pinned calendar date and the open SSE stream count
-  (from the admin's broker stats, so the thread budget is known: gunicorn
-  has 16 threads and each stream holds one).
+  the Berlin time, the pinned calendar date and the open SSE stream count,
+  so the thread budget is known (gunicorn has 16 threads and each stream
+  holds one). No endpoint exposes that count today, only
+  `EventBroker.connection_count` (`broker.py:190`). Plan 1 adds it to
+  `/api/v1/health` as an additive `sse_streams` field.
 
 ## Non-goals
 
@@ -191,7 +193,10 @@ stays byte-identical. The shape is the subset of `/system/scan`
   `is_scan_running()`, never the full `scan_status_payload`
   (`admin/app.py:378`, which also reads the runstate and heartbeat). It
   runs once per **flushed** `scan` event, after the 250 ms debounce, never
-  per connection, under a statement timeout of 200 ms. A test asserts that
+  per connection, through the existing fail-fast `side_connection()`
+  (`core/db/side_engine.py:86`, whose statement timeout is
+  `MARKETDATA_PG_TIMEOUT_MS`, 250 ms by default). The broker gains an
+  injectable progress reader and clock beside `watcher_factory` for tests. A test asserts that
   one publish with N subscribers reads once.
 - **Failure must be visible.** `progress_store.read()` swallows every error
   and returns `None`, which is also the legitimate "nothing publishing"
@@ -228,17 +233,23 @@ stays byte-identical. The shape is the subset of `/system/scan`
   and `scanProgress` and sends no request. A `scan` tick whose payload is
   `null` (an older server, a failed read, degraded mode) is the
   **fallback**: it fetches `/system/scan`, throttled with
-  `changes('scan', 5000)` through the existing throttle mechanism.
+  `changes('scan', { minIntervalMs: 5000 })` through the existing throttle
+  mechanism.
   `/system/scan` is still fetched at boot, on `bot` and on `resync`.
 - **`/health`** is fetched at boot, on `bot`, and from a new 5-minute timer
   that skips while `document.hidden`. When the tab becomes visible and more
   than 5 minutes have passed since the last fetch, it fetches once. It no
   longer reacts to `scan`. Fake-timer specs cover hidden, visible and the
   catch-up fetch.
-- **System workspace.** `system.store.ts:111-113,412-413` fetches
-  `/system/scan` for `paused` and `pending` on `scan`. It moves to the same
-  5 s throttle. Those flags change only through `runtime_flags`, so 5 s is
-  enough. This brings the System page into the Goal's scope.
+- **Route reloads on `scan`.** The System workspace
+  (`workspaces/system/system.routes.ts:14`, `refreshOnSystem`) and ticker
+  detail (`ticker-detail.routes.ts:8`) reload their whole route on every
+  `scan`, through `RouteRefreshService`, which listens to the unthrottled
+  `EventStream.raised` with a 300 ms debounce. Throttling `changes()` does
+  not reach them. `RouteRefreshService` gains a per-event minimum interval,
+  and `scan` gets 5 s (the System page's `paused`/`pending` change only
+  through `runtime_flags`, so 5 s is enough). This brings both pages into
+  the Goal's scope.
 
 **P1-d. `/live` stops reacting to `scan`.** `LIVE_REFRESH_EVENTS` becomes
 `['trades', 'bot', 'risk']`. The plan's `/live` task lists every field of
@@ -255,8 +266,10 @@ coalesces callers in the same tick through its `queued` microtask, so a
 candidates: a `register()` in a later tick re-running the `merged()`
 effect, or `scan` and `market` counters ticking in separate tasks. The
 plan's first tape task writes a spec that **fails on today's code** and
-reproduces the double request (for example, registering in tick 1 and
-again in tick 2 with the same symbols), then fixes it. If no unit
+reproduces the double request (the leading hypothesis is that `TapeFeed.fetch()` has no in-flight
+de-duplication, while `tape.store.ts:53` and `market-index.store.ts:38` each
+call `feed.refresh()` from their own `load()` in different ticks), then
+fixes it with an in-flight guard. If no unit
 reproduction is found, the task records what it ruled out, and the
 request stays as it is until the probe can tell the cases apart.
 
@@ -279,12 +292,14 @@ two at risk, and each gets a named helper rather than a new branch.
   from the payload; a `scan` tick with a null payload triggers at most one
   fallback call per 5 s; `bot` and `resync` still fetch; the 5-minute
   health timer pauses while hidden and catches up on visible (fake timers).
-- `system.store` spec: `/system/scan` refetch on `scan` is throttled to
-  5 s.
+- `RouteRefreshService` spec: `scan` reloads a route at most once per 5 s;
+  other events keep the 300 ms debounce.
 - `live.store` spec: `LIVE_REFRESH_EVENTS` equals exactly
   `['trades', 'bot', 'risk']`.
 - `TapeFeed` spec: the double-request reproduction, which fails before the
   fix (P1-e).
+- `/health` test: `sse_streams` equals the broker's connection count, and
+  the other fields are unchanged.
 - probe unit tests on a fixture: `settle_time` with overlapping intervals,
   a gap just under and just over 2 s, the never-quiet case and an empty
   page; nearest-rank percentiles and the `thin` rule; the run label from
