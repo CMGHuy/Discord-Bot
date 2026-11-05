@@ -5,7 +5,7 @@
  * docs/superpowers/specs/2026-10-19-v179-mobile-layout-consistency-design.md §3.5, §6a.6).
  *
  * Visits every route and tab (layout-audit-lib.mjs ROUTES) at each width,
- * headless, on browse.mjs's persistent profile, and reports nine checks:
+ * headless, on browse.mjs's persistent profile, and reports ten checks:
  *   overflow   the page (document, body or the shell's <main> pane) is wider than the viewport
  *   offscreen  text past the right edge of the viewport, outside any scroll box
  *   clipped    text cut by its own overflow/ellipsis or by an overflow:hidden ancestor (never sr-only)
@@ -21,6 +21,10 @@
  *   rail-label a labelled-rail entry (nav.rail a.rail-link; widths >= 640 only, the phone navigates by
  *              its tab bar) with no accessible name, no visible .rail-label, or a name that does not
  *              contain its label (spec v202 §3). Never allowed.
+ *   dock       from 1024px the docked Live column (aside.live-column) missing, over main.workspace's
+ *              content box, or a live strip beside it; below 1024px a docked column, no live strip,
+ *              or a sheet that a tap on the strip does not open inside the viewport (spec v202 §8).
+ *              Never allowed.
  * A finding the allow-list names (with a reason and a date) passes; anything
  * else makes the exit code 1. Entries nothing matches any more print as STALE;
  * --prune removes them (only on a run at 390, 768 and 1440).
@@ -45,8 +49,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import {
-  CHECKS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, RAIL_MIN_WIDTH, ROUTES, TOUCH_MAX_WIDTH,
-  classify, countByCheck, dedupe, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs, pickIds, railLabelVerdict,
+  CHECKS, DOCK_MIN_WIDTH, DOCK_SELECTORS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, RAIL_MIN_WIDTH, ROUTES, TOUCH_MAX_WIDTH,
+  classify, countByCheck, dedupe, dockVerdict, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs, pickIds, railLabelVerdict,
   resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
@@ -371,6 +375,66 @@ async function auditRailLabels(page, width) {
   return findings;
 }
 
+/** How long the opened live sheet gets for its entrance before it is measured. */
+const SHEET_SETTLE_MS = 400;
+
+/** Runs inside the page (page.evaluate): the dock check's DOM facts. Self-contained. */
+function measureDock() {
+  const rect = (el) => {
+    const r = el?.getBoundingClientRect();
+    return r && r.width > 0 && r.height > 0 ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
+  };
+  const workspace = document.querySelector('main.workspace');
+  const outer = rect(workspace);
+  const s = workspace ? getComputedStyle(workspace) : null;
+  const content = outer && s ? {
+    ...outer,
+    left: outer.left + parseFloat(s.borderLeftWidth) + parseFloat(s.paddingLeft),
+    right: outer.right - parseFloat(s.borderRightWidth) - parseFloat(s.paddingRight),
+  } : null;
+  const root = document.documentElement;
+  return {
+    column: rect(document.querySelector('aside.live-column')),
+    workspace: content,
+    strip: Boolean(rect(document.querySelector('sb-live-strip button.live-strip'))),
+    viewport: { width: root.clientWidth, height: root.clientHeight },
+  };
+}
+
+/** Runs inside the page: the open live sheet's dialog rect, or null. Self-contained. */
+function measureSheet() {
+  const r = document.querySelector('sb-live-sheet [role=dialog]')?.getBoundingClientRect();
+  return r && r.width > 0 && r.height > 0 ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
+}
+
+/** Tap the live strip, measure the sheet it opens, then close it with Escape. */
+async function openSheet(page, width) {
+  try {
+    await page.locator('sb-live-strip button.live-strip').tap({ timeout: 2000 });
+  } catch (error) {
+    console.error(`  live strip @${width}: cannot tap (${String(error).split('\n')[0]})`);
+    return null;
+  }
+  await page.waitForTimeout(SHEET_SETTLE_MS);
+  const sheet = await page.evaluate(measureSheet);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(SHEET_SETTLE_MS);
+  return sheet;
+}
+
+/**
+ * The dock check (spec v202 §8 "Layout"): from DOCK_MIN_WIDTH the docked column sits beside the
+ * workspace, never over its content; below it the live strip opens the dock as a sheet inside the
+ * viewport. Judged by dockVerdict on measured facts.
+ */
+async function auditDock(page, width) {
+  const facts = { ...(await page.evaluate(measureDock)), width, sheet: null };
+  if (width < DOCK_MIN_WIDTH && facts.strip) facts.sheet = await openSheet(page, width);
+  const verdict = dockVerdict(facts);
+  if (verdict.ok) return [];
+  return [{ check: 'dock', selector: DOCK_SELECTORS[verdict.reason], text: '', detail: `live dock ${verdict.reason} at ${width}px` }];
+}
+
 /** Same page-ready rule as browse.mjs: never 'networkidle' (the SPA holds an event stream open). */
 function ready() {
   const main = document.querySelector('main') ?? document.body;
@@ -472,8 +536,9 @@ async function auditWidth(width, opts) {
       await screenshot(page, join(opts.out, `${slug(route)}@${width}.png`), width);
       const hints = await auditHints(page, width);
       const rails = await auditRailLabels(page, width);
-      findings.push(...[...hints, ...rails].map((f) => ({ route, width, ...f })));
-      console.error(`${route} @${width}: ${raw.length + hints.length + rails.length} raw finding(s)`);
+      const docks = await auditDock(page, width);
+      findings.push(...[...hints, ...rails, ...docks].map((f) => ({ route, width, ...f })));
+      console.error(`${route} @${width}: ${raw.length + hints.length + rails.length + docks.length} raw finding(s)`);
     }
     return findings;
   });

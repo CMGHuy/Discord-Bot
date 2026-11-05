@@ -6,27 +6,26 @@
  * Spec: docs/superpowers/specs/2026-10-19-v179-mobile-layout-consistency-design.md §3.5, §6a.6.
  */
 
-/** Every route and tab (27, spec §2). `:id` is a trade id, `:plan` an open
- *  (else pending) trade's id, `:symbol` a watchlist symbol with trades,
- *  `:date` the day a closed trade closed -- resolved from the API at run time.
- *  A route or tab added to the app is added here in the same commit. */
+/** Every route and tab (29) on the v202 paths (spec v202 §2): the old names are redirects and are
+ *  not visited. `:id` is a trade id, `:plan` an open (else pending) trade's id, `:symbol` a
+ *  watchlist symbol with trades, `:date` the day a closed trade closed -- resolved from the API at
+ *  run time. A route or tab added to the app is added here in the same commit. */
 export const ROUTES = Object.freeze([
   '/dashboard',
   '/trades', '/trades/:id', '/trades/:id?tab=why', '/trades/:id?tab=chart', '/trades/:id?tab=journal',
+  '/trades/calendar', '/trades/calendar/:date', '/trades/cancels',
   '/plans/:plan',
-  '/analytics', '/analytics?tab=attribution', '/analytics?tab=execution', '/analytics?tab=edge',
-  '/analytics?tab=pipeline', '/analytics?tab=tuning', '/analytics?tab=partials',
-  '/calendar', '/calendar/:date',
+  '/insights/analytics', '/insights/analytics?tab=attribution', '/insights/analytics?tab=execution',
+  '/insights/analytics?tab=edge', '/insights/analytics?tab=pipeline', '/insights/analytics?tab=tuning',
+  '/insights/analytics?tab=partials',
+  '/insights/research', '/insights/reports', '/insights/reports?tab=gates',
   '/watchlist', '/watchlist/:symbol',
   '/risk',
-  '/system', '/system?tab=logs', '/system?tab=scan', '/system?tab=providers',
-  '/versions', '/research',
-  '/reports', '/reports?tab=gates',
-  '/cancels',
+  '/system', '/system?tab=logs', '/system?tab=scan', '/system?tab=providers', '/system/versions',
   '/ui',
 ]);
 
-export const CHECKS = Object.freeze(['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter', 'hint', 'rail-label']);
+export const CHECKS = Object.freeze(['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter', 'hint', 'rail-label', 'dock']);
 
 /** Phone, tablet and desktop (docs/claude/ui-design.md § Device classes). */
 export const FULL_WIDTHS = Object.freeze([390, 768, 1440]);
@@ -167,6 +166,51 @@ export function railLabelVerdict(entry) {
   if (!entry.labelVisible) return { ok: false, reason: 'label-hidden' };
   if (!name.toLowerCase().includes(label.toLowerCase())) return { ok: false, reason: 'label-not-in-name' };
   return { ok: true, reason: null };
+}
+
+/** The width the Live dock docks from (ui/breakpoints.ts md, DockState.docked). Below it the live
+ *  strip opens the dock as a sheet (spec v202 §3). */
+export const DOCK_MIN_WIDTH = 1024;
+/** Sub-pixel slack: rects meeting at a shared edge, or a sheet at -0.4px, are rounding, not a defect. */
+const DOCK_EDGE_SLACK_PX = 0.5;
+
+const overlapPx = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left);
+const outsideViewport = (r, v) => r.left < -DOCK_EDGE_SLACK_PX || r.top < -DOCK_EDGE_SLACK_PX
+  || r.right > v.width + DOCK_EDGE_SLACK_PX || r.bottom > v.height + DOCK_EDGE_SLACK_PX;
+const isDocked = (f) => f.width >= DOCK_MIN_WIDTH;
+
+/** One rule per reason, in the order they are judged; the first that fails is the finding. */
+const DOCK_RULES = Object.freeze([
+  ['no-column', (f) => isDocked(f) && !f.column],
+  ['overlaps-workspace', (f) => isDocked(f) && Boolean(f.workspace) && overlapPx(f.column, f.workspace) > DOCK_EDGE_SLACK_PX],
+  ['strip-when-docked', (f) => isDocked(f) && f.strip],
+  ['docked-below-1024', (f) => !isDocked(f) && Boolean(f.column)],
+  ['no-strip', (f) => !isDocked(f) && !f.strip],
+  ['sheet-not-opened', (f) => !isDocked(f) && !f.sheet],
+  ['sheet-off-screen', (f) => !isDocked(f) && outsideViewport(f.sheet, f.viewport)],
+]);
+
+/** The element each dock finding points at (layout-audit.mjs prints it as the selector). */
+export const DOCK_SELECTORS = Object.freeze({
+  'no-column': 'aside.live-column',
+  'overlaps-workspace': 'aside.live-column',
+  'strip-when-docked': 'sb-live-strip',
+  'docked-below-1024': 'aside.live-column',
+  'no-strip': 'sb-live-strip',
+  'sheet-not-opened': 'sb-live-sheet [role=dialog]',
+  'sheet-off-screen': 'sb-live-sheet [role=dialog]',
+});
+
+/**
+ * The dock check's verdict (spec v202 §8 "Layout", v203) on one page's measured facts:
+ * `{ width, column, workspace, strip, sheet, viewport }`. `column` is aside.live-column's rect,
+ * `workspace` main.workspace's content box, `strip` whether the live strip shows, `sheet` the opened
+ * sheet dialog's rect (null when none opened); rects are {left, right, top, bottom} or null. Runs in
+ * Node on the measured numbers, never shipped into the page.
+ */
+export function dockVerdict(facts) {
+  const broken = DOCK_RULES.find(([, fails]) => fails(facts));
+  return broken ? { ok: false, reason: broken[0] } : { ok: true, reason: null };
 }
 
 const findingKey = (f) =>`${f.route} @${f.width} ${f.check} ${f.selector}`;
