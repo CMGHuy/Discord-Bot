@@ -341,6 +341,10 @@ After changing `CURRENCY_SYMBOL` (the account currency), re-run steps 3-4:
 the new account's pairs have no rows yet, so until the backfill runs, past
 amounts show `fx_missing` while the refresher is on.
 
+`snap` writes only the current Berlin day. A weekday it skips (no later bar yet:
+a Yahoo gap, a holiday or a failed fetch) stays empty until the backfill runs;
+a later snap never fills it.
+
 The snap writes a day's row only once the bar behind it is final (its London
 day ended). Expect the row later than 08:00 when the pair file was last
 written before London midnight; it arrives on the cycle after the next refresh.
