@@ -7,11 +7,12 @@ import {
   ApplicationRef,
   Signal,
   WritableSignal,
+  computed,
   provideZonelessChangeDetection,
   signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { convertToParamMap } from '@angular/router';
 
@@ -21,15 +22,28 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { AnalyticsPerformance, Preferences } from '../api/models';
+import { AnalyticsPerformance, MarketMeta, Preferences, SnapshotUpdate } from '../api/models';
 import { scopePatchFromParams } from '../workspaces/analytics/scope-url';
 import {
   AnalyticsStore,
   BREAKDOWN_DIMENSIONS,
   presetRange,
   RELOCATED_METRICS,
+  requestAsOfText,
 } from './analytics.store';
+import { LiveValuesStore } from './live-values.store';
 import { PreferencesStore } from './preferences.store';
+
+function fakeLive(snaps = signal<Record<string, SnapshotUpdate>>({})) {
+  const live = {
+    snaps,
+    status: signal(null),
+    snapshot: (k: string) => computed(() => snaps()[k] ?? null),
+    quote: () => signal(null),
+    requestRefresh: vi.fn(),
+  };
+  return { live, provider: { provide: LiveValuesStore, useValue: live } };
+}
 
 /* NG48, rewritten for v94 — Analytics.
  *
@@ -198,6 +212,7 @@ describe('AnalyticsStore', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
+        fakeLive().provider,
         AnalyticsStore,
       ],
     });
@@ -1005,6 +1020,7 @@ describe('AnalyticsStore — the remembered scope', () => {
         provideHttpClientTesting(),
         { provide: EventStream, useValue: new FakeEventStream() },
         { provide: PreferencesStore, useValue: preferencesStub(values) },
+        fakeLive().provider,
         AnalyticsStore,
       ],
     });
@@ -1062,5 +1078,117 @@ describe('AnalyticsStore — the remembered scope', () => {
 
     expect(store.scope()).toEqual(SCOPE);
     expect(store.unit()).toBe('r');
+  });
+});
+
+describe('AnalyticsStore snapshots (v204)', () => {
+  const SNAP_META: MarketMeta = {
+    as_of: '2026-10-29', refreshing: false, stale_count: 0, missing_count: 0, incomplete: false,
+    computed_at: '2026-10-29T14:00:00Z', stale_inputs: false, source: 'snapshot', error: null,
+  };
+  const REQ_META: MarketMeta = {
+    ...SNAP_META, computed_at: null, source: 'request', as_of: '2026-10-28', missing_count: 1, incomplete: true,
+  };
+  const upd = (key: string, computed_at: string | null, refreshing = false): SnapshotUpdate =>
+    ({ key, computed_at, stale_inputs: false, refreshing, error: null });
+  const CURVE = {
+    points: [], points_n: 0, as_of: null, benchmark: { spy_indexed: [] }, scope: SCOPE, n: 0,
+  };
+  const PERF_URL = (r: { url: string }) => r.url === '/api/v1/analytics/performance';
+  const CURVE_URL = (r: { url: string }) => r.url === '/api/v1/analytics/equity-curve';
+
+  let live: ReturnType<typeof fakeLive>['live'];
+  let backend: HttpTestingController;
+  let store: InstanceType<typeof AnalyticsStore>;
+  const tick = () => TestBed.inject(ApplicationRef).tick();
+
+  const setup = (cached: Record<string, SnapshotUpdate> = {}) => {
+    const fake = fakeLive(signal(cached));
+    live = fake.live;
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor])),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+        fake.provider,
+        AnalyticsStore,
+      ],
+    });
+    store = TestBed.inject(AnalyticsStore);
+    backend = TestBed.inject(HttpTestingController);
+  };
+
+  /** Answer the Overview's three requests; both payloads carry `meta`. */
+  const loadOverview = (meta: MarketMeta | undefined = SNAP_META) => {
+    store.load();
+    tick();
+    backend.expectOne(PERF_URL).flush({ ...PERFORMANCE, market_meta: meta });
+    backend.expectOne(CURVE_URL).flush({ ...CURVE, market_meta: meta });
+    backend.expectOne((r) => r.url === '/api/v1/analytics/variance-band').flush({ status: 'insufficient', scope: 'whole_book', days: 0, weeks: 0 });
+  };
+
+  it('requestAsOfText names the request and its FX date', () => {
+    expect(requestAsOfText(REQ_META)).toBe('as of this request · FX rates as of Oct 28');
+    expect(requestAsOfText({ ...REQ_META, as_of: null })).toBe('as of this request');
+    expect(requestAsOfText({ ...REQ_META, as_of: '2026-10-28T23:30:00Z' })).toBe('as of this request · FX rates as of Oct 28');
+    expect(requestAsOfText(SNAP_META)).toBeNull();
+    expect(requestAsOfText(undefined)).toBeNull();
+    expect(requestAsOfText(null)).toBeNull();
+  });
+
+  it('follows the performance and equity snapshots on the default view only', () => {
+    setup();
+    loadOverview();
+    live.snaps.set({ 'analytics.performance:main': upd('analytics.performance:main', '2026-10-29T14:05:00Z') });
+    tick();
+    expect(backend.match(PERF_URL)).toHaveLength(1);
+    live.snaps.set({ ...live.snaps(), 'analytics.equity_curve:main': upd('analytics.equity_curve:main', '2026-10-29T14:05:00Z') });
+    tick();
+    expect(backend.match(CURVE_URL)).toHaveLength(1);
+    store.setScope({ strategy: 'VWAP' });
+    tick();
+    backend.match(PERF_URL); backend.match(CURVE_URL);
+    backend.match((r) => r.url === '/api/v1/analytics/variance-band');
+    live.snaps.set({ 'analytics.performance:main': upd('analytics.performance:main', '2026-10-29T14:10:00Z') });
+    tick();
+    expect(backend.match(PERF_URL)).toHaveLength(0);
+  });
+
+  it('the key follows the ledger', () => {
+    setup();
+    expect(store.performanceKey()).toBe('analytics.performance:main');
+    expect(store.equityCurveKey()).toBe('analytics.equity_curve:main');
+    store.setScope({ ledger: 'weak' });
+    expect(store.performanceKey()).toBe('analytics.performance:weak');
+    store.setScope({ strategy: 'VWAP' });
+    expect(store.performanceKey()).toBeNull();
+    expect(store.equityCurveKey()).toBeNull();
+  });
+
+  it('performanceMeta ORs refreshing from the live snapshot', () => {
+    setup();
+    loadOverview();
+    expect(store.performanceMeta()?.refreshing).toBe(false);
+    live.snaps.set({ 'analytics.performance:main': upd('analytics.performance:main', null, true) });
+    expect(store.performanceMeta()?.refreshing).toBe(true);
+    expect(store.equityCurveMeta()?.refreshing).toBe(false);
+  });
+
+  it('a filtered view takes no live snapshot into its meta', () => {
+    setup({ 'analytics.performance:main': upd('analytics.performance:main', null, true) });
+    store.setScope({ strategy: 'VWAP' });
+    tick();
+    backend.match(PERF_URL).forEach((r) => r.flush({ ...PERFORMANCE, market_meta: REQ_META }));
+    expect(store.performanceMeta()?.refreshing).toBe(false);
+    expect(store.performanceMeta()?.source).toBe('request');
+  });
+
+  it('no reload before the first payload', () => {
+    setup({ 'analytics.performance:main': upd('analytics.performance:main', '2026-10-29T14:05:00Z') });
+    tick();
+    expect(backend.match(PERF_URL)).toHaveLength(0);
+    expect(backend.match(CURVE_URL)).toHaveLength(0);
+    expect(store.performance()).toBeNull();
   });
 });

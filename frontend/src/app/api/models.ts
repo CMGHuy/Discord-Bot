@@ -491,6 +491,8 @@ export const TRADE_SORTABLE = [
 export interface EquitySeries {
   points: unknown[];
   change_pct: number | null;
+  /** v204: `source: "snapshot"`, or null/absent when the series build failed. */
+  market_meta?: MarketMeta | null;
 }
 
 export interface Dashboard {

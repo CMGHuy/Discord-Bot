@@ -8,6 +8,8 @@ import { AnalyticsVarianceBand } from '../api/models';
 import { EventStream } from '../api/event-stream';
 import { authInterceptor, errorInterceptor, loadingInterceptor } from '../api/interceptors';
 import { AnalyticsStore } from './analytics.store';
+import { FakeLiveValues } from '../testing/fake-live-values';
+import { LiveValuesStore } from './live-values.store';
 
 /* v175 — the variance-band slice: whole book, unscoped, loaded with Overview,
  * its own error and its own retry. */
@@ -37,6 +39,7 @@ describe('AnalyticsStore — variance-band slice', () => {
         provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor])),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: new FakeEventStream() },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         AnalyticsStore,
       ],
     });
