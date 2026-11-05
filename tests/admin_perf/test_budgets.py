@@ -3,8 +3,8 @@
 BUDGETS[name] = (max SQL statements, max Repository.list_all calls), measured on
 pre-memo code (V205-5) by test_probe_records_todays_cost and copied in by hand. The
 tests assert <=, so a change that makes an endpoint cheaper still passes and one that
-makes it dearer fails here rather than on a page. V205-9 lowers the list_all numbers
-once @read_scope is on; nothing else edits BUDGETS.
+makes it dearer fails here rather than on a page. V205-9 lowered the list_all numbers
+once @read_scope was on (statements unchanged); nothing else edits BUDGETS.
 
 The comment after each entry is the probe's list_all call list: which stores the
 endpoint loaded, and how many times, before v205."""
@@ -19,14 +19,14 @@ from tests.admin_perf import golden_book as gb
 NAMES = list(gb.ENDPOINTS)
 
 BUDGETS: dict[str, tuple[int, int]] = {
-    "dashboard": (12, 9),  # list_all: TradeRepository x4, PlanRepository x4, JournalRepository x1 (probe, pre-v205)
-    "dashboard_today": (12, 9),  # list_all: TradeRepository x4, PlanRepository x4, JournalRepository x1 (probe, pre-v205)
-    "trades": (3, 3),  # list_all: PlanRepository x1, TradeRepository x1, JournalRepository x1 (probe, pre-v205)
-    "trades_open": (3, 3),  # list_all: PlanRepository x1, TradeRepository x1, JournalRepository x1 (probe, pre-v205)
-    "live": (12, 8),  # list_all: PlanRepository x2, TradeRepository x6 (probe, pre-v205)
-    "calendar_month": (2, 2),  # list_all: TradeRepository x1, JournalRepository x1 (probe, pre-v205)
-    "calendar_day": (2, 2),  # list_all: TradeRepository x1, JournalRepository x1 (probe, pre-v205)
-    "calendar_sparklines": (2, 2),  # list_all: TradeRepository x1, JournalRepository x1 (probe, pre-v205)
+    "dashboard": (12, 4),  # list_all: TradeRepository x2, PlanRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
+    "dashboard_today": (12, 4),  # list_all: TradeRepository x2, PlanRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
+    "trades": (3, 3),  # list_all: PlanRepository x1, TradeRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
+    "trades_open": (3, 3),  # list_all: PlanRepository x1, TradeRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
+    "live": (12, 7),  # list_all: PlanRepository x2, TradeRepository x5 (probe, v205 V205-9 scoped)
+    "calendar_month": (2, 2),  # list_all: TradeRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
+    "calendar_day": (2, 2),  # list_all: TradeRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
+    "calendar_sparklines": (2, 2),  # list_all: TradeRepository x1, JournalRepository x1 (probe, v205 V205-9 scoped)
 }
 
 
