@@ -67,6 +67,13 @@ def golden_seed(admin_app, tmp_path, monkeypatch):
     snapshot.write_text(json.dumps(snapshots.build_snapshot([], 10000.0, [])), encoding="utf-8")
     seed_store("plans", gb.plans())
     seed_store("trades", gb.trades())
+    # The admin suite's account row predates base_balance, so the first GET would run
+    # load_account_config's one-time migration and write mid-read. Seed the value that
+    # migration computes (10,000 balance - 210.00 realized on this book), already migrated.
+    seed_store("account", {
+        "balance": 10000.0, "base_balance": 9790.0, "risk_pct": 1.0, "max_position_pct": 20.0,
+        "sizing_mode": "risk_pct", "balance_history": [],
+    })
     monkeypatch.setattr(fx, "account_currency_code", lambda: gb.ACCOUNT_CODE)
     monkeypatch.setattr(fx, "quote_currency_code", lambda ticker, **_kw: gb.QUOTES.get(str(ticker).upper()))
     monkeypatch.setattr(fx, "_quote_codes", {})
