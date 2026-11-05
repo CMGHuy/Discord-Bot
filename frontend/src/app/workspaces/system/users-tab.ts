@@ -175,6 +175,10 @@ export class UserFormDialog {
       />
     </sb-panel>
 
+    <ng-template #nameCell let-user>
+      <span class="name">{{ user.username }}</span>
+    </ng-template>
+
     <ng-template #actionsCell let-user>
       <span class="row-actions">
         <button
@@ -233,6 +237,9 @@ export class UserFormDialog {
     :host {
       display: block;
     }
+    .name {
+      overflow-wrap: anywhere;
+    }
     .row-actions {
       display: flex;
       flex-wrap: wrap;
@@ -241,6 +248,14 @@ export class UserFormDialog {
     }
     .row-actions button {
       min-height: var(--control-h);
+      flex: none;
+      white-space: nowrap;
+    }
+    @media (min-width: 640px) {
+      /* In the table the actions stay on one line; the name column gives way. */
+      .row-actions {
+        flex-wrap: nowrap;
+      }
     }
     .notice {
       color: var(--text-secondary);
@@ -268,10 +283,15 @@ export class UsersTab {
     const u = this.deleting();
     return u ? deleteConsequence(u.username) : '';
   });
+  private readonly nameCell = viewChild.required<TemplateRef<RowContext<AdminUser>>>('nameCell');
   private readonly actionsCell = viewChild.required<TemplateRef<RowContext<AdminUser>>>('actionsCell');
-  protected readonly columns = computed(() =>
-    USER_COLUMNS.map((c) => (c.key === 'actions' ? { ...c, cell: this.actionsCell() } : c)),
-  );
+  protected readonly columns = computed(() => {
+    const cells: Record<string, TemplateRef<RowContext<AdminUser>>> = {
+      username: this.nameCell(),
+      actions: this.actionsCell(),
+    };
+    return USER_COLUMNS.map((c) => (cells[c.key] ? { ...c, cell: cells[c.key] } : c));
+  });
 
   constructor() {
     this.store.load();
