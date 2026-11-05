@@ -280,6 +280,21 @@
   .palette-trigger .shortcut { display: none; }
 }
 
+/* v203: below 1024px the bar also holds the wordmark, so the trigger shrinks
+   to its magnifier and the breadcrumb keeps its room. The words stay in the
+   accessible name (visually hidden, never display:none). */
+@media (max-width: 1023px) {
+  .palette-trigger { flex: none; }
+  .palette-trigger .trigger-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 /* Everything here is a removal: the bar never wraps to a second row, which
    would change the height of every page's content area. On a phone the bar
    drops the breadcrumb and the divider (the wordmark leads, spec v202 §3),

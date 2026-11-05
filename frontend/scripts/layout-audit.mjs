@@ -13,6 +13,7 @@
  *              and a checkbox's label)
  *   text       text under 11px (SVG text at its rendered size)
  *   baseline   side-by-side text in one flex/grid row whose baselines differ by more than 2px
+ *              (landmark columns -- main, aside, nav -- are regions, not a text line)
  *   vcenter    a table cell's content more than 2px off the middle of its row, or an icon
  *              (svg, img, checkbox/radio) more than 2px off the centre line of the text beside it
  *   hint       an sb-hint popover that, opened the way the device opens it (hover at 1440, tap at
@@ -169,8 +170,9 @@ function auditPage({ touch, minTap, minText, maxBaseline, maxCenter, hiddenSrc, 
   const isRow = (cs) => (/flex/.test(cs.display) ? cs.flexDirection.startsWith('row') : /grid/.test(cs.display));
 
   function checkBaselines(el) {
+    // Landmark columns (main, aside, nav) are regions side by side, not text on one line (v203's dock).
     const marks = [...el.children]
-      .filter((k) => visible(k) && getComputedStyle(k).position !== 'absolute')
+      .filter((k) => !/^(MAIN|ASIDE|NAV)$/.test(k.tagName) && visible(k) && getComputedStyle(k).position !== 'absolute')
       .map(baselineOf).filter(Boolean);
     for (let i = 0; i < marks.length; i += 1) {
       for (let j = i + 1; j < marks.length; j += 1) {
@@ -415,6 +417,7 @@ async function openSheet(page, width) {
     console.error(`  live strip @${width}: cannot tap (${String(error).split('\n')[0]})`);
     return null;
   }
+  await page.locator('sb-live-sheet [role=dialog]').waitFor({ state: 'visible', timeout: 2000 }).catch(() => null);
   await page.waitForTimeout(SHEET_SETTLE_MS);
   const sheet = await page.evaluate(measureSheet);
   await page.keyboard.press('Escape');
@@ -428,6 +431,8 @@ async function openSheet(page, width) {
  * viewport. Judged by dockVerdict on measured facts.
  */
 async function auditDock(page, width) {
+  // The strip mounts once the viewport signal settles; give a slow route a moment before judging.
+  if (width < DOCK_MIN_WIDTH) await page.locator('sb-live-strip button.live-strip').waitFor({ timeout: 2000 }).catch(() => null);
   const facts = { ...(await page.evaluate(measureDock)), width, sheet: null };
   if (width < DOCK_MIN_WIDTH && facts.strip) facts.sheet = await openSheet(page, width);
   const verdict = dockVerdict(facts);
