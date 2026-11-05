@@ -34,11 +34,15 @@ class FakeEventSource {
     this.closed = true;
   }
 
-  /** Deliver a frame the way the server sends it: named event, thin body. */
-  emit(name: string, seq = 1): void {
-    const event = new MessageEvent(name, {
-      data: JSON.stringify({ seq, at: '2026-08-12T00:00:00+00:00' }),
-    });
+  /** Deliver a frame the way the server sends it: named event, thin body,
+   *  plus any extra keys (v206: `progress` on `scan`). */
+  emit(name: string, seq = 1, body: object = {}): void {
+    this.emitRaw(name, JSON.stringify({ seq, at: '2026-08-12T00:00:00+00:00', ...body }));
+  }
+
+  /** Deliver a frame whose data is exactly `data`, parseable or not. */
+  emitRaw(name: string, data: string): void {
+    const event = new MessageEvent(name, { data });
     for (const handler of this.listeners.get(name) ?? []) handler(event);
   }
 
@@ -274,6 +278,104 @@ describe('EventStream', () => {
 
     expect(stream.state()).toBe('live');
     expect(trades()).toBe(afterRecovery); // no poll ticks on top of live events
+  });
+
+  /* -- the scan payload (v206 P1-c) ------------------------------------- */
+
+  const RECORD = {
+    at: '2026-11-05T15:40:00+00:00', pct: 66, stage: 'analyzing',
+    current_ticker: 'AAPL', done: 50, total: 100, qualifying_found: 3,
+  };
+  const PAYLOAD = { running: true, progress: RECORD };
+  const scanFrame = (seq = 1) => FakeEventSource.latest().emit('scan', seq, { progress: PAYLOAD });
+  const degradeNow = () => {
+    const source = FakeEventSource.latest();
+    source.fail();
+    source.fail();
+    source.fail();
+  };
+
+  it('holds nothing before the first scan frame', () => {
+    expect(stream.payload('scan')()).toBeNull();
+  });
+
+  it('holds the last validated payload of a scan frame', () => {
+    scanFrame(1);
+    FakeEventSource.latest().emit('scan', 2, { progress: { running: true, progress: { ...RECORD, pct: 70 } } });
+    expect(stream.payload('scan')()).toEqual({ running: true, progress: { ...RECORD, pct: 70 } });
+  });
+
+  it('a thin scan frame sets it back to null, so the store falls back to fetching', () => {
+    scanFrame(1);
+    FakeEventSource.latest().emit('scan', 2);
+    expect(stream.payload('scan')()).toBeNull();
+  });
+
+  it('a malformed payload is null, and the counter still bumps', () => {
+    const scan = stream.changes('scan');
+    scanFrame(1);
+    FakeEventSource.latest().emit('scan', 2, { progress: { running: 'yes', progress: RECORD } });
+    expect(stream.payload('scan')()).toBeNull();
+    expect(scan()).toBe(2);
+  });
+
+  it('an unparseable frame is null, and the counter still bumps', () => {
+    const scan = stream.changes('scan');
+    scanFrame(1);
+    FakeEventSource.latest().emitRaw('scan', '{not json');
+    expect(stream.payload('scan')()).toBeNull();
+    expect(scan()).toBe(2);
+  });
+
+  it('is set before the counters move, so a reaction reads the payload it came with', () => {
+    const seen: unknown[] = [];
+    stream.raised.subscribe(() => seen.push(stream.payload('scan')()));
+    scanFrame(1);
+    expect(seen).toEqual([PAYLOAD]);
+  });
+
+  it('is cleared on resync: the client refetches everything', () => {
+    scanFrame(1);
+    FakeEventSource.latest().emit('resync');
+    expect(stream.payload('scan')()).toBeNull();
+  });
+
+  it('is cleared on degrade, and a 5 s poll tick never brings it back', () => {
+    const scan = stream.changes('scan');
+    scanFrame(1);
+    degradeNow();
+    expect(stream.payload('scan')()).toBeNull();
+    vi.advanceTimersByTime(POLL_INTERVAL_MS * 2);
+    expect(scan()).toBe(3); // the frame, then two poll ticks
+    expect(stream.payload('scan')()).toBeNull();
+  });
+
+  it('is cleared when the stream reconnects', () => {
+    scanFrame(1);
+    stream.disconnect();
+    stream.connect();
+    expect(FakeEventSource.instances).toHaveLength(2);
+    expect(stream.payload('scan')()).toBeNull();
+  });
+
+  it('is left alone by every other event, and no other counter moves on a scan frame', () => {
+    const trades = stream.changes('trades');
+    const bot = stream.changes('bot');
+    const scan = stream.changes('scan');
+    scanFrame(1);
+    FakeEventSource.latest().emit('trades', 2);
+    FakeEventSource.latest().emit('ping', 3);
+    expect(stream.payload('scan')()).toEqual(PAYLOAD);
+    expect([trades(), bot(), scan()]).toEqual([1, 0, 1]);
+  });
+
+  it('feeds the throttled scan view exactly as before', () => {
+    const slow = stream.changes('scan', { minIntervalMs: 5_000 });
+    for (let i = 0; i < 5; i++) scanFrame(i + 1);
+    expect(slow()).toBe(1);
+    vi.advanceTimersByTime(5_000);
+    expect(slow()).toBe(2);
+    expect(stream.payload('scan')()).toEqual(PAYLOAD);
   });
 
   /* -- throttled subscription (v132) ------------------------------------ */

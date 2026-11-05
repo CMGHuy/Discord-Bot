@@ -1,6 +1,9 @@
 import { Injectable, Signal, WritableSignal, signal } from '@angular/core';
 import { Subject } from 'rxjs';
 
+import { ScanEventProgress } from './models';
+import { parseScanEventProgress } from './scan-event-progress';
+
 /** The ten event types the server can raise, plus the two it synthesises.
  *  Mirrors spec v12's taxonomy table -- one type per *concern*, so several
  *  files raise the same event and the client never learns the storage
@@ -61,10 +64,19 @@ const RECOVERY_INTERVAL_MS = 30_000;
  * the stream calling into stores -- would make every new workspace a change
  * to this file, and would put the list of stores inside the transport.
  *
- * **The reaction to an event is always a refetch, never a patch.** The
- * events are thin by design (`{seq, at}`, no payload), so there is nothing
- * here to merge into anything. That is the property that stops a store
- * becoming a second, slowly diverging copy of the server's data.
+ * **The reaction to an event is a refetch, never a patch -- except `scan`.**
+ * The events are thin by design (`{seq, at}`, no payload), so there is
+ * nothing here to merge into anything. That is the property that stops a
+ * store becoming a second, slowly diverging copy of the server's data.
+ *
+ * `scan` is the one exception (v206 P1-c). It fires about once a second
+ * while a scan runs, and refetching `/system/scan` on each one, from every
+ * open tab, was most of the admin's load. So a `scan` frame carries the two
+ * fields the progress strip reads, and {@link payload} exposes them,
+ * validated, as a signal separate from the counter. A thin or malformed
+ * frame sets it to null, and so does every path that refetches everything
+ * (resync, the polling fallback, a reconnect), so a store never patches
+ * from a payload older than its last refetch.
  *
  * `market` is answered by a catch-up fetch (`/market/updates`), still never a
  * patch from the event itself.
@@ -87,6 +99,9 @@ export class EventStream {
   readonly raised = this.raisedSubject.asObservable();
   private readonly counters = new Map<EventName, ReturnType<typeof signal<number>>>();
   private readonly throttles = new Map<string, Throttle>();
+  /** v206: the last validated `scan` payload; null whenever the store must fetch. */
+  private readonly scanPayload = signal<ScanEventProgress | null>(null);
+  private readonly scanPayloadView = this.scanPayload.asReadonly();
   private visibilityBound = false;
   /** Timestamps of recent connection failures, inside the rolling window. */
   private failures: number[] = [];
@@ -115,17 +130,28 @@ export class EventStream {
     return throttle.out;
   }
 
+  /**
+   * The last validated payload of a `scan` frame, or null (v206 P1-c).
+   *
+   * Unthrottled: it moves on every `scan` frame, before the counters do. A
+   * thin frame (the server's read failed, or an older server) and anything
+   * malformed read as null -- the store's cue to fetch `/system/scan`
+   * through its throttled fallback instead.
+   */
+  payload(_name: 'scan'): Signal<ScanEventProgress | null> {
+    return this.scanPayloadView;
+  }
+
   connect(): void {
     if (this.source || typeof EventSource === 'undefined') return;
 
     const source = new EventSource('/api/v1/events', { withCredentials: true });
     this.source = source;
+    // A reconnect starts from nothing: the resync that follows refetches.
+    this.scanPayload.set(null);
 
     for (const name of EVENT_NAMES) {
-      source.addEventListener(name, (event) => {
-        this.markLive(event as MessageEvent);
-        this.bump(name);
-      });
+      source.addEventListener(name, (event) => this.receive(name, event as MessageEvent));
     }
 
     // The stream opens with one of these, and sends one on every reconnect
@@ -160,6 +186,14 @@ export class EventStream {
   }
 
   /* -- internals ------------------------------------------------------- */
+
+  private receive(name: EventName, event: MessageEvent): void {
+    const frame = this.markLive(event);
+    // Set before the bump: a reaction to the counter reads the payload that
+    // arrived with it, never the one before.
+    if (name === 'scan') this.scanPayload.set(parseScanEventProgress(frame));
+    this.bump(name);
+  }
 
   private counterFor(name: EventName) {
     let counter = this.counters.get(name);
@@ -198,10 +232,12 @@ export class EventStream {
   }
 
   private bumpAll(): void {
+    // Everything is refetched, so no store may patch from an older payload.
+    this.scanPayload.set(null);
     for (const name of EVENT_NAMES) this.bump(name);
   }
 
-  private markLive(event: MessageEvent): void {
+  private markLive(event: MessageEvent): unknown {
     // A message arriving is proof the connection works, so the failure
     // window resets here rather than on `onopen`: EventSource reports open
     // before the server has necessarily said anything.
@@ -209,11 +245,13 @@ export class EventStream {
     this.state.set('live');
     this.stopPolling();
     try {
-      const data = JSON.parse(event.data) as { seq?: number };
-      if (typeof data.seq === 'number') this.lastSeq.set(data.seq);
+      const data = JSON.parse(event.data) as { seq?: number } | null;
+      if (typeof data?.seq === 'number') this.lastSeq.set(data.seq);
+      return data;
     } catch {
       // A frame we cannot parse is not worth failing over: the event's
       // meaning is its NAME, which we already have.
+      return null;
     }
   }
 
@@ -237,6 +275,7 @@ export class EventStream {
    */
   private degrade(): void {
     this.state.set('degraded');
+    this.scanPayload.set(null);
     this.source?.close();
     this.source = null;
     this.startPolling();
