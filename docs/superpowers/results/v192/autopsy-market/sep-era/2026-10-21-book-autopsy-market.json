@@ -1,0 +1,5776 @@
+{
+  "header": {
+    "window": [
+      "2026-09-03",
+      "2026-10-21"
+    ],
+    "n": 202,
+    "pooled_net_expr": 0.1021,
+    "pooled_win_rate": 0.3267,
+    "net_of_frictions": "modelled",
+    "cells_tested": 222,
+    "bar_covered_n": 195,
+    "resamples": 10000,
+    "seed": 42,
+    "notes": [
+      "net R is modelled locally (apply_frictions slippage on both fills plus commission_r); live rows store gross R only",
+      "bar cuts read only --bars-dir; anchor lag is at most 4 calendar days (weekends/holidays included); its close must lie within 25% of its planned entry",
+      "alert hour has hour granularity: 09:00-09:29 ET counts as the regular session",
+      "every row drawn from this report is exploratory: the window overlaps the 2026 holdout (spec v161 boundary 5)",
+      "earnings_proximity: earnings_proximity: days_to_earnings is opportunistic; trades without it are uncovered",
+      "fomc_proximity: fomc_proximity: FOMC dates cover 2026-01-01 to 2027-12-08; trades outside are uncovered",
+      "macro: CPI and NFP omitted: market_events.py carries no past dates",
+      "sector_today: sector_today: today's sector map, not point-in-time",
+      "stop cells price the dollar loss at 2% of 10,000 USD",
+      "entry-type filter: market rows only (v192 disclosure); rejection tallies carry no entry type and are unfiltered"
+    ],
+    "frictions": {
+      "slippage_bps": 5.0,
+      "commission_per_trade": 1.0,
+      "commission_risk_basis": 100.0,
+      "min_risk_fraction": 0.001
+    },
+    "input_fingerprints": {
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\rows_era.csv": "d79884f0e9c627961460f36475eabe5a0fbc30681f6a29b93f987ef855692f96",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\rejections_cut.csv": "1f4739aa929dfbbfaa4a8800e1c10c21d7c8c46c68a5929999b3575a89feb44a",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\PLTR.csv": "f7715048aad524674a130973bce40da3f8b2c79834a07d63b124de84c7962c99",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\NBIS.csv": "c9701f8eff97c2c417e469268caee9a20c93372ea2ffa1454e5566291b45a7eb",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\SHOP.csv": "53c9931e7d58b1af8278d1d0d5aa78810a3043982b23721f39f5970f255cd287",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\ADBE.csv": "1462a77fefba8c6c43747673fade15a67124467df368a8e7af780192f24c6759",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\PYPL.csv": "a0f3772f617d9b5ea8905ae07f5ba97055ab962f1acd855cc6b89458ab6b4cc6",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\SNDK.csv": "b94523be882d95ee305112a82d39775effa69473101c1191e9856c304e344335",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\GLW.csv": "af6975aa13cfb42bc0150212afbf7cfa73bf6d5a3c1639e364bcccba759aea28",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\ARM.csv": "428b255e95204f170c2e200b3eb51d940885975f3b965b95ebd8e1e923765394",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\STX.csv": "59d8dd320e0f018f27fbc210c19378e7484830fc04e26a8380635c201a70c55e",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\WDC.csv": "565a4c1a56411a67531edbd0207998e19f65fba27de8ff96dbc5bbb03a51b472",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\ASTS.csv": "99d354bb72f02b1fe0b63d618cf906739cc0877029f498bb350f7b27887ff302",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\QBTS.csv": "ee2efb4319aedcc1725c3f9cc5a36a523007937ea5440d9639b72349c7d9b0ee",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\ASML.csv": "3d7cf3752b175da663ce7ef8b56664e146b8f733193e41d7cafc9616844864f2",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\MRVL.csv": "8791a322138e2639588eac54ee71e0c758bc28768d5a2dcd437dd3aa84048e1a",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\ABNB.csv": "15fa35d7c42877933568d8d1fb963a0178956212a4baeebfc9407747413848a7",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\ORCL.csv": "3835c3456db8d4087907ec660feb63f1acd633ea0049d9a775e3d80fd5ed01c4",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\DDOG.csv": "8d8019651183679bfcc8a286461d5df3fd98963d0d19dc62ab976b6575cba504",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\NFLX.csv": "61faf762816c5bcd8fc59159878cdad02dd2700b54493649b0a4868a737c6628",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\INTU.csv": "a54b38f8746d37d729340950ba2e92fd095c3fa9538f215f5995fb0784eb7d09",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\NOW.csv": "f9a23252efb99d684d7f95831fcd75495b221b47405ab4af73d2f0c80bfa2128",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\MU.csv": "e799c984f8713a7c56781954bec67a831a8b1f7426d9dac0341ac624a703e3c3",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\AXON.csv": "581632e97547bd10af346ac0d69c3521dca3d66ff52c82d75e44b24cbf67d0be",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\MRNA.csv": "a0486cc5a4655de988775bbd658c7fe10a85160d093b471dfd1ea5c180269289",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\RKLB.csv": "bd171429cbb1850660fbe54f3441c3f863aaaa16db7bc7d50d73c508b2ba887c",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\PANW.csv": "42f1a4ca34b5e80b8657e3c18ef46f7e6fa8d61dac4b2fdfaf9d65738b0676cf",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\HOOD.csv": "551ec18530c8418698a6a64170471ae95e1e6ab8788793d6c7e0439c802909d0",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\PEP.csv": "e9a5e592dc3e88495181bef876a59eb2ce291f5fb79c6c65c0da5b81f05daaa2",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\INTC.csv": "71ae576d31ed9da8842fb4a5edf56238d961744bf99c90b7c280b3b6c7249e90",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\AMZN.csv": "dd54b86edf7d5a7ea71ba89573b44486d8b54b73a61081fa4b24250bd42f729a",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\HIMS.csv": "8cfcb303903f0732d11a3a300a1e0b9723a1a5be164850feecaf682314b7b8ff",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\MSTR.csv": "478a0e3149b5bb1be3f501f74589e7e355cc64897fb9d083438aa57ddaf1ebf2",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\AMAT.csv": "07f434bdcf42daf300357a729124b0175d004b6b765a1e4e8089b3a0c9ed908b",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\CRM.csv": "c2844edb4c03395460c3a7cfd58e0c683ee4c2193d8e3e63cbc34d66d404bda4",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\SNPS.csv": "ef5fb70eba1d73094d0fb53b3956db20a2baaa108871a05cdfa5afcf9c5aa155",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\WMT.csv": "f8993a89b8cc8c358a4b3440f9c5b5269dd2faf417ed93a33bc812f3c6465a2c",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\META.csv": "a2e8d06afe76340d6c7969940bcccff1a4ab2f1470b6d32bc407d955a980b0a7",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\AMD.csv": "c155f9fbfcb351c99f340bb0a1d915f766743dc8612fd7b7471237e0675808ff",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\GM.csv": "9a570cd2451d4ddedc5d49ebcddb4a71d39fba2ddc018d840f34eee689d16466",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\GEV.csv": "1aea3ef3772a2c2e631e4c94b4d64857d30580e696f976acecc89bb03b4ffb6d",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\CEG.csv": "d26f8aca7d1a8bf90d06d035c31a6a79afce6b1a102fa392f45261ea715b3674",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\SNOW.csv": "b772db81e430f932b88ef46fdf5624378d1db2d48cdd0312b2826eb08dabf884",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\BA.csv": "8c3806312fdd4498ccf5acdc8106b24976d0670c97e230c36f6e6a02707c3c8f",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\NKE.csv": "f0e7e9cdeafa894c13ba64c2c1d1cc402dbfd68b0c7d7533fcc86847c6dc1297",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\IREN.csv": "5355ed53012d4598f7e1655fd663541ec9bd24fad1737057e90d506602e2cc5c",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\HD.csv": "d9df228cf586901b0c1c556ecd3d571908c23b795d99b9ce5a27574bbf2e8c80",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\SOFI.csv": "8c03c0ed38facc43e6e0201f9c294189097e10a29eead64003b46ccc9255ae88",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\DELL.csv": "b5c11a189be6db94d04d3c4c8f3383d232125d4aed7da80f3cbb9a9b98b8ffd0",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\ISRG.csv": "96e0df50c939a6c8021eb90e219f60fa44c2d0df572a0c263fbc5ba0cf912961",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\FTNT.csv": "875629a81443d1d5ae0540bb62f1b379dd676ae76b5b45443752470fa26c00c8",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\MSFT.csv": "1c4aef7c4387c767cd1614af09812aaaf285e5053487eafc9b23d36939cea203",
+      "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars\\GS.csv": "6f1de58590ca1b35f942e9eb3009255072c460e36ec58156f8a173635115a3b6"
+    },
+    "invocation": {
+      "command": [
+        "C:\\Users\\HuyCao\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+        "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\scripts\\reports\\book_autopsy.py",
+        "E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim/logs/v192/autopsy/rows_era.csv",
+        "E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim/logs/v192/autopsy/rejections_cut.csv",
+        "--bars-dir",
+        "E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim/logs/v192/autopsy/bars",
+        "--out-dir",
+        "E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-10-24-v192-gap-toward-stop-reclaim/docs/superpowers/results/v192/autopsy-market/sep-era",
+        "--date",
+        "2026-10-21",
+        "--entry-type",
+        "market"
+      ],
+      "options": {
+        "rows": "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\rows_era.csv",
+        "rejections": "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\rejections_cut.csv",
+        "bars_dir": "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\logs\\v192\\autopsy\\bars",
+        "out_dir": "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-10-24-v192-gap-toward-stop-reclaim\\docs\\superpowers\\results\\v192\\autopsy-market\\sep-era",
+        "date": "2026-10-21",
+        "resamples": 10000,
+        "seed": 42,
+        "balance": 10000.0,
+        "entry_type": "market"
+      }
+    },
+    "sector_map": {
+      "ABNB": "Consumer Discretionary",
+      "ADBE": "Information Technology",
+      "AMAT": "Information Technology",
+      "AMD": "Information Technology",
+      "AMZN": "Consumer Discretionary",
+      "ARM": null,
+      "ASML": null,
+      "ASTS": null,
+      "AXON": "Industrials",
+      "BA": "Industrials",
+      "CEG": "Utilities",
+      "CRM": "Information Technology",
+      "DDOG": "Information Technology",
+      "DELL": "Information Technology",
+      "FTNT": "Information Technology",
+      "GEV": "Industrials",
+      "GLW": "Information Technology",
+      "GM": "Consumer Discretionary",
+      "GS": "Financials",
+      "HD": "Consumer Discretionary",
+      "HIMS": null,
+      "HOOD": "Financials",
+      "INTC": "Information Technology",
+      "INTU": "Information Technology",
+      "IREN": null,
+      "ISRG": "Health Care",
+      "META": "Communication Services",
+      "MRNA": "Health Care",
+      "MRVL": "Information Technology",
+      "MSFT": "Information Technology",
+      "MSTR": null,
+      "MU": "Information Technology",
+      "NBIS": null,
+      "NFLX": "Communication Services",
+      "NKE": "Consumer Discretionary",
+      "NOW": "Information Technology",
+      "ORCL": "Information Technology",
+      "PANW": "Information Technology",
+      "PEP": "Consumer Staples",
+      "PLTR": "Information Technology",
+      "PYPL": "Financials",
+      "QBTS": null,
+      "RKLB": null,
+      "SHOP": null,
+      "SNDK": "Information Technology",
+      "SNOW": null,
+      "SNPS": "Information Technology",
+      "SOFI": null,
+      "SPCX": null,
+      "STX": "Information Technology",
+      "WDC": "Information Technology",
+      "WMT": "Consumer Staples",
+      "XAGUSD": null,
+      "XAUUSD": null
+    },
+    "entry_type_filter": "market"
+  },
+  "cells": [
+    {
+      "id": "strategy_horizon=Bollinger lower|2m",
+      "cut": "strategy_horizon",
+      "value": "Bollinger lower|2m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.0771,
+      "gross_expr": 0.0,
+      "delta": -0.1800679943856256,
+      "ci": [
+        -0.3154758941244202,
+        -0.027296639591914938
+      ],
+      "p": 0.007949854762268766,
+      "q": 0.013896596513572175,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Bollinger lower|2w",
+      "cut": "strategy_horizon",
+      "value": "Bollinger lower|2w",
+      "n": 2,
+      "weeks": 1,
+      "win_rate": 0.5,
+      "net_expr": 0.7776,
+      "gross_expr": 0.855,
+      "delta": 0.6822656070180528,
+      "ci": [
+        0.547977832187349,
+        0.8437971664426865
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Bollinger lower|3m",
+      "cut": "strategy_horizon",
+      "value": "Bollinger lower|3m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 1.6961,
+      "gross_expr": 1.77,
+      "delta": 1.6019201293983953,
+      "ci": [
+        1.468772796277025,
+        1.7628947234017118
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Bollinger upper|3m",
+      "cut": "strategy_horizon",
+      "value": "Bollinger upper|3m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": 0.0374,
+      "gross_expr": 0.11,
+      "delta": -0.06536204640353348,
+      "ci": [
+        -1.3068776946594287,
+        1.1523839458579288
+      ],
+      "p": 0.8944745875318348,
+      "q": 0.9198793989719256,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Bollinger upper|4m",
+      "cut": "strategy_horizon",
+      "value": "Bollinger upper|4m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 2.8697,
+      "gross_expr": 2.93,
+      "delta": 2.7813915061318086,
+      "ci": [
+        2.504136401532055,
+        2.8969157228532683
+      ],
+      "p": 0.00030455306837216383,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Bollinger upper|4w",
+      "cut": "strategy_horizon",
+      "value": "Bollinger upper|4w",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0694,
+      "gross_expr": -1.0,
+      "delta": -1.1773274228956823,
+      "ci": [
+        -1.4109082081006117,
+        -1.028248967697107
+      ],
+      "p": 0.0003045066991473812,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Donchian high|2m",
+      "cut": "strategy_horizon",
+      "value": "Donchian high|2m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 1.0141,
+      "gross_expr": 1.09,
+      "delta": 0.9165516487642011,
+      "ci": [
+        0.6300756715342669,
+        1.0255111313484713
+      ],
+      "p": 0.0003023431594860166,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=EMA14|2m",
+      "cut": "strategy_horizon",
+      "value": "EMA14|2m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 1.3548,
+      "gross_expr": 1.43,
+      "delta": 1.258913160725387,
+      "ci": [
+        1.1253307011895488,
+        1.418543826386784
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=EMA20|3m",
+      "cut": "strategy_horizon",
+      "value": "EMA20|3m",
+      "n": 2,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.075,
+      "gross_expr": 0.0,
+      "delta": -0.1788729273551785,
+      "ci": [
+        -0.31535926248909574,
+        -0.02546822726581225
+      ],
+      "p": 0.008561382051674057,
+      "q": 0.014848646995872192,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=EMA60|7m",
+      "cut": "strategy_horizon",
+      "value": "EMA60|7m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.653,
+      "gross_expr": -0.58,
+      "delta": -0.7627062782484288,
+      "ci": [
+        -1.352081743621199,
+        -0.2056230690039231
+      ],
+      "p": 0.00022097005855706552,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=EMA80|9m",
+      "cut": "strategy_horizon",
+      "value": "EMA80|9m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.1885,
+      "gross_expr": -1.12,
+      "delta": -1.297085399114424,
+      "ci": [
+        -1.6047651748396148,
+        -1.163375076858578
+      ],
+      "p": 0.00030175015087507544,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=EMA9|4w",
+      "cut": "strategy_horizon",
+      "value": "EMA9|4w",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 2.811,
+      "gross_expr": 2.89,
+      "delta": 2.7223566371032657,
+      "ci": [
+        2.4462993440928256,
+        2.8290069905146207
+      ],
+      "p": 0.0003023431594860166,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bearish)|2m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bearish)|2m",
+      "n": 12,
+      "weeks": 7,
+      "win_rate": 0.3333,
+      "net_expr": 0.0846,
+      "gross_expr": 0.1597,
+      "delta": -0.01860735536945929,
+      "ci": [
+        -1.180143803213038,
+        1.1107374991510675
+      ],
+      "p": 0.9501049895010499,
+      "q": 0.9587423075874231,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 11,
+        "top_ticker_share": 0.1667,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bearish)|2w",
+      "cut": "strategy_horizon",
+      "value": "FVG (bearish)|2w",
+      "n": 5,
+      "weeks": 3,
+      "win_rate": 0.2,
+      "net_expr": -0.5466,
+      "gross_expr": -0.4621,
+      "delta": -0.6651801354992217,
+      "ci": [
+        -1.2381977384891796,
+        1.2472097752249651
+      ],
+      "p": 0.34868017188459177,
+      "q": 0.4778209762862924,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 5,
+        "top_ticker_share": 0.2,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bearish)|3m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bearish)|3m",
+      "n": 5,
+      "weeks": 4,
+      "win_rate": 0.0,
+      "net_expr": -0.8722,
+      "gross_expr": -0.8,
+      "delta": -0.9990316843153051,
+      "ci": [
+        -1.4382742768420036,
+        -0.45805978373894607
+      ],
+      "p": 0.00020062192797672785,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 5,
+        "top_ticker_share": 0.2,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bearish)|4m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bearish)|4m",
+      "n": 7,
+      "weeks": 4,
+      "win_rate": 0.1429,
+      "net_expr": -0.4405,
+      "gross_expr": -0.3686,
+      "delta": -0.5620559832929923,
+      "ci": [
+        -1.2781566058653304,
+        1.3966990688053866
+      ],
+      "p": 0.36420186615832245,
+      "q": 0.4960295355039729,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 6,
+        "top_ticker_share": 0.2857,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bearish)|4w",
+      "cut": "strategy_horizon",
+      "value": "FVG (bearish)|4w",
+      "n": 6,
+      "weeks": 4,
+      "win_rate": 0.1667,
+      "net_expr": -0.2149,
+      "gross_expr": -0.1333,
+      "delta": -0.3267353312277456,
+      "ci": [
+        -1.3050472161137774,
+        0.3412214113117009
+      ],
+      "p": 0.5115812694274541,
+      "q": 0.6535026497350265,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 6,
+        "top_ticker_share": 0.1667,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bearish)|5m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bearish)|5m",
+      "n": 4,
+      "weeks": 4,
+      "win_rate": 0.5,
+      "net_expr": 0.6517,
+      "gross_expr": 0.72,
+      "delta": 0.5607080885890109,
+      "ci": [
+        -1.2639360157786173,
+        2.8923143364303714
+      ],
+      "p": 0.6452519574382654,
+      "q": 0.7499787149282456,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 4,
+        "top_ticker_share": 0.25,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bearish)|6m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bearish)|6m",
+      "n": 3,
+      "weeks": 3,
+      "win_rate": 0.6667,
+      "net_expr": 1.525,
+      "gross_expr": 1.6,
+      "delta": 1.4443661882790302,
+      "ci": [
+        -1.28296408664293,
+        3.040982146124608
+      ],
+      "p": 0.25583777140516184,
+      "q": 0.366425711302877,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 3,
+        "top_ticker_share": 0.3333,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bearish)|7m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bearish)|7m",
+      "n": 4,
+      "weeks": 3,
+      "win_rate": 0.0,
+      "net_expr": -1.0645,
+      "gross_expr": -1.0,
+      "delta": -1.190194484572873,
+      "ci": [
+        -1.4722565819327094,
+        -1.0484105623369797
+      ],
+      "p": 0.00020498103925386903,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 3,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bearish)|8m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bearish)|8m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.5768,
+      "gross_expr": -0.505,
+      "delta": -0.6856789232556286,
+      "ci": [
+        -1.3558201280822715,
+        -0.07755262893045797
+      ],
+      "p": 0.00022204951704230043,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bearish)|9m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bearish)|9m",
+      "n": 4,
+      "weeks": 3,
+      "win_rate": 0.25,
+      "net_expr": 0.0507,
+      "gross_expr": 0.12,
+      "delta": -0.05248497471195125,
+      "ci": [
+        -1.1974867468836026,
+        1.6873389303065356
+      ],
+      "p": 0.8405441341924926,
+      "q": 0.8971192201477566,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 4,
+        "top_ticker_share": 0.25,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bullish)|2m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bullish)|2m",
+      "n": 4,
+      "weeks": 3,
+      "win_rate": 0.25,
+      "net_expr": 0.1239,
+      "gross_expr": 0.2,
+      "delta": 0.022222506775376738,
+      "ci": [
+        -0.6585607531575755,
+        1.5194569779105753
+      ],
+      "p": 0.9966268015946029,
+      "q": 0.9966268015946029,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 3,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bullish)|2w",
+      "cut": "strategy_horizon",
+      "value": "FVG (bullish)|2w",
+      "n": 4,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": 0.6321,
+      "gross_expr": 0.7075,
+      "delta": 0.5406573656473184,
+      "ci": [
+        0.20605702220542924,
+        1.2651303326166974
+      ],
+      "p": 0.00022341376228775692,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 4,
+        "top_ticker_share": 0.25,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bullish)|3m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bullish)|3m",
+      "n": 6,
+      "weeks": 4,
+      "win_rate": 0.1667,
+      "net_expr": -0.0965,
+      "gross_expr": -0.0201,
+      "delta": -0.20471604338630855,
+      "ci": [
+        -0.9687241525925809,
+        1.3304084233743012
+      ],
+      "p": 0.6645944048932116,
+      "q": 0.7684372806577761,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 6,
+        "top_ticker_share": 0.1667,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bullish)|4m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bullish)|4m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 1.9729,
+      "gross_expr": 2.03,
+      "delta": 1.8800894991907082,
+      "ci": [
+        1.6031727708289547,
+        2.015863598549825
+      ],
+      "p": 0.00030175015087507544,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bullish)|4w",
+      "cut": "strategy_horizon",
+      "value": "FVG (bullish)|4w",
+      "n": 5,
+      "weeks": 3,
+      "win_rate": 0.6,
+      "net_expr": 1.1305,
+      "gross_expr": 1.202,
+      "delta": 1.0544449255493455,
+      "ci": [
+        -0.21998292009389825,
+        2.0076191791549105
+      ],
+      "p": 0.1541607033326518,
+      "q": 0.23232944068838352,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 5,
+        "top_ticker_share": 0.2,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bullish)|5m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bullish)|5m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.0571,
+      "gross_expr": 0.0,
+      "delta": -0.1599781106499505,
+      "ci": [
+        -0.39032359543172807,
+        -0.008335253175885377
+      ],
+      "p": 0.03714981729598051,
+      "q": 0.059332801724515646,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bullish)|6m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bullish)|6m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 2.7247,
+      "gross_expr": 2.8,
+      "delta": 2.6356331402126596,
+      "ci": [
+        2.362148161902526,
+        2.781618469537437
+      ],
+      "p": 0.0003040900106431504,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bullish)|7m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bullish)|7m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 1.5723,
+      "gross_expr": 1.65,
+      "delta": 1.4774579208455134,
+      "ci": [
+        1.3441526994026494,
+        1.638053164444681
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bullish)|8m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bullish)|8m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.5704,
+      "gross_expr": -0.5,
+      "delta": -0.6792364414006694,
+      "ci": [
+        -1.4156317931882016,
+        -0.06456850488601114
+      ],
+      "p": 0.002234137622877569,
+      "q": 0.004167886993939667,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=FVG (bullish)|9m",
+      "cut": "strategy_horizon",
+      "value": "FVG (bullish)|9m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 1.4803,
+      "gross_expr": 1.54,
+      "delta": 1.3849930694779242,
+      "ci": [
+        1.1404404761929017,
+        1.539166231420378
+      ],
+      "p": 0.0003046922608165753,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 23.6%|2m",
+      "cut": "strategy_horizon",
+      "value": "Fib 23.6%|2m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": 0.1807,
+      "gross_expr": 0.2737,
+      "delta": 0.07941339293958619,
+      "ci": [
+        -0.359726825671102,
+        0.4154480535051595
+      ],
+      "p": 0.707517793594306,
+      "q": 0.8084545391614685,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 23.6%|2w",
+      "cut": "strategy_horizon",
+      "value": "Fib 23.6%|2w",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 2.5016,
+      "gross_expr": 2.58,
+      "delta": 2.4114087125295045,
+      "ci": [
+        2.1331517311906065,
+        2.518456683030483
+      ],
+      "p": 0.0003023431594860166,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 23.6%|3m",
+      "cut": "strategy_horizon",
+      "value": "Fib 23.6%|3m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": 0.0869,
+      "gross_expr": 0.155,
+      "delta": -0.015388375083317848,
+      "ci": [
+        -1.4594819000121788,
+        1.2714190670485044
+      ],
+      "p": 0.9876871880199667,
+      "q": 0.9921563608164371,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 23.6%|4m",
+      "cut": "strategy_horizon",
+      "value": "Fib 23.6%|4m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.6933,
+      "gross_expr": -0.625,
+      "delta": -0.8033544850486265,
+      "ci": [
+        -1.7328720474236703,
+        -0.03174450527927076
+      ],
+      "p": 0.008665703810687701,
+      "q": 0.014913071674206742,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 23.6%|4w",
+      "cut": "strategy_horizon",
+      "value": "Fib 23.6%|4w",
+      "n": 4,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": 0.3345,
+      "gross_expr": 0.4175,
+      "delta": 0.23711947481736312,
+      "ci": [
+        -0.4274269136815091,
+        0.8295077621817457
+      ],
+      "p": 0.5867437722419929,
+      "q": 0.7051276619781958,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 3,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 23.6%|7m",
+      "cut": "strategy_horizon",
+      "value": "Fib 23.6%|7m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0766,
+      "gross_expr": -1.0,
+      "delta": -1.1846261134227238,
+      "ci": [
+        -1.3211377704914076,
+        -1.035567096075933
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 23.6%|8m",
+      "cut": "strategy_horizon",
+      "value": "Fib 23.6%|8m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0631,
+      "gross_expr": -1.0,
+      "delta": -1.1709706339440105,
+      "ci": [
+        -1.4045312037502191,
+        -1.0218969588850153
+      ],
+      "p": 0.0003045066991473812,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 38.2%|4w",
+      "cut": "strategy_horizon",
+      "value": "Fib 38.2%|4w",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": 0.1597,
+      "gross_expr": 0.23,
+      "delta": 0.05820092584652131,
+      "ci": [
+        -1.3663312314930056,
+        1.3783614041310412
+      ],
+      "p": 0.895017793594306,
+      "q": 0.9198793989719256,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 38.2%|6m",
+      "cut": "strategy_horizon",
+      "value": "Fib 38.2%|6m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 2.5063,
+      "gross_expr": 2.58,
+      "delta": 2.4161560596362106,
+      "ci": [
+        2.284041637193669,
+        2.580888174664148
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 38.2%|7m",
+      "cut": "strategy_horizon",
+      "value": "Fib 38.2%|7m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": -0.0807,
+      "gross_expr": 0.0388,
+      "delta": -0.1837768637560225,
+      "ci": [
+        -0.4120922968867204,
+        -0.042127401803033156
+      ],
+      "p": 0.0015260186174271325,
+      "q": 0.002870984178549351,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 38.2%|9m",
+      "cut": "strategy_horizon",
+      "value": "Fib 38.2%|9m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0766,
+      "gross_expr": -1.0,
+      "delta": -1.1846261134227245,
+      "ci": [
+        -1.3211377704914082,
+        -1.0355670960759336
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 50.0%|2m",
+      "cut": "strategy_horizon",
+      "value": "Fib 50.0%|2m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 1.0,
+      "net_expr": 1.7897,
+      "gross_expr": 1.8807,
+      "delta": 1.7044867620710469,
+      "ci": [
+        0.08056103228053724,
+        3.2537459555433474
+      ],
+      "p": 0.01579181494661922,
+      "q": 0.026359270061274184,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 50.0%|3m",
+      "cut": "strategy_horizon",
+      "value": "Fib 50.0%|3m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0637,
+      "gross_expr": -1.0,
+      "delta": -1.1715848395670692,
+      "ci": [
+        -1.4221330218037607,
+        -1.0249975128496966
+      ],
+      "p": 0.0003046922608165753,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 50.0%|4m",
+      "cut": "strategy_horizon",
+      "value": "Fib 50.0%|4m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0726,
+      "gross_expr": -1.0,
+      "delta": -1.180569011271724,
+      "ci": [
+        -1.3170809637031153,
+        -1.031496923932104
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 50.0%|4w",
+      "cut": "strategy_horizon",
+      "value": "Fib 50.0%|4w",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.5958,
+      "gross_expr": -0.5,
+      "delta": -0.7048898136292607,
+      "ci": [
+        -1.4289607793835106,
+        -0.10765059061157266
+      ],
+      "p": 0.0002222716159146477,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 50.0%|5m",
+      "cut": "strategy_horizon",
+      "value": "Fib 50.0%|5m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0658,
+      "gross_expr": -1.0,
+      "delta": -1.1736958901652195,
+      "ci": [
+        -1.424267986266056,
+        -1.0271052093234352
+      ],
+      "p": 0.0003046922608165753,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 50.0%|6m",
+      "cut": "strategy_horizon",
+      "value": "Fib 50.0%|6m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": 1.1591,
+      "gross_expr": 1.23,
+      "delta": 1.0675621102110404,
+      "ci": [
+        -0.4514752517122818,
+        2.4307248534079036
+      ],
+      "p": 0.5490848585690515,
+      "q": 0.6886827039679629,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 50.0%|7m",
+      "cut": "strategy_horizon",
+      "value": "Fib 50.0%|7m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 3.3616,
+      "gross_expr": 3.43,
+      "delta": 3.275673074746813,
+      "ci": [
+        3.0021211714426514,
+        3.3915546013302054
+      ],
+      "p": 0.00030455306837216383,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 50.0%|8m",
+      "cut": "strategy_horizon",
+      "value": "Fib 50.0%|8m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0766,
+      "gross_expr": -1.0,
+      "delta": -1.1846261134227247,
+      "ci": [
+        -1.3211377704914085,
+        -1.0355670960759338
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 50.0%|9m",
+      "cut": "strategy_horizon",
+      "value": "Fib 50.0%|9m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 2.4567,
+      "gross_expr": 2.51,
+      "delta": 2.3663428528229105,
+      "ci": [
+        2.0851361639429538,
+        2.4825808763770825
+      ],
+      "p": 0.00030455306837216383,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 61.8%|2m",
+      "cut": "strategy_horizon",
+      "value": "Fib 61.8%|2m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0679,
+      "gross_expr": -1.0,
+      "delta": -1.175855576469771,
+      "ci": [
+        -1.4094316810155527,
+        -1.026778228061339
+      ],
+      "p": 0.0003045066991473812,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 61.8%|3m",
+      "cut": "strategy_horizon",
+      "value": "Fib 61.8%|3m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0705,
+      "gross_expr": -1.0,
+      "delta": -1.1784286477144743,
+      "ci": [
+        -1.3149407559673243,
+        -1.0293496651734755
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 61.8%|4m",
+      "cut": "strategy_horizon",
+      "value": "Fib 61.8%|4m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -2.1077,
+      "gross_expr": -2.04,
+      "delta": -2.2208351802686566,
+      "ci": [
+        -2.4582095395866728,
+        -2.0728938711296734
+      ],
+      "p": 0.0003045066991473812,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 61.8%|4w",
+      "cut": "strategy_horizon",
+      "value": "Fib 61.8%|4w",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.7704,
+      "gross_expr": -0.6867,
+      "delta": -0.8812674972493186,
+      "ci": [
+        -1.3877250637783396,
+        -0.47697011829253605
+      ],
+      "p": 0.00022241992882562276,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 78.6%|2m",
+      "cut": "strategy_horizon",
+      "value": "Fib 78.6%|2m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.0771,
+      "gross_expr": 0.0,
+      "delta": -0.18015347660679612,
+      "ci": [
+        -0.47609550495340364,
+        -0.07014039134708273
+      ],
+      "p": 0.0003023431594860166,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 78.6%|2w",
+      "cut": "strategy_horizon",
+      "value": "Fib 78.6%|2w",
+      "n": 4,
+      "weeks": 3,
+      "win_rate": 0.25,
+      "net_expr": -0.7977,
+      "gross_expr": -0.7121,
+      "delta": -0.9179782431230195,
+      "ci": [
+        -1.458667144667873,
+        -0.05205802682519113
+      ],
+      "p": 0.01962588163140141,
+      "q": 0.032514520314709805,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 4,
+        "top_ticker_share": 0.25,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 78.6%|3m",
+      "cut": "strategy_horizon",
+      "value": "Fib 78.6%|3m",
+      "n": 3,
+      "weeks": 2,
+      "win_rate": 0.6667,
+      "net_expr": 1.4778,
+      "gross_expr": 1.5533,
+      "delta": 1.3964259366119958,
+      "ci": [
+        0.9967367890207457,
+        1.600404214159806
+      ],
+      "p": 0.00022271714922048998,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 3,
+        "top_ticker_share": 0.3333,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 78.6%|4w",
+      "cut": "strategy_horizon",
+      "value": "Fib 78.6%|4w",
+      "n": 4,
+      "weeks": 3,
+      "win_rate": 0.5,
+      "net_expr": 1.1721,
+      "gross_expr": 1.25,
+      "delta": 1.0915627071386647,
+      "ci": [
+        -1.1541144187785926,
+        1.9753936788636621
+      ],
+      "p": 0.2619827939369111,
+      "q": 0.37282166829483504,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 3,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 78.6%|5m",
+      "cut": "strategy_horizon",
+      "value": "Fib 78.6%|5m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.5807,
+      "gross_expr": -0.52,
+      "delta": -0.689642739592089,
+      "ci": [
+        -1.4200613898835146,
+        -0.04981419082280044
+      ],
+      "p": 0.0053285968028419185,
+      "q": 0.009696299100253328,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 78.6%|7m",
+      "cut": "strategy_horizon",
+      "value": "Fib 78.6%|7m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.5675,
+      "gross_expr": -0.5,
+      "delta": -0.6763558898668992,
+      "ci": [
+        -1.2862242518259195,
+        -0.11947061631913852
+      ],
+      "p": 0.0008936550491510277,
+      "q": 0.0017556762912524615,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Fib 78.6%|9m",
+      "cut": "strategy_horizon",
+      "value": "Fib 78.6%|9m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0766,
+      "gross_expr": -1.0,
+      "delta": -1.1846261134227214,
+      "ci": [
+        -1.3211377704914051,
+        -1.0355670960759304
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Floor Pivot|4w",
+      "cut": "strategy_horizon",
+      "value": "Floor Pivot|4w",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 1.2331,
+      "gross_expr": 1.31,
+      "delta": 1.1366351414184284,
+      "ci": [
+        1.0028975643457219,
+        1.2959086734115994
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Floor S2|2w",
+      "cut": "strategy_horizon",
+      "value": "Floor S2|2w",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 1.3693,
+      "gross_expr": 1.44,
+      "delta": 1.2734915252745493,
+      "ci": [
+        1.1399275593323535,
+        1.4331309207448777
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Floor S2|6m",
+      "cut": "strategy_horizon",
+      "value": "Floor S2|6m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0752,
+      "gross_expr": -1.0,
+      "delta": -1.1831467781297287,
+      "ci": [
+        -1.3196585428960896,
+        -1.0340829950903445
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Rolling support|6m",
+      "cut": "strategy_horizon",
+      "value": "Rolling support|6m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0766,
+      "gross_expr": -1.0,
+      "delta": -1.184626113422721,
+      "ci": [
+        -1.4916968460206617,
+        -1.0737507927725582
+      ],
+      "p": 0.0003023431594860166,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (2x touch)|2m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (2x touch)|2m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.0712,
+      "gross_expr": 0.0,
+      "delta": -0.17422522408465702,
+      "ci": [
+        -0.3096257118933049,
+        -0.021421595520654382
+      ],
+      "p": 0.011619018498700505,
+      "q": 0.019690245089400857,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (2x touch)|5m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (2x touch)|5m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0766,
+      "gross_expr": -1.0,
+      "delta": -1.1846261134227194,
+      "ci": [
+        -1.3211377704914031,
+        -1.0355670960759285
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (2x touch)|8m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (2x touch)|8m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 2.9889,
+      "gross_expr": 3.06,
+      "delta": 2.9011278032306724,
+      "ci": [
+        2.6287718043776795,
+        3.038407502864414
+      ],
+      "p": 0.00030175015087507544,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (3x touch)|4m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (3x touch)|4m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0971,
+      "gross_expr": -1.0,
+      "delta": -1.2052299507512823,
+      "ci": [
+        -1.4362474364891025,
+        -1.0639899887162616
+      ],
+      "p": 0.0003052037234854265,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (3x touch)|4w",
+      "cut": "strategy_horizon",
+      "value": "Trendline (3x touch)|4w",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 2.9106,
+      "gross_expr": 2.98,
+      "delta": 2.822414441706512,
+      "ci": [
+        2.549614548126292,
+        2.959757462732569
+      ],
+      "p": 0.00030175015087507544,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (3x touch)|8m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (3x touch)|8m",
+      "n": 2,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.5619,
+      "gross_expr": -0.5,
+      "delta": -0.6706708895190946,
+      "ci": [
+        -0.9067923358159868,
+        -0.5208368888269119
+      ],
+      "p": 0.0003045066991473812,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (4x touch)|2m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (4x touch)|2m",
+      "n": 2,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0638,
+      "gross_expr": -1.0,
+      "delta": -1.1775966328415748,
+      "ci": [
+        -1.4421049286329706,
+        -1.031363329304139
+      ],
+      "p": 0.0003046922608165753,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (4x touch)|2w",
+      "cut": "strategy_horizon",
+      "value": "Trendline (4x touch)|2w",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.058,
+      "gross_expr": 0.0,
+      "delta": -0.16089623394717736,
+      "ci": [
+        -0.4084781070140765,
+        -0.01156642056455551
+      ],
+      "p": 0.029859841560024376,
+      "q": 0.04838602063011249,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (4x touch)|4m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (4x touch)|4m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 2.6337,
+      "gross_expr": 2.69,
+      "delta": 2.544188195138683,
+      "ci": [
+        2.3236497641151,
+        2.7085988052297334
+      ],
+      "p": 0.0003045066991473812,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (4x touch)|5m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (4x touch)|5m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": 0.7285,
+      "gross_expr": 0.825,
+      "delta": 0.6326707604972571,
+      "ci": [
+        -1.2974895917057037,
+        2.4974600674381864
+      ],
+      "p": 0.6002227171492205,
+      "q": 0.7051276619781958,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (5x touch)|2w",
+      "cut": "strategy_horizon",
+      "value": "Trendline (5x touch)|2w",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0755,
+      "gross_expr": -1.0,
+      "delta": -1.183465498650167,
+      "ci": [
+        -1.3199772402132286,
+        -1.0344027423719442
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (5x touch)|3m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (5x touch)|3m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.9229,
+      "gross_expr": -0.8313,
+      "delta": -1.035298777030453,
+      "ci": [
+        -1.297871916460453,
+        -0.8379436104008828
+      ],
+      "p": 0.00022271714922048998,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (5x touch)|4m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (5x touch)|4m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.0771,
+      "gross_expr": 0.0,
+      "delta": -0.18015347660679987,
+      "ci": [
+        -0.31556148478529333,
+        -0.02738259399211186
+      ],
+      "p": 0.007949854762268766,
+      "q": 0.013896596513572175,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (5x touch)|5m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (5x touch)|5m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0766,
+      "gross_expr": -1.0,
+      "delta": -1.1846261134227223,
+      "ci": [
+        -1.321137770491406,
+        -1.0355670960759313
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (5x touch)|7m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (5x touch)|7m",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": 0.3128,
+      "gross_expr": 0.39,
+      "delta": 0.21275327979742592,
+      "ci": [
+        -1.4736996344123274,
+        1.7371762939683713
+      ],
+      "p": 0.7734645933549614,
+      "q": 0.8376055596331777,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (6x touch)|2m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (6x touch)|2m",
+      "n": 2,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.5765,
+      "gross_expr": -0.5,
+      "delta": -0.6853614632462484,
+      "ci": [
+        -0.8225319766844553,
+        -0.5356402640940954
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (6x touch)|3m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (6x touch)|3m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0763,
+      "gross_expr": -1.0,
+      "delta": -1.1842852968307855,
+      "ci": [
+        -1.49135148875851,
+        -1.0734103540116242
+      ],
+      "p": 0.0003023431594860166,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (6x touch)|4m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (6x touch)|4m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.0745,
+      "gross_expr": 0.0,
+      "delta": -0.17747607038303487,
+      "ci": [
+        -0.47336790015723906,
+        -0.06746599795483285
+      ],
+      "p": 0.0003023431594860166,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (6x touch)|8m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (6x touch)|8m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0757,
+      "gross_expr": -1.0,
+      "delta": -1.1836775790404201,
+      "ci": [
+        -1.3201893051637328,
+        -1.034615505981174
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (6x touch)|9m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (6x touch)|9m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 1.6643,
+      "gross_expr": 1.74,
+      "delta": 1.5699887804568944,
+      "ci": [
+        1.286379590675803,
+        1.6781126962146238
+      ],
+      "p": 0.0003023431594860166,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (8x touch)|2w",
+      "cut": "strategy_horizon",
+      "value": "Trendline (8x touch)|2w",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 2.9211,
+      "gross_expr": 3.0,
+      "delta": 2.833027536705733,
+      "ci": [
+        2.7014419425602165,
+        2.9984489956801674
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (8x touch)|6m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (8x touch)|6m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0715,
+      "gross_expr": -1.0,
+      "delta": -1.1794263238942784,
+      "ci": [
+        -1.3159383595149081,
+        -1.0303505553764989
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (9x touch)|2w",
+      "cut": "strategy_horizon",
+      "value": "Trendline (9x touch)|2w",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": 0.8634,
+      "gross_expr": 0.95,
+      "delta": 0.7688842102919405,
+      "ci": [
+        -1.4131413027762214,
+        2.865888676545432
+      ],
+      "p": 0.5957683741648107,
+      "q": 0.7051276619781958,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (9x touch)|4w",
+      "cut": "strategy_horizon",
+      "value": "Trendline (9x touch)|4w",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 1.6322,
+      "gross_expr": 1.71,
+      "delta": 1.53772128011214,
+      "ci": [
+        1.2539950393951789,
+        1.6458864571504974
+      ],
+      "p": 0.0003023431594860166,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Trendline (9x touch)|8m",
+      "cut": "strategy_horizon",
+      "value": "Trendline (9x touch)|8m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0766,
+      "gross_expr": -1.0,
+      "delta": -1.1846261134227227,
+      "ci": [
+        -1.3211377704914065,
+        -1.0355670960759318
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=VWAP|3m",
+      "cut": "strategy_horizon",
+      "value": "VWAP|3m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.6729,
+      "gross_expr": -0.5896,
+      "delta": -0.7788641124362737,
+      "ci": [
+        -1.008753731471575,
+        -0.6375476315020943
+      ],
+      "p": 0.0003052037234854265,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=VWAP|4m",
+      "cut": "strategy_horizon",
+      "value": "VWAP|4m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -3.849,
+      "gross_expr": -3.78,
+      "delta": -3.9708131789553858,
+      "ci": [
+        -4.310002018054933,
+        -3.836057197111189
+      ],
+      "p": 0.00030175015087507544,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=VWAP|9m",
+      "cut": "strategy_horizon",
+      "value": "VWAP|9m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 1.7257,
+      "gross_expr": 1.78,
+      "delta": 1.63169869661723,
+      "ci": [
+        1.387629540514102,
+        1.7868005528156556
+      ],
+      "p": 0.0003046922608165753,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Volume Profile HVN|2m",
+      "cut": "strategy_horizon",
+      "value": "Volume Profile HVN|2m",
+      "n": 6,
+      "weeks": 3,
+      "win_rate": 0.3333,
+      "net_expr": -0.1443,
+      "gross_expr": -0.0683,
+      "delta": -0.2539825336510876,
+      "ci": [
+        -1.1469204921849248,
+        1.237381712034491
+      ],
+      "p": 0.7455475946775845,
+      "q": 0.8234406269573321,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 5,
+        "top_ticker_share": 0.3333,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Volume Profile HVN|2w",
+      "cut": "strategy_horizon",
+      "value": "Volume Profile HVN|2w",
+      "n": 4,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.7104,
+      "gross_expr": -0.6044,
+      "delta": -0.8289727402535272,
+      "ci": [
+        -1.2974895917057003,
+        -0.6601505572975109
+      ],
+      "p": 0.00022271714922048998,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 4,
+        "top_ticker_share": 0.25,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Volume Profile HVN|4m",
+      "cut": "strategy_horizon",
+      "value": "Volume Profile HVN|4m",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 3.0085,
+      "gross_expr": 3.08,
+      "delta": 2.9207916754926893,
+      "ci": [
+        2.6460766134027898,
+        3.036184424295001
+      ],
+      "p": 0.00030455306837216383,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "strategy_horizon=Volume Profile HVN|4w",
+      "cut": "strategy_horizon",
+      "value": "Volume Profile HVN|4w",
+      "n": 6,
+      "weeks": 4,
+      "win_rate": 0.5,
+      "net_expr": 0.1762,
+      "gross_expr": 0.2539,
+      "delta": 0.07630172522733415,
+      "ci": [
+        -0.9754378633462685,
+        1.3466844843594192
+      ],
+      "p": 0.8894013837360875,
+      "q": 0.9198793989719256,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 5,
+        "top_ticker_share": 0.3333,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "direction=bearish",
+      "cut": "direction",
+      "value": "bearish",
+      "n": 21,
+      "weeks": 7,
+      "win_rate": 0.3333,
+      "net_expr": 0.0471,
+      "gross_expr": 0.1193,
+      "delta": -0.06136265711304738,
+      "ci": [
+        -0.5478982855616779,
+        0.5672998985997635
+      ],
+      "p": 0.7359264073592641,
+      "q": 0.8208995901639345,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 10,
+        "top_ticker_share": 0.2381,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "direction=bullish",
+      "cut": "direction",
+      "value": "bullish",
+      "n": 181,
+      "weeks": 8,
+      "win_rate": 0.326,
+      "net_expr": 0.1085,
+      "gross_expr": 0.1846,
+      "delta": 0.06136265711304738,
+      "ci": [
+        -0.5672998985997635,
+        0.5478982855616779
+      ],
+      "p": 0.7359264073592641,
+      "q": 0.8208995901639345,
+      "thin": false,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 54,
+        "top_ticker_share": 0.0608,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=ABNB",
+      "cut": "ticker",
+      "value": "ABNB",
+      "n": 3,
+      "weeks": 3,
+      "win_rate": 0.0,
+      "net_expr": -0.8668,
+      "gross_expr": -0.7911,
+      "delta": -0.9835060583843206,
+      "ci": [
+        -1.433464110592035,
+        -0.5316592862337429
+      ],
+      "p": 0.00020472924557273008,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=ADBE",
+      "cut": "ticker",
+      "value": "ADBE",
+      "n": 3,
+      "weeks": 3,
+      "win_rate": 0.6667,
+      "net_expr": 0.3083,
+      "gross_expr": 0.3938,
+      "delta": 0.20933568257743732,
+      "ci": [
+        -1.2256714917191007,
+        1.6006814516737986
+      ],
+      "p": 0.7395491803278689,
+      "q": 0.8208995901639345,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=AMAT",
+      "cut": "ticker",
+      "value": "AMAT",
+      "n": 4,
+      "weeks": 2,
+      "win_rate": 0.25,
+      "net_expr": -0.1239,
+      "gross_expr": -0.055,
+      "delta": -0.23063504464957205,
+      "ci": [
+        -0.9585142285287587,
+        1.683774772471606
+      ],
+      "p": 0.7897676496872207,
+      "q": 0.8511088263619563,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=AMD",
+      "cut": "ticker",
+      "value": "AMD",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": 0.1228,
+      "gross_expr": 0.2196,
+      "delta": 0.020874033438450235,
+      "ci": [
+        -1.2974895917057043,
+        1.273074497718864
+      ],
+      "p": 0.9178173719376392,
+      "q": 0.9346580576612656,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=AMZN",
+      "cut": "ticker",
+      "value": "AMZN",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0674,
+      "gross_expr": -1.0,
+      "delta": -1.175297129743588,
+      "ci": [
+        -1.4258873645976,
+        -1.028704865868711
+      ],
+      "p": 0.0003046922608165753,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=ARM",
+      "cut": "ticker",
+      "value": "ARM",
+      "n": 10,
+      "weeks": 6,
+      "win_rate": 0.4,
+      "net_expr": 0.4116,
+      "gross_expr": 0.48,
+      "delta": 0.32562530203472245,
+      "ci": [
+        -0.6403771495255827,
+        1.3516936211540094
+      ],
+      "p": 0.5525447455254474,
+      "q": 0.6891288399249962,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=ASML",
+      "cut": "ticker",
+      "value": "ASML",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.203,
+      "gross_expr": -0.135,
+      "delta": -0.30818191549374263,
+      "ci": [
+        -0.7343276523172425,
+        -0.03345772153642692
+      ],
+      "p": 0.007110321075436063,
+      "q": 0.01272976837699037,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=ASTS",
+      "cut": "ticker",
+      "value": "ASTS",
+      "n": 14,
+      "weeks": 5,
+      "win_rate": 0.3571,
+      "net_expr": 0.2835,
+      "gross_expr": 0.3605,
+      "delta": 0.19485767822739913,
+      "ci": [
+        -0.3890419419546378,
+        0.4589207229282313
+      ],
+      "p": 0.3956,
+      "q": 0.5234897865753962,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=AXON",
+      "cut": "ticker",
+      "value": "AXON",
+      "n": 2,
+      "weeks": 1,
+      "win_rate": 0.5,
+      "net_expr": -0.1044,
+      "gross_expr": -0.045,
+      "delta": -0.20862128078291306,
+      "ci": [
+        -0.44168928517067146,
+        -0.05704573294669008
+      ],
+      "p": 0.0009135200974421437,
+      "q": 0.001763759509007488,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=BA",
+      "cut": "ticker",
+      "value": "BA",
+      "n": 3,
+      "weeks": 2,
+      "win_rate": 0.3333,
+      "net_expr": -0.3731,
+      "gross_expr": -0.2827,
+      "delta": -0.48238015610351725,
+      "ci": [
+        -1.297489591705708,
+        -0.08739068396381369
+      ],
+      "p": 0.004454342984409799,
+      "q": 0.008172430930074177,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=CEG",
+      "cut": "ticker",
+      "value": "CEG",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 0.1098,
+      "gross_expr": 0.2037,
+      "delta": 0.007742902518750788,
+      "ci": [
+        -0.22003924659129792,
+        0.15011275423982737
+      ],
+      "p": 0.8875324278956204,
+      "q": 0.9198793989719256,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=CRM",
+      "cut": "ticker",
+      "value": "CRM",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.0971,
+      "gross_expr": -1.0,
+      "delta": -1.2052299507512823,
+      "ci": [
+        -1.4362474364891025,
+        -1.0639899887162616
+      ],
+      "p": 0.0003052037234854265,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=DDOG",
+      "cut": "ticker",
+      "value": "DDOG",
+      "n": 4,
+      "weeks": 2,
+      "win_rate": 0.25,
+      "net_expr": 0.0391,
+      "gross_expr": 0.1125,
+      "delta": -0.06426726527069748,
+      "ci": [
+        -1.3793131486157335,
+        0.41034083897336543
+      ],
+      "p": 0.8904200933540787,
+      "q": 0.9198793989719256,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=DELL",
+      "cut": "ticker",
+      "value": "DELL",
+      "n": 3,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.7414,
+      "gross_expr": -0.6667,
+      "delta": -0.8562289731751414,
+      "ci": [
+        -0.9939904716083345,
+        -0.7088942210003907
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=FTNT",
+      "cut": "ticker",
+      "value": "FTNT",
+      "n": 3,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.7429,
+      "gross_expr": -0.6667,
+      "delta": -0.8577282725052325,
+      "ci": [
+        -0.9954894402430534,
+        -0.7103965454908518
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=GEV",
+      "cut": "ticker",
+      "value": "GEV",
+      "n": 3,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.6641,
+      "gross_expr": -0.5768,
+      "delta": -0.7778089552189253,
+      "ci": [
+        -1.1602088404180506,
+        -0.5639223643488571
+      ],
+      "p": 0.00022271714922048998,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=GLW",
+      "cut": "ticker",
+      "value": "GLW",
+      "n": 11,
+      "weeks": 6,
+      "win_rate": 0.2727,
+      "net_expr": -0.0397,
+      "gross_expr": 0.0317,
+      "delta": -0.15001845257876478,
+      "ci": [
+        -1.0703239435182097,
+        1.0129328732938918
+      ],
+      "p": 0.7561243875612439,
+      "q": 0.8268946504364342,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=GM",
+      "cut": "ticker",
+      "value": "GM",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": -0.5764,
+      "gross_expr": -0.4806,
+      "delta": -0.6853323218445867,
+      "ci": [
+        -1.4281713733909185,
+        -0.06927361985907626
+      ],
+      "p": 0.0008890864636585908,
+      "q": 0.0017556762912524615,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=GS",
+      "cut": "ticker",
+      "value": "GS",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.0769,
+      "gross_expr": 0.0,
+      "delta": -0.17987972279562375,
+      "ci": [
+        -0.3152873836997899,
+        -0.027107328044198638
+      ],
+      "p": 0.007949854762268766,
+      "q": 0.013896596513572175,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=HD",
+      "cut": "ticker",
+      "value": "HD",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.5744,
+      "gross_expr": -0.5,
+      "delta": -0.683248891611808,
+      "ci": [
+        -1.2118524855737234,
+        -0.17355467792869586
+      ],
+      "p": 0.00022160664819944597,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=HIMS",
+      "cut": "ticker",
+      "value": "HIMS",
+      "n": 5,
+      "weeks": 5,
+      "win_rate": 0.2,
+      "net_expr": -0.5977,
+      "gross_expr": -0.52,
+      "delta": -0.7175470329303754,
+      "ci": [
+        -1.3820611960726592,
+        0.2451053635603973
+      ],
+      "p": 0.127625525105021,
+      "q": 0.1953990798159632,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=HOOD",
+      "cut": "ticker",
+      "value": "HOOD",
+      "n": 4,
+      "weeks": 4,
+      "win_rate": 1.0,
+      "net_expr": 2.5213,
+      "gross_expr": 2.5925,
+      "delta": 2.468101524771458,
+      "ci": [
+        1.6486175225910003,
+        2.9616391655293857
+      ],
+      "p": 0.00020098482564566376,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=INTC",
+      "cut": "ticker",
+      "value": "INTC",
+      "n": 4,
+      "weeks": 2,
+      "win_rate": 0.25,
+      "net_expr": -0.1598,
+      "gross_expr": -0.0875,
+      "delta": -0.267160099153242,
+      "ci": [
+        -0.4463566915870441,
+        -0.10047986914760242
+      ],
+      "p": 0.0008936550491510277,
+      "q": 0.0017556762912524615,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=INTU",
+      "cut": "ticker",
+      "value": "INTU",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -1.0724,
+      "gross_expr": -1.0,
+      "delta": -1.1862926614753075,
+      "ci": [
+        -1.42734648580467,
+        -1.0392260928218537
+      ],
+      "p": 0.00022241992882562276,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=IREN",
+      "cut": "ticker",
+      "value": "IREN",
+      "n": 3,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.7423,
+      "gross_expr": -0.6667,
+      "delta": -0.8571888564303292,
+      "ci": [
+        -1.4742563169292902,
+        -0.5446127001260216
+      ],
+      "p": 0.00022160664819944597,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=ISRG",
+      "cut": "ticker",
+      "value": "ISRG",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 1.0,
+      "net_expr": 2.5685,
+      "gross_expr": 2.645,
+      "delta": 2.4910497468476924,
+      "ci": [
+        2.141521788407646,
+        2.77370077378212
+      ],
+      "p": 0.00022143489813994686,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=META",
+      "cut": "ticker",
+      "value": "META",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.1191,
+      "gross_expr": -1.0,
+      "delta": -1.2272977736424513,
+      "ci": [
+        -1.458373635451709,
+        -1.0861428886430224
+      ],
+      "p": 0.0003052037234854265,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=MRNA",
+      "cut": "ticker",
+      "value": "MRNA",
+      "n": 6,
+      "weeks": 3,
+      "win_rate": 0.6667,
+      "net_expr": 0.8781,
+      "gross_expr": 0.9533,
+      "delta": 0.7997869925950747,
+      "ci": [
+        -1.2467336839664205,
+        1.7144999125591291
+      ],
+      "p": 0.20507053772234718,
+      "q": 0.29951091693658605,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=MRVL",
+      "cut": "ticker",
+      "value": "MRVL",
+      "n": 5,
+      "weeks": 5,
+      "win_rate": 0.8,
+      "net_expr": 1.6462,
+      "gross_expr": 1.72,
+      "delta": 1.5832345514498367,
+      "ci": [
+        -0.05911486322965138,
+        2.8282390386760694
+      ],
+      "p": 0.061024409763905565,
+      "q": 0.09676727833990739,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=MSFT",
+      "cut": "ticker",
+      "value": "MSFT",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.0731,
+      "gross_expr": 0.0,
+      "delta": -0.17608630179179613,
+      "ci": [
+        -0.31148915049728787,
+        -0.023292953281829815
+      ],
+      "p": 0.009478672985781991,
+      "q": 0.016186656944950785,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=MSTR",
+      "cut": "ticker",
+      "value": "MSTR",
+      "n": 7,
+      "weeks": 4,
+      "win_rate": 0.1429,
+      "net_expr": -0.4293,
+      "gross_expr": -0.3504,
+      "delta": -0.5504941550710838,
+      "ci": [
+        -0.8939148309646874,
+        -0.28048940434323383
+      ],
+      "p": 0.0006018054162487463,
+      "q": 0.001225695434928639,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=MU",
+      "cut": "ticker",
+      "value": "MU",
+      "n": 4,
+      "weeks": 3,
+      "win_rate": 0.25,
+      "net_expr": 0.0663,
+      "gross_expr": 0.145,
+      "delta": -0.03652145115062547,
+      "ci": [
+        -1.4046289920807704,
+        0.6577465260554897
+      ],
+      "p": 0.8874565172907715,
+      "q": 0.9198793989719256,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=NBIS",
+      "cut": "ticker",
+      "value": "NBIS",
+      "n": 14,
+      "weeks": 7,
+      "win_rate": 0.3571,
+      "net_expr": -0.0955,
+      "gross_expr": -0.0229,
+      "delta": -0.21232199733297508,
+      "ci": [
+        -1.0348861363959685,
+        0.9757103612239569
+      ],
+      "p": 0.7101289871012899,
+      "q": 0.8084545391614685,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=NFLX",
+      "cut": "ticker",
+      "value": "NFLX",
+      "n": 2,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.5602,
+      "gross_expr": -0.5,
+      "delta": -0.6689783637071061,
+      "ci": [
+        -0.9050890960766055,
+        -0.519146919271394
+      ],
+      "p": 0.0003045066991473812,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=NKE",
+      "cut": "ticker",
+      "value": "NKE",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 1.0,
+      "net_expr": 2.0621,
+      "gross_expr": 2.14,
+      "delta": 1.97956883389661,
+      "ci": [
+        1.6553435706212514,
+        2.168044636779926
+      ],
+      "p": 0.00022158209616662973,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=NOW",
+      "cut": "ticker",
+      "value": "NOW",
+      "n": 3,
+      "weeks": 3,
+      "win_rate": 0.3333,
+      "net_expr": 0.4183,
+      "gross_expr": 0.4867,
+      "delta": 0.3209070567314765,
+      "ci": [
+        -1.372079718182828,
+        2.325458433398879
+      ],
+      "p": 0.8170656844689994,
+      "q": 0.8762733427638545,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=ORCL",
+      "cut": "ticker",
+      "value": "ORCL",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": -1.0084,
+      "gross_expr": -0.935,
+      "delta": -1.121671618620426,
+      "ci": [
+        -4.13220248236042,
+        1.8312546415923407
+      ],
+      "p": 0.5926416970500498,
+      "q": 0.7051276619781958,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=PANW",
+      "cut": "ticker",
+      "value": "PANW",
+      "n": 5,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.6723,
+      "gross_expr": -0.6,
+      "delta": -0.7940655733104709,
+      "ci": [
+        -1.061476852170969,
+        -0.12120220154870547
+      ],
+      "p": 0.0006668148477439431,
+      "q": 0.0013457536018105034,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=PEP",
+      "cut": "ticker",
+      "value": "PEP",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 0.5,
+      "net_expr": 2.4373,
+      "gross_expr": 2.5314,
+      "delta": 2.35857335098327,
+      "ci": [
+        -0.7729663609508137,
+        5.429809836870506
+      ],
+      "p": 0.5402580071174378,
+      "q": 0.6814618044322226,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=PLTR",
+      "cut": "ticker",
+      "value": "PLTR",
+      "n": 3,
+      "weeks": 3,
+      "win_rate": 0.6667,
+      "net_expr": 1.856,
+      "gross_expr": 1.9233,
+      "delta": 1.7803267902326925,
+      "ci": [
+        -0.15910881052123996,
+        2.7985351302837995
+      ],
+      "p": 0.15715162676488642,
+      "q": 0.23414537679063613,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=PYPL",
+      "cut": "ticker",
+      "value": "PYPL",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.0671,
+      "gross_expr": 0.0,
+      "delta": -0.17003404179889925,
+      "ci": [
+        -0.4917902733733794,
+        -0.05204973844029937
+      ],
+      "p": 0.0009136592051164915,
+      "q": 0.001763759509007488,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=QBTS",
+      "cut": "ticker",
+      "value": "QBTS",
+      "n": 4,
+      "weeks": 4,
+      "win_rate": 0.5,
+      "net_expr": 0.611,
+      "gross_expr": 0.675,
+      "delta": 0.5191388700829358,
+      "ci": [
+        -0.9627259577856657,
+        1.7215268230321359
+      ],
+      "p": 0.42691882104416057,
+      "q": 0.554245486969612,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=RKLB",
+      "cut": "ticker",
+      "value": "RKLB",
+      "n": 5,
+      "weeks": 3,
+      "win_rate": 0.0,
+      "net_expr": -0.6005,
+      "gross_expr": -0.5179,
+      "delta": -0.7204818376934216,
+      "ci": [
+        -1.180243429712789,
+        -0.4394532810043579
+      ],
+      "p": 0.00020468734008801556,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=SHOP",
+      "cut": "ticker",
+      "value": "SHOP",
+      "n": 3,
+      "weeks": 3,
+      "win_rate": 0.0,
+      "net_expr": -0.8092,
+      "gross_expr": -0.75,
+      "delta": -0.9250878073821406,
+      "ci": [
+        -1.5729215654534583,
+        -0.0973989461770342
+      ],
+      "p": 0.0010228086325048584,
+      "q": 0.001941309491954059,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=SNDK",
+      "cut": "ticker",
+      "value": "SNDK",
+      "n": 6,
+      "weeks": 5,
+      "win_rate": 0.5,
+      "net_expr": 0.6951,
+      "gross_expr": 0.7617,
+      "delta": 0.611181450474263,
+      "ci": [
+        -0.5084619783164108,
+        1.6698437604032388
+      ],
+      "p": 0.2656531306261252,
+      "q": 0.37563691082165473,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=SNOW",
+      "cut": "ticker",
+      "value": "SNOW",
+      "n": 3,
+      "weeks": 2,
+      "win_rate": 0.3333,
+      "net_expr": -0.2028,
+      "gross_expr": -0.1175,
+      "delta": -0.3095595230054825,
+      "ci": [
+        -1.0835484271753697,
+        0.0981502961320924
+      ],
+      "p": 0.26837416481069043,
+      "q": 0.37708268726565364,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=SNPS",
+      "cut": "ticker",
+      "value": "SNPS",
+      "n": 3,
+      "weeks": 2,
+      "win_rate": 0.3333,
+      "net_expr": -0.446,
+      "gross_expr": -0.3533,
+      "delta": -0.5563933807587088,
+      "ci": [
+        -1.2974895917057083,
+        -0.19807943470962486
+      ],
+      "p": 0.00022271714922048998,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=SOFI",
+      "cut": "ticker",
+      "value": "SOFI",
+      "n": 3,
+      "weeks": 2,
+      "win_rate": 0.6667,
+      "net_expr": 1.1497,
+      "gross_expr": 1.2267,
+      "delta": 1.0634154345133728,
+      "ci": [
+        0.7051618976603882,
+        1.640479019682348
+      ],
+      "p": 0.00022373867322966775,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=SPCX",
+      "cut": "ticker",
+      "value": "SPCX",
+      "n": 3,
+      "weeks": 1,
+      "win_rate": 0.3333,
+      "net_expr": -0.1336,
+      "gross_expr": -0.0567,
+      "delta": -0.23930234999030026,
+      "ci": [
+        -0.37711519373127145,
+        -0.086280346445146
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=STX",
+      "cut": "ticker",
+      "value": "STX",
+      "n": 9,
+      "weeks": 6,
+      "win_rate": 0.4444,
+      "net_expr": 0.5567,
+      "gross_expr": 0.6322,
+      "delta": 0.47582478182153654,
+      "ci": [
+        -0.9234135272884354,
+        2.0343080920962584
+      ],
+      "p": 0.5025497450254974,
+      "q": 0.6486397871840722,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=WDC",
+      "cut": "ticker",
+      "value": "WDC",
+      "n": 5,
+      "weeks": 4,
+      "win_rate": 0.2,
+      "net_expr": -0.0283,
+      "gross_expr": 0.044,
+      "delta": -0.1337209721633418,
+      "ci": [
+        -1.293784232473981,
+        0.8895694254730263
+      ],
+      "p": 0.7530616342099979,
+      "q": 0.8268946504364342,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=WMT",
+      "cut": "ticker",
+      "value": "WMT",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -1.1168,
+      "gross_expr": -1.0,
+      "delta": -1.224953769596028,
+      "ci": [
+        -1.456023430805057,
+        -1.0837898478684784
+      ],
+      "p": 0.0003052037234854265,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=XAGUSD",
+      "cut": "ticker",
+      "value": "XAGUSD",
+      "n": 3,
+      "weeks": 3,
+      "win_rate": 0.0,
+      "net_expr": -1.0758,
+      "gross_expr": -1.0,
+      "delta": -1.1956638879534354,
+      "ci": [
+        -1.4785815664583404,
+        -1.0463142473675031
+      ],
+      "p": 0.0002044362669937647,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "ticker=XAUUSD",
+      "cut": "ticker",
+      "value": "XAUUSD",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.1594,
+      "gross_expr": -0.0404,
+      "delta": -0.2627938671976476,
+      "ci": [
+        -0.491318324220754,
+        -0.12155769137833544
+      ],
+      "p": 0.0003052037234854265,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "sector_today=Communication Services",
+      "cut": "sector_today",
+      "value": "Communication Services",
+      "n": 3,
+      "weeks": 2,
+      "win_rate": 0.0,
+      "net_expr": -0.7465,
+      "gross_expr": -0.6667,
+      "delta": -0.9875283675922061,
+      "ci": [
+        -1.5959433940056345,
+        -0.6397949328394066
+      ],
+      "p": 0.00022241992882562276,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.6667,
+        "uncovered": 80
+      }
+    },
+    {
+      "id": "sector_today=Consumer Discretionary",
+      "cut": "sector_today",
+      "value": "Consumer Discretionary",
+      "n": 10,
+      "weeks": 6,
+      "win_rate": 0.3,
+      "net_expr": -0.1845,
+      "gross_expr": -0.1055,
+      "delta": -0.4370552912057019,
+      "ci": [
+        -1.400086646447159,
+        0.15564126264747874
+      ],
+      "p": 0.1745825417458254,
+      "q": 0.25667102163955785,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 5,
+        "top_ticker_share": 0.3,
+        "uncovered": 80
+      }
+    },
+    {
+      "id": "sector_today=Consumer Staples",
+      "cut": "sector_today",
+      "value": "Consumer Staples",
+      "n": 3,
+      "weeks": 2,
+      "win_rate": 0.3333,
+      "net_expr": 1.2526,
+      "gross_expr": 1.3543,
+      "delta": 1.0620320970071329,
+      "ci": [
+        -1.2476266575070842,
+        5.392788987307432
+      ],
+      "p": 0.6003113879003559,
+      "q": 0.7051276619781958,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.6667,
+        "uncovered": 80
+      }
+    },
+    {
+      "id": "sector_today=Financials",
+      "cut": "sector_today",
+      "value": "Financials",
+      "n": 6,
+      "weeks": 5,
+      "win_rate": 0.6667,
+      "net_expr": 1.6569,
+      "gross_expr": 1.7283,
+      "delta": 1.5146800337243638,
+      "ci": [
+        0.2011445951441314,
+        2.5088525839148956
+      ],
+      "p": 0.029205841168233646,
+      "q": 0.047674240730499036,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 3,
+        "top_ticker_share": 0.6667,
+        "uncovered": 80
+      }
+    },
+    {
+      "id": "sector_today=Health Care",
+      "cut": "sector_today",
+      "value": "Health Care",
+      "n": 8,
+      "weeks": 4,
+      "win_rate": 0.75,
+      "net_expr": 1.3007,
+      "gross_expr": 1.3762,
+      "delta": 1.1600901742304381,
+      "ci": [
+        -0.3327977777958208,
+        2.21304590835636
+      ],
+      "p": 0.10456598093326644,
+      "q": 0.1612058872721191,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.75,
+        "uncovered": 80
+      }
+    },
+    {
+      "id": "sector_today=Industrials",
+      "cut": "sector_today",
+      "value": "Industrials",
+      "n": 8,
+      "weeks": 3,
+      "win_rate": 0.25,
+      "net_expr": -0.4151,
+      "gross_expr": -0.3336,
+      "delta": -0.6761287727256202,
+      "ci": [
+        -1.0519423278938864,
+        -0.40308266765179007
+      ],
+      "p": 0.0002046245140167792,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 3,
+        "top_ticker_share": 0.375,
+        "uncovered": 80
+      }
+    },
+    {
+      "id": "sector_today=Information Technology",
+      "cut": "sector_today",
+      "value": "Information Technology",
+      "n": 83,
+      "weeks": 8,
+      "win_rate": 0.3253,
+      "net_expr": 0.116,
+      "gross_expr": 0.1905,
+      "delta": -0.31499680060626617,
+      "ci": [
+        -0.8387577243485842,
+        0.24662102781004308
+      ],
+      "p": 0.2405759424057594,
+      "q": 0.34907097525541564,
+      "thin": false,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 21,
+        "top_ticker_share": 0.1325,
+        "uncovered": 80
+      }
+    },
+    {
+      "id": "sector_today=Utilities",
+      "cut": "sector_today",
+      "value": "Utilities",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 0.1098,
+      "gross_expr": 0.2037,
+      "delta": -0.1077798622546295,
+      "ci": [
+        -0.4209463461419628,
+        0.09951974362742072
+      ],
+      "p": 0.3961544330840836,
+      "q": 0.5234897865753962,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 80
+      }
+    },
+    {
+      "id": "regime=bull_quiet",
+      "cut": "regime",
+      "value": "bull_quiet",
+      "n": 166,
+      "weeks": 6,
+      "win_rate": 0.3193,
+      "net_expr": 0.0648,
+      "gross_expr": 0.1428,
+      "delta": null,
+      "ci": null,
+      "p": null,
+      "q": null,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 53,
+        "top_ticker_share": 0.0723,
+        "uncovered": 36
+      }
+    },
+    {
+      "id": "weekday=Fri",
+      "cut": "weekday",
+      "value": "Fri",
+      "n": 41,
+      "weeks": 7,
+      "win_rate": 0.3171,
+      "net_expr": 0.3229,
+      "gross_expr": 0.3955,
+      "delta": 0.2770315679811752,
+      "ci": [
+        -0.27274634258482433,
+        1.070810404415998
+      ],
+      "p": 0.37336266373362664,
+      "q": 0.4993163334268983,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 24,
+        "top_ticker_share": 0.0976,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "weekday=Mon",
+      "cut": "weekday",
+      "value": "Mon",
+      "n": 29,
+      "weeks": 5,
+      "win_rate": 0.3448,
+      "net_expr": 0.2689,
+      "gross_expr": 0.3355,
+      "delta": 0.19473583999237307,
+      "ci": [
+        -0.4789787054749659,
+        1.0360245398127381
+      ],
+      "p": 0.5768576857685769,
+      "q": 0.6997945696208965,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 21,
+        "top_ticker_share": 0.1724,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "weekday=Sat",
+      "cut": "weekday",
+      "value": "Sat",
+      "n": 4,
+      "weeks": 4,
+      "win_rate": 0.0,
+      "net_expr": -0.8856,
+      "gross_expr": -0.8175,
+      "delta": -1.0076621573554505,
+      "ci": [
+        -1.3010458897614439,
+        -0.6536218470054708
+      ],
+      "p": 0.0002008233758409479,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 4,
+        "top_ticker_share": 0.25,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "weekday=Thu",
+      "cut": "weekday",
+      "value": "Thu",
+      "n": 52,
+      "weeks": 7,
+      "win_rate": 0.3462,
+      "net_expr": 0.0861,
+      "gross_expr": 0.1596,
+      "delta": -0.021623136795121622,
+      "ci": [
+        -1.0331172374088913,
+        0.3410161515907841
+      ],
+      "p": 0.9475052494750525,
+      "q": 0.9587423075874231,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 32,
+        "top_ticker_share": 0.0962,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "weekday=Tue",
+      "cut": "weekday",
+      "value": "Tue",
+      "n": 27,
+      "weeks": 6,
+      "win_rate": 0.4074,
+      "net_expr": 0.4374,
+      "gross_expr": 0.5067,
+      "delta": 0.387024693084799,
+      "ci": [
+        -0.04198350047407101,
+        0.8148364044548299
+      ],
+      "p": 0.07839216078392161,
+      "q": 0.12255675840866619,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 16,
+        "top_ticker_share": 0.1852,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "weekday=Wed",
+      "cut": "weekday",
+      "value": "Wed",
+      "n": 49,
+      "weeks": 7,
+      "win_rate": 0.2857,
+      "net_expr": -0.2684,
+      "gross_expr": -0.1784,
+      "delta": -0.48921406811840507,
+      "ci": [
+        -0.8623414757794878,
+        -0.12999967648817654
+      ],
+      "p": 0.022997700229977002,
+      "q": 0.0378184403781844,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 34,
+        "top_ticker_share": 0.0612,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "friday_entry=no",
+      "cut": "friday_entry",
+      "value": "no",
+      "n": 161,
+      "weeks": 8,
+      "win_rate": 0.3292,
+      "net_expr": 0.0459,
+      "gross_expr": 0.1223,
+      "delta": -0.2770315679811752,
+      "ci": [
+        -1.0708104044159983,
+        0.2727463425848238
+      ],
+      "p": 0.37336266373362664,
+      "q": 0.4993163334268983,
+      "thin": false,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 53,
+        "top_ticker_share": 0.0807,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "friday_entry=yes",
+      "cut": "friday_entry",
+      "value": "yes",
+      "n": 41,
+      "weeks": 7,
+      "win_rate": 0.3171,
+      "net_expr": 0.3229,
+      "gross_expr": 0.3955,
+      "delta": 0.2770315679811752,
+      "ci": [
+        -0.27274634258482433,
+        1.070810404415998
+      ],
+      "p": 0.37336266373362664,
+      "q": 0.4993163334268983,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 24,
+        "top_ticker_share": 0.0976,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "weekend_hold=no",
+      "cut": "weekend_hold",
+      "value": "no",
+      "n": 175,
+      "weeks": 8,
+      "win_rate": 0.2857,
+      "net_expr": -0.0874,
+      "gross_expr": -0.0109,
+      "delta": -1.418227772547645,
+      "ci": [
+        -2.101707813366958,
+        -0.7216822257231739
+      ],
+      "p": 0.00019998000199980003,
+      "q": 0.0006285141585554367,
+      "thin": false,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 53,
+        "top_ticker_share": 0.0743,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "weekend_hold=yes",
+      "cut": "weekend_hold",
+      "value": "yes",
+      "n": 27,
+      "weeks": 7,
+      "win_rate": 0.5926,
+      "net_expr": 1.3308,
+      "gross_expr": 1.4006,
+      "delta": 1.418227772547645,
+      "ci": [
+        0.7216822257231732,
+        2.1017078133669576
+      ],
+      "p": 0.00019998000199980003,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 23,
+        "top_ticker_share": 0.0741,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "earnings_proximity=6_20d",
+      "cut": "earnings_proximity",
+      "value": "6_20d",
+      "n": 18,
+      "weeks": 2,
+      "win_rate": 0.2778,
+      "net_expr": -0.0338,
+      "gross_expr": 0.0422,
+      "delta": 0.02662721809873797,
+      "ci": [
+        -0.03986524343416195,
+        0.2103394027023731
+      ],
+      "p": 0.5151484851514848,
+      "q": 0.6535026497350265,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 14,
+        "top_ticker_share": 0.1111,
+        "uncovered": 176
+      }
+    },
+    {
+      "id": "earnings_proximity=gt_20d",
+      "cut": "earnings_proximity",
+      "value": "gt_20d",
+      "n": 6,
+      "weeks": 2,
+      "win_rate": 0.1667,
+      "net_expr": -0.356,
+      "gross_expr": -0.2817,
+      "delta": -0.40819868431287376,
+      "ci": [
+        -1.5821349898507984,
+        0.03986524343416195
+      ],
+      "p": 0.5151484851514848,
+      "q": 0.6535026497350265,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 5,
+        "top_ticker_share": 0.3333,
+        "uncovered": 176
+      }
+    },
+    {
+      "id": "earnings_proximity=le_5d",
+      "cut": "earnings_proximity",
+      "value": "le_5d",
+      "n": 2,
+      "weeks": 1,
+      "win_rate": 0.5,
+      "net_expr": 0.8263,
+      "gross_expr": 0.9,
+      "delta": 0.9406150564859705,
+      "ci": [
+        0.6336407621545479,
+        0.9406150564859705
+      ],
+      "p": 0.00026932399676811203,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 176
+      }
+    },
+    {
+      "id": "opex_week=opex_week",
+      "cut": "opex_week",
+      "value": "opex_week",
+      "n": 88,
+      "weeks": 2,
+      "win_rate": 0.25,
+      "net_expr": -0.1073,
+      "gross_expr": -0.0355,
+      "delta": -0.3710627120617102,
+      "ci": [
+        -0.7012579179422489,
+        -0.16948552215924076
+      ],
+      "p": 0.0002222716159146477,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 38,
+        "top_ticker_share": 0.0795,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "opex_week=other",
+      "cut": "opex_week",
+      "value": "other",
+      "n": 114,
+      "weeks": 6,
+      "win_rate": 0.386,
+      "net_expr": 0.2638,
+      "gross_expr": 0.3424,
+      "delta": 0.3710627120617102,
+      "ci": [
+        0.169485522159241,
+        0.7012579179422506
+      ],
+      "p": 0.0002222716159146477,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 45,
+        "top_ticker_share": 0.0877,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "fomc_proximity=fomc_in_hold",
+      "cut": "fomc_proximity",
+      "value": "fomc_in_hold",
+      "n": 5,
+      "weeks": 1,
+      "win_rate": 0.4,
+      "net_expr": 0.8718,
+      "gross_expr": 0.928,
+      "delta": 0.789227016647662,
+      "ci": [
+        0.5646339205730357,
+        0.9684912401396382
+      ],
+      "p": 0.0003045066991473812,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 5,
+        "top_ticker_share": 0.2,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "fomc_proximity=no_fomc",
+      "cut": "fomc_proximity",
+      "value": "no_fomc",
+      "n": 197,
+      "weeks": 8,
+      "win_rate": 0.3249,
+      "net_expr": 0.0826,
+      "gross_expr": 0.1588,
+      "delta": -0.789227016647662,
+      "ci": [
+        -0.9684912401396385,
+        -0.5646339205730365
+      ],
+      "p": 0.0003045066991473812,
+      "q": 0.0006285141585554367,
+      "thin": false,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 54,
+        "top_ticker_share": 0.0711,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "atr_pct_bucket=1.5_3",
+      "cut": "atr_pct_bucket",
+      "value": "1.5_3",
+      "n": 15,
+      "weeks": 6,
+      "win_rate": 0.2,
+      "net_expr": 0.2056,
+      "gross_expr": 0.2875,
+      "delta": 0.1688647536686842,
+      "ci": [
+        -0.5168058037654534,
+        1.4970899528174675
+      ],
+      "p": 0.7193280671932807,
+      "q": 0.810613354908164,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 11,
+        "top_ticker_share": 0.2,
+        "uncovered": 35
+      }
+    },
+    {
+      "id": "atr_pct_bucket=3_5",
+      "cut": "atr_pct_bucket",
+      "value": "3_5",
+      "n": 53,
+      "weeks": 5,
+      "win_rate": 0.3396,
+      "net_expr": -0.029,
+      "gross_expr": 0.0536,
+      "delta": -0.1185034960778022,
+      "ci": [
+        -0.39734226787801236,
+        1.212989221137614
+      ],
+      "p": 0.7155284471552845,
+      "q": 0.8104454860636385,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 27,
+        "top_ticker_share": 0.0755,
+        "uncovered": 35
+      }
+    },
+    {
+      "id": "atr_pct_bucket=ge_5",
+      "cut": "atr_pct_bucket",
+      "value": "ge_5",
+      "n": 99,
+      "weeks": 6,
+      "win_rate": 0.3232,
+      "net_expr": 0.0719,
+      "gross_expr": 0.147,
+      "delta": 0.04916614452428416,
+      "ci": [
+        -1.251338461902952,
+        0.5173941675937488
+      ],
+      "p": 0.9121087891210878,
+      "q": 0.9331251206676567,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 20,
+        "top_ticker_share": 0.1212,
+        "uncovered": 35
+      }
+    },
+    {
+      "id": "session_bucket=close",
+      "cut": "session_bucket",
+      "value": "close",
+      "n": 12,
+      "weeks": 5,
+      "win_rate": 0.4167,
+      "net_expr": 0.3191,
+      "gross_expr": 0.4015,
+      "delta": 0.2954750544866499,
+      "ci": [
+        -0.2544066779930157,
+        1.5180347586046061
+      ],
+      "p": 0.29117088291170884,
+      "q": 0.403999600039996,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 10,
+        "top_ticker_share": 0.1667,
+        "uncovered": 33
+      }
+    },
+    {
+      "id": "session_bucket=midday",
+      "cut": "session_bucket",
+      "value": "midday",
+      "n": 76,
+      "weeks": 6,
+      "win_rate": 0.3289,
+      "net_expr": 0.1109,
+      "gross_expr": 0.1938,
+      "delta": 0.12048956604114666,
+      "ci": [
+        -0.5856499348353418,
+        0.4037402551512653
+      ],
+      "p": 0.5927407259274072,
+      "q": 0.7051276619781958,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 45,
+        "top_ticker_share": 0.0921,
+        "uncovered": 33
+      }
+    },
+    {
+      "id": "session_bucket=open",
+      "cut": "session_bucket",
+      "value": "open",
+      "n": 81,
+      "weeks": 6,
+      "win_rate": 0.284,
+      "net_expr": -0.0583,
+      "gross_expr": 0.0143,
+      "delta": -0.19757228611555455,
+      "ci": [
+        -0.4813450509431899,
+        0.308314397630201
+      ],
+      "p": 0.3093690630936906,
+      "q": 0.4265834286136604,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 36,
+        "top_ticker_share": 0.0988,
+        "uncovered": 33
+      }
+    },
+    {
+      "id": "alert_hour=20",
+      "cut": "alert_hour",
+      "value": "20",
+      "n": 202,
+      "weeks": 8,
+      "win_rate": 0.3267,
+      "net_expr": 0.1021,
+      "gross_expr": 0.1778,
+      "delta": null,
+      "ci": null,
+      "p": null,
+      "q": null,
+      "thin": false,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 54,
+        "top_ticker_share": 0.0693,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "open_gap_bucket=adverse_large",
+      "cut": "open_gap_bucket",
+      "value": "adverse_large",
+      "n": 80,
+      "weeks": 8,
+      "win_rate": 0.4125,
+      "net_expr": 0.3394,
+      "gross_expr": 0.416,
+      "delta": 0.3321473564268522,
+      "ci": [
+        -0.04240519583661834,
+        0.8664234209098494
+      ],
+      "p": 0.08099190080991901,
+      "q": 0.1257356781804337,
+      "thin": false,
+      "bar_covered_n": 80,
+      "extra": {
+        "tickers": 37,
+        "top_ticker_share": 0.075,
+        "uncovered": 11
+      }
+    },
+    {
+      "id": "open_gap_bucket=adverse_small",
+      "cut": "open_gap_bucket",
+      "value": "adverse_small",
+      "n": 20,
+      "weeks": 7,
+      "win_rate": 0.4,
+      "net_expr": 0.6939,
+      "gross_expr": 0.7685,
+      "delta": 0.6115443505695181,
+      "ci": [
+        -0.35260371203807284,
+        1.989744743822451
+      ],
+      "p": 0.17078292170782922,
+      "q": 0.25275872412758726,
+      "thin": true,
+      "bar_covered_n": 20,
+      "extra": {
+        "tickers": 16,
+        "top_ticker_share": 0.15,
+        "uncovered": 11
+      }
+    },
+    {
+      "id": "open_gap_bucket=favourable",
+      "cut": "open_gap_bucket",
+      "value": "favourable",
+      "n": 75,
+      "weeks": 8,
+      "win_rate": 0.2267,
+      "net_expr": -0.281,
+      "gross_expr": -0.2057,
+      "delta": -0.703672730619711,
+      "ci": [
+        -1.214599426555159,
+        -0.38697966794223315
+      ],
+      "p": 0.00019998000199980003,
+      "q": 0.0006285141585554367,
+      "thin": false,
+      "bar_covered_n": 75,
+      "extra": {
+        "tickers": 39,
+        "top_ticker_share": 0.08,
+        "uncovered": 11
+      }
+    },
+    {
+      "id": "open_gap_bucket=flat",
+      "cut": "open_gap_bucket",
+      "value": "flat",
+      "n": 16,
+      "weeks": 7,
+      "win_rate": 0.4375,
+      "net_expr": 0.5001,
+      "gross_expr": 0.5729,
+      "delta": 0.38607234013331654,
+      "ci": [
+        -0.371573345852798,
+        1.2587475125190122
+      ],
+      "p": 0.28817118288171184,
+      "q": 0.4023522176084278,
+      "thin": true,
+      "bar_covered_n": 16,
+      "extra": {
+        "tickers": 14,
+        "top_ticker_share": 0.125,
+        "uncovered": 11
+      }
+    },
+    {
+      "id": "dollar_volume_bucket=ge_200m",
+      "cut": "dollar_volume_bucket",
+      "value": "ge_200m",
+      "n": 195,
+      "weeks": 8,
+      "win_rate": 0.3333,
+      "net_expr": 0.1252,
+      "gross_expr": 0.2006,
+      "delta": null,
+      "ci": null,
+      "p": null,
+      "q": null,
+      "thin": false,
+      "bar_covered_n": 195,
+      "extra": {
+        "tickers": 51,
+        "top_ticker_share": 0.0718,
+        "uncovered": 7
+      }
+    },
+    {
+      "id": "near_stop_reversal=reversed_to_target",
+      "cut": "near_stop_reversal",
+      "value": "reversed_to_target",
+      "n": 22,
+      "weeks": 5,
+      "win_rate": 0.0,
+      "net_expr": -1.0761,
+      "gross_expr": -1.0,
+      "delta": 0.06694223873360894,
+      "ci": [
+        -0.0016853963583269849,
+        0.3431867777748998
+      ],
+      "p": 0.5665433456654334,
+      "q": 0.6984532171614576,
+      "thin": true,
+      "bar_covered_n": 22,
+      "extra": {
+        "tickers": 19,
+        "top_ticker_share": 0.1364,
+        "uncovered": 131,
+        "mean_stop_atr": 0.3389,
+        "dollar_loss_at_2pct": 215.22,
+        "mean_overshoot_r": null
+      }
+    },
+    {
+      "id": "near_stop_reversal=wider_stop_lost",
+      "cut": "near_stop_reversal",
+      "value": "wider_stop_lost",
+      "n": 49,
+      "weeks": 5,
+      "win_rate": 0.0,
+      "net_expr": -1.1431,
+      "gross_expr": -1.0682,
+      "delta": -0.06694223873360894,
+      "ci": [
+        -0.3431867777748998,
+        0.0016853963583269849
+      ],
+      "p": 0.5665433456654334,
+      "q": 0.6984532171614576,
+      "thin": true,
+      "bar_covered_n": 49,
+      "extra": {
+        "tickers": 29,
+        "top_ticker_share": 0.102,
+        "uncovered": 131,
+        "mean_stop_atr": 0.3708,
+        "dollar_loss_at_2pct": 228.62,
+        "mean_overshoot_r": 1.1133
+      }
+    },
+    {
+      "id": "exit_reason=other",
+      "cut": "exit_reason",
+      "value": "other",
+      "n": 23,
+      "weeks": 4,
+      "win_rate": 0.6957,
+      "net_expr": 1.0571,
+      "gross_expr": 1.1498,
+      "delta": 1.07774325913925,
+      "ci": [
+        0.08695047297783341,
+        2.8584305704501642
+      ],
+      "p": 0.01366284910588708,
+      "q": 0.02297842804171918,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 21,
+        "top_ticker_share": 0.087,
+        "uncovered": 0,
+        "mean_stop_atr": 0.31,
+        "dollar_loss_at_2pct": 92.0,
+        "mean_overshoot_r": null
+      }
+    },
+    {
+      "id": "exit_reason=runner_be",
+      "cut": "exit_reason",
+      "value": "runner_be",
+      "n": 28,
+      "weeks": 8,
+      "win_rate": 1.0,
+      "net_expr": 1.6359,
+      "gross_expr": 1.7104,
+      "delta": 1.7806433987846526,
+      "ci": [
+        1.3337969450577085,
+        2.2500404063737744
+      ],
+      "p": 0.00019998000199980003,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 20,
+        "top_ticker_share": 0.1071,
+        "uncovered": 0,
+        "mean_stop_atr": 0.3681,
+        "dollar_loss_at_2pct": null,
+        "mean_overshoot_r": null
+      }
+    },
+    {
+      "id": "exit_reason=runner_tp2",
+      "cut": "exit_reason",
+      "value": "runner_tp2",
+      "n": 22,
+      "weeks": 5,
+      "win_rate": 1.0,
+      "net_expr": 2.7682,
+      "gross_expr": 2.8414,
+      "delta": 2.9919204340556775,
+      "ci": [
+        2.624695067025358,
+        3.2039809257489797
+      ],
+      "p": 0.0002,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 16,
+        "top_ticker_share": 0.1364,
+        "uncovered": 0,
+        "mean_stop_atr": 0.3559,
+        "dollar_loss_at_2pct": null,
+        "mean_overshoot_r": null
+      }
+    },
+    {
+      "id": "exit_reason=scratch",
+      "cut": "exit_reason",
+      "value": "scratch",
+      "n": 35,
+      "weeks": 7,
+      "win_rate": 0.0,
+      "net_expr": -0.084,
+      "gross_expr": -0.0123,
+      "delta": -0.22507670327420473,
+      "ci": [
+        -0.5905069788008195,
+        -0.03887320200449164
+      ],
+      "p": 0.006999300069993001,
+      "q": 0.012632883053158099,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 28,
+        "top_ticker_share": 0.0857,
+        "uncovered": 0,
+        "mean_stop_atr": 0.4238,
+        "dollar_loss_at_2pct": 16.8,
+        "mean_overshoot_r": null
+      }
+    },
+    {
+      "id": "exit_reason=stop",
+      "cut": "exit_reason",
+      "value": "stop",
+      "n": 94,
+      "weeks": 8,
+      "win_rate": 0.0,
+      "net_expr": -1.1431,
+      "gross_expr": -1.0691,
+      "delta": -2.3290775438315485,
+      "ci": [
+        -2.7820142511194694,
+        -2.0532439499082455
+      ],
+      "p": 0.00019998000199980003,
+      "q": 0.0006285141585554367,
+      "thin": false,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 43,
+        "top_ticker_share": 0.0851,
+        "uncovered": 0,
+        "mean_stop_atr": 0.3739,
+        "dollar_loss_at_2pct": 228.62,
+        "mean_overshoot_r": 0.9286
+      }
+    },
+    {
+      "id": "near_tp_close=other_exit",
+      "cut": "near_tp_close",
+      "value": "other_exit",
+      "n": 202,
+      "weeks": 8,
+      "win_rate": 0.3267,
+      "net_expr": 0.1021,
+      "gross_expr": 0.1778,
+      "delta": null,
+      "ci": null,
+      "p": null,
+      "q": null,
+      "thin": false,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 54,
+        "top_ticker_share": 0.0693,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "gap_through_stop=at_stop",
+      "cut": "gap_through_stop",
+      "value": "at_stop",
+      "n": 87,
+      "weeks": 7,
+      "win_rate": 0.0,
+      "net_expr": -1.0746,
+      "gross_expr": -1.0,
+      "delta": 0.9207430550511335,
+      "ci": [
+        0.0676353471448432,
+        1.5797540886224677
+      ],
+      "p": 0.00020062192797672785,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 39,
+        "top_ticker_share": 0.0805,
+        "uncovered": 108,
+        "mean_stop_atr": 0.376,
+        "dollar_loss_at_2pct": 214.92,
+        "mean_overshoot_r": null
+      }
+    },
+    {
+      "id": "gap_through_stop=through_stop",
+      "cut": "gap_through_stop",
+      "value": "through_stop",
+      "n": 7,
+      "weeks": 4,
+      "win_rate": 0.0,
+      "net_expr": -1.9953,
+      "gross_expr": -1.9286,
+      "delta": -0.9207430550511335,
+      "ci": [
+        -1.5797540886224681,
+        -0.0676353471448432
+      ],
+      "p": 0.00020062192797672785,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 7,
+        "top_ticker_share": 0.1429,
+        "uncovered": 108,
+        "mean_stop_atr": 0.3186,
+        "dollar_loss_at_2pct": 399.06,
+        "mean_overshoot_r": 0.9286
+      }
+    },
+    {
+      "id": "holding_bucket=2m|3_5d",
+      "cut": "holding_bucket",
+      "value": "2m|3_5d",
+      "n": 4,
+      "weeks": 3,
+      "win_rate": 0.5,
+      "net_expr": 1.3051,
+      "gross_expr": 1.3742,
+      "delta": 1.2272930867848009,
+      "ci": [
+        -0.2017086754948268,
+        1.939000300401393
+      ],
+      "p": 0.15488629379225569,
+      "q": 0.23232944068838352,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 4,
+        "top_ticker_share": 0.25,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=2m|le_2d",
+      "cut": "holding_bucket",
+      "value": "2m|le_2d",
+      "n": 32,
+      "weeks": 6,
+      "win_rate": 0.3125,
+      "net_expr": -0.0887,
+      "gross_expr": -0.0113,
+      "delta": -0.22677383005292204,
+      "ci": [
+        -0.8959282596262097,
+        0.2902080981757391
+      ],
+      "p": 0.41475852414758524,
+      "q": 0.5448307240281889,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 17,
+        "top_ticker_share": 0.1875,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=2w|3_5d",
+      "cut": "holding_bucket",
+      "value": "2w|3_5d",
+      "n": 2,
+      "weeks": 1,
+      "win_rate": 0.5,
+      "net_expr": 1.6469,
+      "gross_expr": 1.725,
+      "delta": 1.560182464276325,
+      "ci": [
+        1.4281360862416599,
+        1.7288399944403585
+      ],
+      "p": 0.00030576364470264486,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=2w|le_2d",
+      "cut": "holding_bucket",
+      "value": "2w|le_2d",
+      "n": 24,
+      "weeks": 5,
+      "win_rate": 0.3333,
+      "net_expr": -0.0246,
+      "gross_expr": 0.0597,
+      "delta": -0.1437999211307148,
+      "ci": [
+        -0.8114168913292468,
+        0.43181121574821374
+      ],
+      "p": 0.7708,
+      "q": 0.8376055596331777,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 20,
+        "top_ticker_share": 0.125,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=3m|3_5d",
+      "cut": "holding_bucket",
+      "value": "3m|3_5d",
+      "n": 3,
+      "weeks": 2,
+      "win_rate": 0.3333,
+      "net_expr": 0.718,
+      "gross_expr": 0.7933,
+      "delta": 0.6251460311051837,
+      "ci": [
+        -1.2951951230095595,
+        1.5861277328154197
+      ],
+      "p": 0.5726057906458797,
+      "q": 0.6984532171614576,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 3,
+        "top_ticker_share": 0.3333,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=3m|le_2d",
+      "cut": "holding_bucket",
+      "value": "3m|le_2d",
+      "n": 24,
+      "weeks": 7,
+      "win_rate": 0.2083,
+      "net_expr": -0.2748,
+      "gross_expr": -0.1997,
+      "delta": -0.4277309969643006,
+      "ci": [
+        -1.1007614012386278,
+        0.042532918974437034
+      ],
+      "p": 0.0775922407759224,
+      "q": 0.12216650675357994,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 17,
+        "top_ticker_share": 0.1667,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=4m|3_5d",
+      "cut": "holding_bucket",
+      "value": "4m|3_5d",
+      "n": 2,
+      "weeks": 1,
+      "win_rate": 0.5,
+      "net_expr": 0.777,
+      "gross_expr": 0.84,
+      "delta": 0.6816672452566725,
+      "ci": [
+        0.36890817321174685,
+        0.7987250761599516
+      ],
+      "p": 0.00030455306837216383,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=4m|6_10d",
+      "cut": "holding_bucket",
+      "value": "4m|6_10d",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 2.6337,
+      "gross_expr": 2.69,
+      "delta": 2.544188195138683,
+      "ci": [
+        2.3236497641151,
+        2.7085988052297334
+      ],
+      "p": 0.0003045066991473812,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=4m|le_2d",
+      "cut": "holding_bucket",
+      "value": "4m|le_2d",
+      "n": 16,
+      "weeks": 6,
+      "win_rate": 0.1875,
+      "net_expr": -0.4032,
+      "gross_expr": -0.3306,
+      "delta": -0.5487663813806488,
+      "ci": [
+        -1.0078383110025804,
+        0.31907397185193226
+      ],
+      "p": 0.1471852814718528,
+      "q": 0.22380227730651592,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 14,
+        "top_ticker_share": 0.125,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=4w|3_5d",
+      "cut": "holding_bucket",
+      "value": "4w|3_5d",
+      "n": 5,
+      "weeks": 3,
+      "win_rate": 0.8,
+      "net_expr": 1.8495,
+      "gross_expr": 1.922,
+      "delta": 1.791711927877128,
+      "ci": [
+        0.7238938586799097,
+        4.0404645773723935
+      ],
+      "p": 0.00020468734008801556,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 4,
+        "top_ticker_share": 0.4,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=4w|6_10d",
+      "cut": "holding_bucket",
+      "value": "4w|6_10d",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 2.4123,
+      "gross_expr": 2.49,
+      "delta": 2.3216797888374745,
+      "ci": [
+        2.042582337845075,
+        2.428842498015491
+      ],
+      "p": 0.0003023431594860166,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=4w|le_2d",
+      "cut": "holding_bucket",
+      "value": "4w|le_2d",
+      "n": 30,
+      "weeks": 7,
+      "win_rate": 0.3667,
+      "net_expr": 0.163,
+      "gross_expr": 0.2427,
+      "delta": 0.0715426345265593,
+      "ci": [
+        -0.63730329904625,
+        0.7452122923526582
+      ],
+      "p": 0.8561143885611439,
+      "q": 0.9093655227778658,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 22,
+        "top_ticker_share": 0.1,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=5m|3_5d",
+      "cut": "holding_bucket",
+      "value": "5m|3_5d",
+      "n": 3,
+      "weeks": 3,
+      "win_rate": 0.3333,
+      "net_expr": 0.4466,
+      "gross_expr": 0.52,
+      "delta": 0.3497064837932803,
+      "ci": [
+        -1.4673293439625925,
+        3.531172638471561
+      ],
+      "p": 0.8720775906074528,
+      "q": 0.9198793989719256,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 3,
+        "top_ticker_share": 0.3333,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=5m|6_10d",
+      "cut": "holding_bucket",
+      "value": "5m|6_10d",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 0.0,
+      "net_expr": -0.0571,
+      "gross_expr": 0.0,
+      "delta": -0.1599781106499505,
+      "ci": [
+        -0.39032359543172807,
+        -0.008335253175885377
+      ],
+      "p": 0.03714981729598051,
+      "q": 0.059332801724515646,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=5m|le_2d",
+      "cut": "holding_bucket",
+      "value": "5m|le_2d",
+      "n": 8,
+      "weeks": 5,
+      "win_rate": 0.25,
+      "net_expr": -0.207,
+      "gross_expr": -0.1338,
+      "delta": -0.32191709266698926,
+      "ci": [
+        -1.1388792749922196,
+        1.451813117247078
+      ],
+      "p": 0.6114279995997198,
+      "q": 0.7144053469007253,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 8,
+        "top_ticker_share": 0.125,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=6m|le_2d",
+      "cut": "holding_bucket",
+      "value": "6m|le_2d",
+      "n": 10,
+      "weeks": 5,
+      "win_rate": 0.5,
+      "net_expr": 0.8901,
+      "gross_expr": 0.964,
+      "delta": 0.8290281486207436,
+      "ci": [
+        -0.7388019070017817,
+        2.4438924229102055
+      ],
+      "p": 0.2468740622186656,
+      "q": 0.3558833883931413,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 10,
+        "top_ticker_share": 0.1,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=7m|3_5d",
+      "cut": "holding_bucket",
+      "value": "7m|3_5d",
+      "n": 1,
+      "weeks": 1,
+      "win_rate": 1.0,
+      "net_expr": 3.3616,
+      "gross_expr": 3.43,
+      "delta": 3.275673074746813,
+      "ci": [
+        3.0021211714426514,
+        3.3915546013302054
+      ],
+      "p": 0.00030455306837216383,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 1,
+        "top_ticker_share": 1.0,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=7m|le_2d",
+      "cut": "holding_bucket",
+      "value": "7m|le_2d",
+      "n": 13,
+      "weeks": 7,
+      "win_rate": 0.2308,
+      "net_expr": -0.4353,
+      "gross_expr": -0.3609,
+      "delta": -0.5743742545510199,
+      "ci": [
+        -1.3094972386988581,
+        -0.11005673034715088
+      ],
+      "p": 0.004399560043995601,
+      "q": 0.008139186081391862,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 10,
+        "top_ticker_share": 0.1538,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=8m|3_5d",
+      "cut": "holding_bucket",
+      "value": "8m|3_5d",
+      "n": 3,
+      "weeks": 3,
+      "win_rate": 0.0,
+      "net_expr": -0.7359,
+      "gross_expr": -0.67,
+      "delta": -0.8506550316698323,
+      "ci": [
+        -1.445138570541948,
+        -0.13227491190035576
+      ],
+      "p": 0.0010231225700838961,
+      "q": 0.001941309491954059,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 3,
+        "top_ticker_share": 0.3333,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=8m|le_2d",
+      "cut": "holding_bucket",
+      "value": "8m|le_2d",
+      "n": 8,
+      "weeks": 5,
+      "win_rate": 0.125,
+      "net_expr": -0.3142,
+      "gross_expr": -0.2425,
+      "delta": -0.4334863065204301,
+      "ci": [
+        -1.1251686882209766,
+        1.0600812594749645
+      ],
+      "p": 0.4192096048024012,
+      "q": 0.5474384250949004,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 8,
+        "top_ticker_share": 0.125,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=9m|3_5d",
+      "cut": "holding_bucket",
+      "value": "9m|3_5d",
+      "n": 2,
+      "weeks": 2,
+      "win_rate": 1.0,
+      "net_expr": 2.0682,
+      "gross_expr": 2.13,
+      "delta": 1.9856938528791452,
+      "ci": [
+        1.5325500673663073,
+        2.428025288379853
+      ],
+      "p": 0.00022207417277370642,
+      "q": 0.0006285141585554367,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 2,
+        "top_ticker_share": 0.5,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=9m|6_10d",
+      "cut": "holding_bucket",
+      "value": "9m|6_10d",
+      "n": 3,
+      "weeks": 2,
+      "win_rate": 0.3333,
+      "net_expr": 0.4417,
+      "gross_expr": 0.5033,
+      "delta": 0.3447459255866714,
+      "ci": [
+        -0.549823838262097,
+        1.7751153775234356
+      ],
+      "p": 0.6786148910277685,
+      "q": 0.7805829316485213,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 3,
+        "top_ticker_share": 0.3333,
+        "uncovered": 0
+      }
+    },
+    {
+      "id": "holding_bucket=9m|le_2d",
+      "cut": "holding_bucket",
+      "value": "9m|le_2d",
+      "n": 6,
+      "weeks": 5,
+      "win_rate": 0.3333,
+      "net_expr": -0.2123,
+      "gross_expr": -0.14,
+      "delta": -0.32400945428769856,
+      "ci": [
+        -1.2945560298396923,
+        0.9515075173008195
+      ],
+      "p": 0.5715714714414324,
+      "q": 0.6984532171614576,
+      "thin": true,
+      "bar_covered_n": null,
+      "extra": {
+        "tickers": 5,
+        "top_ticker_share": 0.3333,
+        "uncovered": 0
+      }
+    }
+  ],
+  "tallies": [
+    {
+      "id": "fill_status=filled",
+      "cut": "fill_status",
+      "value": "filled",
+      "count": 203,
+      "extra": {
+        "bar_covered": 196,
+        "of_plans": 203
+      }
+    },
+    {
+      "id": "fill_status=expired_unfilled",
+      "cut": "fill_status",
+      "value": "expired_unfilled",
+      "count": 0,
+      "extra": {
+        "bar_covered": 0,
+        "of_plans": 203
+      }
+    },
+    {
+      "id": "fill_status=never_touched",
+      "cut": "fill_status",
+      "value": "never_touched",
+      "count": 0,
+      "extra": {
+        "bar_covered": 0,
+        "of_plans": 203
+      }
+    },
+    {
+      "id": "fill_status=risk_cap",
+      "cut": "fill_status",
+      "value": "risk_cap",
+      "count": 0,
+      "extra": {
+        "bar_covered": 0,
+        "of_plans": 203
+      }
+    },
+    {
+      "id": "fill_status=invalidated",
+      "cut": "fill_status",
+      "value": "invalidated",
+      "count": 0,
+      "extra": {
+        "bar_covered": 0,
+        "of_plans": 203
+      }
+    },
+    {
+      "id": "fill_status=open",
+      "cut": "fill_status",
+      "value": "open",
+      "count": 0,
+      "extra": {
+        "bar_covered": 0,
+        "of_plans": 203
+      }
+    },
+    {
+      "id": "fill_status=unknown",
+      "cut": "fill_status",
+      "value": "unknown",
+      "count": 0,
+      "extra": {
+        "bar_covered": 0,
+        "of_plans": 203
+      }
+    },
+    {
+      "id": "alerts_per_day=1",
+      "cut": "alerts_per_day",
+      "value": "1",
+      "count": 6,
+      "extra": {
+        "plans": 6
+      }
+    },
+    {
+      "id": "alerts_per_day=2_3",
+      "cut": "alerts_per_day",
+      "value": "2_3",
+      "count": 6,
+      "extra": {
+        "plans": 15
+      }
+    },
+    {
+      "id": "alerts_per_day=4_6",
+      "cut": "alerts_per_day",
+      "value": "4_6",
+      "count": 7,
+      "extra": {
+        "plans": 32
+      }
+    },
+    {
+      "id": "alerts_per_day=7_plus",
+      "cut": "alerts_per_day",
+      "value": "7_plus",
+      "count": 13,
+      "extra": {
+        "plans": 150
+      }
+    },
+    {
+      "id": "alert_hour_session=premarket",
+      "cut": "alert_hour_session",
+      "value": "premarket",
+      "count": 0,
+      "extra": {}
+    },
+    {
+      "id": "alert_hour_session=regular",
+      "cut": "alert_hour_session",
+      "value": "regular",
+      "count": 0,
+      "extra": {}
+    },
+    {
+      "id": "alert_hour_session=after_close",
+      "cut": "alert_hour_session",
+      "value": "after_close",
+      "count": 203,
+      "extra": {}
+    },
+    {
+      "id": "alert_hour_session=unknown",
+      "cut": "alert_hour_session",
+      "value": "unknown",
+      "count": 0,
+      "extra": {}
+    },
+    {
+      "id": "actionable_before_open=yes",
+      "cut": "actionable_before_open",
+      "value": "yes",
+      "count": 203,
+      "extra": {}
+    },
+    {
+      "id": "actionable_before_open=no",
+      "cut": "actionable_before_open",
+      "value": "no",
+      "count": 0,
+      "extra": {}
+    },
+    {
+      "id": "actionable_before_open=unknown",
+      "cut": "actionable_before_open",
+      "value": "unknown",
+      "count": 0,
+      "extra": {}
+    }
+  ],
+  "giveback": {
+    "n": 200,
+    "mean": 1.8192,
+    "median": 1.4463
+  }
+}

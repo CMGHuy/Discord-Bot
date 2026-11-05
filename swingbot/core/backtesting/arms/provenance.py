@@ -36,15 +36,21 @@ def git_head() -> str:
 
 def build_stamp(*, stage, signal_window, universe, horizons, engines, knob_delta,
                 engine_hash_baseline, engine_hash_component, changed_outcomes,
-                preregistration=None) -> dict:
-    return {"producer": "measure_arms", "producer_version": PRODUCER_VERSION,
-            "stage": stage, "signal_window": list(signal_window), "universe": sorted(universe),
-            "universe_count": len(universe), "horizons": list(horizons), "engines": list(engines),
-            "knob_delta": dict(knob_delta),
-            "engine_hash": {"baseline": engine_hash_baseline, "component": engine_hash_component},
-            "changed_outcomes": int(changed_outcomes), "preregistration": preregistration,
-            "git_head": git_head(),
-            "created_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
+                preregistration=None, baseline_knob_delta=None) -> dict:
+    """The producer stamp. ``baseline_knob_delta`` (v192) is the config delta the BASELINE arm
+    ran under; it is written only when non-empty, so a stamp made without one is key-for-key
+    the pre-v192 stamp."""
+    stamp = {"producer": "measure_arms", "producer_version": PRODUCER_VERSION,
+             "stage": stage, "signal_window": list(signal_window), "universe": sorted(universe),
+             "universe_count": len(universe), "horizons": list(horizons), "engines": list(engines),
+             "knob_delta": dict(knob_delta),
+             "engine_hash": {"baseline": engine_hash_baseline, "component": engine_hash_component},
+             "changed_outcomes": int(changed_outcomes), "preregistration": preregistration,
+             "git_head": git_head(),
+             "created_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
+    if baseline_knob_delta:
+        stamp["baseline_knob_delta"] = dict(baseline_knob_delta)
+    return stamp
 
 
 def check_stamp(blob: dict, *, funnel_stage: str, full_universe) -> str | None:

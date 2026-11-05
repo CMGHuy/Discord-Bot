@@ -27,7 +27,7 @@ Inlined from the `/new-doc` skill and `docs/claude/document-conventions.md` —
 - **A task past 20 KB is split, never compressed:** write it as two tasks, `<id>` and `<id>b`, appended in order, each with real test code, real implementation code and exact paths. Report it as `SPLIT: <id> -> <id>b` and never edit the index — the controller adds the `b` ledger row directly below `<id>`.
 - Plans numbered above v145: the first line under every `### Task` is `**Model:** <haiku|sonnet|opus> — <one-clause reason>`, from the rubric in `docs/claude/model-routing.md` (the higher tier wins).
 - `## Parallelisation`: disjoint files + no contract dependency; name every sequential-edge reason.
-- Per-task verification is the narrow run (`python scripts/dev/testrun.py file <test>`); one full-suite run as the final task.
+- Per-task verification is the narrow run (`python scripts/dev/testrun.py file <test>`); no plan task runs the full suite (the CI pipeline does; Claude watches it after the push).
 - **UI fix waves: one page per task** (its route and tabs, all three widths); an audit that finds issues on several pages produces one task per page (`docs/claude/ui-design.md` § UI tasks).
 - Verify every named symbol exists (`git grep -n`) or mark it created by an earlier task.
 - **Do not commit** — the controller reviews and commits on `main`.

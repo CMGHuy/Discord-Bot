@@ -8,7 +8,7 @@ import {
   untracked,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
 
 import { ApiClient } from '../api/api-client';
@@ -26,32 +26,37 @@ import { Button } from '../ui/button';
 import { DensityService } from '../ui/density.service';
 import { Hint } from '../ui/hint';
 import { Icon } from '../ui/icon';
-import { NavIndicator } from './nav-indicator';
 import { ProfileMenu } from './profile-menu';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteRefreshService } from '../routing/route-refresh.service';
 import { SessionStore } from '../stores/session.store';
 import { Breadcrumb } from './breadcrumb';
-import { FreshnessChip } from './freshness-chip';
 import { KillswitchChip } from './killswitch-chip';
 import { MoreSheet } from './more-sheet';
 import { CommandPalette, isPaletteShortcut, shortcutLabel } from './palette/command-palette';
 import { PhoneTabBar } from './phone-tab-bar';
 import { RefresherBanner } from './refresher-banner';
-import { ConnectionStatus } from './connection-status';
-import { NAV_GROUPS, navEntryFor } from './nav';
+import { AlarmChip } from './alarm-chip';
+import { NAV_ENTRIES, navEntryFor } from './nav';
 import { SectionTabs } from './section-tabs';
 import { ScanProgressStrip } from './scan-progress';
+import { LiveStore } from '../stores/live.store';
+import { DockState } from './live/dock-state';
+import { LiveDock } from './live/live-dock';
+import { LiveEdgeTab } from './live/live-edge-tab';
+import { LiveSheet } from './live/live-sheet';
+import { LiveStrip } from './live/live-strip';
+import { alarmFor, heatStripText, liveWarnings } from './live/live-state';
 import { Tape } from './tape/tape';
 import { ToastHost } from './toast-host';
 
 /**
- * Icon rail, top bar, connection status, toast host, outlet -- v195 Phase 3.
+ * Labelled rail, top bar, connection status, toast host, outlet -- v195 Phase 3.
  *
  * Rendered by App instead of the login form -- it is not itself routed, so
  * there is no state in which the shell exists without a session.
  *
- * **One rail state.** The rail is always 48px and always icons: there is no
+ * **One rail state.** The rail is always 80px, each entry an icon over its label (v202 §3): there is no
  * expanded sidebar, no overlay and no stored collapse choice. The server's
  * pre-v195 sidebar preference is left in place (an older image reads it
  * again on rollback) and is never read or written here.
@@ -72,9 +77,10 @@ const ZOOM_DEFAULT = 100;
 @Component({
   selector: 'sb-shell',
   imports: [
-    RouterOutlet, RouterLink, RouterLinkActive, ConnectionStatus, ToastHost,
-    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, FreshnessChip, ProfileMenu, NavIndicator, Tape,
+    RouterOutlet, RouterLink, AlarmChip, ToastHost,
+    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, ProfileMenu, Tape,
     Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
+    LiveDock, LiveEdgeTab, LiveStrip, LiveSheet,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
@@ -93,30 +99,11 @@ export class Shell {
   private readonly marketIndex = inject(MarketIndexStore);
   protected readonly clock = inject(CLOCK);
 
-  /** `Thu, Sep 11, 2026 16:58` -- one string, so the bar cannot render a date
-   *  and a time from two different reads of the clock. Locale pinned to
-   *  `en-US` rather than left to the host's default -- the same build
-   *  otherwise renders "11 Sept 2026" on a machine set to en-GB, and a
-   *  monitoring surface should not reformat itself by viewer. 24-hour and
-   *  zero-padded via hourCycle: 4:58 next to a 16:58 market close reads as
-   *  an error. */
-  protected readonly now = computed(() => {
-    const at = new Date(this.clock());
-    const date = at.toLocaleDateString('en-US', {
-      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
-    });
-    const time = at.toLocaleTimeString('en-US', {
-      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-    });
-    return `${date} ${time}`;
-  });
-
-  /**
-   * The four rail groups (v195 §5.1), from the one nav model the phone bar,
-   * the More sheet, the palette and the breadcrumb also read. The /ui
-   * gallery is deliberately absent: a developer surface, reachable by URL.
-   */
-  protected readonly navGroups = NAV_GROUPS;
+  /** The rail's five work destinations and its foot (System), from the one
+   *  nav model the phone bar, More sheet, palette and breadcrumb read
+   *  (v202 §1). The /ui gallery is not on it: a developer surface. */
+  protected readonly railWork = NAV_ENTRIES.filter((entry) => !entry.foot);
+  protected readonly railFoot = NAV_ENTRIES.filter((entry) => entry.foot);
 
   private readonly router = inject(Router);
   private readonly url = toSignal(
@@ -130,6 +117,9 @@ export class Shell {
   /** The destination and section the current URL belongs to (v202 §1):
    *  the section tabs read it, and the rail (V203-1) lights its entry. */
   protected readonly navHere = computed(() => navEntryFor(this.url()));
+
+  /** The destination the rail lights: one entry, or none off the nav model. */
+  protected readonly activePath = computed(() => this.navHere()?.entry.path ?? null);
 
   /** The rail foot's version hint: the words the old footer block showed,
    *  on one line. Empty until the first /health answer; the template
@@ -315,6 +305,37 @@ export class Shell {
   protected readonly killObservation = signal<Killswitch | null>(null);
   protected readonly killswitchOn = computed(() => this.killObservation()?.on ?? null);
   protected readonly killswitchStale = computed(() => this.killObservation()?.availability?.state === 'unavailable');
+
+  /* -- v203: the Live dock (spec v202 §4) ------------------------------ */
+
+  /** Where the dock is and whether it is open, per destination. */
+  protected readonly dock = inject(DockState);
+  /** /live: the dock's, the edge tab's and the strip's only data. */
+  protected readonly live = inject(LiveStore);
+  /** The shell clock as a Date, so every live surface ages on one tick. */
+  protected readonly liveNow = computed(() => new Date(this.clock()));
+  /** Every warning that applies, worded once in live-state.ts. The
+   *  killswitch reading is the chip's own, so the bar and the tab agree. */
+  protected readonly dockWarnings = computed(() => liveWarnings({
+    utilisationPct: this.live.heat()?.utilisation_pct ?? null,
+    lastSuccess: this.connection.botLastSuccess(),
+    now: this.liveNow(),
+    streamState: this.connection.state(),
+    botAlive: this.connection.botAlive(),
+    killswitchOn: this.killswitchOn(),
+  }));
+  protected readonly heatText = computed(() => heatStripText(this.live.heat(), this.connection.currency()));
+  protected readonly awaitingCount = computed(() => this.live.awaiting()?.count ?? null);
+
+  /** The top bar's alarm (spec v202 §3): bot down, stream down or stale data,
+   *  worded once by alarmFor. Null while all is well and before /health
+   *  answers, so a healthy bar carries no alarm. */
+  protected readonly alarm = computed(() => alarmFor({
+    lastSuccess: this.connection.botLastSuccess(),
+    now: this.liveNow(),
+    streamState: this.connection.state(),
+    botAlive: this.connection.botAlive(),
+  }));
 
   constructor() {
     // Read once, here rather than in an app initializer: preferences are

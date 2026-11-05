@@ -15,10 +15,10 @@ reasoning about how long the suite takes. Every number here was measured on
   `test_analytics_perf`) is confirmed by the same narrow run, and recorded as
   such in the plan's results.
 - **A fix that touches other files** widens to `testrun.py changed`, not `full`.
-- **No full suite after merging back to `main`.** The plan's final task ran it
-  once on the branch; the merge adds no code the branch run did not see. A merge
-  that needed conflict resolution is checked with `changed` over the resolved
-  files. Close-out never ends with a full run.
+- **No local full suite for a plan, before or after the merge.** The CI
+  pipeline runs every suite on push to `main`; Claude watches it and fixes
+  failures (`working-conventions.md` § Pipeline watch). A merge that needed
+  conflict resolution is checked with `changed` over the resolved files.
 
 ## Baseline
 

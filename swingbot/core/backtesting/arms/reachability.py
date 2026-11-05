@@ -61,6 +61,15 @@ _HEADROOM = ("v135 headroom veto (edge/gates.py), applied to the built plan in "
              "HEADROOM_SCOPE=<scope> --knob HEADROOM_MIN_R=1.0, then "
              "validate_component.py --stage reachability.")
 
+_V192 = ("v192 next-open market fill (planning/market_next_open.py), reached from "
+         "exit_sim._market_exit for a market plan the builders left PENDING under "
+         "MARKET_ENTRY_NEXT_OPEN; both engines build market plans. GAP_RECLAIM_ATR is "
+         "inert unless MARKET_ENTRY_NEXT_OPEN is on (apply_knobs refuses it alone), so a "
+         "lone perturbation at the default is inert by design. Stage -1: measure_arms.py "
+         "--stage pilot --baseline-knob MARKET_ENTRY_NEXT_OPEN=true --knob "
+         "MARKET_ENTRY_NEXT_OPEN=true --knob GAP_RECLAIM_ATR=<g>, then "
+         "validate_component.py --stage reachability --gap-reclaim.")
+
 REGISTRY: dict[str, Reach] = {
     "MIN_REWARD_PCT": Reach(REACHABLE, "Scenario admission gate in replay_scenarios.", C, True),
     "MIN_STOP_DISTANCE_PCT": Reach(REACHABLE, "Scenario admission gate in replay_scenarios.", C, True),
@@ -83,6 +92,8 @@ REGISTRY: dict[str, Reach] = {
     "PULLBACK_DRYUP_MAX_RATIO": Reach(REACHABLE, _DRYUP, CS),
     "HEADROOM_SCOPE": Reach(REACHABLE, _HEADROOM, CS),
     "HEADROOM_MIN_R": Reach(REACHABLE, _HEADROOM, CS),
+    "MARKET_ENTRY_NEXT_OPEN": Reach(REACHABLE, _V192, CS),
+    "GAP_RECLAIM_ATR": Reach(REACHABLE, _V192, CS),
     "SHORT_UNIVERSE_RESEARCH_MODE": Reach(REACHABLE, (
         "v118: the short_universe population engine replays the base scan and the extra "
         "lane per decision date through the live selector (build_extra_candidates), "

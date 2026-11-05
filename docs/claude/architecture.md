@@ -150,6 +150,15 @@ Every Alpaca and yfinance request in `swingbot/` (bot, spawned `_run_bounded` wo
   off/shadow/on, `SCALE_OUT_ENABLED`, `INTRADAY_MANAGER_V2`) are documented in
   the README; `shadow` mode logs to `data/shadow_plans.jsonl` via
   `backtesting/shadow_log.py`.
+- **Market-on-open path (v192, off by default).** With
+  `MARKET_ENTRY_NEXT_OPEN` on, the builders build market plans PENDING
+  (`gap_reclaim.stamp_next_open`); `planning/gap_reclaim.py` is the one pure
+  rule (tick, `a_t`, `X`, `decide_at_open`) shared by the replay
+  (`planning/market_next_open.py`, dispatched from `exit_sim._market_exit`)
+  and the live step (`planning/market_open.py` session timing,
+  `PlanManager._step_market_open`). `GAP_RECLAIM_ATR` adds the reclaim
+  veto. Traps and coupling: `known-traps.md` § Market-on-open and the
+  gap-reclaim veto (v192).
 - **Opex-day caution (v44):** `swingbot/core/market/opex.py` holds both the
   US options-expiration calendar (`opex_tier` -> `"monthly"`/`"weekly"`/None,
   stdlib only) and the policy built on it — effective confidence/confluence

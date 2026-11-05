@@ -1,0 +1,1916 @@
+{
+ "exits": [
+  {
+   "name": "mkt_strategy_bull_so",
+   "signal": 20,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_tp2",
+    "entry_index": 20,
+    "exit_index": 34,
+    "entry_price": 96.0592,
+    "r_total": 2.0,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 99.90156800000001,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 103.743936,
+      "r": 2.667,
+      "reason": "runner_tp2"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_single",
+   "signal": 20,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": null,
+    "entry_index": 20,
+    "exit_index": 30,
+    "entry_price": 96.0592,
+    "r_total": 1.333,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 99.90156800000001,
+      "r": 1.333,
+      "reason": "tp1"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bear_so",
+   "signal": 20,
+   "result": {
+    "outcome": "scratch",
+    "runner_outcome": null,
+    "entry_index": 20,
+    "exit_index": 26,
+    "entry_price": 96.0592,
+    "r_total": 0.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 96.0592,
+      "r": 0.0,
+      "reason": "breakeven_stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_confluence_bull_so",
+   "signal": 20,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_tp2",
+    "entry_index": 20,
+    "exit_index": 34,
+    "entry_price": 96.0592,
+    "r_total": 2.0,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 99.90156800000001,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 103.743936,
+      "r": 2.667,
+      "reason": "runner_tp2"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_confluence_bear_so",
+   "signal": 20,
+   "result": {
+    "outcome": "scratch",
+    "runner_outcome": null,
+    "entry_index": 20,
+    "exit_index": 26,
+    "entry_price": 96.0592,
+    "r_total": 0.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 96.0592,
+      "r": 0.0,
+      "reason": "breakeven_stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_hold_cap_bull",
+   "signal": 20,
+   "result": {
+    "outcome": "timeout",
+    "runner_outcome": null,
+    "entry_index": 20,
+    "exit_index": 25,
+    "entry_price": 96.0592,
+    "r_total": -0.369,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 94.9965,
+      "r": -0.369,
+      "reason": "timeout"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "stop_entry_bull",
+   "signal": 20,
+   "result": {
+    "outcome": "not_triggered",
+    "runner_outcome": null,
+    "entry_index": null,
+    "exit_index": null,
+    "entry_price": null,
+    "r_total": 0.0,
+    "legs": [],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "limit_bull",
+   "signal": 20,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": null,
+    "entry_index": 21,
+    "exit_index": 30,
+    "entry_price": 95.098608,
+    "r_total": 1.333,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 98.940976,
+      "r": 1.333,
+      "reason": "tp1"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "turtle_soup",
+   "signal": 20,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 21,
+    "exit_index": 23,
+    "entry_price": 95.6953,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 94.13801600000001,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_so",
+   "signal": 35,
+   "result": {
+    "outcome": "scratch",
+    "runner_outcome": null,
+    "entry_index": 35,
+    "exit_index": 43,
+    "entry_price": 104.9919,
+    "r_total": 0.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 104.9919,
+      "r": 0.0,
+      "reason": "breakeven_stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_single",
+   "signal": 35,
+   "result": {
+    "outcome": "scratch",
+    "runner_outcome": null,
+    "entry_index": 35,
+    "exit_index": 43,
+    "entry_price": 104.9919,
+    "r_total": 0.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 104.9919,
+      "r": 0.0,
+      "reason": "breakeven_stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bear_so",
+   "signal": 35,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 35,
+    "exit_index": 41,
+    "entry_price": 104.9919,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 108.14165700000001,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_confluence_bull_so",
+   "signal": 35,
+   "result": {
+    "outcome": "scratch",
+    "runner_outcome": null,
+    "entry_index": 35,
+    "exit_index": 43,
+    "entry_price": 104.9919,
+    "r_total": 0.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 104.9919,
+      "r": 0.0,
+      "reason": "breakeven_stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_confluence_bear_so",
+   "signal": 35,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 35,
+    "exit_index": 41,
+    "entry_price": 104.9919,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 108.14165700000001,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_hold_cap_bull",
+   "signal": 35,
+   "result": {
+    "outcome": "timeout",
+    "runner_outcome": null,
+    "entry_index": 35,
+    "exit_index": 40,
+    "entry_price": 104.9919,
+    "r_total": 0.681,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 107.1361,
+      "r": 0.681,
+      "reason": "timeout"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "stop_entry_bull",
+   "signal": 35,
+   "result": {
+    "outcome": "scratch",
+    "runner_outcome": null,
+    "entry_index": 36,
+    "exit_index": 42,
+    "entry_price": 106.041819,
+    "r_total": 0.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 106.041819,
+      "r": 0.0,
+      "reason": "breakeven_stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "limit_bull",
+   "signal": 35,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": null,
+    "entry_index": 36,
+    "exit_index": 41,
+    "entry_price": 103.941981,
+    "r_total": 1.333,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 108.14165700000001,
+      "r": 1.333,
+      "reason": "tp1"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "turtle_soup",
+   "signal": 35,
+   "result": {
+    "outcome": "timeout",
+    "runner_outcome": null,
+    "entry_index": 36,
+    "exit_index": 45,
+    "entry_price": 104.5927,
+    "r_total": -0.453,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 103.8227,
+      "r": -0.453,
+      "reason": "time_exit",
+      "price_basis": "daily_close_proxy"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_so",
+   "signal": 50,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 50,
+    "exit_index": 53,
+    "entry_price": 98.2359,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 95.288823,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_single",
+   "signal": 50,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 50,
+    "exit_index": 53,
+    "entry_price": 98.2359,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 95.288823,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bear_so",
+   "signal": 50,
+   "result": {
+    "outcome": "scratch",
+    "runner_outcome": null,
+    "entry_index": 50,
+    "exit_index": 59,
+    "entry_price": 98.2359,
+    "r_total": 0.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 98.2359,
+      "r": 0.0,
+      "reason": "breakeven_stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_confluence_bull_so",
+   "signal": 50,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 50,
+    "exit_index": 53,
+    "entry_price": 98.2359,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 95.288823,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_confluence_bear_so",
+   "signal": 50,
+   "result": {
+    "outcome": "scratch",
+    "runner_outcome": null,
+    "entry_index": 50,
+    "exit_index": 59,
+    "entry_price": 98.2359,
+    "r_total": 0.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 98.2359,
+      "r": 0.0,
+      "reason": "breakeven_stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_hold_cap_bull",
+   "signal": 50,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 50,
+    "exit_index": 53,
+    "entry_price": 98.2359,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 95.288823,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "stop_entry_bull",
+   "signal": 50,
+   "result": {
+    "outcome": "not_triggered",
+    "runner_outcome": null,
+    "entry_index": null,
+    "exit_index": null,
+    "entry_price": null,
+    "r_total": 0.0,
+    "legs": [],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "limit_bull",
+   "signal": 50,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": null,
+    "entry_index": 51,
+    "exit_index": 62,
+    "entry_price": 97.253541,
+    "r_total": 1.333,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 101.18297700000001,
+      "r": 1.333,
+      "reason": "tp1"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "turtle_soup",
+   "signal": 50,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 51,
+    "exit_index": 52,
+    "entry_price": 97.8545,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 96.271182,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_so",
+   "signal": 65,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 65,
+    "exit_index": 72,
+    "entry_price": 104.471,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 108.64984000000001,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 107.25689333333334,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_single",
+   "signal": 65,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": null,
+    "entry_index": 65,
+    "exit_index": 70,
+    "entry_price": 104.471,
+    "r_total": 1.333,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 108.64984000000001,
+      "r": 1.333,
+      "reason": "tp1"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bear_so",
+   "signal": 65,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 65,
+    "exit_index": 68,
+    "entry_price": 104.471,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 107.60513,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_confluence_bull_so",
+   "signal": 65,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 65,
+    "exit_index": 72,
+    "entry_price": 104.471,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 108.64984000000001,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 107.25689333333334,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "mkt_confluence_bear_so",
+   "signal": 65,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 65,
+    "exit_index": 68,
+    "entry_price": 104.471,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 107.60513,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_hold_cap_bull",
+   "signal": 65,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_timeout",
+    "entry_index": 65,
+    "exit_index": 70,
+    "entry_price": 104.471,
+    "r_total": 1.237,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 108.64984000000001,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 108.0436,
+      "r": 1.14,
+      "reason": "runner_timeout"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "stop_entry_bull",
+   "signal": 65,
+   "result": {
+    "outcome": "scratch",
+    "runner_outcome": null,
+    "entry_index": 66,
+    "exit_index": 75,
+    "entry_price": 105.51571,
+    "r_total": 0.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 105.51571,
+      "r": 0.0,
+      "reason": "breakeven_stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "limit_bull",
+   "signal": 65,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": null,
+    "entry_index": 66,
+    "exit_index": 68,
+    "entry_price": 103.42629000000001,
+    "r_total": 1.333,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 107.60513,
+      "r": 1.333,
+      "reason": "tp1"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "turtle_soup",
+   "signal": 65,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": null,
+    "entry_index": 66,
+    "exit_index": 70,
+    "entry_price": 104.1583,
+    "r_total": 2.528,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 108.64984000000001,
+      "r": 2.528,
+      "reason": "tp1"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_so",
+   "signal": 80,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 80,
+    "exit_index": 83,
+    "entry_price": 100.6726,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 97.652422,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_single",
+   "signal": 80,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 80,
+    "exit_index": 83,
+    "entry_price": 100.6726,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 97.652422,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bear_so",
+   "signal": 80,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 80,
+    "exit_index": 85,
+    "entry_price": 100.6726,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 96.645696,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 97.98799733333334,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "mkt_confluence_bull_so",
+   "signal": 80,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 80,
+    "exit_index": 83,
+    "entry_price": 100.6726,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 97.652422,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_confluence_bear_so",
+   "signal": 80,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 80,
+    "exit_index": 85,
+    "entry_price": 100.6726,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 96.645696,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 97.98799733333334,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "mkt_hold_cap_bull",
+   "signal": 80,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 80,
+    "exit_index": 83,
+    "entry_price": 100.6726,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 97.652422,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "stop_entry_bull",
+   "signal": 80,
+   "result": {
+    "outcome": "not_triggered",
+    "runner_outcome": null,
+    "entry_index": null,
+    "exit_index": null,
+    "entry_price": null,
+    "r_total": 0.0,
+    "legs": [],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "limit_bull",
+   "signal": 80,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 81,
+    "exit_index": 84,
+    "entry_price": 99.665874,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 96.645696,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "turtle_soup",
+   "signal": 80,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 81,
+    "exit_index": 82,
+    "entry_price": 100.4703,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 98.659148,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_so",
+   "signal": 95,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 95,
+    "exit_index": 107,
+    "entry_price": 103.7493,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 107.89927200000001,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 106.51594800000001,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_single",
+   "signal": 95,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": null,
+    "entry_index": 95,
+    "exit_index": 99,
+    "entry_price": 103.7493,
+    "r_total": 1.333,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 107.89927200000001,
+      "r": 1.333,
+      "reason": "tp1"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bear_so",
+   "signal": 95,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 95,
+    "exit_index": 98,
+    "entry_price": 103.7493,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 106.86177900000001,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_confluence_bull_so",
+   "signal": 95,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 95,
+    "exit_index": 107,
+    "entry_price": 103.7493,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 107.89927200000001,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 106.51594800000001,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "mkt_confluence_bear_so",
+   "signal": 95,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 95,
+    "exit_index": 98,
+    "entry_price": 103.7493,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 106.86177900000001,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_hold_cap_bull",
+   "signal": 95,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_timeout",
+    "entry_index": 95,
+    "exit_index": 100,
+    "entry_price": 103.7493,
+    "r_total": 1.426,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 107.89927200000001,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 108.4777,
+      "r": 1.519,
+      "reason": "runner_timeout"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "stop_entry_bull",
+   "signal": 95,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 96,
+    "exit_index": 105,
+    "entry_price": 104.786793,
+    "r_total": 0.834,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 108.93676500000001,
+      "r": 1.0,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 107.553441,
+      "r": 0.667,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "limit_bull",
+   "signal": 95,
+   "result": {
+    "outcome": "not_triggered",
+    "runner_outcome": null,
+    "entry_index": null,
+    "exit_index": null,
+    "entry_price": null,
+    "r_total": 0.0,
+    "legs": [],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "turtle_soup",
+   "signal": 95,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": null,
+    "entry_index": 96,
+    "exit_index": 99,
+    "entry_price": 103.6844,
+    "r_total": 2.097,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 107.89927200000001,
+      "r": 2.097,
+      "reason": "tp1"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_so",
+   "signal": 110,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 110,
+    "exit_index": 113,
+    "entry_price": 103.2469,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 100.14949299999999,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_single",
+   "signal": 110,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 110,
+    "exit_index": 113,
+    "entry_price": 103.2469,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 100.14949299999999,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bear_so",
+   "signal": 110,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 110,
+    "exit_index": 123,
+    "entry_price": 103.2469,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 99.11702399999999,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 100.49364933333332,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "mkt_confluence_bull_so",
+   "signal": 110,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 110,
+    "exit_index": 113,
+    "entry_price": 103.2469,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 100.14949299999999,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_confluence_bear_so",
+   "signal": 110,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 110,
+    "exit_index": 123,
+    "entry_price": 103.2469,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 99.11702399999999,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 100.49364933333332,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "mkt_hold_cap_bull",
+   "signal": 110,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 110,
+    "exit_index": 113,
+    "entry_price": 103.2469,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 100.14949299999999,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "stop_entry_bull",
+   "signal": 110,
+   "result": {
+    "outcome": "not_triggered",
+    "runner_outcome": null,
+    "entry_index": null,
+    "exit_index": null,
+    "entry_price": null,
+    "r_total": 0.0,
+    "legs": [],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "limit_bull",
+   "signal": 110,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 111,
+    "exit_index": 114,
+    "entry_price": 102.21443099999999,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 99.11702399999999,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "turtle_soup",
+   "signal": 110,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 111,
+    "exit_index": 112,
+    "entry_price": 103.3281,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 101.181962,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_so",
+   "signal": 125,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 125,
+    "exit_index": 129,
+    "entry_price": 102.9559,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 107.07413600000001,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 105.70139066666667,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_single",
+   "signal": 125,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": null,
+    "entry_index": 125,
+    "exit_index": 128,
+    "entry_price": 102.9559,
+    "r_total": 1.333,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 107.07413600000001,
+      "r": 1.333,
+      "reason": "tp1"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bear_so",
+   "signal": 125,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 125,
+    "exit_index": 127,
+    "entry_price": 102.9559,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 106.044577,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_confluence_bull_so",
+   "signal": 125,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 125,
+    "exit_index": 129,
+    "entry_price": 102.9559,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 107.07413600000001,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 105.70139066666667,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "mkt_confluence_bear_so",
+   "signal": 125,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 125,
+    "exit_index": 127,
+    "entry_price": 102.9559,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 106.044577,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_hold_cap_bull",
+   "signal": 125,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 125,
+    "exit_index": 129,
+    "entry_price": 102.9559,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 107.07413600000001,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 105.70139066666667,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "stop_entry_bull",
+   "signal": 125,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 126,
+    "exit_index": 139,
+    "entry_price": 103.985459,
+    "r_total": 0.833,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 108.103695,
+      "r": 1.0,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 106.73094966666667,
+      "r": 0.667,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "limit_bull",
+   "signal": 125,
+   "result": {
+    "outcome": "not_triggered",
+    "runner_outcome": null,
+    "entry_index": null,
+    "exit_index": null,
+    "entry_price": null,
+    "r_total": 0.0,
+    "legs": [],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "turtle_soup",
+   "signal": 125,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": null,
+    "entry_index": 126,
+    "exit_index": 128,
+    "entry_price": 103.1723,
+    "r_total": 1.715,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 107.07413600000001,
+      "r": 1.715,
+      "reason": "tp1"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_so",
+   "signal": 140,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 140,
+    "exit_index": 143,
+    "entry_price": 105.8254,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 102.650638,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bull_single",
+   "signal": 140,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 140,
+    "exit_index": 143,
+    "entry_price": 105.8254,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 102.650638,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_strategy_bear_so",
+   "signal": 140,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 140,
+    "exit_index": 144,
+    "entry_price": 105.8254,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 101.592384,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 103.00338933333333,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "mkt_confluence_bull_so",
+   "signal": 140,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 140,
+    "exit_index": 143,
+    "entry_price": 105.8254,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 102.650638,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "mkt_confluence_bear_so",
+   "signal": 140,
+   "result": {
+    "outcome": "win",
+    "runner_outcome": "runner_be",
+    "entry_index": 140,
+    "exit_index": 144,
+    "entry_price": 105.8254,
+    "r_total": 1.111,
+    "legs": [
+     {
+      "fraction": 0.5,
+      "exit_price": 101.592384,
+      "r": 1.333,
+      "reason": "tp1"
+     },
+     {
+      "fraction": 0.5,
+      "exit_price": 103.00338933333333,
+      "r": 0.889,
+      "reason": "runner_be"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": "floor"
+   }
+  },
+  {
+   "name": "mkt_hold_cap_bull",
+   "signal": 140,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 140,
+    "exit_index": 143,
+    "entry_price": 105.8254,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 102.650638,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "stop_entry_bull",
+   "signal": 140,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 141,
+    "exit_index": 143,
+    "entry_price": 106.883654,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 102.650638,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "limit_bull",
+   "signal": 140,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 141,
+    "exit_index": 143,
+    "entry_price": 104.767146,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 101.592384,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  },
+  {
+   "name": "turtle_soup",
+   "signal": 140,
+   "result": {
+    "outcome": "loss",
+    "runner_outcome": null,
+    "entry_index": 141,
+    "exit_index": 142,
+    "entry_price": 106.1482,
+    "r_total": -1.0,
+    "legs": [
+     {
+      "fraction": 1.0,
+      "exit_price": 103.708892,
+      "r": -1.0,
+      "reason": "stop"
+     }
+    ],
+    "cancel_reason": null,
+    "runner_stop_source": null
+   }
+  }
+ ],
+ "arms": [
+  {
+   "ticker": "AAPL",
+   "strategy": "Volume Profile HVN",
+   "horizon_key": "4w",
+   "entry_date": "2024-06-27",
+   "outcome": "win",
+   "r_multiple": 1.132,
+   "planned_rr": 1.7678179223187174,
+   "source": "confluence",
+   "direction": "bullish"
+  },
+  {
+   "ticker": "AAPL",
+   "strategy": "Bollinger lower",
+   "horizon_key": "4w",
+   "entry_date": "2025-04-04",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "planned_rr": 2.5,
+   "source": "confluence",
+   "direction": "bullish"
+  },
+  {
+   "ticker": "AAPL",
+   "strategy": "Trendline (4x touch)",
+   "horizon_key": "4w",
+   "entry_date": "2025-08-13",
+   "outcome": "loss",
+   "r_multiple": -1.0,
+   "planned_rr": 2.4999999999999964,
+   "source": "confluence",
+   "direction": "bullish"
+  },
+  {
+   "ticker": "AAPL",
+   "strategy": "Fibonacci",
+   "horizon_key": "4w",
+   "entry_date": "2025-12-18",
+   "outcome": "timeout",
+   "r_multiple": 0.163,
+   "planned_rr": 1.5685443299819077,
+   "source": "strategy",
+   "direction": "bullish"
+  },
+  {
+   "ticker": "AAPL",
+   "strategy": "RSI Divergence",
+   "horizon_key": "4w",
+   "entry_date": "2025-12-18",
+   "outcome": "timeout",
+   "r_multiple": 0.163,
+   "planned_rr": 1.8428366012023476,
+   "source": "strategy",
+   "direction": "bullish"
+  }
+ ]
+}

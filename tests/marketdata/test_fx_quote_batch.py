@@ -140,3 +140,13 @@ def test_convert_amount_without_fetch_still_resolves_its_one_ticker(codes, clock
     codes.known("AAPL", "USD")
     assert fx_convert.convert_amount(10.0, "AAPL", date(2026, 10, 28), fetch=False) == (5.0, False)
     assert codes.calls == [["AAPL"]]
+
+
+def test_spot_metals_in_the_batch_are_usd_with_no_store_query(codes, clock, flat_rate):
+    """Main's spot-metal rule (6ac7ad6b) holds on the batch path: never 'unknown'."""
+    assert fx.stored_codes(["XAUUSD", " xagusd "]) == {"XAUUSD": "USD", "XAGUSD": "USD"}
+    assert codes.calls == []
+    codes.known("AAPL", "USD")
+    rows = fx_convert.to_account_currency([_row("XAUUSD"), _row("AAPL")], fetch=False)
+    assert codes.calls == [["AAPL"]]
+    assert rows[0]["realized_pnl_amount"] == 5.0   # converted, not left out

@@ -1,52 +1,44 @@
 <div class="shell">
-  <!-- v195 Phase 3: one always-collapsed 48px icon rail. No expanded state,
-       no overlay, no hamburger: each entry is a glyph whose name is its
-       aria-label and whose label is an anchored hint, shown on hover and on
-       keyboard focus (correction 10). -->
+  <!-- v203 (spec v202 §3): an 80px labelled rail. The diamond mark heads it,
+       the five work destinations follow, System sits at the foot. Each entry
+       draws its icon over its label, so it needs no hint, and the active
+       entry's pill is the indicator. "Active" comes from the nav model
+       (navHere), not routerLinkActive, so /plans/7 lights Trades. -->
   <nav class="rail" aria-label="Primary">
-    <!-- v168 §3 #6: one 2px accent bar that slides to the active entry.
-         Absolutely placed (shell.css), so it takes no part in the flex gap. -->
-    <sb-nav-indicator />
-    <div class="mark">
-      <a class="brand sb-hit" routerLink="/dashboard" #brand aria-label="Bomeo Capital — go to the Dashboard">
-        <sb-icon name="brand" title="" />
-      </a>
-      <sb-hint [anchor]="brand" text="Bomeo Capital · Dashboard" />
-    </div>
+    <a class="rail-brand sb-hit" routerLink="/dashboard" #brand aria-label="Bomeo Capital — go to the Dashboard">
+      <sb-icon name="brand" title="" />
+    </a>
+    <sb-hint [anchor]="brand" text="Bomeo Capital · Dashboard" />
 
-    @for (group of navGroups; track group.id; let first = $first) {
-      <!-- Groups are told apart by a thin rule, never by text (spec §1.3);
-           each list still carries its group's name for assistive tech. -->
-      @if (!first) {
-        <div class="rail-divider" aria-hidden="true"></div>
+    <ul class="nav rail-work" aria-label="Destinations">
+      @for (entry of railWork; track entry.path) {
+        <li>
+          <a class="rail-link" [routerLink]="entry.path"
+             [class.active]="entry.path === activePath()"
+             [attr.aria-current]="entry.path === activePath() ? 'page' : null">
+            <span class="rail-pill"><sb-icon [name]="entry.icon" title="" /></span>
+            <span class="rail-label">{{ entry.label }}</span>
+          </a>
+        </li>
       }
-      <ul class="nav" [attr.aria-label]="group.label">
-        @for (entry of group.entries; track entry.path) {
-          <li>
-            <!-- title="" on the icon: its default native tooltip would sit on
-                 top of the label hint. The hint is the link's sibling, never
-                 its child: a button cannot nest in a link, and in anchor mode
-                 the hint renders none. -->
-            <a
-              #link
-              class="rail-link sb-hit"
-              [routerLink]="entry.path"
-              routerLinkActive="active"
-              [routerLinkActiveOptions]="{ exact: false }"
-              [attr.aria-label]="entry.label"
-            >
-              <sb-icon [name]="entry.icon" title="" />
-            </a>
-            <sb-hint [anchor]="link" [text]="entry.label" />
-          </li>
-        }
-      </ul>
-    }
+    </ul>
 
-    <!-- The install's version, as a hint: 48px holds no "ui 1.36.1" line.
-         Nothing renders until the first /health answer -- a version that
-         reads 0.0.0 while it waits looks real. -->
-    <div class="rail-foot">
+    <ul class="nav rail-foot" aria-label="System">
+      @for (entry of railFoot; track entry.path) {
+        <li>
+          <a class="rail-link" [routerLink]="entry.path"
+             [class.active]="entry.path === activePath()"
+             [attr.aria-current]="entry.path === activePath() ? 'page' : null">
+            <span class="rail-pill"><sb-icon [name]="entry.icon" title="" /></span>
+            <span class="rail-label">{{ entry.label }}</span>
+          </a>
+        </li>
+      }
+    </ul>
+
+    <!-- The install's version, as a hint. Nothing renders until the first
+         /health answer: a version that reads 0.0.0 while it waits looks real. -->
+    <div class="rail-version">
       @if (connection.versions()) {
         <sb-hint class="version" glyph="v" label="Version" align="left" [text]="versionText()" />
       }
@@ -55,12 +47,30 @@
 
   <div class="main">
     <header class="topbar">
-      <!-- A labelled list, never a heading: the page's one <h1> belongs to
-           sb-page (correction 9), which route-focus.ts finds inside .workspace. -->
-      <sb-breadcrumb class="topbar-lead" />
-      <!-- v195 §3.1: the command palette's trigger, centred between the
-           breadcrumb and the cluster (both carry an auto left margin, which
-           splits the free space). Phones use the search icon instead. -->
+      <!-- v203 (spec v202 §3, D2): the two-tone BomeoCapital wordmark leads
+           the bar on every device. On a phone the diamond sits before it (the
+           rail that carries it elsewhere is hidden there). A link, never a
+           heading: the page's one <h1> belongs to sb-page (correction 9). -->
+      <a class="brand sb-hit" routerLink="/dashboard" aria-label="Bomeo Capital — go to the Dashboard">
+        @if (isPhone()) {
+          <sb-icon name="brand" title="" />
+        }
+        <span class="word"><span>Bomeo</span><span>Capital</span></span>
+      </a>
+      @if (!isPhone()) {
+        <span class="topbar-divider" aria-hidden="true"></span>
+        <sb-breadcrumb class="topbar-lead" />
+      }
+      <!-- v203 (spec v202 D5): only the killswitch chip stays, plus the alarm
+           chip while the bot is down, the stream is down or data is stale.
+           Freshness, connection and the clock live in the Live dock and the
+           strip. The alarm opens the dock (DockState.reveal). -->
+      <div class="status-cluster">
+        <sb-alarm-chip [alarm]="alarm()" (reveal)="dock.reveal()" />
+        <sb-killswitch-chip [on]="killswitchOn()" [stale]="killswitchStale()" />
+      </div>
+      <!-- v195 §3.1: the command palette's trigger (Ctrl K), after the cluster
+           from v203. A phone uses the search icon instead. -->
       @if (!isPhone()) {
         <button sb-button variant="ghost" type="button" class="palette-trigger"
                 aria-haspopup="dialog" [attr.aria-expanded]="paletteOpen()"
@@ -69,28 +79,7 @@
           <span class="trigger-text">Search or jump…</span>
           <kbd class="shortcut" aria-hidden="true">{{ paletteShortcut }}</kbd>
         </button>
-      }
-      <!-- v195 Phase 3: the right cluster. The killswitch and freshness chips
-           show on every device, phone included: the halt control is on Risk,
-           one tap from the chip, and Scan health has left the Risk page
-           (§5.1). The dot answers only "is the event stream connected" (D30). -->
-      <div class="status-cluster">
-        <sb-killswitch-chip [on]="killswitchOn()" [stale]="killswitchStale()" />
-        <sb-freshness-chip [at]="connection.botLastSuccess() ?? connection.botLastSeen()" [now]="clock()" />
-        <sb-connection-status
-          [state]="connection.state()"
-          [botAlive]="connection.botAlive()"
-          [botHealthy]="connection.botHealthy()"
-          [marketActive]="connection.marketActive()"
-        />
-        <span class="clock">
-          <sb-icon name="clock" />
-          {{ now() }}
-        </span>
-      </div>
-      <!-- Phone only: the bar collapses to the title, the two chips, this
-           search icon and the avatar (the one place to sign out there). -->
-      @if (isPhone()) {
+      } @else {
         <button sb-button variant="icon" type="button" class="search-trigger"
                 aria-label="Search or jump to a page" (click)="onSearchRequested()">
           <sb-icon name="search" />
@@ -117,6 +106,13 @@
       <sb-tape />
     </div>
 
+    <!-- v203 (spec v202 §3, §4): below 1024px the dock never docks. This
+         40px line under the tape carries its state and opens it as a sheet. -->
+    @if (!dock.docked()) {
+      <sb-live-strip [warnings]="dockWarnings()" [heatText]="heatText()" [awaitingCount]="awaitingCount()"
+                     [lastSuccess]="connection.botLastSuccess()" [now]="liveNow()" (opened)="dock.openSheet()" />
+    }
+
     <!-- Engaged killswitch: the chip above is the state on every page; this
          strip is the alarm, full width and never truncated. -->
     @if (killswitchOn() === true) {
@@ -131,17 +127,33 @@
     }
     <sb-refresher-banner />
 
-    <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">
-      <!-- v202 §1: the destination's section tabs, drawn here from the nav
-           model and never by a workspace, above the page's sb-page header. -->
-      <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null">
-        <sb-section-tabs [entry]="navHere()?.entry ?? null" [active]="navHere()?.section ?? null" />
-        <router-outlet />
-      </div>
-      @if (routeLoading.visible()) {
-        <div class="route-loading-overlay" role="status" aria-live="polite"><span class="route-loading-mark" aria-hidden="true"></span><span>{{ routeLoading.label() }}</span></div>
+    <!-- v203 (spec v202 §4): the workspace and, from 1024px, the Live dock
+         beside it -- 320px open, a 40px edge tab collapsed. Below 1024px the
+         dock never docks; the live strip opens it as a sheet. -->
+    <div class="workspace-row" [class.dock-open]="dock.docked() && dock.open()"
+         [class.dock-collapsed]="dock.docked() && !dock.open()">
+      <main class="workspace" [class.route-pending]="routeLoading.visible()" [attr.aria-busy]="routeLoading.visible() ? 'true' : null">
+        <!-- v202 §1: the destination's section tabs, drawn here from the nav
+             model and never by a workspace, above the page's sb-page header. -->
+        <div class="workspace-content" [attr.inert]="routeLoading.visible() ? '' : null">
+          <sb-section-tabs [entry]="navHere()?.entry ?? null" [active]="navHere()?.section ?? null" />
+          <router-outlet />
+        </div>
+        @if (routeLoading.visible()) {
+          <div class="route-loading-overlay" role="status" aria-live="polite"><span class="route-loading-mark" aria-hidden="true"></span><span>{{ routeLoading.label() }}</span></div>
+        }
+      </main>
+      @if (dock.docked()) {
+        <aside class="live-column" aria-label="Live">
+          @if (dock.open()) {
+            <sb-live-dock variant="docked" (close)="dock.toggle()" />
+          } @else {
+            <sb-live-edge-tab [warnings]="dockWarnings()" [heatText]="heatText()" [awaitingCount]="awaitingCount()"
+                              (expand)="dock.toggle()" />
+          }
+        </aside>
       }
-    </main>
+    </div>
   </div>
 
   <!-- v195 Phase 3, phone: the bottom tab bar and its More sheet. Both hosts
@@ -151,6 +163,12 @@
     <sb-phone-tab-bar [moreOpen]="moreOpen()" (moreRequested)="toggleMore()" />
     <sb-more-sheet [open]="moreOpen()" (closed)="closeMore()" (searchRequested)="onSearchRequested()" />
   }
+
+  <!-- v203: the Live dock as a sheet below 1024px -- from the right on a
+       tablet, from the bottom on a phone. DockState closes it on navigation
+       and when the window widens to docked; a docked window never shows it. -->
+  <sb-live-sheet [open]="dock.sheetOpen() && !dock.docked()" [side]="isPhone() ? 'bottom' : 'right'"
+                 (closed)="dock.closeSheet()" />
 
   <!-- v195 §3.1: the command palette. After the More sheet on purpose: when
        the sheet's search field opens it, the sheet's focus trap returns focus

@@ -19,6 +19,7 @@ from .acceptance_levels import stamp_confluence_acceptance, stamp_strategy_accep
 from .plan_types import PlanStatus, TradePlanV2, record_transition
 from . import params as plan_params
 from . import reward_floor
+from . import gap_reclaim
 from .lifecycle import apply_level_lifecycle
 from .stop_scope import DROP, stop_ceiling
 from .params import (DEFAULT_EXPIRY_BARS, STRUCTURE_BUFFER_ATR, TP1_FRACTION,
@@ -408,6 +409,19 @@ def _lifecycle_pair(df, index, entry, stop, tp1, atr_val, direction, strategy,
     return stop, tp1
 
 
+def _settle_market_entry(plan: TradePlanV2, df, index: int, created_at: str) -> None:
+    """A market plan's entry state. v192: with MARKET_ENTRY_NEXT_OPEN on (Turtle Soup
+    excepted -- gap_reclaim.next_open_applies) the plan stays PENDING, waiting for
+    the next open, with a_t and X stamped from bars through ``index``; otherwise it
+    is filled at build, exactly as before. Stop-entry and limit plans pass through."""
+    if plan.entry_type != "market":
+        return
+    if gap_reclaim.next_open_applies(plan):
+        gap_reclaim.stamp_next_open(plan, df, index)
+        return
+    record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
+
+
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
                         direction, level_map=None, quality_inputs=None,
                         stop_mult=None, tp2_r=None,
@@ -484,8 +498,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         hold_cap_bars=shape.get("hold_cap_bars"),
         **limit_order_fields(df, index, strategy, horizon_key, direction),
     )
-    if entry_type == "market":
-        record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
+    _settle_market_entry(plan, df, index, created_at)
     plan_params.stamp_badge(plan)
     plan_params._apply_quality(plan, quality_inputs)
     plan.stop_mult_applied = applied_stop_mult
@@ -707,8 +720,7 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
         badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
         stop_ceiling_pct=stop_ceiling_pct,
     )
-    if entry_type == "market":
-        record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
+    _settle_market_entry(plan, df, len(df) - 1, created_at)
     plan_params.stamp_badge(plan)
     plan_params.stamp_cohort(plan, regime2_state)
     plan_params._apply_quality(plan, quality_inputs)

@@ -60,7 +60,9 @@ describe('v179: the .sb-hit utility', () => {
 
 describe('v179: controls that grow to the hit size', () => {
   const GROWN: [file: string, selector: string, declaration: string][] = [
-    ['src/app/shell/shell.css', '.rail-link', 'min-height: var(--control-h)'],
+    // v202 §3: a 64x52 rail entry is past the 44px hit size at every width.
+    ['src/app/shell/shell.css', '.rail-link', 'min-height: 52px'],
+    ['src/app/shell/shell.css', '.rail-link', 'width: 64px'],
     ['src/app/ui/filter-bar.ts', '.chip', 'min-height: var(--control-h)'],
     ['src/app/ui/filter-bar.ts', '.chip', 'min-width: var(--hit-min)'],
     ['src/app/ui/column-picker.ts', '.trigger', 'min-height: var(--control-h)'],
@@ -88,8 +90,11 @@ describe('v179: controls that keep their look and take .sb-hit', () => {
     ['src/app/workspaces/system/logs-tab.ts', /<a slot="raw" class="raw sb-hit"/],
     ['src/app/workspaces/system/settings-tab.ts', /<a class="export sb-hit"/],
     ['src/app/workspaces/system/settings-tab.ts', /<summary class="sb-hit">/],
-    // The rail is 48px wide: its brand link pads with .sb-hit rather than grow.
+    // The rail's brand mark pads with .sb-hit rather than grow.
+    ['src/app/shell/shell.html', /<a class="rail-brand sb-hit" routerLink="\/dashboard"/],
+    // v203: the top bar's wordmark link and its alarm chip keep their size and pad with .sb-hit.
     ['src/app/shell/shell.html', /<a class="brand sb-hit" routerLink="\/dashboard"/],
+    ['src/app/shell/alarm-chip.ts', /<button type="button" class="alarm-chip sb-hit"/],
     // Tooltip-only chart marks and the Versions timeline (v179 audit): thin by data, padded by .sb-hit.
     ['src/app/ui/bar-list.ts', /<li class="sb-hit" tabindex="0"/],
     ['src/app/ui/histogram.ts', /<li class="sb-hit" tabindex="0"/],
@@ -99,7 +104,6 @@ describe('v179: controls that keep their look and take .sb-hit', () => {
     // SVG shapes draw no ::after: the waterfall's transparent 44px row rect and the dot plot's r=22 circle are the hit area.
     ['src/app/ui/waterfall.ts', /<rect class="hit"[^>]*height="44" tabindex="0"/],
     ['src/app/ui/dot-plot.ts', /<circle class="hit"[^>]*r="26" tabindex="0"/],
-    ['src/app/shell/shell.html', /<a\s+#link\s+class="rail-link sb-hit"\s+\[routerLink\]="entry\.path"/],
   ];
 
   it.each(PADDED)('%s pads its control with .sb-hit', (file, markup) => {
