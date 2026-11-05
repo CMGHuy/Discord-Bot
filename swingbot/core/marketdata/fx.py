@@ -29,7 +29,7 @@ import pandas as pd
 from swingbot import config
 from swingbot.core.db.repositories.market_refresh import quote_currency_repo
 from swingbot.core.infra.swallowed import swallowed
-from swingbot.core.marketdata import data, data_refresh, data_store
+from swingbot.core.marketdata import data, data_refresh, data_store, spot_metals
 from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.shared import kinds
 from swingbot.core.marketdata.shared.kinds import Asker
@@ -53,6 +53,11 @@ MINOR_UNITS: dict[str, tuple[str, float]] = {
 #: `CURRENCY_SYMBOL`'s default (swingbot/config.py) and the answer for an
 #: unrecognised symbol.
 DEFAULT_ACCOUNT_CODE = "EUR"
+
+#: XAUUSD / XAGUSD are priced in dollars (spot_metals rescales the futures to
+#: the gold-api.com USD quote) but Yahoo reports no currency for them, so the
+#: refresher stores "unknown" and their closed trades were left out of money.
+SPOT_METAL_QUOTE = "USD"
 
 _frames: dict[str, tuple[float, pd.DataFrame | None]] = {}
 _quote_codes: dict[str, str] = {}
@@ -84,6 +89,8 @@ def quote_currency_code(ticker: str, *, fetch: bool = True) -> str | None:
     key = str(ticker or "").upper().strip()
     if not key:
         return None
+    if spot_metals.is_spot_metal(key):
+        return SPOT_METAL_QUOTE   # Yahoo has no currency for spot metals
     if key in _quote_codes:
         return _quote_codes[key]
     if not fetch:
