@@ -57,6 +57,7 @@ def test_two_cycles_on_one_berlin_day_insert_the_row_once(monkeypatch):
     monkeypatch.setattr(fx_snap, "quote_currency_repo", lambda: FakeCodes({"USD"}))
     monkeypatch.setattr(fx, "account_currency_code", lambda: "EUR")
     monkeypatch.setattr(fx, "_pair_frame", lambda pair, *, refresh=True: FRAME)
+    monkeypatch.setattr(fx_snap, "_written_at", lambda base, account: None)   # FRAME's 11-04 bar suffices
     quotes.fx_snap_step(_ctx(datetime(2026, 11, 4, 7, 5, tzinfo=UTC)))
     quotes.fx_snap_step(_ctx(datetime(2026, 11, 4, 7, 10, tzinfo=UTC)))
     assert [len(batch) for batch in daily.inserts] == [1, 0]

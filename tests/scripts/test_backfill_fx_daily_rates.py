@@ -14,8 +14,9 @@ from tests.marketdata.test_fx_snap import FakeCodes, FakeDaily
 
 UTC = timezone.utc
 NOW = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)                  # 13:00 Berlin (CET)
-WEEK = pd.DataFrame({"Close": [0.8650, 0.8640, 0.0, 0.8700]},   # Monday 11-02 closed at 0.0
-                    index=pd.DatetimeIndex(["2026-10-29", "2026-10-30", "2026-11-02", "2026-11-03"]))
+WEEK = pd.DataFrame({"Close": [0.8650, 0.8640, 0.0, 0.8700, 0.8720]},   # Monday 11-02 closed at 0.0;
+                    index=pd.DatetimeIndex(["2026-10-29", "2026-10-30", "2026-11-02", "2026-11-03",
+                                            "2026-11-04"]))             # 11-04 is still forming at NOW
 EXPECTED = {                                                     # day -> (rate, bar_date), by hand
     date(2026, 10, 30): (0.8650, date(2026, 10, 29)),
     date(2026, 10, 31): (0.8640, date(2026, 10, 30)),
@@ -33,6 +34,7 @@ def world(monkeypatch):
     monkeypatch.setattr(fx_snap, "quote_currency_repo", lambda: FakeCodes({"USD", "EUR"}))
     monkeypatch.setattr(fx, "account_currency_code", lambda: "EUR")
     monkeypatch.setattr(fx, "_pair_frame", lambda pair, *, refresh=True: state.frames.get(pair))
+    monkeypatch.setattr(fx_snap, "_written_at", lambda base, account: NOW)   # 13:00 Berlin Wednesday
     return state
 
 
@@ -48,7 +50,7 @@ def test_backfill_fills_each_day_after_the_first_bar_through_berlin_today(world)
 
 def test_a_gap_past_seven_days_leaves_those_days_without_a_row(world):
     world.frames["USDEUR=X"] = pd.DataFrame(
-        {"Close": [0.90, 0.91]}, index=pd.DatetimeIndex(["2026-10-01", "2026-10-20"]))
+        {"Close": [0.90, 0.91, 0.92]}, index=pd.DatetimeIndex(["2026-10-01", "2026-10-20", "2026-10-21"]))
     assert fx_snap.backfill(end=date(2026, 10, 21), now=NOW) == 8
     assert set(_stored(world.daily)) == {date(2026, 10, d) for d in range(2, 9)} | {date(2026, 10, 21)}
 
