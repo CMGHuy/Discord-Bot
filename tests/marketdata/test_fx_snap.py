@@ -116,6 +116,32 @@ def test_no_frame_or_a_stale_bar_writes_no_row(world):
     assert fx_snap.snap(datetime(2026, 11, 12, 9, 0, tzinfo=UTC)) == 0     # bar 11-04 is 8 days old
 
 
+def test_a_frame_two_weekdays_behind_writes_nothing_until_it_catches_up(world):
+    world.frames["USDEUR=X"] = FRAME.iloc[:4]                    # last bar Tue 11-03; D = Thu 11-05
+    now = datetime(2026, 11, 5, 9, 0, tzinfo=UTC)
+    assert fx_snap.snap(now) == 0 and world.daily.rows == {}
+    world.frames["USDEUR=X"] = FRAME                              # fx_step brought the 11-04 bar
+    assert fx_snap.snap(now) == 1
+    assert world.daily.rows[("USD", "EUR", date(2026, 11, 5))]["bar_date"] == date(2026, 11, 4)
+
+
+def test_a_stale_frame_is_logged_once_per_pair_per_day(world, caplog):
+    world.frames["USDEUR=X"] = FRAME.iloc[:4]
+    now = datetime(2026, 12, 9, 9, 0, tzinfo=UTC)
+    world.frames["USDEUR=X"] = FRAME.iloc[:3]
+    with caplog.at_level("INFO", logger=fx_snap.log.name):
+        fx_snap.snap(now)
+        fx_snap.snap(now)
+    assert len([r for r in caplog.records if "stale" in r.getMessage()]) == 1
+
+
+def test_monday_needs_only_the_friday_bar(world):
+    world.frames["USDEUR=X"] = pd.DataFrame(
+        {"Close": [0.8650, 0.8640]}, index=pd.DatetimeIndex(["2026-10-29", "2026-10-30"]))
+    assert fx_snap.snap(datetime(2026, 11, 2, 9, 0, tzinfo=UTC)) == 1      # Monday 11-02
+    assert world.daily.rows[("USD", "EUR", date(2026, 11, 2))]["bar_date"] == date(2026, 10, 30)
+
+
 def test_a_naive_now_is_refused(world):
     with pytest.raises(ValueError, match="aware"):
         fx_snap.snap(datetime(2026, 11, 4, 9, 0))
