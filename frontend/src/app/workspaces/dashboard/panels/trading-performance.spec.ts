@@ -7,6 +7,7 @@ import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { describe, expect, it, beforeEach } from 'vitest';
 
+import { MarketMeta } from '../../../api/models';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { LiveValuesStore } from '../../../stores/live-values.store';
 import { FakeLiveValues } from '../../../testing/fake-live-values';
@@ -41,6 +42,15 @@ describe('trading performance panel', () => {
         { provide: LiveValuesStore, useClass: FakeLiveValues },
       ],
     });
+  });
+
+  it('passes equityMeta to the portfolio value', () => {
+    const meta: MarketMeta = {
+      as_of: '2026-10-29', refreshing: false, stale_count: 0, missing_count: 0, incomplete: false,
+      computed_at: '2026-10-29T14:00:00Z', stale_inputs: false, source: 'snapshot', error: null,
+    };
+    expect(render({ balance: 100, changePct: 1 }).querySelector('sb-portfolio-value .as-of')).toBeNull();
+    expect(render({ balance: 100, changePct: 1, equityMeta: meta }).querySelector('sb-portfolio-value .as-of')).not.toBeNull();
   });
 
   describe('open P&L freshness (v201)', () => {

@@ -265,7 +265,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     <div class="performance-stack">
     <sb-trading-performance
       [balance]="store.balance()"
-      [changePct]="store.equityChangePct()"
+      [changePct]="store.equityChangePct()" [equityMeta]="store.equityMeta()"
       [points]="store.equityPoints()"
       [openPnlPct]="store.openPnlPct()"
       [openPnlAmount]="store.openPnlAmount()"
