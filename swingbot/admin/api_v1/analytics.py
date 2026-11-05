@@ -18,17 +18,24 @@ because sub-project 3 owns how a sparkline looks.
 """
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 
 from flask import jsonify, request
 
+from swingbot.admin import market_values
 from swingbot.admin.queries import analytics_snapshot_read
-from swingbot.core.analytics import page_bodies
+from swingbot.core.analytics import admin_snapshots, page_bodies
+from swingbot.core.analytics.scope import BookScope, closed_only
+from swingbot.core.infra.swallowed import swallowed
+from swingbot.core.marketdata.shared import admin_refresh
 from swingbot.core.tracking.performance import TradeLog
 
 from . import ApiError, _positive_int, api_v1
 from .auth import require_auth
 
+log = logging.getLogger(__name__)
 
 def _snapshot(fresh: bool = False) -> dict:
     """The analytics snapshot, self-healing.
@@ -85,6 +92,77 @@ _all_trades = page_bodies._all_trades
 _index_benchmark = page_bodies._index_benchmark
 _weak_in_account_currency = page_bodies._weak_in_account_currency
 _fx_missing_total = page_bodies._fx_missing_total
+# v204 V204-14: every route V204-2 marked `snapshot` has its body in `page_bodies`. The
+# routes look these names up at call time, so a patched module attribute takes effect.
+_performance_body = page_bodies.performance_body
+_equity_curve_body = page_bodies.equity_curve_body
+
+_LEDGER_DEFAULT_KEYS: dict[str, Callable[[str], str]] = {
+    "analytics.performance": lambda ledger: admin_refresh.performance_key(ledger),
+    "analytics.equity_curve": lambda ledger: admin_refresh.equity_curve_key(ledger),
+}
+
+
+def _ledger_default_key(route: str, scope: BookScope) -> str | None:
+    """The snapshot key of an unfiltered (ledger-only) view, else None."""
+    if scope != BookScope(ledger=scope.ledger):
+        return None
+    return _LEDGER_DEFAULT_KEYS[route](scope.ledger)
+
+
+def _closed_tickers() -> list[str]:
+    """The sorted unique tickers of the closed book."""
+    return sorted({t["ticker"] for t in closed_only(_all_trades(TradeLog())) if t.get("ticker")})
+
+
+def _fx_as_of(tickers: Iterable[str]) -> str | None:
+    """The oldest FX rate date a request body converts with. None means unknown, never
+    now: an unmounted daily bar cache is logged and leaves the date open."""
+    from swingbot.core.marketdata.daily_readonly import DailyCacheUnavailable
+
+    now = admin_snapshots._now()
+    try:
+        fx_map, _ = admin_snapshots._fx_inputs(list(tickers), on=now.date())
+    except DailyCacheUnavailable as exc:
+        swallowed(log, "admin.analytics.fx_as_of", exc)
+        return None
+    return admin_snapshots.build_inputs(computed_at=now, fx=fx_map)["oldest_fx_as_of"]
+
+
+def request_market_meta(*, fx_missing: int, tickers: Iterable[str], refreshing: bool = False,
+                        error: str | None = None) -> dict:
+    """The MarketMeta of a body computed on this request (`source: "request"`): the FX
+    rows the body left unconverted count as missing."""
+    meta = market_values.total_meta([], extra_missing=fx_missing)
+    meta["as_of"] = _fx_as_of(tickers)
+    meta["refreshing"] = bool(meta["refreshing"] or refreshing)
+    if error:
+        meta["error"] = error
+    return meta
+
+
+def _stored_view(route: str, key: str | None) -> tuple[dict | None, dict | None]:
+    """(served body, snapshot row). Both None when the view has no key, the refresher is
+    off or the route is not snapshotted; the body is None when the row has no doc yet."""
+    if key is None or not admin_refresh.refresher_on() or route not in admin_snapshots.SNAPSHOT_ROUTES:
+        return None, None
+    snap = market_values.read_snapshot(key)
+    if snap.get("doc") is None:
+        return None, snap
+    return {**snap["doc"], "market_meta": market_values.snapshot_meta(snap)}, snap
+
+
+def default_view_body(route: str, key: str | None, compute: Callable[[], dict]) -> dict:
+    """A default view's stored snapshot, else the request-time body (which never fetches
+    while the refresher is on) with a request MarketMeta. Never an empty body of zeros."""
+    served, snap = _stored_view(route, key)
+    if served is not None:
+        return served
+    body = compute()
+    body["market_meta"] = request_market_meta(
+        fx_missing=int(body.get("fx_missing_count") or 0), tickers=_closed_tickers(),
+        refreshing=snap is not None, error=snap["error"] if snap else None)
+    return body
 
 
 def _soak_for(strategy: str):
@@ -116,15 +194,21 @@ def analytics_soak():
 @api_v1.route("/analytics/performance", methods=["GET"])
 @require_auth
 def analytics_performance():
-    """The scoped performance record; the body is `page_bodies.performance_body`."""
-    return jsonify(page_bodies.performance_body(_scope()))
+    """The scoped performance record: the default view's snapshot, else computed on request."""
+    scope = _scope()
+    return jsonify(default_view_body("analytics.performance",
+                                     _ledger_default_key("analytics.performance", scope),
+                                     lambda: _performance_body(scope)))
 
 
 @api_v1.route("/analytics/equity-curve", methods=["GET"])
 @require_auth
 def analytics_equity_curve():
-    """The scoped equity curve; the body is `page_bodies.equity_curve_body`."""
-    return jsonify(page_bodies.equity_curve_body(_scope()))
+    """The scoped equity curve: the default view's snapshot, else computed on request."""
+    scope = _scope()
+    return jsonify(default_view_body("analytics.equity_curve",
+                                     _ledger_default_key("analytics.equity_curve", scope),
+                                     lambda: _equity_curve_body(scope)))
 
 
 @api_v1.route("/analytics/by-dimension", methods=["GET"])

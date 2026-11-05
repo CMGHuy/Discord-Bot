@@ -73,6 +73,7 @@ def test_response_shape(seed, logged_in):
         "as_of": str, "month": str, "days": list, "totals": dict, "longest_hold": (dict, type(None)), "day_of_week": list,
         "best_day": (dict, type(None)), "worst_day": (dict, type(None)),
         "streak": dict, "filters": dict, "fx_missing_count": int,
+        "market_meta": dict,
     })
     assert_shape(body["days"][0], {
         "date": str, "net_pnl_amount": NULLABLE_NUMBER,

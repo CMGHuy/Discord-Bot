@@ -18,8 +18,14 @@ import datetime as dt
 
 from flask import jsonify, request
 
+from swingbot.core.analytics import page_bodies
+from swingbot.core.marketdata.shared import admin_refresh
+
 from . import ApiError, api_v1
 from .auth import require_auth
+
+# v204 V204-14: the body lives in core (`page_bodies`); the route looks it up at call time.
+_calendar_body = page_bodies.calendar_body
 
 # `month` is handled separately from the filters: it scopes the grid rather
 # than narrowing the population, and it has its own format.
@@ -68,6 +74,13 @@ def _filter_args() -> tuple[str | None, str | None]:
     return strategy, horizon
 
 
+def _calendar_default_key(month: str, filters: tuple[str | None, str | None]) -> str | None:
+    """The snapshot key of an unfiltered current or previous month, else None."""
+    if filters == (None, None) and month in admin_refresh.calendar_months():
+        return admin_refresh.calendar_key(month)
+    return None
+
+
 @api_v1.route("/calendar/pnl", methods=["GET"])
 @require_auth
 def calendar_pnl():
@@ -79,10 +92,13 @@ def calendar_pnl():
     strategy/horizon filter. A weekday pattern drawn from one month is 4-5
     observations per weekday and would be noise presented as a finding.
     """
-    from swingbot.core.analytics import page_bodies
+    from .analytics import default_view_body
 
     _reject_unknown_params()
-    return jsonify(page_bodies.calendar_body(_month_param(), _filter_args()))
+    month = _month_param()
+    filters = _filter_args()
+    return jsonify(default_view_body("calendar.pnl", _calendar_default_key(month, filters),
+                                     lambda: _calendar_body(month, filters)))
 
 
 def _date_param() -> str:
