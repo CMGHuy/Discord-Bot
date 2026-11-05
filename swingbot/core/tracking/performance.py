@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 _TRADE_ID_ALPHABET = string.ascii_letters + string.digits
 
 from swingbot import config
+from swingbot.core.infra import read_memo
 from swingbot.core.planning import account as account_module
 from swingbot.core.planning import gap_sizing as gap_sizing_mod
 from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY
@@ -717,6 +718,12 @@ def _json_record(row: dict) -> dict:
     return normalise(result)
 
 
+def _load_trade_records() -> list[dict]:
+    """Every trades row in TradeLog's JSON shape, read fresh (TradeLog._all's loader)."""
+    from swingbot.core.db.repositories.trades import trades_repo
+    return [_json_record(row) for row in trades_repo().list_all()]
+
+
 def _manual_close_quote(ticker: str) -> float | None:
     """The live price a manual close settles at when its caller has none.
     Never raises: a network hiccup must never block the close itself."""
@@ -784,9 +791,10 @@ class TradeLog:
             self._db_upsert(trade)
 
     def _all(self) -> list[dict]:
-        """Every trade, in TradeLog's API shape."""
-        from swingbot.core.db.repositories.trades import trades_repo
-        return [_json_record(row) for row in trades_repo().list_all()]
+        """Every trade, in TradeLog's API shape. v205: inside an admin read scope
+        (``read_memo.scope()``) the table is read and parsed once per request and
+        each call gets shallow copies; outside one, today's direct read."""
+        return read_memo.records(read_memo.TRADES, _load_trade_records)
 
     def _open_trade_for_plan(self, plan_id: str, *, conn=None) -> dict | None:
         """The plan's open trade. Standalone: from ``self._all()`` exactly as

@@ -15,6 +15,7 @@ import threading
 from datetime import datetime
 
 from swingbot.core.db.engine import ADMIN_LOCK_TIMEOUT_MS, transaction
+from swingbot.core.infra import read_memo
 from swingbot.core.planning.exit_sim import tighter_stop
 from swingbot.core.planning.plan_engine import (PlanStatus, TradePlanV2,
                                        plan_from_dict, plan_to_dict)
@@ -60,6 +61,12 @@ def _normalised(record: dict) -> dict:
     return record
 
 
+def _load_plan_records() -> dict[str, dict]:
+    """plan_id -> record, read fresh from the plans table (PlanStore._all's loader)."""
+    from swingbot.core.db.repositories.plans import plans_repo
+    return {record["plan_id"]: _normalised(record) for record in plans_repo().list_all()}
+
+
 class PlanStore:
     def __init__(self, *, lock_timeout_ms: int = ADMIN_LOCK_TIMEOUT_MS):
         # How long update() waits on the plan row lock in a transaction it owns.
@@ -74,9 +81,10 @@ class PlanStore:
 
     @staticmethod
     def _all() -> dict[str, dict]:
-        """Map plan ids to records from the plans table."""
-        from swingbot.core.db.repositories.plans import plans_repo
-        return {record["plan_id"]: _normalised(record) for record in plans_repo().list_all()}
+        """Map plan ids to records from the plans table. v205: through the read
+        memo (once per admin read request, per-call copies); outside a scope,
+        today's direct read."""
+        return read_memo.mapping(read_memo.PLANS, _load_plan_records)
 
     def get_record(self, plan_id: str) -> dict | None:
         """The raw plan dict for a plan id, or None."""
