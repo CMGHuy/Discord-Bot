@@ -105,6 +105,37 @@ def load_snapshot(path: str | None = None, max_age_seconds: int = 3600) -> dict 
     return snap if age <= max_age_seconds else None
 
 
+@dataclasses.dataclass(frozen=True)
+class SnapshotSources:
+    """What `build_snapshot` reads: both ledgers' closes, the base balance, the registry."""
+    closed: list
+    weak_closed: list
+    starting_balance: float
+    registry_entries: list
+
+
+def gather_sources() -> SnapshotSources:
+    """Read the trades, the account's base balance and the active registry rows."""
+    from swingbot.core.planning import account as account_module
+    from swingbot.core.backtesting import registry
+    from swingbot.core.tracking.performance import TradeLog
+
+    all_trades = TradeLog().get_trades(status="all", limit=None)
+    from swingbot.core.tracking.ledger import split_by_ledger
+    closed_all = [t for t in all_trades if t.get("status") in ("win", "loss", "closed")]
+    closed, weak_closed = split_by_ledger(closed_all)
+    starting_balance = account_module.load_account_config().get("base_balance", 0.0)
+    registry_entries = registry.active_rows(registry.load_registry())
+    return SnapshotSources(closed=closed, weak_closed=weak_closed,
+                           starting_balance=starting_balance, registry_entries=registry_entries)
+
+
+def compute_snapshot(sources: SnapshotSources | None = None) -> dict:
+    """The analytics snapshot document, never saved; every error propagates."""
+    s = sources or gather_sources()
+    return build_snapshot(s.closed, s.starting_balance, s.registry_entries, weak_closed=s.weak_closed)
+
+
 def refresh_snapshot() -> None:
     """Rebuild and save the analytics snapshot from the current in-memory
     state of trades.json / account.json / the validation registry.
@@ -114,18 +145,6 @@ def refresh_snapshot() -> None:
     stays at its previous (or absent) state for one more cycle.
     """
     try:
-        from swingbot.core.planning import account as account_module
-        from swingbot.core.backtesting import registry
-        from swingbot.core.tracking.performance import TradeLog
-
-        all_trades = TradeLog().get_trades(status="all", limit=None)
-        from swingbot.core.tracking.ledger import split_by_ledger
-        closed_all = [t for t in all_trades if t.get("status") in ("win", "loss", "closed")]
-        closed, weak_closed = split_by_ledger(closed_all)
-        starting_balance = account_module.load_account_config().get("base_balance", 0.0)
-        registry_entries = registry.active_rows(registry.load_registry())
-
-        snap = build_snapshot(closed, starting_balance, registry_entries, weak_closed=weak_closed)
-        save_snapshot(snap)
+        save_snapshot(compute_snapshot())
     except Exception:
         log.warning("refresh_snapshot failed -- snapshot left stale for this cycle", exc_info=True)

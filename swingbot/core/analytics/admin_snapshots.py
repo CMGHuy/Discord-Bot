@@ -19,13 +19,16 @@ The module stays light to import: pandas, the DB, `risk_payload`,
 """
 from __future__ import annotations
 
+import functools
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
 from swingbot import config
 from swingbot.core.market import session
 from swingbot.core.marketdata import daily_readonly, spot_metals
+from swingbot.core.marketdata.shared import admin_refresh
 
 
 @dataclass(frozen=True)
@@ -34,6 +37,11 @@ class SnapshotResult:
     inputs: dict
     stale_inputs: bool
 
+
+#: The routes V204-2 measured too slow to compute on request
+#: (docs/superpowers/results/2026-10-29-v204-measure-first.md; pinned by a test).
+SNAPSHOT_ROUTES: frozenset[str] = frozenset(
+    {"analytics.performance", "analytics.equity_curve", "calendar.pnl"})
 
 RISK_MIN_ROWS = 21     # risk_metrics._MIN_BARS returns need _MIN_BARS + 1 closes
 _SCAN_GRACE_HOUR_ET = 20
@@ -162,3 +170,84 @@ def build_risk() -> SnapshotResult:
                           trade_ids=[t.get("id") for t in open_trades])
     return SnapshotResult(doc=doc, inputs=inputs,
                           stale_inputs=stale_inputs_for(inputs["bars_as_of"]["per_symbol"], now))
+
+
+def build_analytics_snapshot() -> SnapshotResult:
+    """`analytics_snapshot.json`'s document, computed but never saved (the file stays Discord's)."""
+    from swingbot.core.analytics import snapshots
+    src = snapshots.gather_sources()
+    doc = snapshots.compute_snapshot(src)
+    inputs = build_inputs(computed_at=_now(),
+                          trade_ids=[t.get("id") for t in [*src.closed, *src.weak_closed]])
+    return SnapshotResult(doc=doc, inputs=inputs, stale_inputs=False)
+
+
+def _ledger_inputs(trades, *, ledger: str | None) -> dict:
+    """The inputs of a trade-scoped page: the trades' ids and their quote currencies' FX."""
+    now = _now()
+    fx_map, missing_fx = _fx_inputs([t.get("ticker") for t in trades], on=now.date())
+    return build_inputs(computed_at=now, fx=fx_map, missing_fx=missing_fx, ledger=ledger,
+                        trade_ids=[t.get("id") for t in trades])
+
+
+def _build_ledger_page(body, ledger: str) -> SnapshotResult:
+    from swingbot.core.analytics.scope import closed_only, parse_scope, select
+    from swingbot.core.tracking.performance import TradeLog
+    all_raw = TradeLog().get_trades(status=None, limit=None, ledger=None) or []
+    scope = parse_scope({"ledger": ledger})
+    doc = body(scope, all_raw=all_raw)
+    inputs = _ledger_inputs(select(closed_only(all_raw), scope), ledger=ledger)
+    return SnapshotResult(doc=doc, inputs=inputs, stale_inputs=False)
+
+
+def build_performance(ledger: str) -> SnapshotResult:
+    """`/analytics/performance?ledger=<ledger>`'s body, with its trades and FX recorded."""
+    from swingbot.core.analytics import page_bodies
+    return _build_ledger_page(page_bodies.performance_body, ledger)
+
+
+def build_equity_curve(ledger: str) -> SnapshotResult:
+    """`/analytics/equity-curve?ledger=<ledger>`'s body, with its trades and FX recorded."""
+    from swingbot.core.analytics import page_bodies
+    return _build_ledger_page(page_bodies.equity_curve_body, ledger)
+
+
+def build_calendar(month: str) -> SnapshotResult:
+    """`/calendar/pnl?month=<month>`'s unfiltered body; records the month's trades and FX."""
+    from swingbot.core.analytics import page_bodies
+    from swingbot.core.analytics import pnl_calendar as pc
+    rows = pc.load_rows(convert=page_bodies.to_account_currency)
+    doc = page_bodies.calendar_body(month, (None, None), rows=rows)
+    trades: dict = {}       # trade_id -> {"id", "ticker"}, first-seen order
+    for row in rows:
+        if row["day"].startswith(month):
+            trades.setdefault(row.get("trade_id"),
+                              {"id": row.get("trade_id"), "ticker": row.get("ticker")})
+    return SnapshotResult(doc=doc, inputs=_ledger_inputs(list(trades.values()), ledger=None),
+                          stale_inputs=False)
+
+
+def _ledger_builders() -> dict:
+    out: dict = {}
+    for ledger in _scope_ledgers():
+        if "analytics.performance" in SNAPSHOT_ROUTES:
+            out[admin_refresh.performance_key(ledger)] = functools.partial(build_performance, ledger)
+        if "analytics.equity_curve" in SNAPSHOT_ROUTES:
+            out[admin_refresh.equity_curve_key(ledger)] = functools.partial(build_equity_curve, ledger)
+    return out
+
+
+def _scope_ledgers() -> tuple[str, ...]:
+    from swingbot.core.analytics import scope
+    return scope.LEDGERS
+
+
+def builders(now: datetime | None = None) -> dict[str, Callable[[], SnapshotResult]]:
+    """Every snapshot key the refresher stores, mapped to the builder that computes it."""
+    out: dict = {admin_refresh.SNAPSHOT_RISK: build_risk,
+                 admin_refresh.SNAPSHOT_ANALYTICS: build_analytics_snapshot}
+    out.update(_ledger_builders())
+    if "calendar.pnl" in SNAPSHOT_ROUTES:
+        for month in admin_refresh.calendar_months(now or _now()):
+            out[admin_refresh.calendar_key(month)] = functools.partial(build_calendar, month)
+    return out
