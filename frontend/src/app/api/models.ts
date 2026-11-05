@@ -1738,6 +1738,15 @@ export interface ScanStatus {
   progress: ScanProgressRecord | null;
 }
 
+/** v206 P1-c: the payload a `scan` SSE frame carries -- the two fields of
+ *  `ScanStatus` the progress strip reads. Absent (never null) on the wire
+ *  when the server's read failed; `parseScanEventProgress` turns absent or
+ *  malformed into `null`. */
+export interface ScanEventProgress {
+  running: boolean;
+  progress: ScanProgressRecord | null;
+}
+
 export interface ScanCommandResult {
   ok: boolean;
   message: string;
