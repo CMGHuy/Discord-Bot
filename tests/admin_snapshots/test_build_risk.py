@@ -84,6 +84,36 @@ def test_non_usd_position_records_its_rate_and_pair_date(world, monkeypatch):
     assert res.inputs["missing"]["fx"] == []
 
 
+def _pair_or_bars(pair_symbol):
+    pair = ReadOnlyBars({}, {}, {pair_symbol: {"path": "p", "mtime": 1.0, "last_bar": "2026-09-15", "rows": 9}})
+    return lambda syms, **k: (
+        pair if list(syms) == [pair_symbol] else bars({"AAPL": "2026-09-15", "SPY": "2026-09-15"}))
+
+
+def test_unknown_rate_is_recorded_and_its_ticker_is_missing(world, monkeypatch):
+    monkeypatch.setattr(fx, "quote_currency_code", lambda t, **k: "EUR" if t == "SAP.DE" else "USD")
+    monkeypatch.setattr(fx, "fx_rate", lambda src, dst, on, **k: None)
+    monkeypatch.setattr(daily_readonly, "read_cached_daily", _pair_or_bars("EURUSD=X"))
+    res = snaps.build_risk()
+    assert res.inputs["fx"] == {"EUR": {"rate": None, "as_of": "2026-09-15"}}
+    assert res.inputs["missing"]["fx"] == ["SAP.DE"]
+
+
+def test_minor_unit_ticker_records_the_major_unit_rate(world, monkeypatch):
+    asked = []
+
+    def rate(src, dst, on, **k):
+        asked.append(src)
+        return {"GBP": 1.27, "GBp": 0.0127}[src]
+    monkeypatch.setattr(fx, "quote_currency_code",
+                        lambda t, **k: {"AAPL": "GBP", "SAP.DE": "GBp"}.get(t, "USD"))
+    monkeypatch.setattr(fx, "fx_rate", rate)
+    monkeypatch.setattr(daily_readonly, "read_cached_daily", _pair_or_bars("GBPUSD=X"))
+    res = snaps.build_risk()
+    assert res.inputs["fx"] == {"GBP": {"rate": 1.27, "as_of": "2026-09-15"}}
+    assert res.inputs["missing"]["fx"] == [] and set(asked) == {"GBP"}
+
+
 def test_missing_bar_cache_fails_the_risk_snapshot(world, monkeypatch):
     def unmounted(syms, **k):
         raise DailyCacheUnavailable("daily bar cache /app/market_data is not mounted")

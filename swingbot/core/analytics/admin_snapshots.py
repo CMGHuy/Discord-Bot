@@ -104,7 +104,7 @@ def expected_bar_date(now: datetime | None = None) -> date:
     """The date of the last session whose daily bar the scan has had its chance to write."""
     now = _now() if now is None else now
     close = session.last_regular_close(now)
-    now_et = now.astimezone(session.US_MARKET_TZ)
+    now_et = session.now_et(now)    # one reading of a naive `now` (ET), as last_regular_close
     close_et = close.astimezone(session.US_MARKET_TZ)
     if now_et.date() == close_et.date() and now_et.hour < _SCAN_GRACE_HOUR_ET:
         previous = session.last_regular_close(close - timedelta(seconds=1))
@@ -140,7 +140,7 @@ def _fx_inputs(tickers, *, on: date) -> tuple[dict, list[str]]:
         src = fx._major(code)[0]
         if src == account:
             continue
-        rate = fx.fx_rate(code, account, on, refresh=False)
+        rate = fx.fx_rate(src, account, on, refresh=False)    # major unit: GBp and GBP share "GBP"
         fx_map[src] = {"rate": rate, "as_of": _pair_as_of(f"{src}{account}=X")}
         if rate is None:
             missing.append(t)

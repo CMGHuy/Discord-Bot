@@ -89,6 +89,11 @@ def test_expected_bar_date_half_day_waits_like_a_full_day():
     assert snaps.expected_bar_date(utc(2026, 11, 27, 19, 0)) == date(2026, 11, 25)   # Fri 14:00 ET
 
 
+def test_expected_bar_date_reads_a_naive_now_as_et():
+    # Naive 21:00 is Wed 21:00 ET (after the grace window), whatever the machine's zone.
+    assert snaps.expected_bar_date(datetime(2026, 10, 28, 21, 0)) == date(2026, 10, 28)
+
+
 def test_expected_bar_date_has_one_source(monkeypatch):
     seen = []
     monkeypatch.setattr(session, "last_regular_close",
