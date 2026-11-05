@@ -143,8 +143,8 @@ describe('Breadcrumb (sb-breadcrumb)', () => {
     for (const sep of seps) expect(sep.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('keeps only the current crumb below 640px', () => {
-    expect(SOURCE).toMatch(/@media \(max-width: 639px\) \{\s*li:not\(\.current\) \{ display: none; \}/);
+  it('keeps only the current crumb below 1024px (v203: moved from 640px)', () => {
+    expect(SOURCE).toMatch(/@media \(max-width: 1023px\) \{\s*li:not\(\.current\) \{ display: none; \}/);
   });
 
   it('draws the separators in the rule colour and the text in the muted one (correction 13)', () => {

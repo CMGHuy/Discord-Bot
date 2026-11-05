@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-04 14:10:34 UTC",
+  "generated_at": "2026-11-05 16:27:41 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.38.0",
-    "bot": "2.16.1"
+    "ui": "1.39.0",
+    "bot": "2.16.4"
   },
   "releases": [
     {
@@ -2321,6 +2321,58 @@
       },
       "changed": [
         "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-05",
+      "last_seen": "2026-11-05",
+      "commit": "c8b75df6",
+      "subject": "release(bot): 2.16.2 -- market-on-open entry and the gap-toward-stop reclaim veto, both inert; v192 measured NO-LIFT at Stage 1",
+      "versions": {
+        "ui": "1.38.0",
+        "bot": "2.16.2"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-05",
+      "last_seen": "2026-11-05",
+      "commit": "f694c5b5",
+      "subject": "release(ui): 1.39.0 -- cockpit shell: labelled rail, Live dock, strip, sheet, alarm chip",
+      "versions": {
+        "ui": "1.39.0",
+        "bot": "2.16.2"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-11-05",
+      "last_seen": "2026-11-05",
+      "commit": "322b0195",
+      "subject": "release(bot): 2.16.3 -- admin read performance: read memo, fx_daily_rates, Berlin-day FX (v205)",
+      "versions": {
+        "ui": "1.39.0",
+        "bot": "2.16.3"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-05",
+      "last_seen": "2026-11-05",
+      "commit": "d42dcb9f",
+      "subject": "release(bot): 2.16.4 -- v191 ATR-band stop path (default off), gap sizing for longs, measurement closed",
+      "versions": {
+        "ui": "1.39.0",
+        "bot": "2.16.4"
+      },
+      "changed": [
         "bot"
       ]
     }

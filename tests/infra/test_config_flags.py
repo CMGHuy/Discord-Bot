@@ -124,3 +124,11 @@ def test_v93_strategy_alert_fields():
     allow = by_key["STRATEGY_ALERTS_LIVE_STRATEGIES"]
     assert allow.default == ""
     assert isinstance(config.STRATEGY_ALERTS_LIVE_STRATEGIES, str)
+
+
+def test_v192_knobs_default_off():
+    by_key = {f.key: f for f in config.FIELDS}
+    assert by_key["MARKET_ENTRY_NEXT_OPEN"].default == "false"
+    assert by_key["GAP_RECLAIM_ATR"].default == "0"
+    assert isinstance(config.MARKET_ENTRY_NEXT_OPEN, bool)
+    assert isinstance(config.GAP_RECLAIM_ATR, float)

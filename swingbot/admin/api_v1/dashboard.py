@@ -31,17 +31,17 @@ taken that decision away from it.
 """
 from __future__ import annotations
 
-from datetime import date
-
 from flask import jsonify, request
 
 from swingbot import config
 from swingbot.admin import dashboard as dash
 from swingbot.core.planning.plan_engine import DEFAULT_EXPIRY_BARS
 from swingbot.core.tracking.performance import TradeLog, expand_realized_legs
+from swingbot.core.marketdata import fx_convert
 
 from . import ApiError, api_v1, iso
 from .auth import require_auth
+from .read_scope import read_scope
 from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
 from .money import convert_amount, missing_count, to_account_currency
 
@@ -317,7 +317,7 @@ def _open_amounts(open_trades: list[dict], prices: dict) -> tuple[list[float], i
         if not price or not t.get("entry"):
             continue
         raw = dash.unrealized_pnl_amount(t.get("entry"), t.get("direction"), t.get("shares"), price)
-        value, flagged = convert_amount(raw, t.get("ticker"), date.today())
+        value, flagged = convert_amount(raw, t.get("ticker"), fx_convert.berlin_today())
         missing += flagged
         if value is not None:
             amounts.append(value)
@@ -372,6 +372,7 @@ def _open_figures(all_trades: list[dict], account_cfg: dict) -> dict:
 
 @api_v1.route("/dashboard", methods=["GET"])
 @require_auth
+@read_scope
 def dashboard():
     mode = _scope()
     window = _parse_range_window(mode)

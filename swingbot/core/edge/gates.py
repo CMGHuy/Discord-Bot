@@ -18,16 +18,18 @@ def gap_stats(df: pd.DataFrame, lookback: int = 250) -> dict:
 
     v183: also the adverse side for a short -- p99 of the UP gaps only
     (Open / prev Close - 1 > 0) over the same window, None when there are
-    none, and their count. The three original keys are unchanged."""
+    none, and their count. The three original keys are unchanged.
+    v191: also p99 of the absolute DOWN gaps for a long, and their count."""
     tail = df.tail(lookback + 1)
     signed = (tail["Open"] / tail["Close"].shift(1) - 1.0).dropna() * 100.0
     gaps = signed.abs()
     if gaps.empty:
-        return {"p90_gap_pct": 0.0, "p99_gap_pct": 0.0, "n": 0, "p99_up_gap_pct": None, "n_up": 0}
+        return {"p90_gap_pct": 0.0, "p99_gap_pct": 0.0, "n": 0, "p99_up_gap_pct": None, "n_up": 0,
+                "p99_down_gap_pct": None, "n_down": 0}
     return {"p90_gap_pct": float(np.percentile(gaps, 90)),
             "p99_gap_pct": float(np.percentile(gaps, 99)),
             "n": int(len(gaps)),
-            **_up_gap_stats(signed)}
+            **_up_gap_stats(signed), **_down_gap_stats(signed)}
 
 
 def _up_gap_stats(signed: pd.Series) -> dict:
@@ -35,6 +37,13 @@ def _up_gap_stats(signed: pd.Series) -> dict:
     up = signed[signed > 0]
     return {"p99_up_gap_pct": float(np.percentile(up, 99)) if len(up) else None,
             "n_up": int(len(up))}
+
+
+def _down_gap_stats(signed: pd.Series) -> dict:
+    """v191: p99 and count of strictly negative gaps, as positive percents."""
+    down = -signed[signed < 0]
+    return {"p99_down_gap_pct": float(np.percentile(down, 99)) if len(down) else None,
+            "n_down": int(len(down))}
 
 
 def stop_beyond_gap_noise(stop_distance_pct: float, gap_p90_pct: float,

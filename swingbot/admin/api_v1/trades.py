@@ -46,12 +46,15 @@ from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.tracking.equity import open_shares as _open_shares  # v172: moved to core
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.planning.gap_sizing import gap_risk_amount_for, size_for
+from swingbot.core.presentation.band_stop import band_stop_line
 from swingbot.core.presentation.gap_risk import gap_risk_line
 from swingbot.core.presentation.plan_view import plan_view
 from swingbot.core.presentation.short_notice import risk_notice_lines
+from swingbot.core.marketdata import fx_convert
 
 from . import api_v1, collection, error, parse_collection_params, ApiError
 from .auth import require_auth
+from .read_scope import read_scope
 from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
 from .money import convert_amount, missing_count, to_account_currency
 
@@ -867,29 +870,52 @@ def _risk_notice_detail_lines(plan: dict | None, trade: dict | None) -> list[str
     return risk_notice_lines(snapshot, currency=config.CURRENCY_SYMBOL) if snapshot else None
 
 
-def _recorded_sizing_view(sizing: dict, shares, entry, stop, stamp) -> dict:
+def _recorded_sizing_view(sizing: dict, shares, entry, stop, stamp, direction: str) -> dict:
     """The size_for result re-expressed on the shares actually shown."""
     if shares is None or "gap_sized" not in sizing:
         return dict(sizing)
     return {**sizing, "risk_amount": round(float(shares) * abs(float(entry) - float(stop)), 2),
-            "gap_risk_amount": gap_risk_amount_for(shares, entry, stop, stamp)}
+            "gap_risk_amount": gap_risk_amount_for(shares, entry, stop, stamp, direction=direction)}
+
+
+def _gap_stamp_for(p: dict, t: dict) -> tuple[str, dict] | None:
+    """The saved stamp, plan first, for a short or an explicitly stamped long."""
+    stamp = p.get("gap_sizing") or t.get("gap_sizing")
+    direction = (p or t).get("direction")
+    if not stamp or direction not in ("bullish", "bearish"):
+        return None
+    if direction == "bullish" and "n_down_gaps" not in stamp:
+        return None
+    return direction, stamp
+
+
+def _p99_keys(direction: str, stamp: dict) -> dict:
+    """Keep the short response shape and expose the adverse-side long percentile."""
+    if direction == "bearish":
+        return {"up_gap_p99_pct": stamp.get("up_gap_p99_pct")}
+    return {"up_gap_p99_pct": None, "down_gap_p99_pct": stamp.get("down_gap_p99_pct")}
 
 
 def _gap_sizing_detail(plan: dict | None, trade: dict | None) -> dict | None:
-    """v183: the order block's share count and gap-risk line for a stamped short."""
+    """The order block's share count and gap-risk line for a stamped short or long."""
     p, t = plan or {}, trade or {}
-    stamp = p.get("gap_sizing") or t.get("gap_sizing")
-    if (p or t).get("direction") != "bearish" or not stamp:
+    found = _gap_stamp_for(p, t)
+    if found is None:
         return None
+    direction, stamp = found
     entry = t.get("entry") or p.get("trigger_price") or p.get("entry_price")
     stop = t.get("stop_loss") or p.get("stop_loss")
-    sizing = size_for(entry, stop, direction="bearish", gap_sizing=stamp) or {}
+    sizing = size_for(entry, stop, direction=direction, gap_sizing=stamp) or {}
     shares = t["shares"] if t.get("shares") is not None else sizing.get("shares")
-    view = _recorded_sizing_view(sizing, shares, entry, stop, stamp)
-    return {"rule": stamp.get("rule"), "up_gap_p99_pct": stamp.get("up_gap_p99_pct"),
+    view = _recorded_sizing_view(sizing, shares, entry, stop, stamp, direction)
+    return {"rule": stamp.get("rule"), **_p99_keys(direction, stamp),
             "shares": shares, "risk_amount": view.get("risk_amount"),
             "gap_risk_amount": view.get("gap_risk_amount"), "gap_sized": bool(view.get("gap_sized")),
             "line": gap_risk_line(view, currency=config.CURRENCY_SYMBOL)}
+
+
+def _band_stop_detail(plan: dict) -> str | None:
+    return band_stop_line(plan or {}, currency=config.CURRENCY_SYMBOL)
 
 
 def _plan_detail(plan: dict, trade: dict | None) -> dict:
@@ -931,6 +957,7 @@ def _plan_detail(plan: dict, trade: dict | None) -> dict:
         "quote": _quote_stamp(plan, trade),
         "risk_notice_lines": _risk_notice_detail_lines(plan, trade),
         "gap_sizing": _gap_sizing_detail(plan, trade),
+        "band_stop_line": _band_stop_detail(plan),
     }
 
 
@@ -972,6 +999,7 @@ def _legacy_detail(t: dict) -> dict:
         "quote": _quote_stamp(None, t),
         "risk_notice_lines": _risk_notice_detail_lines(None, t),
         "gap_sizing": _gap_sizing_detail(None, t),
+        "band_stop_line": None,
     }
 
 
@@ -1078,6 +1106,7 @@ def _filter_by_status(rows: list[dict], value: str) -> list[dict]:
 
 @api_v1.route("/trades", methods=["GET"])
 @require_auth
+@read_scope
 def list_trades():
     params = parse_collection_params(
         request.args, allowed_filters=FILTERS, sortable=SORTABLE
@@ -1338,7 +1367,7 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
             row["r_multiple"] = _live_r(row, price)
             row["realized_pnl_amount"], row["fx_missing"] = convert_amount(
                 dash.unrealized_pnl_amount(entry, direction, row.get("open_shares"), price),
-                row.get("ticker"), date.today())
+                row.get("ticker"), fx_convert.berlin_today())
         # Store the display value in a transient field; apply it exactly once
         # in _strip_internal_fields after all passes are complete.
         if row.get("open_shares") is not None:

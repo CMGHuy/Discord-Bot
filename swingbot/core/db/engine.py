@@ -3,16 +3,22 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
+from typing import Callable
 
 import sqlalchemy as sa
 from sqlalchemy import Engine, create_engine
 from sqlalchemy import exc as sa_exc
 
 from swingbot import config
+from swingbot.core.infra.swallowed import swallowed
 
 log = logging.getLogger(__name__)
 
 _engine: Engine | None = None
+# v205 L1-d: callables run on every engine get_engine() creates, so a hook
+# outlives reset_engine(). Only the admin registers one (its SQL counter,
+# swingbot/admin/request_timing.py); the bot's and refresher's engines carry none.
+_ENGINE_HOOKS: list[Callable[[Engine], None]] = []
 _POOL_SIZE = 5
 _MAX_OVERFLOW = 5
 _CONNECT_TIMEOUT_SECONDS = 5
@@ -51,6 +57,25 @@ def _checked_timeout(lock_timeout_ms: int | None) -> int | None:
     return ms
 
 
+def add_engine_hook(hook: Callable[[Engine], None]) -> None:
+    """Run ``hook(engine)`` on every engine get_engine() creates from now on,
+    and at once on the current one. The same hook object is added only once."""
+    if any(existing is hook for existing in _ENGINE_HOOKS):
+        return
+    _ENGINE_HOOKS.append(hook)
+    if _engine is not None:
+        _apply_hooks(_engine, [hook])
+
+
+def _apply_hooks(created: Engine, hooks: list[Callable[[Engine], None]]) -> None:
+    """A failing hook is logged and skipped: instrumentation never takes the database down."""
+    for hook in hooks:
+        try:
+            hook(created)
+        except Exception as exc:
+            swallowed(log, "ops.db_engine.apply_hooks", exc, "engine hook %r failed", hook)
+
+
 def get_engine() -> Engine:
     """Return the singleton engine, failing clearly for an invalid URL.
 
@@ -83,6 +108,7 @@ def get_engine() -> Engine:
         future=True,
         connect_args={"connect_timeout": _CONNECT_TIMEOUT_SECONDS},
     )
+    _apply_hooks(_engine, list(_ENGINE_HOOKS))
     log.info("Database engine created for %s", _engine.url.render_as_string(hide_password=True))
     return _engine
 

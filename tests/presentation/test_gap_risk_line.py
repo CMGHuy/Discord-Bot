@@ -117,3 +117,12 @@ def test_a_long_ticket_and_email_are_byte_identical_without_the_hook(monkeypatch
     after = (execution_embeds.build_ticket_embed(item, item.plan_v2).description,
              notifier._build_alert_texts(item, item.plan, item.conf))
     assert before == after
+
+
+def test_every_alert_channel_shows_the_line_for_a_cut_long(monkeypatch):
+    from swingbot.core.db import notify
+
+    # Snapshot notifications are unrelated to the text rendered on each channel.
+    monkeypatch.setattr(notify, "publish", lambda *a, **kw: None)
+    for name, text in _renderings(_item(monkeypatch, CUT, "bullish")).items():
+        assert CUT_LINE in text, name

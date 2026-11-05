@@ -24,7 +24,7 @@ from swingbot.core.edge import heat as heat_mod
 from swingbot.core.edge import regime2
 from swingbot.core.infra.jsonio import read_json
 from swingbot.core.infra.swallowed import swallowed
-from swingbot.core.market import earnings_calendar, levels, trendlines
+from swingbot.core.market import atr_band, earnings_calendar, levels, trendlines
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
@@ -34,9 +34,10 @@ from swingbot.core.planning.plan_engine import build_confluence_plan, primary_st
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
 from swingbot.core.planning.params import stamp_entry_context
 from swingbot.core.planning.gap_sizing import size_for_plan, stamp_gap_sizing
+from swingbot.core.planning import gap_reclaim
 from swingbot.core.scanning.risk_notice import stamp_risk_notice
-from swingbot.core.planning.builders import confluence_stop_dropped
-from swingbot.core.planning.stop_scope import plan_stop_ceiling, risk_sizing_ok
+from swingbot.core.planning.builders import band_no_plan_reason, confluence_stop_dropped
+from swingbot.core.planning.stop_scope import band_sizing_verdict, plan_stop_ceiling, risk_sizing_ok
 from swingbot.core.risk_limits import planned_loss_pct
 from swingbot.core.market.indicators import atr
 from swingbot.core.market.session import now_et
@@ -413,8 +414,11 @@ def pd_normalize(when):
 
 
 def _no_plan_reason(scenario, level_map) -> str:
-    """Why build_confluence_plan returned None: v139 arm D's ceiling, or no
+    """Why no plan: band_no_target, band_rr_drop, v139's ceiling, or no
     level paying MIN_RISK_REWARD_RATIO."""
+    band = band_no_plan_reason(scenario, level_map)
+    if band is not None:
+        return band
     if confluence_stop_dropped(scenario, level_map):
         return "stop_beyond_confluence_ceiling"
     return "no_qualifying_target"
@@ -484,6 +488,35 @@ def _stamp_risk_notice_live(plan, df, now) -> None:
     stamp_risk_notice(plan, frame)
 
 
+def _sizing_reject_reason(plan, df, now) -> str | None:
+    """Stamp a band plan before its dollar check sizes on the stored distance.
+    Every other plan keeps v139's risk-sizing rule."""
+    if plan.stop_moved_by is not None:
+        _stamp_gap_sizing_live(plan, df, now)
+        return band_sizing_verdict(plan)
+    if plan.stop_ceiling_pct is not None and not risk_sizing_ok(plan):
+        return "risk_sizing"
+    return None
+
+
+def _stamp_next_open_live(plan, df, now) -> None:
+    """v192: a plan waiting for its next open takes a_t (and X) from COMPLETED bars
+    only -- today's forming bar is dropped during the session, as v183's gap sizing
+    does -- so live reads what the replay reads at bar t. Still once, at creation.
+    Never raises: a frame problem leaves no veto (the plan fills at the open)."""
+    if not gap_reclaim.waits_for_open(plan):
+        return
+    from .strategy_pass import completed_frame
+    plan.reclaim_atr = plan.reclaim_level = None
+    try:
+        frame = completed_frame(df, now or datetime.now(timezone.utc))
+        if frame is not None and len(frame):
+            gap_reclaim.stamp_next_open(plan, frame, len(frame) - 1)
+    except Exception as exc:
+        swallowed(log, "scan.analyze.next_open_frame", exc, level=logging.DEBUG)
+        plan.reclaim_atr = plan.reclaim_level = None
+
+
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                     regime=None, rs_percentile=None, breadth=None, regime2_state=None,
                     issued_at=None, now=None):
@@ -529,12 +562,14 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             _reject_plan(item, "risk_cap", ticker, horizon_key, plan=plan,
                          margin=loss_pct - ceiling)
             return
-        if plan.stop_ceiling_pct is not None and not risk_sizing_ok(plan):
+        reason = _sizing_reject_reason(plan, df, now)
+        if reason is not None:
             # v139 arm S: a structural stop past 2% is honest only when the
             # position is sized to fixed dollar risk (spec Arm S). Checked
             # only for such plans: a confluence plan's strategy is its primary
             # attribution, which in_scope() could otherwise match.
-            _reject_plan(item, "risk_sizing", ticker, horizon_key)
+            # v191: band plans are stamped before checking their dollar risk.
+            _reject_plan(item, reason, ticker, horizon_key, plan=plan)
             return
         # item.plan_v2 is set BEFORE risk_features stamping (below) is even
         # attempted -- a render-only feature's stamping failure must never
@@ -545,6 +580,7 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
         else:
             plan.issued_at = datetime.now(timezone.utc).isoformat()
             plan.issued_at_source = "live"
+        _stamp_next_open_live(plan, df, now)
         item.plan_v2 = plan
         stamp_entry_context(plan, df, {
             "regime2_state": regime2_state,
@@ -552,7 +588,8 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             "sector_pctile": getattr(item, "sector_rs_percentile", None),
             "rs_combined": getattr(item, "rs_combined", None),
         })
-        _stamp_gap_sizing_live(plan, df, now)
+        if plan.stop_moved_by is None:
+            _stamp_gap_sizing_live(plan, df, now)
         _stamp_risk_notice_live(plan, df, now)
         try:
             plan.risk_features = risk_features.build(
@@ -813,11 +850,30 @@ def _default_hard_filters(hard_filters: dict | None = None) -> dict:
         'min_risk_reward_ratio': config.MIN_RISK_REWARD_RATIO,
         'mtf_adjacent_gate': config.MTF_ADJACENT_GATE,
         'confluence_deviation_pct': config.CONFLUENCE_DEVIATION_PCT,
+        'confluence_atr_stop_floor': config.CONFLUENCE_ATR_STOP_FLOOR,
     }
 
 
+def _band_live(df, current_price: float, k: float, now, ticker: str,
+               horizon_label: str) -> atr_band.AtrBand | None:
+    """Read raw ATR14 only from completed bars; missing ATR keeps legacy gates."""
+    if not k or k <= 0:
+        return None
+    from .strategy_pass import completed_frame
+    try:
+        frame = completed_frame(df, now or datetime.now(timezone.utc))
+    except Exception as exc:
+        swallowed(log, "scan.analyze.band_frame", exc, level=logging.DEBUG)
+        frame = None
+    band = atr_band.band_for(frame, current_price, k)
+    if band.atr_pct is None:
+        log.info("%s (%s): plan rejected (%s) -- ATR14 unavailable, today's stop band applies",
+                 ticker, horizon_label, atr_band.REASON_NO_ATR)
+    return band
+
+
 def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
-                       hard_filters: dict) -> HorizonBuild:
+                       hard_filters: dict, *, ticker: str = "", now=None) -> HorizonBuild:
     """One horizon's level map and scenarios at `current_price` (v171 D5 seam:
     `_scan_one` at the scan price, `rescenario` at a re-quoted one)."""
     # Computed once here and threaded through to build_level_map() and
@@ -863,11 +919,13 @@ def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
     # continue to evaluate the same candidates.
     effective_min_reward = max(hard_filters["min_reward_pct"], h.get("sr_target_min_pct", hard_filters["min_reward_pct"]) * 0.15)
     effective_max_stop = max(hard_filters["max_stop_loss_pct"], h.get("max_risk_pct", hard_filters["max_stop_loss_pct"]))
+    band = _band_live(df, current_price, hard_filters.get("confluence_atr_stop_floor", 0.0),
+                      now, ticker, h.get("label", ""))
     scenarios = levels.build_scenarios(current_price, supports, resistances, effective_min_reward,
                                         atr_floor=floor_pct, min_stop_distance_pct=hard_filters["min_stop_distance_pct"],
                                         max_stop_distance_pct=effective_max_stop,
                                         min_risk_reward=hard_filters["min_risk_reward_ratio"],
-                                        block_bullish=veto_bullish_for(df))
+                                        block_bullish=veto_bullish_for(df), band=band)
     return HorizonBuild(candidates, supports, resistances, scenarios)
 
 
@@ -1052,7 +1110,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
 
         log.debug("%s (%s): building levels (price=%.2f, bars=%d)", ticker, horizon_key, current_price, bars_available)
         candidates, supports, resistances, scenarios = _horizon_scenarios(
-            df, h, current_price, trendline_candidates, hard_filters)
+            df, h, current_price, trendline_candidates, hard_filters, ticker=ticker)
         log.debug("%s (%s): %d support level(s), %d resistance level(s) found",
                    ticker, horizon_key, len(supports), len(resistances))
         stats["checked"] += 1
@@ -1248,7 +1306,7 @@ def rescenario(item, df, price: float):
         return None
     horizon_key = item.result.horizon_key
     build = _horizon_scenarios(df, HORIZONS[horizon_key], price, item.trendline_candidates,
-                               _default_hard_filters(item.hard_filters))
+                               _default_hard_filters(item.hard_filters), ticker=item.result.ticker)
     kept = _apply_headroom(build.scenarios, build.supports, build.resistances,
                            {"failed_counts": {"headroom": 0}}, item.result.ticker, horizon_key)
     scenario = next((s for s in kept if s.direction == item.plan.direction), None)

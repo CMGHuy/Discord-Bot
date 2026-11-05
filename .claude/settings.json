@@ -52,6 +52,7 @@
       "Bash(docker compose ps)",
       "Bash(docker compose logs:*)",
       "Read(//e/Documents/Private/Projects/Discord-Bot/**)",
+      "Edit(//e/Documents/Private/Projects/Discord-Bot/.superpowers/sdd/**)",
       "Read(//e/Claude/claude-config/**/plugins/cache/claude-plugins-official/superpowers/**)",
       "Skill(superpowers:subagent-driven-development)",
       "Skill(superpowers:test-driven-development)",
@@ -68,6 +69,11 @@
     "SessionStart": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/sync-local-settings.py",
+            "timeout": 10
+          },
           {
             "type": "command",
             "command": "pwsh -NoProfile -File .claude/hooks/session-cursor.ps1",

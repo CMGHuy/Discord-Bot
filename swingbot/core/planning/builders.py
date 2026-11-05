@@ -5,11 +5,12 @@ import math
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import numpy as np
 
 from swingbot import config
-from swingbot.core.market import levels, opex
+from swingbot.core.market import atr_band, levels, opex
 from swingbot.core.market.strategy_types import (BREAKEVEN_TRIGGER_FRACTION, COMPRESSION_SHORT,
                                                   FIB_LIMIT, HORIZONS, SHORT_STRATEGIES,
                                                   TURTLE_SOUP)
@@ -19,6 +20,7 @@ from .acceptance_levels import stamp_confluence_acceptance, stamp_strategy_accep
 from .plan_types import PlanStatus, TradePlanV2, record_transition
 from . import params as plan_params
 from . import reward_floor
+from . import gap_reclaim
 from .lifecycle import apply_level_lifecycle
 from .stop_scope import DROP, stop_ceiling
 from .params import (DEFAULT_EXPIRY_BARS, STRUCTURE_BUFFER_ATR, TP1_FRACTION,
@@ -408,6 +410,19 @@ def _lifecycle_pair(df, index, entry, stop, tp1, atr_val, direction, strategy,
     return stop, tp1
 
 
+def _settle_market_entry(plan: TradePlanV2, df, index: int, created_at: str) -> None:
+    """A market plan's entry state. v192: with MARKET_ENTRY_NEXT_OPEN on (Turtle Soup
+    excepted -- gap_reclaim.next_open_applies) the plan stays PENDING, waiting for
+    the next open, with a_t and X stamped from bars through ``index``; otherwise it
+    is filled at build, exactly as before. Stop-entry and limit plans pass through."""
+    if plan.entry_type != "market":
+        return
+    if gap_reclaim.next_open_applies(plan):
+        gap_reclaim.stamp_next_open(plan, df, index)
+        return
+    record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
+
+
 def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
                         direction, level_map=None, quality_inputs=None,
                         stop_mult=None, tp2_r=None,
@@ -484,8 +499,7 @@ def build_strategy_plan(df, index, *, ticker, strategy, horizon_key,
         hold_cap_bars=shape.get("hold_cap_bars"),
         **limit_order_fields(df, index, strategy, horizon_key, direction),
     )
-    if entry_type == "market":
-        record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
+    _settle_market_entry(plan, df, index, created_at)
     plan_params.stamp_badge(plan)
     plan_params._apply_quality(plan, quality_inputs)
     plan.stop_mult_applied = applied_stop_mult
@@ -621,12 +635,94 @@ def confluence_stop_geometry(entry, level, is_bull, candidates, params):
     return today, None
 
 
+# Today's percent band as arm K reads it: the v115 clamp target.
+TODAY_BAND_FLOOR_PCT = HARD_MAX_PLANNED_LOSS_PCT - CLAMP_HEADROOM_PCT
+
+
+class PlanGeometry(NamedTuple):
+    stop_loss: float | None
+    stop_ceiling_pct: float | None
+    moved_by: str | None
+    tp1: float | None
+    reason: str | None
+
+
+def confluence_atr_band_stop(entry, level, is_bull, atr_pct, params) -> tuple[float, float, str] | None:
+    """The band stop, its stored ceiling with fill headroom, and move reason."""
+    band = atr_band.band_stop(entry, level, is_bull, atr_pct, params.confluence_atr_stop_floor)
+    if band is None:
+        return None
+    return band.stop, band.distance_pct + CLAMP_HEADROOM_PCT, band.moved_by
+
+
+def arm_k_today_stop(entry, level, is_bull) -> float:
+    """The level within today's 1.75-2% band, or the v115 clamp target."""
+    d = planned_loss_pct(entry, level)
+    if TODAY_BAND_FLOOR_PCT - STOP_GEOMETRY_TOL <= d <= HARD_MAX_PLANNED_LOSS_PCT + STOP_GEOMETRY_TOL:
+        return float(level)
+    offset = entry * TODAY_BAND_FLOOR_PCT / 100.0
+    return entry - offset if is_bull else entry + offset
+
+
+def _arm_k_tp1(entry, level, is_bull, stop, candidates, params):
+    lo_rr, hi_rr = params.min_risk_reward_ratio, params.max_risk_reward_ratio
+    today = select_structural_target(entry, arm_k_today_stop(entry, level, is_bull), is_bull,
+                                     candidates, lo_rr, hi_rr)
+    if today is None:
+        return None, atr_band.REASON_NO_TARGET
+    rr = abs(today - entry) / abs(entry - stop)
+    if rr + STOP_GEOMETRY_TOL < lo_rr:
+        return None, atr_band.REASON_RR_DROP
+    return today, None
+
+
+def _band_tp1(entry, level, is_bull, stop, candidates, params):
+    """TP1 and rejection reason: arm K keeps; arm R re-chooses."""
+    if params.confluence_atr_target_mode == "keep":
+        return _arm_k_tp1(entry, level, is_bull, stop, candidates, params)
+    tp1 = select_structural_target(entry, stop, is_bull, candidates,
+                                   params.min_risk_reward_ratio, params.max_risk_reward_ratio)
+    return tp1, (None if tp1 is not None else atr_band.REASON_NO_TARGET)
+
+
+def _plan_geometry(scenario, candidates, params) -> PlanGeometry | None:
+    """Band stop and TP1 from the supplied ATR; otherwise today's geometry.
+
+    None means v139 arm D dropped the plan. A band rejection is carried as
+    a reason alongside its geometry so issuance and census share one rule.
+    """
+    entry, level = scenario.entry, scenario.stop_loss
+    is_bull = scenario.direction == "bullish"
+    band = confluence_atr_band_stop(entry, level, is_bull,
+                                    getattr(scenario, "atr14_pct", None), params)
+    if band is not None:
+        stop, ceiling, moved_by = band
+        tp1, reason = _band_tp1(entry, level, is_bull, stop, candidates, params)
+        return PlanGeometry(stop, ceiling, moved_by, tp1, reason)
+    geometry = confluence_stop_geometry(entry, level, is_bull, candidates, params)
+    if geometry is None:
+        return None
+    stop, ceiling = geometry
+    tp1 = select_structural_target(entry, stop, is_bull, candidates,
+                                   params.min_risk_reward_ratio, params.max_risk_reward_ratio)
+    return PlanGeometry(stop, ceiling, None, tp1, None)
+
+
 def _confluence_candidates(scenario, level_map) -> list:
     """TP candidates for a confluence plan: the unified level map's when one is
     supplied, else the scenario's own real target (or nothing)."""
     if level_map is not None:
         return levels.target_candidates(*level_map, scenario.direction)
     return [scenario.take_profit] if scenario.take_profit is not None else []
+
+
+def band_no_plan_reason(scenario, level_map=None, params=None) -> str | None:
+    """Name a band rejection using the same geometry as the plan builder."""
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
+    geometry = _plan_geometry(scenario, _confluence_candidates(scenario, level_map), params)
+    return geometry.reason if geometry is not None else None
 
 
 def confluence_stop_dropped(scenario, level_map=None, params=None) -> bool:
@@ -662,7 +758,8 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     knobs at 0; arm S keeps a structural stop up to
     CONFLUENCE_STRUCTURAL_STOP_PCT (tp1/tp2 against that risk, the ceiling
     stored as stop_ceiling_pct); arm D returns None beyond
-    CONFLUENCE_STOP_DROP_PCT."""
+    CONFLUENCE_STOP_DROP_PCT. v191: _plan_geometry uses the ATR band when the
+    floor is on and the scenario carries atr14_pct, else v139's geometry."""
     if params is None:
         from swingbot.scan_params import ScanParams
         params = ScanParams.from_config()
@@ -670,15 +767,10 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     is_bull = scenario.direction == "bullish"
     level = scenario.stop_loss   # v129: the pre-clamp level the trade leans on
     candidates = _confluence_candidates(scenario, level_map)
-    geometry = confluence_stop_geometry(entry, level, is_bull, candidates, params)
-    if geometry is None:
-        return None              # v139 arm D: structural stop beyond its ceiling
-    stop_loss, stop_ceiling_pct = geometry
-
-    tp1 = select_structural_target(entry, stop_loss, is_bull, candidates,
-                                   params.min_risk_reward_ratio, params.max_risk_reward_ratio)
-    if tp1 is None:
-        return None
+    geometry = _plan_geometry(scenario, candidates, params)
+    if geometry is None or geometry.tp1 is None:
+        return None              # v139 arm D, no target, or a v191 band reason
+    stop_loss, stop_ceiling_pct, tp1 = geometry.stop_loss, geometry.stop_ceiling_pct, geometry.tp1
 
     if level_map is not None:
         supports, resistances = level_map
@@ -706,9 +798,9 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
         trail_atr_mult=TRAIL_ATR_MULT, quality_score=0, quality_breakdown=[],
         badge="WEAK", badge_stats={}, status=PlanStatus.PENDING,
         stop_ceiling_pct=stop_ceiling_pct,
+        stop_moved_by=geometry.moved_by,
     )
-    if entry_type == "market":
-        record_transition(plan, PlanStatus.ACTIVE, reason="market_entry", at=created_at)
+    _settle_market_entry(plan, df, len(df) - 1, created_at)
     plan_params.stamp_badge(plan)
     plan_params.stamp_cohort(plan, regime2_state)
     plan_params._apply_quality(plan, quality_inputs)

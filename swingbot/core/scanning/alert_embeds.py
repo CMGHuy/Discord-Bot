@@ -9,6 +9,7 @@ from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.market import opex
 from swingbot.core import presentation as ui
 from swingbot.core.presentation import kinds
+from swingbot.core.presentation.instructions import market_on_open_lines
 from swingbot.core.presentation.kinds import Kind
 from swingbot.core.presentation.short_notice import FIELD_NAME as SHORT_FIELD, alert_notice
 
@@ -18,6 +19,15 @@ def strategy_plan_line(plan) -> str:
     ``bullish`` and no ✅ (outcome-only glyph)."""
     return (f"{plan.strategy} · {plan.horizon_key} · {kinds.side_word(plan.direction)} · "
             f"{kinds.plan_badge_text(plan.badge)}")
+
+
+#: v192: the full alert's field for a market plan waiting for its next open.
+MARKET_ON_OPEN_FIELD = "At the open"
+
+
+def _market_on_open_fields(plan) -> list:
+    lines = market_on_open_lines(plan) if plan is not None else []
+    return [(MARKET_ON_OPEN_FIELD, "\n".join(lines), False)] if lines else []
 
 
 def _strategy_levels(plan) -> str:
@@ -33,6 +43,8 @@ def build_strategy_alert_embed(plan) -> "discord.Embed":
                     level=getattr(plan, "confidence_level", None), plan_id=plan.plan_id,
                     link_base=config.ADMIN_PUBLIC_URL)
     embed.add_field(name="Plan (v2)", value=strategy_plan_line(plan), inline=False)
+    for name, value, inline in _market_on_open_fields(plan):
+        embed.add_field(name=name, value=value, inline=inline)
     for name, value in (("Entry", plan.trigger_price), ("Stop", plan.stop_loss), ("TP1", plan.tp1)):
         embed.add_field(name=name, value=f"{value:.2f}")
     if plan.tp2 is not None:
@@ -47,9 +59,10 @@ def build_strategy_simple_embed(plan) -> "discord.Embed":
     identity as the full embed, with the levels block and one context line,
     and no fields, so it reads on a phone. Replaces the plain ``str`` that
     `_send_alerts` could never send as ``embed=``."""
-    embed = ui.push_embed(
-        Kind.STRATEGY_SIGNAL, plan.ticker, plan.direction, plan.strategy,
-        description=f"{_strategy_levels(plan)}\n{strategy_plan_line(plan)} · ledger {plan.ledger}")
+    description = f"{_strategy_levels(plan)}\n{strategy_plan_line(plan)} · ledger {plan.ledger}"
+    description = "\n".join([description, *market_on_open_lines(plan)])
+    embed = ui.push_embed(Kind.STRATEGY_SIGNAL, plan.ticker, plan.direction, plan.strategy,
+                          description=description)
     ui.apply_chrome(embed, kind=Kind.STRATEGY_SIGNAL,
                     level=getattr(plan, "confidence_level", None), plan_id=plan.plan_id,
                     link_base=config.ADMIN_PUBLIC_URL)
@@ -67,7 +80,7 @@ from .snapshots import _snapshot_and_diff
 from .requirements import _sources_str
 from .plan_table import (_v2_plan, plan_numbers_for_display, leg_rows, cohort_line,
                          stop_figures_for_display)
-from .execution_embeds import build_ticket_embed, ticket_gap_line
+from .execution_embeds import build_ticket_embed, ticket_band_line, ticket_gap_line
 
 
 log = logging.getLogger(__name__)
@@ -138,11 +151,13 @@ def _quote_target(item):
 
 
 GAP_RISK_FIELD = "Position risk"
+BAND_STOP_FIELD = "Stop band"
 
 
 def _gap_risk_fields(item) -> list:
-    line = ticket_gap_line(_v2_plan(item))
-    return [(GAP_RISK_FIELD, line, False)] if line else []
+    plan = _v2_plan(item)
+    lines = ((BAND_STOP_FIELD, ticket_band_line(plan)), (GAP_RISK_FIELD, ticket_gap_line(plan)))
+    return [(name, line, False) for name, line in lines if line is not None]
 
 
 def _quote_fields(item) -> list:
@@ -201,6 +216,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     sections["headline"].extend(_short_notice_fields(item, nums, plan_v2))
     sections["plan"].extend(_quote_fields(item))
     sections["plan"].extend(_gap_risk_fields(item))
+    sections["plan"].extend(_market_on_open_fields(plan_v2))
 
     unmet = [(requirement.label, requirement.detail)
              for requirement in item.requirements if not requirement.passed]

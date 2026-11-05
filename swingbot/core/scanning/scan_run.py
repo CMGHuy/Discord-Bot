@@ -323,6 +323,7 @@ def _hard_filters_snapshot(params: ScanParams | None = None) -> dict:
         "min_risk_reward_ratio": params.min_risk_reward_ratio,
         "mtf_adjacent_gate": params.mtf_adjacent_gate,
         "confluence_deviation_pct": params.confluence_deviation_pct,
+        "confluence_atr_stop_floor": params.confluence_atr_stop_floor,
     }
 
 

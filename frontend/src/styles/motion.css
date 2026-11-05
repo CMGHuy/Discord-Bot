@@ -142,14 +142,6 @@ sb-confirm-dialog dialog[open]::backdrop {
   will-change: clip-path;
 }
 
-/* -- #6 nav indicator (sb-nav-indicator, MO11) -------------------------------
- * The component declares no transition of its own; it lives here, per mode.
- * Off and pending: no rule, so the indicator jumps. */
-[data-motion=on] sb-nav-indicator .nav-indicator {
-  transition: transform calc(350ms * var(--motion-scale)) var(--ease-spring), opacity var(--dur-base) var(--ease-out);
-}
-[data-motion=reduced] sb-nav-indicator .nav-indicator { transition: opacity var(--dur-base) var(--ease-out); }
-
 /* -- Reduced: no transform-based motion (spec §1) --------------------------- */
 [data-motion=reduced] .sb-pop-in,
 [data-motion=reduced] .sb-drawer-in,

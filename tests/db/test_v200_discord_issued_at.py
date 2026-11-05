@@ -163,7 +163,9 @@ def scripts():
     return ScriptDirectory.from_config(Config(str(REPO / "alembic.ini")))
 
 
-def test_v200_001_sits_on_v201_001_and_is_the_single_head(scripts):
+def test_v200_001_sits_on_v201_001_below_the_single_head(scripts):
     assert (MIG.revision, MIG.down_revision) == ("v200_001", "v201_001")
     assert scripts.get_revision("v200_001").down_revision == "v201_001"
-    assert scripts.get_heads() == ["v200_001"]
+    heads = scripts.get_heads()
+    assert len(heads) == 1      # later revisions (v205_001, ...) stack on it; never branch
+    assert "v200_001" in {r.revision for r in scripts.iterate_revisions(heads[0], "base")}

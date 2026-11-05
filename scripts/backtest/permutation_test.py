@@ -7,6 +7,7 @@ the un-shifted expectancy doesn't beat ~95% of shifted runs, the
 
 Run: python scripts/backtest/permutation_test.py --component-json '{...}' [--n 200]
      python scripts/backtest/permutation_test.py --arms stamped.json [--n 200 --seed 42]
+     python scripts/backtest/permutation_test.py --arms stamped.json --gap-reclaim [--n 200 --seed 42 --out-json F]
      python scripts/backtest/permutation_test.py --arms stamped.json --shift-replay          [--wr-statistic pooled] [--n 200 --seed 42 --out-json F --data-source alpaca]
 """
 import argparse
@@ -95,6 +96,25 @@ def arm_pair_permutation(baseline, component, n_perm: int = 200, seed: int = 42)
             "n_valid": len(valid), "seed": seed, "shift_range": list(SHIFT_RANGE),
             "removed": len(split["removed"]), "added": len(split["added"]),
             "changed": len(split["changed"])}
+
+
+def _gap_reclaim_null(args, blob, baseline, component) -> dict:
+    """v192: the re-priced-fixed removal-label null over the census's re-priced keys."""
+    from swingbot.core.backtesting.arms import gap_reclaim_census, gap_reclaim_clauses
+
+    side = gap_reclaim_census.load_sidecar(args.arms)
+    if side is None or side.get("knob_delta") != (blob.get("provenance") or {}).get("knob_delta"):
+        raise ValueError("refused:no-gap-reclaim-sidecar -- --gap-reclaim needs the census measure_arms "
+                         "wrote beside these arms (<arms stem>.gap_reclaim.json, same knob delta). Budget intact.")
+    return gap_reclaim_clauses.repriced_permutation(baseline, component,
+                                                    gap_reclaim_census.repriced_keys(side["rows"]),
+                                                    n_perm=args.n, seed=args.seed)
+
+
+def _arm_null(args, blob, baseline, component) -> dict:
+    if getattr(args, "gap_reclaim", False):
+        return _gap_reclaim_null(args, blob, baseline, component)
+    return arm_pair_permutation(baseline, component, n_perm=args.n, seed=args.seed)
 
 
 def _full_universe():
@@ -197,13 +217,16 @@ def _arms_main(args) -> int:
     if _stamp_gate_refused(blob, baseline, component):
         return 1
     try:
-        out = arm_pair_permutation(baseline, component, n_perm=args.n, seed=args.seed)
+        out = _arm_null(args, blob, baseline, component)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     out["verdict"] = ("REAL" if out["p_value"] is not None and out["p_value"] < 0.05
                       else "INDISTINGUISHABLE FROM LUCK")
-    print(json.dumps(out, indent=1))
+    text = json.dumps(out, indent=1)
+    print(text)
+    if args.out_json:
+        Path(args.out_json).write_text(text, encoding="utf-8")
     return 0
 
 
@@ -216,6 +239,8 @@ def _parser():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--shift-replay", action="store_true",
                    help="v180 A2: circular entry-shift replay of an additive arm's strategy")
+    p.add_argument("--gap-reclaim", action="store_true",
+                   help="v192: re-priced-fixed removal-label null (needs <arms stem>.gap_reclaim.json)")
     p.add_argument("--wr-statistic", choices=tuple(WR_STATISTICS), default="standardised")
     p.add_argument("--out-json", default=None)
     p.add_argument("--data-source", choices=training_data.DATA_SOURCES, default=None)
@@ -326,6 +351,8 @@ def main(argv=None) -> int:
     args = _parser().parse_args(argv)
     instrument_cli.require_v1(instrument_cli.spec_from_args(args), "permutation_test.py",
                               "phase 6 (cutover: walk-forward on the v2 folds)")
+    if args.gap_reclaim and not args.arms:
+        _parser().error("--gap-reclaim needs --arms")
     if args.shift_replay:
         if args.arms is None:
             _parser().error("--shift-replay needs --arms")

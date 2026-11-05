@@ -39,7 +39,14 @@ for arg in "$@"; do
     *) TARGET="$arg" ;;
   esac
 done
-SSH_HETZNER="${SSH_HETZNER:-scripts/ops/ssh-hetzner.sh}"
+# ssh-hetzner.sh is git-ignored, so a worktree has none: fall back to the main checkout's copy.
+if [ -z "${SSH_HETZNER:-}" ]; then
+  SSH_HETZNER="scripts/ops/ssh-hetzner.sh"
+  if [ ! -f "$SSH_HETZNER" ]; then
+    MAIN_GIT="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+    [ -n "$MAIN_GIT" ] && [ -f "${MAIN_GIT%/.git}/scripts/ops/ssh-hetzner.sh" ] && SSH_HETZNER="${MAIN_GIT%/.git}/scripts/ops/ssh-hetzner.sh"
+  fi
+fi
 KEEP=3
 STAMP="${REPLICATE_STAMP:-$(date -u +%Y-%m-%dT%H-%MZ)}"
 OUT_DIR="backups/prod-replica"

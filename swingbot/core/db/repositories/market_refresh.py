@@ -1,5 +1,5 @@
 """v201: the refresher's four stores -- quote currencies, the refresh queue,
-in-flight marks and the heartbeat.
+in-flight marks and the heartbeat; v205: the daily FX rates.
 
 Writers: the refresher process writes currencies, marks and the heartbeat;
 the request door (admin API) writes the queue, the refresher takes from it.
@@ -9,14 +9,15 @@ transaction. Times are tz-aware UTC.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from swingbot.core.db.repositories.base import Repository
-from swingbot.core.db.schema import (market_refresh_marks, market_refresh_queue,
-                                     quote_currencies, refresher_heartbeat)
+from swingbot.core.db.schema import (fx_daily_rates, market_refresh_marks,
+                                     market_refresh_queue, quote_currencies,
+                                     refresher_heartbeat)
 
 #: Restated so core/db imports nothing from core/marketdata (V201-5 pins equality).
 HEARTBEAT_KEY = "refresher"
@@ -56,6 +57,66 @@ class QuoteCurrencyRepository(Repository):
         with self._tx(conn) as c:
             settled = {r.symbol for r in c.execute(stmt)}
         return [s for s in wanted if s not in settled]
+
+    def known_codes(self, *, conn=None) -> set[str]:
+        """v205: every distinct code a symbol is known to be quoted in (the snap's pairs in use)."""
+        t = self.table
+        stmt = sa.select(t.c.code).distinct().where(t.c.outcome == "known", t.c.code.is_not(None))
+        with self._tx(conn) as c:
+            return {r.code for r in c.execute(stmt)}
+
+
+_FX_SOURCES = ("snap", "backfill")
+
+
+def _fx_values(row: dict) -> dict:
+    """One fx_daily_rates row, codes upper-cased; a bad source or rate is refused."""
+    rate = float(row["rate"])
+    if row["source"] not in _FX_SOURCES or not rate > 0:
+        raise ValueError(f"fx_daily_rates: refused row {row!r}")
+    return {"base": str(row["base"]).upper(), "account": str(row["account"]).upper(),
+            "day": row["day"], "rate": rate, "bar_date": row["bar_date"],
+            "snapped_at": row["snapped_at"], "source": row["source"], "updated_at": _STAMP}
+
+
+class FxDailyRateRepository(Repository):
+    """v205: one rate per (base, account, Berlin day), written insert-if-absent only.
+
+    The key is composite, so the base class's single-key get/upsert are never
+    used; every method writes its own SQL. The first value written is the day's
+    value: a later snap or a re-run backfill never changes it."""
+
+    def __init__(self):
+        super().__init__(fx_daily_rates, key="day")
+
+    def insert_if_absent(self, rows, *, conn=None) -> int:
+        values = [_fx_values(row) for row in rows]
+        if not values:
+            return 0
+        stmt = pg_insert(self.table).values(values).on_conflict_do_nothing(
+            index_elements=["base", "account", "day"]).returning(self.table.c.day)
+        with self._tx(conn) as c:   # RETURNING: rowcount is -1 for a multi-VALUES insert here
+            return len(c.execute(stmt).all())
+
+    def all_rates(self, *, conn=None) -> list[dict]:
+        t = self.table
+        stmt = sa.select(t.c.base, t.c.account, t.c.day, t.c.rate, t.c.bar_date).order_by(
+            t.c.base, t.c.account, t.c.day)
+        with self._tx(conn) as c:
+            return [dict(r._mapping) for r in c.execute(stmt)]
+
+    def version(self, *, conn=None) -> tuple[int, datetime | None]:
+        t = self.table
+        stmt = sa.select(sa.func.count(), sa.func.max(t.c.snapped_at)).select_from(t)
+        with self._tx(conn) as c:
+            count, latest = c.execute(stmt).one()
+        return int(count), latest
+
+    def days_present(self, base: str, account: str, *, conn=None) -> set[date]:
+        t = self.table
+        stmt = sa.select(t.c.day).where(t.c.base == base.upper(), t.c.account == account.upper())
+        with self._tx(conn) as c:
+            return {r.day for r in c.execute(stmt)}
 
 
 class RefreshQueueRepository(Repository):
@@ -189,3 +250,7 @@ def refresh_mark_repo() -> RefreshMarkRepository:
 
 def refresher_heartbeat_repo() -> RefresherHeartbeatRepository:
     return _singleton(RefresherHeartbeatRepository)
+
+
+def fx_daily_rate_repo() -> FxDailyRateRepository:
+    return _singleton(FxDailyRateRepository)

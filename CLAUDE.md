@@ -88,7 +88,7 @@ v192). Detail: `edge-priorities.md`, `backtest-methodology.md` § Stage −2.
   `python scripts/dev/testrun.py changed` (diff-selected; widens when unsure),
   `... file tests/test_foo.py` (~7s), `... fast` (~27s) or `... suite <name>`.
   Dispatch the `test-runner` subagent for a full run so none of it reaches
-  this context. When a *plan* schedules its runs: "Naming specs and plans".
+  this context. Plans schedule no full run: "Naming specs and plans".
 - Hand wide/exploratory searches to the `Explore` agent so raw grep output
   never lands in this context.
 - **Route mechanical work to the role agents** (`task-implementer`,
@@ -104,7 +104,7 @@ hook's NEXT id blind** — verify with `grep -n "^### Task" <plan>`. Tooling:
 ## Commands
 
 ```bash
-python scripts/dev/testrun.py full             # full suite via -n 4 — the pre-commit gate
+python scripts/dev/testrun.py full             # full suite via -n 4 — the CI pipeline's job; local only to chase an observed failure
 python scripts/dev/testrun.py fast             # ~27s, skips the slow tier; auto-escalates if charts/templates touched
 python scripts/dev/testrun.py changed          # only tests reaching your diff; widens to full when unsure (--dry-run: print, don't run)
 python scripts/dev/testrun.py file tests/test_foo.py  # one file (~7s) — use this while iterating
@@ -122,8 +122,8 @@ failure. Baseline, and why counts/timings swing with machine load:
 `docs/claude/testing-cost.md`.
 
 **A failed test is fixed and re-run alone** (`testrun.py file …` or `pytest
-path::test`), never by re-running the whole suite. **No full suite after
-merging back to `main`**: it ran once, before the merge. **Commit in several
+path::test`), never by re-running the whole suite. **No plan or merge runs the
+full suite locally; CI does. After pushing, watch the run and fix failing tests until green** (`working-conventions.md` § Pipeline watch). **Commit in several
 scoped commits, never one big one** (`working-conventions.md`). **Every feature, fix or change you implement ships its own unit tests in the same work** (backend and frontend alike, edge and empty cases included), run green before you call it done; the partner never has to ask (`working-conventions.md` § How the human partner wants work done).
 
 **Tests live in suites** (`tests/suites.toml`; `testrun.py suite <name>`, `suites`
@@ -131,7 +131,7 @@ lists). A new `tests/` directory joins exactly one suite in the same commit; a
 suite past `max_tests` is **split by feature**, never the limit raised. CI runs
 one job per suite from that file — never hand-list one. `testing-cost.md` § Test suites.
 
-**Long backtest/grid runs** go to `backtest-runner`, chunked per strategy; 15 min+ prints a percent.
+**Long backtest/grid runs** go to `backtest-runner`, chunked per strategy; 15 min+ prints a percent. **Any run past a few minutes persists each finished unit (ticker/fold/chunk) to disk as it completes and a restart skips them -- never results held only in memory**: `working-conventions.md` § Long runs must checkpoint.
 
 ## Naming specs and plans
 
@@ -139,7 +139,7 @@ one job per suite from that file — never hand-list one. `testing-cost.md` § T
 creation** from one repo-wide counter (doc filenames + commit log), recomputed
 right before the commit. `Bump:` states a level only, never a version number.
 **No file over 1500 lines, no task over 20 KB, no plan over 20 tasks** — split,
-never compress a task. **Full suite once per plan, as its final task.** Specs and plans are
+never compress a task. **No plan schedules a full suite; CI runs it.** Specs and plans are
 committed on `main` **the moment written (each plan index/part once `plan_lint.py` passes), never left uncommitted**; branch only to implement. Run `/new-doc`; detail: `document-conventions.md`, `document-lifecycle.md`.
 **Write a plan in two phases** after `plan-briefer` (Sonnet) gathers the code
 into one brief: `plan-writer` `mode=index`, then one (its **Goal** explains *why* and *what changes*: `document-conventions.md`)

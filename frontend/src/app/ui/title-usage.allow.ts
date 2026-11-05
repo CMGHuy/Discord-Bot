@@ -26,7 +26,6 @@ export const TITLE_INPUT_ELEMENTS: readonly string[] = ['sb-panel-header', 'sb-e
 
 export const TITLE_ALLOW: readonly TitleSite[] = [
   // -- shell ---------------------------------------------------------------
-  { file: 'shell/connection-status.ts', binding: '[title]="hint()"', kind: 'control-name', note: 'status dot; aria-label carries the state word, panels carry data age' },
   { file: 'shell/profile-menu.ts', binding: '[attr.title]="haloTitle()"', kind: 'control-name', note: 'the avatar menu button: bot up/down beside its aria-label' },
   { file: 'shell/tape/tape.ts', binding: "[attr.title]=\"asOfTime() === ABSENT ? null : 'Tape data as of ' + asOfTime()\"", kind: 'echo', note: 'as-of time; each tile shows its own age' },
   // -- ui primitives ---------------------------------------------------------

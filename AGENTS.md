@@ -220,7 +220,7 @@ Read the `docs/claude/` file before acting:
   (`.sb-hit`), phone tables declare `compact` rows. Before merging a UI change,
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234` must
   exit 0 (allow-list entries carry a reason and a date; its `hint` check fails
-  an off-screen or covered `sb-hint` popover, and its `rail-label` check fails an icon-rail entry with no accessible name or no visible label on keyboard focus; fix either, never allow it).
+  an off-screen or covered `sb-hint` popover, and its `rail-label` and `dock` checks fail an unlabelled rail entry, a live column over the content, or an off-screen sheet; never allow them).
   UI: `shots --clip <css selector>`, one page per task.
 
 ## Skills: the same ones Claude uses
@@ -243,9 +243,10 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 | Mining the live book for ranked hypotheses: `trade-scout` dispatches the read-only `scout` agent once per generator role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
 | Using the eToro Public API MCP (portfolio, instruments, real or demo trades) -- outside swingbot's paper-only scope | `etoro-public-api-operations` |
 
+`task-brief` (fill a plan task's handoff with trap preflight) is not explicit-only: run it right after `task_handoff.py` writes a handoff.
+
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
-whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`
-(extract one plan task with its trap preflight), `deploy` (Hetzner deploy
+whenever Claude would run `/<name>`: `gate` (pre-commit gate), `deploy` (Hetzner deploy
 sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM
 backup pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
 output returned verbatim, never judged),
@@ -491,10 +492,9 @@ after bumping.
 No plan file may exceed 1500 lines. Split it into more `_N` parts (lettered
 `_2a`/`_2b`), never compress a task or split one across files, and afterwards
 confirm the `^### Task` sequence has no gap. From v197 a task is ≤ 20 KB
-(split: `<id>`/`<id>b`), a plan ≤ 20 tasks (`SCOPE`). A plan runs the full suite ONCE, as
-its own final verification task, never per task and never again after a clean
-merge; the per-task check is the one narrow test file (or `npm test --include`
-one spec). Full cadence: `document-conventions.md`.
+(split: `<id>`/`<id>b`), a plan ≤ 20 tasks (`SCOPE`). A plan never runs the full suite; CI does. After pushing, watch
+the run (`gh run watch`), fix failing tests alone until green. Per task: one narrow
+test file. Detail: `document-conventions.md`.
 
 "Implement plan vN" with nothing more means: in a worktree. Reuse the plan's
 existing `.claude/worktrees/` worktree if one exists, else create it; implement

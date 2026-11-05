@@ -441,49 +441,30 @@ Be honest about a group of one. A phase that is genuinely a chain says so —
 and that sentence is worth as much as a wide group, because it stops the next
 session re-deriving the dependency graph to find out.
 
-## One full suite run, at the end of the plan
+## No full suite in a plan: the pipeline runs it
 
-**A plan verifies itself once, as its own final task — not after every step.**
-This applies to **every** suite a plan's own files touch, not just the Python
-one: a plan that only edits `frontend/` verifies itself once with
-`cd frontend && npm test`; a plan that touches both gets one full run of each,
-still only at the end. The per-task check is the narrow one — Python:
-`python scripts/dev/testrun.py file tests/test_<the file that task touched>.py`
-(~7s), or `... fast` (~27s) when the task's blast radius genuinely crosses
-files; frontend: `npm test -- --include <the one spec file that task
-touched>`. Neither `... full` nor a bare `npm test` (no `--include`) is a
-per-task step, and a plan that writes "run the full suite" into every task's
-verification block is writing a plan that costs an extra 40–260s (Python) or
-several seconds of a full Angular rebuild (frontend) per task for information
-the narrow run already gave.
+**A plan never schedules a full-suite task, Python or frontend.** The full
+suites run in the CI pipeline (`.github/workflows/deploy.yml`, one job per suite
+from `tests/suites.toml`, on push to `main`), which is faster than a local run
+and names the failing tests directly. The per-task check is the narrow one only
+— Python: `python scripts/dev/testrun.py file tests/test_<the file that task
+touched>.py` (~7s), or `... fast` (~27s) when the blast radius genuinely crosses
+files; frontend: `npm test -- --include <the one spec file that task touched>`.
+Neither `... full` nor a bare `npm test` is a plan step.
 
-So every plan ends with a verification task that runs each touched suite's
-full run **once**, over everything the plan implemented:
+A plan's last task is therefore its release/verification-by-pipeline task: the
+plan-specific checks that are not unit tests (layout audit, post-deploy timing,
+a measured claim) and the note that the pipeline is the gate. It carries no
+"run the full suite" step.
 
-```markdown
-### Task A9: Full-suite verification
+**After the plan's branch is merged to `main` and pushed, Claude watches the
+pipeline** (`working-conventions.md` § Pipeline watch): it follows the run to
+its end, and on a failure reads the failing tests from the run log, fixes them
+(re-running each alone with `testrun.py file`), commits, pushes and watches
+again, until the run is green. The plan is not closed out before that.
 
-Run `python scripts/dev/testrun.py full` (or dispatch the `test-runner`
-subagent) once, over all of Phase A. Expect `0 failed`, `0 xfailed`.
-If the plan touched `frontend/`, also run `cd frontend && npm test` once.
-**If either is not green, fix forward from those failures** — they are this
-plan's regressions, and the task is not done until both runs are.
-```
-
-That final run is the gate, and it is a real one: it is where the plan's
-regressions surface, so a red result is the start of the work, not a reason to
-re-litigate earlier tasks. Fix from the failures the run names.
-
-**A full run triggered mid-plan to chase a real, already-observed failure
-(a compile error, a suspicious ordering bug) is debugging, not a second
-verification task** — it doesn't need its own plan step and isn't the
-violation this section forbids. What the section forbids is *routinely
-scheduling* a full run after every task as if it were the per-task check.
-
-**After merging the plan's branch to `main`, do not run either suite again.**
-The branch was green when the merge started and a conflict-free merge does not
-produce code nobody ran. The one exception is a merge that actually resolved
-conflicts — that resolution is new, unrun code, and it gets the one run.
+**A full run triggered locally to chase a real, already-observed failure is
+debugging, not a plan step.** It is the exception, never the schedule.
 
 ## When a plan stops being live
 

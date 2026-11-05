@@ -1,0 +1,46 @@
+{
+ "stage": 0,
+ "arm": "R",
+ "verdict": "UNDERPOWERED",
+ "powered_cells": [],
+ "mde_ceiling_r": 0.1,
+ "power": 0.8,
+ "cluster": "week",
+ "cells": [
+  {
+   "cell": "k0.75",
+   "k": 0.75,
+   "stratum_n": 43188,
+   "paired_n": 1487,
+   "newly_admitted_n": 35742,
+   "observed_n": 1487,
+   "target_n": 649,
+   "mde_r": 0.17439026136085944,
+   "powered": false
+  },
+  {
+   "cell": "k1",
+   "k": 1.0,
+   "stratum_n": 29092,
+   "paired_n": 997,
+   "newly_admitted_n": 20445,
+   "observed_n": 997,
+   "target_n": 435,
+   "mde_r": 0.22536632611288593,
+   "powered": false
+  },
+  {
+   "cell": "k1.5",
+   "k": 1.5,
+   "stratum_n": 15732,
+   "paired_n": 342,
+   "newly_admitted_n": 6418,
+   "observed_n": 342,
+   "target_n": 149,
+   "mde_r": 0.4703007427405639,
+   "powered": false
+  }
+ ],
+ "instrument": "v1",
+ "data_source": "alpaca"
+}

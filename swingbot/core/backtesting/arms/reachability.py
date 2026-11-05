@@ -53,6 +53,11 @@ _V139 = ("v139: builders.confluence_stop_geometry inside build_confluence_plan, 
          "(structural stop beyond the 2% cap) move; strategy plans never. Not verified on "
          "the v74 fixture; covered by tests/planning/test_confluence_stop_geometry.py and "
          "tests/backtesting/test_confluence_stop_replay.py.")
+_V191 = ("v191: atr_band.band_stop inside builders.build_confluence_plan, and the band admission "
+         "in levels.build_scenarios that backtest_scenarios.scenarios_at reaches, so "
+         "replay_scenarios (ConfluenceEngine) observes it. Confluence plans only; strategy plans "
+         "never. Gated by the v92 harvest gate through "
+         "scripts/backtest/measure_atr_band_stop.py, not measure_arms.py.")
 _HEADROOM = ("v135 headroom veto (edge/gates.py), applied to the built plan in "
              "StrategyEngine._gated_plan and to each scenario in "
              "backtest_scenarios._headroom_kept. Inert unless HEADROOM_SCOPE != off and "
@@ -60,6 +65,15 @@ _HEADROOM = ("v135 headroom veto (edge/gates.py), applied to the built plan in "
              "by design. Stage -1: measure_arms.py --stage pilot --knob "
              "HEADROOM_SCOPE=<scope> --knob HEADROOM_MIN_R=1.0, then "
              "validate_component.py --stage reachability.")
+
+_V192 = ("v192 next-open market fill (planning/market_next_open.py), reached from "
+         "exit_sim._market_exit for a market plan the builders left PENDING under "
+         "MARKET_ENTRY_NEXT_OPEN; both engines build market plans. GAP_RECLAIM_ATR is "
+         "inert unless MARKET_ENTRY_NEXT_OPEN is on (apply_knobs refuses it alone), so a "
+         "lone perturbation at the default is inert by design. Stage -1: measure_arms.py "
+         "--stage pilot --baseline-knob MARKET_ENTRY_NEXT_OPEN=true --knob "
+         "MARKET_ENTRY_NEXT_OPEN=true --knob GAP_RECLAIM_ATR=<g>, then "
+         "validate_component.py --stage reachability --gap-reclaim.")
 
 REGISTRY: dict[str, Reach] = {
     "MIN_REWARD_PCT": Reach(REACHABLE, "Scenario admission gate in replay_scenarios.", C, True),
@@ -83,6 +97,8 @@ REGISTRY: dict[str, Reach] = {
     "PULLBACK_DRYUP_MAX_RATIO": Reach(REACHABLE, _DRYUP, CS),
     "HEADROOM_SCOPE": Reach(REACHABLE, _HEADROOM, CS),
     "HEADROOM_MIN_R": Reach(REACHABLE, _HEADROOM, CS),
+    "MARKET_ENTRY_NEXT_OPEN": Reach(REACHABLE, _V192, CS),
+    "GAP_RECLAIM_ATR": Reach(REACHABLE, _V192, CS),
     "SHORT_UNIVERSE_RESEARCH_MODE": Reach(REACHABLE, (
         "v118: the short_universe population engine replays the base scan and the extra "
         "lane per decision date through the live selector (build_extra_candidates), "
@@ -133,6 +149,10 @@ REGISTRY: dict[str, Reach] = {
                                             "not measure_arms.py.", C),
     "CONFLUENCE_STOP_DROP_PCT": Reach(REACHABLE, _V139 + " Arm D runs the standard v72 funnel "
                                       "through measure_arms.py.", C),
+    "CONFLUENCE_ATR_STOP_FLOOR": Reach(REACHABLE, _V191, C),
+    "CONFLUENCE_ATR_TARGET_MODE": Reach(REACHABLE, _V191 + " Read only when "
+                                        "CONFLUENCE_ATR_STOP_FLOOR > 0; a lone perturbation at "
+                                        "floor 0 is inert by design.", C),
 }
 
 

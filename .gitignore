@@ -135,7 +135,6 @@ swingbot/admin/static/app/
 # Editor / tooling config and local-only Claude Code state
 # ==========================================================================
 .vscode/
-.claude/settings.local.json
 .claude/worktrees/
 # Scratch output from the Playwright MCP server: browser profile, traces and
 # screenshots from a local session. Machine-specific and can be large.
@@ -177,3 +176,6 @@ data/reports/
 # v190 evidence now lives under docs/superpowers/results/v190-data/; data/ is the VM bind mount, never tracked
 data/backtest_results/
 data/.v190_*
+
+# runtime queue written by the bot; never tracked (v204 deploy reset could not unlink it)
+data/short_interest_queue.json

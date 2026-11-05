@@ -6,8 +6,9 @@ import pandas as pd
 import pytest
 
 from swingbot import config
-from swingbot.core.marketdata import fx, fx_convert
+from swingbot.core.marketdata import fx, fx_convert, fx_daily
 from swingbot.core.marketdata.shared.kinds import Asker
+from tests.marketdata.test_fx import FakeRates, stored
 
 T0 = datetime(2026, 10, 28, 15, 0, tzinfo=timezone.utc)
 FRAME = pd.DataFrame({"Close": [0.9]}, index=pd.to_datetime(["2026-10-27"]))
@@ -33,10 +34,21 @@ def _boom(*_a, **_k):
     raise AssertionError("network call on a never-fetch path")
 
 
+@pytest.fixture
+def table(monkeypatch):
+    """An empty fx_daily_rates; a test adds rows before its first fx_rate call."""
+    rates = FakeRates()
+    monkeypatch.setattr(fx_daily, "fx_daily_rate_repo", lambda: rates)
+    fx_daily.reset_memo()
+    yield rates
+    fx_daily.reset_memo()
+
+
 @pytest.fixture(autouse=True)
-def _isolated(monkeypatch):
+def _isolated(monkeypatch, table):
     monkeypatch.setattr(fx, "_frames", {})
     monkeypatch.setattr(fx, "_quote_codes", {})
+    monkeypatch.setattr(fx, "_unknown_until", {})
     monkeypatch.setattr(fx, "account_currency_code", lambda: "EUR")
 
 
@@ -112,7 +124,11 @@ def test_refresh_runs_at_the_refresher_tier(codes, provider, monkeypatch):
     assert scopes == [Asker.ADMIN_REFRESH]
 
 
-def test_rate_without_refresh_reads_the_disk_file_only(no_network):
+def test_rate_without_refresh_reads_the_table_only(no_network, table, monkeypatch):
+    monkeypatch.setattr(fx.data_store, "load_normalized", _boom)        # never a file
+    assert fx.fx_rate("USD", "EUR", date(2026, 10, 28), refresh=False) is None
+    table.rows.append(stored("USD", "EUR", date(2026, 10, 28), 0.9, date(2026, 10, 27)))
+    fx_daily.reset_memo()
     assert fx.fx_rate("USD", "EUR", date(2026, 10, 28), refresh=False) == pytest.approx(0.9)
 
 
@@ -129,7 +145,8 @@ def _row(ticker, amount):
     return {"ticker": ticker, "realized_pnl_amount": amount, "closed_at": "2026-10-28"}
 
 
-def test_convert_without_fetch_flags_unknown_never_zero(codes, no_network):
+def test_convert_without_fetch_flags_unknown_never_zero(codes, no_network, table):
+    table.rows.append(stored("USD", "EUR", date(2026, 10, 28), 0.9, date(2026, 10, 27)))
     codes.put("AAPL", "USD", "known", checked_at=T0)
     rows = fx_convert.to_account_currency([_row("AAPL", 10.0), _row("NEW", 5.0)], fetch=False)
     assert (rows[0]["realized_pnl_amount"], rows[0]["fx_missing"]) == (9.0, False)
@@ -150,7 +167,8 @@ def test_money_wrapper_passes_fetch_from_the_kill_switch(monkeypatch, admin, fet
     assert seen == [fetch]
 
 
-def test_risk_weights_never_fetch_with_the_refresher_on(codes, no_network, monkeypatch):
+def test_risk_weights_never_fetch_with_the_refresher_on(codes, no_network, monkeypatch, table):
+    table.rows.append(stored("USD", "EUR", date(2026, 10, 28), 0.9, date(2026, 10, 27)))
     from swingbot.admin.api_v1 import risk_read_model
     monkeypatch.setattr(config, "MARKETDATA_LAYER", "on")
     monkeypatch.setattr(config, "ADMIN_REFRESHER", "on")

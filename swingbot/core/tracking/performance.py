@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 _TRADE_ID_ALPHABET = string.ascii_letters + string.digits
 
 from swingbot import config
+from swingbot.core.infra import read_memo
 from swingbot.core.planning import account as account_module
 from swingbot.core.planning import gap_sizing as gap_sizing_mod
 from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY
@@ -667,12 +668,12 @@ def _paper_sizing(entry, stop_loss, direction, gap_sizing, label) -> dict | None
     """The paper book's share count, from the alert's one sizing path (v183).
 
     A failure in the gap path logs one line and sizes on the stop, never
-    leaving the trade unsized; a long never logs and never leaves today's path."""
+    leaving the trade unsized; an unstamped long never logs."""
     try:
         return gap_sizing_mod.size_for(entry, stop_loss, direction=direction,
                                        gap_sizing=gap_sizing, label=label)
     except Exception as exc:
-        if direction == "bearish" and gap_sizing:
+        if gap_sizing:
             log.info("%s: gap sizing fell back to stop (%s)", label, exc)
         return _stop_only_sizing(entry, stop_loss)
 
@@ -715,6 +716,12 @@ def _json_record(row: dict) -> dict:
     # datetime/Decimal values into analytics and command consumers.
     from swingbot.core.db.codec import normalise
     return normalise(result)
+
+
+def _load_trade_records() -> list[dict]:
+    """Every trades row in TradeLog's JSON shape, read fresh (TradeLog._all's loader)."""
+    from swingbot.core.db.repositories.trades import trades_repo
+    return [_json_record(row) for row in trades_repo().list_all()]
 
 
 def _manual_close_quote(ticker: str) -> float | None:
@@ -784,9 +791,10 @@ class TradeLog:
             self._db_upsert(trade)
 
     def _all(self) -> list[dict]:
-        """Every trade, in TradeLog's API shape."""
-        from swingbot.core.db.repositories.trades import trades_repo
-        return [_json_record(row) for row in trades_repo().list_all()]
+        """Every trade, in TradeLog's API shape. v205: inside an admin read scope
+        (``read_memo.scope()``) the table is read and parsed once per request and
+        each call gets shallow copies; outside one, today's direct read."""
+        return read_memo.records(read_memo.TRADES, _load_trade_records)
 
     def _open_trade_for_plan(self, plan_id: str, *, conn=None) -> dict | None:
         """The plan's open trade. Standalone: from ``self._all()`` exactly as

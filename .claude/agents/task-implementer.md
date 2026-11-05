@@ -30,8 +30,8 @@ with line numbers).
 - Work only in the worktree the handoff names. Never edit
   `.claude/worktrees/*` from the main tree, never touch another worktree.
 - Test-first (preloaded TDD skill). Iterate with the handoff's
-  `testrun.py file` command — never the full suite, never `fast`; the plan's
-  last task owns the full run.
+  `testrun.py file` command — never the full suite, never `fast`; the CI
+  pipeline owns the full run.
 - Every function you write or change stays below cyclomatic complexity 15:
   `python -m radon cc -s -n C <files>` must print nothing for your changes.
 - Area skills (`no-lookahead`, `alert-surface`, `edge-module`,

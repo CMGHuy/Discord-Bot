@@ -19,16 +19,24 @@ description = "chart/PNG rendering -- alone because rendering dominates wall-clo
 paths = ["tests/charts/"]
 
 [suites.market-data]
-description = "OHLCV fetch/cache and the market layer: indicators, entry signals"
-paths = ["tests/marketdata/", "tests/market/"]
+description = "OHLCV fetch and cache"
+paths = ["tests/marketdata/"]
+
+[suites.market-signals]
+description = "the market layer: indicators, entry signals, ATR band"
+paths = ["tests/market/"]
 
 [suites.scanning]
 description = "the scan engine and everything it posts"
 paths = ["tests/scanning/"]
 
 [suites.planning]
-description = "trade-plan construction and lifecycle"
-paths = ["tests/planning/"]
+description = "trade-plan construction, exits and sizing: tests/planning/ files test_a* .. test_o* and test_q* .. test_z*"
+paths = ["tests/planning/test_[a-o]*.py", "tests/planning/test_[q-z]*.py"]
+
+[suites.planning-plans]
+description = "the plan engine, plan manager, plan feed and plan params: tests/planning/ files test_p*"
+paths = ["tests/planning/test_p*.py"]
 
 # tests/backtesting/ is ~40% of the suite's wall-clock, so it is four legs, cut by
 # measured per-file time (~320/290/270/190 CPU-s) rather than by feature -- one leg
@@ -73,6 +81,10 @@ paths = ["tests/admin/test_api*.py"]
 [suites.admin-core]
 description = "Flask admin internals: lifecycle commands, jobs, listeners, settings, SPA serving"
 paths = ["tests/admin/test_[b-z]*.py", "tests/admin/test_a[!p]*.py"]
+
+[suites.admin-perf]
+description = "v205 admin read performance: SQL tally, Server-Timing, goldens and budgets of the profiled endpoints"
+paths = ["tests/admin_perf/"]
 
 [suites.live-api]
 description = "v202 GET /api/v1/live: heat, plans awaiting order, killswitch, activity feed"

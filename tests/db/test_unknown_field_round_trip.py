@@ -105,6 +105,8 @@ NOT_REPOSITORY_BACKED = {
     "dropped_doc_fields": "written only by swingbot.core.db.doc_fields inside Alembic revisions",
     "preregistration_verdicts": "write-once (insert_once only; upsert/insert refused); its doc "
                                 "round trip is tests/db/test_preregistration_verdicts_repository.py",
+    "fx_daily_rates": "composite key (base, account, day), written insert_if_absent only and "
+                      "read as promoted columns; its round trip is tests/db/test_v205_fx_daily_rates.py",
 }
 
 #: Tables whose rows need the probe plan first (a foreign key into plans).

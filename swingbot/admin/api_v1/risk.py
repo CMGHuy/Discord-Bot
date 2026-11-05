@@ -35,6 +35,7 @@ from flask import jsonify, request
 
 from swingbot import config
 from swingbot.core.infra.swallowed import swallowed
+from swingbot.core.marketdata import fx_convert
 
 from . import api_v1, error
 from .auth import require_auth
@@ -100,14 +101,17 @@ def _positions(open_trades: list[dict] | None, balance: float | None) -> list[di
 def _open_short_gap_risk(open_trades: list) -> dict:
     """v183: what the open shorts would lose on a gap the size of each ticker's
     p99 up-gap, summed -- shown beside heat, never added to it (heat stays on
-    stop risk). A short without a figure is counted, never guessed at."""
+    stop risk). A short without a figure is counted, never guessed at.
+    Shorts only, as the risk page labels it; a stamped long's gap figure
+    is on its order block (v191)."""
     from swingbot.core.planning.gap_sizing import gap_risk_amount_for
 
     total, known, unknown = 0.0, 0, 0
     for t in open_trades:
         if t.get("direction") != "bearish":
             continue
-        amount = (gap_risk_amount_for(t["shares"], t.get("entry"), t.get("stop_loss"), t.get("gap_sizing"))
+        amount = (gap_risk_amount_for(t["shares"], t.get("entry"), t.get("stop_loss"), t.get("gap_sizing"),
+                                     direction="bearish")
                   if t.get("shares") else None)
         if amount is None:
             unknown += 1
@@ -453,7 +457,7 @@ def _distribution_metrics(open_trades: list | None, benchmark: str, checked: str
     if not open_trades:
         return _empty_distribution(), {"labels": [], "values": []}, _distribution_status(checked, None)
     symbols = _asset_symbols(open_trades)
-    weights, reason = signed_weights(open_trades, on=datetime.fromisoformat(checked).date())
+    weights, reason = signed_weights(open_trades, on=fx_convert.fx_day(checked))
     try:
         bars = _risk_bars(sorted(set(symbols) | {benchmark}))
     except Exception as exc:

@@ -607,15 +607,26 @@ def _clause_mechanism(split: dict) -> ClauseResult:
         f"{r_exp:+.4f}R (must be <= 0)", r_wr, k_wr)
 
 
+def verdict_of(clauses, *, skipped_fails: bool = False) -> str:
+    """The gate's verdict over ``clauses``: FAIL when any clause FAILs. v192: with
+    ``skipped_fails`` a SKIPPED clause fails too (the spec's 'a SKIPPED clause counts as a fail'
+    for a component whose every clause must be answerable); the default is today's rule."""
+    blocking = ("FAIL", "SKIPPED") if skipped_fails else ("FAIL",)
+    return "FAIL" if any(c.verdict in blocking for c in clauses) else "PASS"
+
+
 def evaluate(baseline, component, *, stage: str,
              permutation_p: float | None = None,
              n_resamples: int = BOOTSTRAP_RESAMPLES,
              seed: int = 42, cluster: str = "ticker",
-             wr_statistic: str = "standardised") -> AcceptanceResult:
+             wr_statistic: str = "standardised",
+             skipped_fails: bool = False) -> AcceptanceResult:
     """The gate. Every applicable clause must PASS.
 
     A SKIPPED clause never blocks a PASS, but it is always reported -- a
-    skip is a fact about the measurement, not an absence of one.
+    skip is a fact about the measurement, not an absence of one. v192:
+    ``skipped_fails=True`` makes it block (opt-in; every existing verdict
+    is unchanged).
     """
     if stage not in STAGES:
         raise ValueError(f"stage must be one of {STAGES}, got {stage!r}")
@@ -631,7 +642,7 @@ def evaluate(baseline, component, *, stage: str,
         _clause_permutation(stage, permutation_p),
         _clause_mechanism(split),
     )
-    verdict = "FAIL" if any(c.verdict == "FAIL" for c in clauses) else "PASS"
+    verdict = verdict_of(clauses, skipped_fails=skipped_fails)
     return AcceptanceResult(stage=stage, verdict=verdict, clauses=clauses,
                             strata=stratum_table(baseline, component),
                             split={k: len(v) if isinstance(v, list) else v

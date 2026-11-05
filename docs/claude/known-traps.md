@@ -1,8 +1,8 @@
 # Known traps
 
 Referenced from the root `CLAUDE.md`. Each of these has already cost a
-session — read this before touching data caching, `scan_engine`/`scan_embeds`,
-`embeds.py`, or the scan loop.
+session — read this before touching data caching, `scanning/scan_run.py`,
+`alert_embeds.py`/`embeds.py`, or the scan loop.
 
 ## Two OHLCV caches
 
@@ -470,6 +470,81 @@ selection. That is the 2% cap minus `CLAMP_HEADROOM_PCT` (0.25, a constant in
   still the measured route if the partner later wants the band instead of
   the clamp.
 
+- **v191 can replace this band on confluence plans.** With
+  `CONFLUENCE_ATR_STOP_FLOOR` above 0 the percent band, the admission floor
+  and the clamp above all step aside for that plan, and an ATR band plus a
+  dollar rule take their place: next section.
+
+## Confluence ATR-band stops (v191): inert by default, coupled to gap sizing
+
+Three knobs, all off by default: `CONFLUENCE_ATR_STOP_FLOOR` (`k`, `"0"`),
+`CONFLUENCE_ATR_TARGET_MODE` (`rechoose` = arm R, `keep` = arm K) and
+`LONG_GAP_SIZING` (`"false"`). With all three at default, replay rows and
+plan dicts are byte-identical to before v191, pinned by the goldens in
+`tests/fixtures/v191/`. A golden that moves is a behaviour change, never a
+fixture to refresh.
+
+- **The ATR is raw Wilder ATR14 of completed bars**
+  (`market/atr_band.raw_atr14_pct`), never `levels.atr_floor_pct` or
+  `Scenario.atr_floor_pct`: those are already multiplied by the horizon's
+  `atr_stop_multiple` and would make the band 1.5-2x too wide. Live reads
+  `strategy_pass.completed_frame(df, now)` (`analyze._band_live`); replay
+  reads `window`. The value rides on `Scenario.atr14_pct` from admission to
+  the builder, so the two always agree.
+- **Band stop:** `d < k x a` moves the stop out to the floor, `d > 2 x a`
+  pulls it in to the ceiling, otherwise the level stands
+  (`stop_moved_by` = `floor` / `ceiling` / `untouched` on the plan doc).
+  Moved stops round away from entry to the tick (0.01, or 0.0001 under $1).
+  Computed once at creation: a SIGHUP or knob flip never rewrites an open or
+  pending plan.
+- **What steps aside for a band plan:** `MIN_STOP_DISTANCE_PCT`, the max-stop
+  gate `max(MAX_STOP_LOSS_PCT, horizon max_risk_pct)`, the v115 clamp, and
+  the 2% `risk_cap` reject in `attach_plan_v2`. The plan stores
+  `stop_ceiling_pct = band distance + 0.25`, which `plan_stop_ceiling` and
+  `PlanManager._step_pending` already read. A stop-entry fill past that
+  headroom is still cancelled `risk_cap`, as in v115.
+- **The dollar rule replaces the price caps.** Shares are sized on
+  `gap_sizing.band_sizing_distance`: the larger of the worst accepted fill to
+  the stop (`stop x c / (100 - c)` long, `stop x c / (100 + c)` short) and
+  the p99 gap allowance, floored to 0.01 shares. A size of 0.00 is
+  `band_size_zero`; a non-`risk_pct` sizing mode, a sizing error or an
+  overshoot is `risk_sizing`. The distance rides in the `gap_sizing` stamp
+  (`band_sizing_distance` key), so alert, engine and paper book share one
+  number. A band long gets a stamp even with `LONG_GAP_SIZING` off (rule
+  `stop`).
+- **Rejections log the usual line.** `band_no_target` (arm R),
+  `band_rr_drop` (arm K), `band_size_zero` and `risk_sizing` print
+  `plan rejected (<reason>, ...)` through `scan_run._skip_rejected_plan`.
+  `band_no_atr` (ATR missing: today's admission and geometry apply) logs its
+  own INFO line containing `plan rejected (band_no_atr`. On a quiet day with
+  the floor on, grep `plan rejected (band_` before suspecting data.
+- **Coupling.** A live floor is honoured only with `LONG_GAP_SIZING` and
+  `SHORT_GAP_SIZING` both on. At import and at every SIGHUP reload
+  `config.enforce_atr_band_coupling()` sets the floor to 0 and logs an ERROR
+  containing `needs LONG_GAP_SIZING and SHORT_GAP_SIZING both on`; the admin
+  settings save and preview return 400 `invalid` (`system._coupling_problem`).
+  A floor that "does nothing" in production is this guard first.
+  Replay and measurement set knobs through `arms.knobs.apply_knobs`, which
+  skips the load hook, so measurement is uncoupled by design.
+- **Legacy replay gates.** Under `CONFLUENCE_GATES` the replay builds plans
+  with `ScanParams.from_config()`, so the band knobs reach the builder only
+  through config globals (`apply_knobs`), never through a
+  `dataclasses.replace(params, ...)`.
+- **Heat is unchanged.** Candidate heat and the correlated cap still count the
+  configured `risk_pct`, and open trades count `|entry - stop| x shares`, so
+  a wider stop with fewer shares buys no extra heat. Heat does not add the gap
+  allowance (disclosed in the spec).
+- **v114 is overridden for the measurement only.** The partner decides again
+  before any band knob goes live; the verdict is in
+  `docs/superpowers/results/2026-10-24-v191-atr-band-stops.md`.
+- **Part B (`LONG_GAP_SIZING`)** mirrors v183 for longs with the p99
+  *down*-gap (`gap_stats` keys `p99_down_gap_pct`, `n_down`; stamp keys
+  `down_gap_p99_pct`, `n_down_gaps`; fewer than 60 down-gaps: sized on the
+  stop). R stays measured on the stop; only the share count shrinks. A gap
+  beyond the ticker's own p99 can still exceed the budget (accepted by the
+  partner). The alert shows `ATR-band stop ...` on band plans and the gap
+  line on gap-sized longs.
+
 ## Futures skipped for dollar volume is deliberate (v115)
 
 `SI=F: skipping new-signal scan -- avg dollar vol $0.1M < $20M floor` is the
@@ -532,3 +607,71 @@ Two things that look broken in the live book but aren't. Don't "fix" either one.
 - **Two daily caches, one adjustment basis each.** `market_data/daily_alpaca/` is Alpaca `Adjustment.ALL`, 10 years, written only by `daily_delta.write_daily` under the key's lease; `market_data/daily/` is yfinance `auto_adjust`, full history, written by its existing yfinance writers. Never splice or write a frame across them. The admin reads only the yfinance file (`freshness.page_daily`). Each file has a `.meta.json` sidecar; a failed D4 delta check means a full refetch, never `history_splice`'s shallow live-only path.
 - **`count` mode is the D9 baseline**: it must make exactly today's provider calls. Anything that shares or caches belongs behind `on`.
 - **The admin's fresh mark** (`X-Swingbot-Fresh: 1`) lasts one request (`freshness.install`); a background thread keeps it only through `contextvars.copy_context()`.
+
+## Market-on-open and the gap-reclaim veto (v192): two knobs, both off
+
+Two knobs, inert by default: `MARKET_ENTRY_NEXT_OPEN` (`"false"`) and
+`GAP_RECLAIM_ATR` (`g`, `"0"`). With both at default, replay `ExitResult`s,
+arm rows and plan dicts are byte-identical to before v192, pinned by the
+goldens in `tests/fixtures/v192/`. A golden that moves is a behaviour
+change, never a fixture to refresh.
+
+- **Coupling.** `GAP_RECLAIM_ATR > 0` is honoured only with
+  `MARKET_ENTRY_NEXT_OPEN` on. At import and at every SIGHUP reload
+  `config.enforce_gap_reclaim_coupling()` sets it to 0 and logs an ERROR; in
+  measurement `arms.knobs.apply_knobs` raises
+  `ValueError(GAP_RECLAIM_NEEDS_NEXT_OPEN)` on the merged arm config. A veto
+  that "does nothing" live is this guard first. `gap_reclaim.effective_g()`
+  is the one reader that applies it.
+- **What "waiting" means.** With the first knob on, a market plan (v180
+  Turtle Soup excepted) is built PENDING with `entry_price=None` and
+  `waits_next_open=True`. `gap_reclaim.waits_for_open(plan)` reads that
+  marker, not status and entry type alone: about ten test modules build
+  PENDING market plans that must keep the close fill. The marker, `a_t`
+  (`reclaim_atr`) and `X` (`reclaim_level`) are stamped once at creation
+  and never rewritten by a reload, a knob flip or a restart.
+- **`a_t` reads bars through `t` only** (Wilder ATR14,
+  `market/indicators.atr`). Under 15 bars, NaN or ≤ 0 gives no
+  `reclaim_level`: the plan fills at the open like the baseline, never a
+  crash. Live re-derives `E`, `a_t`, `X` from the completed frame, and a
+  parity test pins them against the replay.
+- **One decision for live and replay.** `gap_reclaim.decide_at_open` runs in
+  this order: open at or through the stop → `open_through_stop`; `X` set and
+  the open at or beyond it → `reclaim_wait`; past the stop ceiling →
+  `risk_cap`; else fill at the open. Replay fills a reclaim at `E ± 1 tick`
+  (the stop order's slippage; the v1 arm replay applies no other frictions);
+  live fills at `E` on the first RTH poll one tick through it.
+- **The fill bar is walked in both arms**
+  (`market_next_open.next_open_fill_bar`): stop first, then TP1 (scale-out
+  plans bank TP1 and continue the runner from the fill bar), so an ambiguous
+  reclaim bar is −1R. An open at or beyond TP1 is v180's 0R `gap_target`.
+  `_fill_bar_exit`'s 0R `gap_through_stop` scratch is not reused.
+- **Live timing.** `market_open.deciding_session(plan)` is the first NYSE
+  session whose 09:30 ET open is at or after `issued_at`
+  (`strategy_pass._stamp_issued_for_open` stamps it). Extended-hours polls
+  before that open run a two-poll stop-cross debounce
+  (`PREMARKET_STOP_CONFIRM_POLLS`), new code: the old
+  `EXTENDED_HOURS_EXIT_CHECK` / `EXTENDED_HOURS_DEBOUNCE_TICKS` fields are
+  still read by nothing. A first RTH poll on a later session cancels
+  `cancelled_expired` / `missed_open`; a plan resting for its reclaim
+  cancels `gap_no_reclaim` on the first poll after that session's close.
+  `PlanManager._step_market_open` runs ahead of `_step_pending`, whose
+  stop-entry fill would otherwise fill a waiting market plan at any price.
+- **Feed and followers.** `cancelled_open_through_stop`,
+  `cancelled_gap_no_reclaim` and `gap_reclaim_order` are `NOTICE_EVENTS`
+  (re-sent until acked), have `instructions` builders and the
+  `Kind.RECLAIM_ORDER` copy, and the two cancels are in
+  `PLACEHOLDER_DISCARD_EVENTS`, so the alert-time placeholder trade never
+  sits open after a cancel. A cancel transition added later must join that
+  set and `_CANCEL_LEADS`, or `_cancel_why` raises KeyError.
+- **Measurement needs a baseline delta.** Both arms run with
+  `MARKET_ENTRY_NEXT_OPEN=true`; the component adds `GAP_RECLAIM_ATR=g`
+  (`measure_arms.py --baseline-knob`, stamped `baseline_knob_delta`). The
+  veto is not a subset feature: the census sidecar
+  `<out stem>.gap_reclaim.json` names the re-priced (reclaimed) keys, and
+  `gap_reclaim_clauses.strata_split` scores removed / re-priced / added /
+  unchanged, with a SKIPPED clause failing. The verdict is in
+  `docs/superpowers/results/2026-10-24-v192-gap-reclaim.md`.
+- **A pass licenses neither knob.** `MARKET_ENTRY_NEXT_OPEN` changes every
+  market plan's fill and needs its own non-inferiority pre-registration
+  (next-open vs close fill) before the partner flips both.

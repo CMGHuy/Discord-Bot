@@ -8,8 +8,7 @@ export interface NavSection {
 
 /** One destination on the rail. `label` is the title of its first section's
  *  route, and each section's `label` its own route's title, except where an
- *  override below records otherwise (nav.spec.ts holds both). The v195
- *  NAV_GROUPS entries use only path, label and icon. */
+ *  override below records otherwise (nav.spec.ts holds both). */
 export interface NavEntry {
   path: string;
   label: string;
@@ -19,58 +18,6 @@ export interface NavEntry {
   /** Drawn at the rail's foot, apart from the work destinations. */
   foot?: boolean;
 }
-
-/** @deprecated v202: the four-group model. Read NAV_ENTRIES; V203-1 deletes it. */
-export interface NavGroup {
-  id: string;
-  label: string;
-  entries: readonly NavEntry[];
-}
-
-/**
- * @deprecated v202: the v195 four-group rail (Monitor, Review, Insights,
- * System), kept unchanged only while shell.ts (the rail), more-sheet.ts and
- * palette-items.ts still read it. V202-7 moves the sheet and the palette
- * onto NAV_ENTRIES; V203-1 rewrites the rail and deletes this block. Its
- * pre-v202 paths still work: app.routes.ts redirects each one.
- */
-export const NAV_GROUPS: readonly NavGroup[] = [
-  {
-    id: 'nav-monitor',
-    label: 'Monitor',
-    entries: [
-      { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-      { path: '/watchlist', label: 'Watchlist', icon: 'watchlist' },
-      { path: '/risk', label: 'Risk', icon: 'risk' },
-    ],
-  },
-  {
-    id: 'nav-review',
-    label: 'Review',
-    entries: [
-      { path: '/trades', label: 'Trades', icon: 'trades' },
-      { path: '/calendar', label: 'Calendar', icon: 'calendar' },
-      { path: '/cancels', label: 'Cancels', icon: 'cancelled' },
-    ],
-  },
-  {
-    id: 'nav-insights',
-    label: 'Insights',
-    entries: [
-      { path: '/analytics', label: 'Analytics', icon: 'analytics' },
-      { path: '/research', label: 'Research', icon: 'research' },
-      { path: '/reports', label: 'Reports', icon: 'reports' },
-    ],
-  },
-  {
-    id: 'nav-system',
-    label: 'System',
-    entries: [
-      { path: '/system', label: 'System', icon: 'system' },
-      { path: '/versions', label: 'Versions', icon: 'versions' },
-    ],
-  },
-];
 
 /**
  * The nav model -- v202 §1. Six destinations, with sub-pages as their

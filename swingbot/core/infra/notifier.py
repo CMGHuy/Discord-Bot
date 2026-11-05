@@ -127,10 +127,10 @@ def _short_notice(item, plan) -> str:
 
 
 def _gap_risk_lines(item) -> list:
-    """[the v183 gap-risk line] for the email/push body, [] when there is none."""
-    from swingbot.core.scanning.execution_embeds import ticket_gap_line
-    line = ticket_gap_line(getattr(item, "plan_v2", None))
-    return [line] if line else []
+    """Band explanation then gap risk for the email/push order block."""
+    from swingbot.core.scanning.execution_embeds import ticket_band_line, ticket_gap_line
+    plan = getattr(item, "plan_v2", None)
+    return [line for line in (ticket_band_line(plan), ticket_gap_line(plan)) if line is not None]
 
 
 def _build_alert_texts(item, plan, conf) -> tuple[str, str]:
