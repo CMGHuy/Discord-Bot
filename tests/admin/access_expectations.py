@@ -65,11 +65,18 @@ _ADMIN_WRITES = [
     ("/watchlist/tickers/<symbol>", "DELETE"),
 ]
 
+#: v207 Users API (V207-6): admin-only by prefix, reads and writes alike.
+_USERS = [
+    ("/users", "GET"), ("/users", "POST"), ("/users/<int:user_id>", "PATCH"),
+    ("/users/<int:user_id>", "DELETE"), ("/users/<int:user_id>/password", "POST"),
+]
+
 EXPECTATIONS: dict[tuple[str, str], str] = {
     **{key: "public" for key in _PUBLIC},
     **{(V1 + rule, "GET"): "viewer" for rule in _VIEWER_GET},
     **{(V1 + rule, "GET"): "admin" for rule in _ADMIN_GET},
     **{(V1 + rule, method): "admin" for rule, method in _ADMIN_WRITES},
+    **{(V1 + rule, method): "admin" for rule, method in _USERS},
 }
 
 #: Rule with converters -> a concrete path that routes to it. "t1" and "AAPL"
@@ -89,4 +96,6 @@ SAMPLE_PATHS: dict[str, str] = {
     f"{V1}/trades/<trade_id>/journal": f"{V1}/trades/t1/journal",
     f"{V1}/trades/<trade_id>/note": f"{V1}/trades/t1/note",
     f"{V1}/watchlist/tickers/<symbol>": f"{V1}/watchlist/tickers/AAPL",
+    f"{V1}/users/<int:user_id>": f"{V1}/users/1",
+    f"{V1}/users/<int:user_id>/password": f"{V1}/users/1/password",
 }
