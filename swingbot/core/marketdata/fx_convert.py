@@ -2,8 +2,8 @@
 
 `realized_pnl_amount` is stored in each ticker's QUOTE currency and stays so:
 the account balance (hence 2% sizing and the kill switch) reads it. This
-converts read-side: each part at its OWN exit date's rate (a stored
-scaled-out trade sums its legs), same currency is identity with no lookup,
+converts read-side: each part at its OWN exit's Berlin-day rate (v205) (a stored
+scaled-out trade sums its legs), same major currency is identity with no lookup,
 and a missing rate is never 1.0 -- the amount becomes None, `fx_missing`
 True. Never feed a converted row to a percent or R derivation
 (`closed_pnl_pct` divides the amount by `shares * entry`), hence copies.
@@ -14,6 +14,7 @@ quote codes come from the refresher's store and rates from the cache file.
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 from swingbot.core.marketdata import fx
 
@@ -32,14 +33,48 @@ def rate(from_code: str, to_code: str, on, *, fetch: bool = True) -> float | Non
     return fx.fx_rate(from_code, to_code, on) if fetch else fx.fx_rate(from_code, to_code, on, refresh=False)
 
 
-def _day(stamp) -> date:
-    """The date an ISO stamp names; today (UTC) when absent (a live amount)."""
-    if stamp:
-        try:
-            return date.fromisoformat(str(stamp)[:10])
-        except ValueError:
-            pass
-    return datetime.now(timezone.utc).date()
+#: The FX day's calendar (spec L1-a): one rate per pair per Berlin day.
+FX_DAY_TZ = ZoneInfo("Europe/Berlin")
+
+
+def berlin_today() -> date:
+    """Today in Berlin: the FX day of a live amount (open P&L, heat weights)."""
+    return datetime.now(FX_DAY_TZ).date()
+
+
+def fx_day(stamp) -> date:
+    """The Berlin date an amount converts on (v205): an aware stamp in Berlin,
+    a naive one read as UTC first, a date or date-only string unshifted, and
+    Berlin today when the stamp is absent or unreadable (a live amount)."""
+    if isinstance(stamp, datetime):
+        return _berlin_date(stamp)
+    if isinstance(stamp, date):
+        return stamp
+    parsed = _parsed_day(str(stamp or "").strip())
+    return parsed if parsed is not None else berlin_today()
+
+
+def _parsed_day(text: str) -> date | None:
+    """A date-only string unshifted, an ISO stamp's Berlin date; None when unreadable."""
+    try:
+        if len(text) == 10:
+            return date.fromisoformat(text)
+        return _berlin_date(datetime.fromisoformat(text.replace("Z", "+00:00")))
+    except (ValueError, OverflowError):
+        return None
+
+
+def _berlin_date(stamp: datetime) -> date:
+    aware = stamp if stamp.tzinfo is not None else stamp.replace(tzinfo=timezone.utc)
+    return aware.astimezone(FX_DAY_TZ).date()
+
+
+def _scale_only(quote: str, account: str) -> float | None:
+    """The minor-unit scale when both codes share a major currency
+    (GBp -> GBP: 0.01, EUR -> EUR: 1.0); None when a rate is needed."""
+    src, src_scale = fx._major(quote)
+    dst, dst_scale = fx._major(account)
+    return src_scale / dst_scale if src == dst else None
 
 
 def _stored_quotes(tickers) -> dict[str, str | None]:
@@ -66,8 +101,11 @@ class _Rates:
         return self._quotes[key]
 
     def rate(self, quote: str, on: date) -> float | None:
+        """The multiplier for `quote` on `on`; equal majors are the scale, never a lookup."""
         if (quote, on) not in self._rates:
-            self._rates[(quote, on)] = rate(quote, self.account, on, fetch=self.fetch)
+            scale = _scale_only(quote, self.account)
+            self._rates[(quote, on)] = (scale if scale is not None
+                                        else rate(quote, self.account, on, fetch=self.fetch))
         return self._rates[(quote, on)]
 
 
@@ -97,14 +135,14 @@ def _converted(row: dict, rates: _Rates) -> tuple[float | None, bool]:
     quote = rates.quote(row.get("ticker"))
     if quote is None:
         return None, True
-    if quote == rates.account:
+    if _scale_only(quote, rates.account) == 1.0:
         return amount, False
     legs = _priced_legs(row)
     if not legs:
-        return _at(amount, quote, _day(row.get("closed_at")), rates)
+        return _at(amount, quote, fx_day(row.get("closed_at")), rates)
     total = 0.0
     for leg in legs:
-        value, missing = _at(leg["realized_pnl_amount"], quote, _day(leg.get("closed_at")), rates)
+        value, missing = _at(leg["realized_pnl_amount"], quote, fx_day(leg.get("closed_at")), rates)
         if missing:
             return None, True
         total += value
