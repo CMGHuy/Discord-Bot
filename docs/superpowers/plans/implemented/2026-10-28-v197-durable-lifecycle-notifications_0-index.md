@@ -153,3 +153,13 @@ The brief contains git-grep existence evidence and bounded source excerpts for e
 ## Independent authoring verification
 
 Controller verification on 2026-10-28: full plan_lint PASS for both v197 (5 files, 13 tasks) and v198 (4 files, 10 tasks), with no missing or duplicate task bodies. Spec headers, review records and spec-to-plan links pass. Across both plans, 64 Python and 18 TypeScript examples parse, including mapping/member fragments validated in their intended context. Radon checked 344 function/class/method/closure blocks; each is below complexity 15. These are static document checks; no application test suite, database action, release or deployment was run. Execution order remains v197 then v198; v194 is merged. Implementation remains unstarted.
+
+## Implementation deviations (recorded at close-out, 2026-11-05)
+
+- V197-3: a multi-leg close is labelled win/loss by net R (not "closed"); `PlanStore.update` stays v189's guarded version; `account.py` was already connection-threaded.
+- V197-4b: `LockTimeout` maps to 409; a status that moved between read and lock maps to 422.
+- V197-7: the panel sits on System -> Providers (the first panel); sibling panels gained a `stale` input.
+- V197-8: the admin test suite was split into `admin` + `admin-core` by filename glob.
+- Staff-engineer panel (blocking, applied): `deploy/deploy.sh` stops bot, admin and refresher before the pre-start migration and, on "Can't locate revision" (rollback by image alone), fails with recovery steps instead of a bare traceback; rollback docs corrected.
+- Advisories left open: CI deploy cannot forward `LIFECYCLE_CHANNEL_ID`; every deploy now stops the writers even with no pending revision; lifecycle delivery runs inline in the 30 s `config_watcher` loop.
+- Migration `v197_001` chains after `v205_001` (rechained twice as main gained revisions).
