@@ -949,6 +949,36 @@ FIELDS: list[Field] = [
           "Price stale after: pre/after hours (s)", type="number", default="900",
           min=60, max=7200, step=1,
           help="v201. A stored price older than this is labelled stale in pre-market and after-hours."),
+    Field("ADMIN_SNAPSHOT_REGULAR_S", "ADMIN_SNAPSHOT_REGULAR_S", "Data Sources",
+          "Snapshot cadence: regular hours (s)", type="number", default="300",
+          min=60, max=3600, step=1,
+          help="v204. Seconds between admin snapshot rebuilds (risk, analytics, calendar) "
+               "during the NYSE regular session."),
+    Field("ADMIN_SNAPSHOT_EXTENDED_S", "ADMIN_SNAPSHOT_EXTENDED_S", "Data Sources",
+          "Snapshot cadence: pre/after hours (s)", type="number", default="900",
+          min=60, max=7200, step=1,
+          help="v204. Seconds between admin snapshot rebuilds in pre-market and after-hours."),
+    Field("ADMIN_SNAPSHOT_CLOSED_S", "ADMIN_SNAPSHOT_CLOSED_S", "Data Sources",
+          "Snapshot cadence: market closed (s)", type="number", default="3600",
+          min=300, max=21600, step=1,
+          help="v204. Seconds between admin snapshot rebuilds while the market is closed."),
+    Field("ADMIN_SNAPSHOT_BUDGET_S", "ADMIN_SNAPSHOT_BUDGET_S", "Data Sources",
+          "Snapshot build budget (s)", type="number", default="90",
+          min=10, max=600, step=1,
+          help="v204. Most seconds one snapshot build may take. An in-flight snapshot "
+               "mark is treated as abandoned after this budget + 30 s."),
+    Field("ADMIN_STALE_SNAPSHOT_REGULAR_S", "ADMIN_STALE_SNAPSHOT_REGULAR_S", "Data Sources",
+          "Snapshot stale after: regular hours (s)", type="number", default="600",
+          min=60, max=3600, step=1,
+          help="v204. A snapshot older than this is labelled stale during the regular "
+               "session. While the market is closed, a snapshot is stale when it was built "
+               "before the last regular close, or when its inputs are stale."),
+    Field("ADMIN_STALE_SNAPSHOT_EXTENDED_S", "ADMIN_STALE_SNAPSHOT_EXTENDED_S", "Data Sources",
+          "Snapshot stale after: pre/after hours (s)", type="number", default="1800",
+          min=300, max=7200, step=1,
+          help="v204. A snapshot older than this is labelled stale in pre-market and "
+               "after-hours. While the market is closed, a snapshot is stale when it was "
+               "built before the last regular close, or when its inputs are stale."),
     # v148: ops alerts (spec O3/O4).
     Field("PROVIDER_FALLBACK_ALERT_PCT", "PROVIDER_FALLBACK_ALERT_PCT", "Data Sources",
           "Ops alert: provider fallback above (%)", type="number", default="20",
