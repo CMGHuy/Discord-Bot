@@ -22,9 +22,6 @@ const SNAP_META: MarketMeta = {
   as_of: '2026-10-29', refreshing: false, stale_count: 0, missing_count: 0, incomplete: false,
   computed_at: '2026-10-29T14:00:00Z', stale_inputs: false, source: 'snapshot', error: null,
 };
-const REQ_META: MarketMeta = {
-  ...SNAP_META, computed_at: null, source: 'request', as_of: '2026-10-28', missing_count: 1, incomplete: true,
-};
 
 const CANDLES: EquityCandlesResponse = {
   tf: '1D', basis: 'mtm', currency_symbol: '€', has_more: false, recording_since: '2026-10-20T13:35:00Z',
