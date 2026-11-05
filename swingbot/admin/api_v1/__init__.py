@@ -205,9 +205,11 @@ def register(app) -> None:
     # app.py's bottom, which is exactly that point. Importing them above
     # would drag those modules in at api_v1 import time and re-create the
     # circular-import deadlock app.py documents.
-    from . import (analytics, calendar, cancel_precision, dashboard, equity,  # noqa: F401
+    # access_hook must stay in this list, above register_blueprint(api_v1):
+    # Flask refuses a before_request on an already-registered blueprint.
+    from . import (access_hook, analytics, calendar, cancel_precision, dashboard, equity,  # noqa: F401
                    jobs, live, market, market_updates, ops_health, reports, research, risk, session,
-                   system, trade_commands, trades, versions, watchlist)  # (register routes)
+                   system, trade_commands, trades, versions, watchlist)  # (routes + the v207 access hook)
     # /api/v1/events lives outside this package -- it is one route on top of
     # the watcher and broker, and splitting those across two packages to put
     # the route here would be filing by framework rather than by concern.
