@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Dispatch `task-implementer` at each task's `**Model:**` tier and escalate per `docs/claude/model-routing.md`. **Never read a part whole**: `grep -n "^### Task V191-8:" -A 300 docs/superpowers/plans/2026-10-24-v191-confluence-atr-band-stops_2-band-stop-path.md`.
 
 **Bump:** bot patch
-**Edge:** expectancy — moves stop and target geometry on confluence plans and changes which scenarios are admitted; prediction per cell on the floor-moved stratum: ΔWR ≥ +4pp, arm K ΔExpR > 0, arm R ΔExpR < 0.
+**Edge:** expectancy — moves stop and target geometry on confluence plans and changes which scenarios are admitted; prediction per cell on the floor-moved stratum: ΔWR ≥ +4pp, arm K ΔExpR > 0, arm R ΔExpR < 0. Outcome: not delivered -- both arms UNDERPOWERED at Stage 0 (paired-row scarcity), so no lift was measured and the prediction is unscored; the code ships inert.
 **Screen:** harvest-headroom docs/superpowers/results/2026-10-21-book-autopsy-sep-era.md
 **Spec:** [2026-10-24-v191-confluence-atr-band-stops-design.md](../specs/2026-10-24-v191-confluence-atr-band-stops-design.md)
 **Brief:** `.superpowers/briefs/2026-10-24-v191-confluence-atr-band-stops.md`
