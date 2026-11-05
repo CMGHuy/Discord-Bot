@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-11-05 10:20:00 UTC",
+  "generated_at": "2026-11-05 11:13:08 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.38.0",
+    "ui": "1.39.0",
     "bot": "2.16.2"
   },
   "releases": [
@@ -2335,6 +2335,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-11-05",
+      "last_seen": "2026-11-05",
+      "commit": "f694c5b5",
+      "subject": "release(ui): 1.39.0 -- cockpit shell: labelled rail, Live dock, strip, sheet, alarm chip",
+      "versions": {
+        "ui": "1.39.0",
+        "bot": "2.16.2"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
