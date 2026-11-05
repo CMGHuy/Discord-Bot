@@ -19,9 +19,11 @@ import { LiveEvent, LiveSnapshot } from '../api/models';
  * |------------------------------------------------|--------------------------------------------|--------------------------------|
  * | heat.open_pct, open_amount, utilisation_pct,   | open trades and resting plans              | `trades` (trades, plans)       |
  * |   headroom_pct, headroom_amount                |   (`open_heat_state`)                      |                                |
- * | heat.balance                                   | account config                             | `account`; a close moves it    |
- * |                                                |                                            |   with `trades`; no scan write |
- * | heat.cap_pct, cap_amount                       | the heat-cap setting                       | `settings`; no scan write      |
+ * | heat.balance                                   | account config                             | none subscribed; a close moves |
+ * |                                                |                                            |   it with `trades`; no scan    |
+ * |                                                |                                            |   write                        |
+ * | heat.cap_pct, cap_amount                       | the heat-cap setting                       | none subscribed (next `trades`/|
+ * |                                                |                                            |   `bot`); no scan write        |
  * | heat.includes_resting, availability, reason    | the same read                              | as above                       |
  * | awaiting.count, next_expiry                    | PENDING plans                              | `trades` (plans)               |
  * | killswitch.engaged, since, detail              | killswitch row                             | `risk` (killswitch)            |
@@ -32,9 +34,10 @@ import { LiveEvent, LiveSnapshot } from '../api/models';
  * | every `as_of`                                  | the request's clock                        | none (any refresh)             |
  *
  * `bot` (the heartbeat) moves no field itself; it stays from v203 as the
- * once-per-heartbeat catch-up that keeps every `as_of` current. `account` and
- * `settings` are not listed because neither changes during a scan and
- * neither was listed before v206. A field that starts changing during a scan
+ * once-per-heartbeat catch-up that keeps every `as_of` current. The account
+ * and settings tables are not subscribed: neither changes during a scan and
+ * neither was subscribed before v206, so those fields catch up on the next
+ * `trades` or `bot` event. A field that starts changing during a scan
  * through another table gets that table's own event here -- never `scan`.
  */
 export const LIVE_REFRESH_EVENTS = ['trades', 'bot', 'risk'] as const;
