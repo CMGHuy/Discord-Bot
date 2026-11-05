@@ -39,7 +39,11 @@ NETWORK: tuple[tuple[str, str], ...] = (
 )
 VOLATILE_KEYS = frozenset({"checked_at", "built_at"})
 TOP_LEVEL_DROPPED = ("killswitch", "scan_health", "as_of")
-WALL_CLOCK_PATHS: tuple[str, ...] = ()
+WALL_CLOCK_PATHS: tuple[str, ...] = (
+    "computed_at",               # risk._request_inputs: datetime.now() on the request path (v204)
+    "market_meta.computed_at",   # the same clock, via market_values.snapshot_meta
+    "market_meta.as_of",         # snapshot_meta falls back to computed_at when no quote/FX date
+)
 
 
 @dataclass
