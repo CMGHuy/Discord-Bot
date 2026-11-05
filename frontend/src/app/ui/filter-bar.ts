@@ -120,10 +120,12 @@ export class FilterBar {
       cursor: pointer;
       transition: color var(--transition), border-color var(--transition);
     }
-    .chip:hover { color: var(--text); border-color: var(--border-strong); }
+    /* v195 Phase 2: hover is the raised step, never the accent. */
+    .chip:not(.active):hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-raised); }
     .chip:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
-    /* Selection is interactive state, which is what blue is for. */
-    .active { color: var(--text); border-color: var(--accent); background: var(--surface-raised); }
+    /* Selection is interactive state, which is what the accent is for: the
+       accent edge on the same accent tint a selected segment carries. */
+    .chip.active { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
     .count { color: var(--text-muted); font-size: var(--text-chip); }
     /* v179 chips */
     @media (max-width: 639px) {

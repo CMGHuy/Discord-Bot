@@ -39,6 +39,7 @@ from flask import jsonify, request
 
 from swingbot import config
 from swingbot.admin import dashboard as dash
+from swingbot.core.analytics import metrics
 from swingbot.admin.trade_why import legacy_why_fields, plan_why_fields
 from swingbot.core.analytics.override_fidelity import MANUAL_REASONS
 from swingbot.core.tracking.performance import TradeLog
@@ -49,10 +50,13 @@ from swingbot.core.presentation.band_stop import band_stop_line
 from swingbot.core.presentation.gap_risk import gap_risk_line
 from swingbot.core.presentation.plan_view import plan_view
 from swingbot.core.presentation.short_notice import risk_notice_lines
+from swingbot.core.marketdata import fx_convert
 
 from . import api_v1, collection, error, parse_collection_params, ApiError
 from .auth import require_auth
+from .read_scope import read_scope
 from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
+from .money import convert_amount, missing_count, to_account_currency
 
 # Legacy v1 trades carry their own status vocabulary. They have no PENDING,
 # PARTIAL or CANCELLED equivalent and none is synthesised for them.
@@ -320,8 +324,12 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "banked_fraction": view.banked.fraction if view.banked else None,
         "banked_exit_price": view.banked.exit_price if view.banked else None,
         "banked_r": view.banked.r if view.banked else None,
+        "banked_contribution_r": _banked_contribution(plan, view),
         "risk_reward": t.get("risk_reward_ratio"),
         "shares": t.get("shares"),
+        # The ORIGINAL size: `shares` becomes the remaining count on an open
+        # PARTIAL row in `_strip_internal_fields` (v189 B1).
+        "entry_shares": t.get("shares"),
         "open_shares": _open_shares(t.get("shares"), plan.get("legs_realized") or []),
         "position_value": t.get("position_value"),
         "current_price": None,
@@ -331,7 +339,7 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         "exit_price": t.get("exit_price"),
         "realized_pnl_amount": t.get("realized_pnl_amount"),
         "pnl_pct": dash.closed_pnl(t) if trade else None,
-        "r_multiple": dash.closed_r(t) if trade else None,
+        "r_multiple": _plan_row_r(plan, trade),
         # The plan's ORIGINAL risk stop (v166, public). `stop_loss` above is
         # `view.stop` -- the working/trailing stop once PARTIAL -- so this is
         # the only place the original survives on the row. Also read by
@@ -362,6 +370,8 @@ def _row_from_plan(plan: dict, trade: dict | None, noted: set) -> dict:
         # `_expand_plan_row`. 0/1 for a row that hasn't been split.
         "leg_index": 0,
         "leg_total": 1,
+        # v194 B3 -- set only on a realised leg row (`_row_from_leg`).
+        "leg_exit_reason": None,
     }
     # v177 -- the Plan cell's runner fields. One call and no branch here:
     # this function is pinned at complexity 15, every condition lives in the
@@ -443,6 +453,39 @@ def _runner_exit_fields(plan: dict, trade: dict | None) -> dict:
     if _closed_manually_after_tp1(plan, legs) and price is not None:
         return {"runner_exit_price": price, "runner_exit_reason": "manual"}
     return dict(_NO_RUNNER_EXIT)
+
+
+def _banked_contribution(plan: dict, view) -> float | None:
+    """v189 B3: the realized legs' share of the trade's R, `Σ fraction x r`
+    (+1.00R for a +2R TP1 on half). Present exactly when `banked_r` is;
+    `banked_r` keeps meaning the TP1 leg's own R."""
+    if view.banked is None:
+        return None
+    return metrics.banked_contribution_r(plan.get("legs_realized") or [])
+
+
+def _plan_row_r(plan: dict, trade: dict | None) -> float | None:
+    """A closed plan's R is its trade's blended R. An open plan has none
+    until `_attach_unrealized_pnl` prices it: the banked blend alone is not
+    the trade's R (v189 B3)."""
+    if trade is None or plan.get("status") not in _TERMINAL:
+        return None
+    return dash.closed_r(trade)
+
+
+def _live_r(row: dict, price: float) -> float | None:
+    """Live R for an open row. A row with a banked TP1 leg gets the blended
+    trade R, `metrics.open_trade_r` over that one leg (an open plan has
+    realized at most its TP1 leg) -- None when the leg has no `r`. A row
+    with nothing banked keeps the whole position's live R. Both measure
+    against the ORIGINAL stop (`risk_stop`)."""
+    entry, stop, direction = row.get("entry"), row.get("risk_stop"), row.get("direction")
+    if row.get("banked_fraction") is None:
+        return dash.unrealized_r(entry, stop, direction, price)
+    banked_leg = {"fraction": row["banked_fraction"], "r": row.get("banked_r")}
+    blended = metrics.open_trade_r(
+        {"entry": entry, "stop_loss": stop, "direction": direction, "legs": [banked_leg]}, price)
+    return None if blended is None else round(blended, 2)
 
 
 def _runner_cell_fields(plan: dict, trade: dict | None, row: dict) -> dict:
@@ -541,6 +584,7 @@ def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set
         "banked_fraction": None,
         "banked_exit_price": None,
         "banked_r": None,
+        "banked_contribution_r": None,
         "closed_at": closed_at,
         # The leg's OWN holding period -- from the position's open to this
         # leg's own close, not the whole position's span (`_row_from_plan`'s
@@ -550,6 +594,9 @@ def _row_from_leg(plan: dict, trade: dict, leg: dict, leg_index: int, noted: set
         "held_hours": _held_hours(row.get("opened_at"), closed_at),
         "today": _in_today_scope("CLOSED", closed_at),
         "leg_index": leg_index,
+        # v194 B3 -- what closed THIS leg (legs realise in close order, so
+        # leg 1 may be a stop); `giveback` for a v176 give-back stop.
+        "leg_exit_reason": _runner_exit_reason(leg),
         # v177 -- a leg row is always CLOSED: the two-line runner cell never
         # applies to it, even on the TP1 leg of a still-PARTIAL plan. Keep
         # `bar_kind` (the Trades page's leg icon) and the runner-exit fields
@@ -631,8 +678,10 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         "banked_fraction": None,
         "banked_exit_price": None,
         "banked_r": None,
+        "banked_contribution_r": None,
         "risk_reward": t.get("risk_reward_ratio"),
         "shares": t.get("shares"),
+        "entry_shares": t.get("shares"),
         # Legacy v1 trades have no PARTIAL status and never scale out --
         # the full size stays open until the whole position closes at once.
         "open_shares": t.get("shares") if t.get("status") == "open" else None,
@@ -665,6 +714,8 @@ def _row_from_trade(t: dict, noted: set) -> dict:
         # v79 -- a legacy trade never scales out, so it is never split.
         "leg_index": 0,
         "leg_total": 1,
+        # v194 B3 -- set only on a realised leg row (`_row_from_leg`).
+        "leg_exit_reason": None,
     }
 
 
@@ -975,7 +1026,7 @@ def get_trade(trade_id: str):
              if t.get("plan_id") == trade_id),
             None,
         )
-        row = _row_from_plan(plan, trade, noted)
+        row = to_account_currency([_row_from_plan(plan, trade, noted)])[0]
         row["detail"] = _plan_detail(plan, trade)
         # SR53. Ranked against the whole plan population, exactly as the list
         # does -- follow_score is a composite, so scoring this plan alone would
@@ -986,13 +1037,14 @@ def get_trade(trade_id: str):
         trade = log.get_trade_by_id(trade_id)
         if trade is None:
             return error("not_found", f"No trade with id {trade_id!r}", 404)
-        row = _row_from_trade(trade, noted)
+        row = to_account_currency([_row_from_trade(trade, noted)])[0]
         row["detail"] = _legacy_detail(trade)
 
     _attach_current_prices([row])
     _attach_status_fields([row])
     _attach_unrealized_pnl([row])
     _strip_internal_fields([row])
+    row["market_meta"] = _page_market_meta([row])
     return jsonify(row)
 
 
@@ -1054,12 +1106,13 @@ def _filter_by_status(rows: list[dict], value: str) -> list[dict]:
 
 @api_v1.route("/trades", methods=["GET"])
 @require_auth
+@read_scope
 def list_trades():
     params = parse_collection_params(
         request.args, allowed_filters=FILTERS, sortable=SORTABLE
     )
 
-    rows = build_rows()
+    rows = to_account_currency(build_rows())
 
     # Filter -> sort -> slice, in that order, so `total` is the post-filter
     # pre-slice count the collection convention requires.
@@ -1118,12 +1171,49 @@ def list_trades():
     _attach_unrealized_pnl(page_rows)
     _strip_internal_fields(page_rows)
     body = collection(page_rows, total, params.page, params.per_page)
-    body["prices_as_of"] = (
-        datetime.now(timezone.utc).isoformat(timespec="seconds")
-        if any(row.get("current_price") is not None for row in page_rows)
-        else None
-    )
+    body["prices_as_of"] = _prices_as_of(page_rows)
+    body["market_meta"] = _page_market_meta(page_rows)
     return jsonify(body)
+
+
+def _prices_as_of(page_rows: list[dict]) -> str | None:
+    """v201: with the refresher on, the OLDEST input's as-of among the priced
+    rows (the page is only as fresh as its stalest price); off, today's
+    now-stamp whenever any row is priced."""
+    from swingbot.core.marketdata.shared import admin_refresh
+    if not admin_refresh.refresher_on():
+        return (datetime.now(timezone.utc).isoformat(timespec="seconds")
+                if any(row.get("current_price") is not None for row in page_rows)
+                else None)
+    stamps = [row["price_as_of"] for row in page_rows
+              if row.get("current_price") is not None and row.get("price_as_of")]
+    return min(stamps, key=datetime.fromisoformat, default=None)
+
+
+def _position_rows(rows: list[dict]) -> list[dict]:
+    """Rows that hold a position: not terminal, not PENDING, with a ticker."""
+    return [r for r in rows
+            if r["status"] not in _TERMINAL and r["status"] != "PENDING" and r.get("ticker")]
+
+
+def _row_quote(row: dict):
+    """The door's `MarketQuote`, rebuilt from the row's quote fields."""
+    from swingbot.admin.market_values import MarketQuote
+    return MarketQuote(str(row["ticker"]).upper(), row.get("current_price"),
+                       row.get("price_as_of"), row.get("price_age_s"),
+                       bool(row.get("price_refreshing")), row.get("price_error"))
+
+
+def _page_market_meta(rows: list[dict]) -> dict:
+    """`MarketMeta` for a page: unpriced positions and FX gaps count as missing."""
+    from swingbot.admin.market_values import total_meta
+    from swingbot.core.marketdata.shared import admin_refresh
+    pos = _position_rows(rows)
+    fx = missing_count(pos)
+    if admin_refresh.refresher_on():
+        return total_meta([_row_quote(r) for r in pos], extra_missing=fx)
+    unpriced = sum(1 for r in pos if r.get("current_price") is None)
+    return total_meta([], extra_missing=fx + unpriced)
 
 
 def _status_fields(row: dict, price: float | None) -> dict:
@@ -1261,6 +1351,8 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
     that needs a price for every row, not just the page (see the
     `_SORT_ALIASES` branch in `list_trades`), so it only ever reads it.
 
+    v189 B3: a row with a banked TP1 leg gets the blended trade R (`_live_r`).
+
     Sets transient `_display_shares` when a row has realized a leg; this is
     applied to the public `shares` field exactly once by `_strip_internal_fields`
     to avoid overwriting the original value before all P&L calculations complete.
@@ -1272,9 +1364,10 @@ def _attach_unrealized_pnl(rows: list[dict]) -> None:
         entry, direction = row.get("entry"), row.get("direction")
         if price is not None and entry is not None:
             row["pnl_pct"] = dash.unrealized_pnl(entry, direction, price)
-            row["r_multiple"] = dash.unrealized_r(entry, row.get("risk_stop"), direction, price)
-            row["realized_pnl_amount"] = dash.unrealized_pnl_amount(
-                entry, direction, row.get("open_shares"), price)
+            row["r_multiple"] = _live_r(row, price)
+            row["realized_pnl_amount"], row["fx_missing"] = convert_amount(
+                dash.unrealized_pnl_amount(entry, direction, row.get("open_shares"), price),
+                row.get("ticker"), fx_convert.berlin_today())
         # Store the display value in a transient field; apply it exactly once
         # in _strip_internal_fields after all passes are complete.
         if row.get("open_shares") is not None:
@@ -1316,6 +1409,14 @@ def _attach_layer_prices(live: list[dict]) -> None:
             r["price_age_s"], r["price_as_of"] = freshness.quote_age(q)
 
 
+def _attach_door_prices(live: list[dict]) -> None:
+    """v201: price the live rows from the never-fetch door -- one cache read."""
+    from swingbot.admin import market_values
+    quotes = market_values.read_quotes([r["ticker"] for r in live])
+    for r in live:
+        r.update(market_values.quote_fields(quotes.get(str(r["ticker"]).upper())))
+
+
 def _attach_current_prices(rows: list[dict]) -> None:
     """Live price for the still-open rows ON THIS PAGE only.
 
@@ -1338,6 +1439,10 @@ def _attach_current_prices(rows: list[dict]) -> None:
     """
     live = [r for r in rows if r["status"] not in _TERMINAL and r.get("ticker")]
     if not live:
+        return
+    from swingbot.core.marketdata.shared import admin_refresh
+    if admin_refresh.refresher_on():
+        _attach_door_prices(live)
         return
     from swingbot.admin import freshness
     if freshness.layer_on():

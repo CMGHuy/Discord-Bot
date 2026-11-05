@@ -16,7 +16,7 @@
 #             the current-versus-rotated coverage is visible.
 #
 # Nothing here writes: no interpreter, no repository helper, no file on the VM.
-# The output columns are fixed; tests/scout/test_export_script.py pins them.
+# The output columns are fixed (rows: 38, the last two plan_issued_at and plan_issued_at_source, appended by v200); tests/scout/test_export_script.py pins them.
 # Everything sits in functions run by the last line, so bash has parsed the
 # whole script before anything runs: this script arrives on stdin, and no
 # child process may read the rest of it.
@@ -64,7 +64,9 @@ COPY (
     j.doc->'risk_features'->>'regime2_state' AS regime2_state,
     j.doc->'risk_features'->>'session_bucket' AS session_bucket,
     j.doc->'risk_features'->>'days_to_earnings' AS days_to_earnings,
-    j.doc->'risk_features'->>'rs_percentile' AS rs_percentile
+    j.doc->'risk_features'->>'rs_percentile' AS rs_percentile,
+    p.doc->>'issued_at' AS plan_issued_at,
+    p.doc->>'issued_at_source' AS plan_issued_at_source
   FROM journal_entries j
   JOIN trades t ON t.trade_id = j.trade_id
   LEFT JOIN plans p ON p.plan_id = t.doc->>'plan_id'
@@ -106,7 +108,9 @@ COPY (
     NULL::text AS regime2_state,
     NULL::text AS session_bucket,
     NULL::text AS days_to_earnings,
-    NULL::text AS rs_percentile
+    NULL::text AS rs_percentile,
+    p.doc->>'issued_at' AS plan_issued_at,
+    p.doc->>'issued_at_source' AS plan_issued_at_source
   FROM plans p
   WHERE NOT EXISTS (
     SELECT 1

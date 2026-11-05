@@ -4,7 +4,7 @@
 
 A push-to-deploy pipeline: push to `main` on GitHub, GitHub Actions SSHs
 into your Hetzner server and runs `deploy/deploy.sh`, which pulls the
-latest code and restarts both Docker services (`bot` and `admin`). No
+latest code and restarts the Docker services (`bot`, `admin` and, since v201, `refresher`). No
 manual server work after the one-time setup below.
 
 ## How it works, in short
@@ -232,6 +232,14 @@ bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T db 
 Rolling forward again needs nothing: the first tick of a v184-or-later bot
 writes the key back.
 
+**Rolling back past v201: no refresher on the old image.** A pre-v201 image has no
+`swingbot.refresher` module, yet `main`'s compose starts the `refresher` service on
+whatever `SWING_BOT_IMAGE` says. `deploy.sh` probes the image and, when the module
+is missing, starts and verifies only `bot admin` and prints a `rolling back past
+v201` notice (`rollback_to.sh` does the same). The admin then runs on a pre-v201
+image too, so pages fetch at request time as before. Rolling forward again needs
+nothing: the next deploy of a v201 image starts the refresher.
+
 **The admin's server is chosen inside the image (v148).** Compose runs the
 admin as `python admin_ui.py`, and it must keep doing so. A v148+ image execs
 gunicorn from there (`deploy/gunicorn.conf.py`, one gthread worker); an older
@@ -282,6 +290,71 @@ If it failed, the remedy depends on the image now running:
 - **A rollback to a pre-v153 image:** that image has no resync script, so
   `docker compose restart bot` — `on_ready` re-syncs on every start. Clients
   may list the removed commands for up to an hour while Discord propagates.
+
+## The refresher service (v201)
+
+`refresher` is the admin's market refresher, a third container off the same
+image (`python -m swingbot.refresher`). It runs as a process of its own so a
+slow batch can neither hold the admin's gunicorn threads nor share a yfinance
+download lock with the scan and the stop monitor. It fetches quotes,
+quote-currency codes and FX pairs, stores them and NOTIFYs `market`; the admin
+pages only read what it stored.
+
+- A normal deploy starts it: `up -d --no-build --wait` creates it with the pulled
+  image and the digest loop verifies it. No manual step, and `.env` needs no edit
+  (`ADMIN_REFRESHER` defaults to `on`).
+- Its first cycles after a migration-bearing deploy may log a missing-table error
+  until the `alembic upgrade head` step runs; it retries on the next cadence and
+  recovers by itself.
+- Logs: `docker compose logs -f refresher`.
+- Health: the admin's `/system` page `refresher` line (`ok` / `stalled` / `off`).
+- Kill switch: `python3 scripts/ops/env_set.py ADMIN_REFRESHER off`, then
+  `docker compose restart admin refresher`. The admin pages go back to
+  request-time fetching exactly as before v201.
+  `MARKETDATA_LAYER=off` does the same. The refresher process stays up, holds its
+  lock and keeps beating, but fetches nothing and drains no queue; it picks a
+  flip back to `on` up from `.env` within one poll tick, with no restart needed.
+- `scripts/ops/rollback_to.sh` stops it with the other writers and starts it only
+  when the target image has `swingbot.refresher`.
+
+### v205: daily FX rates (`fx_daily_rates`)
+
+The admin converts money at one FX rate per currency pair per Berlin day,
+stored in `fx_daily_rates` (revision `v205_001`). The refresher writes the
+day's row from 08:00 Berlin by itself. Past days are filled once, by a
+backfill, after the deploy that brings the revision:
+
+1. Deploy as usual. `deploy.sh` runs `alembic upgrade head` after
+   `up --wait`; until it has, the admin shows converted amounts as
+   `fx_missing` and the refresher logs `fx snap failed` once per cycle. Both
+   recover by themselves.
+2. Check the revision:
+   `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot alembic current"`
+   prints `v205_001 (head)` or a later head.
+3. Dry run:
+   `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T admin python scripts/ops/backfill_fx_daily_rates.py --dry-run"`.
+   It prints `<PAIR> planned=<n>` per pair and the total, and writes nothing.
+4. Backfill: the same command without `--dry-run`. It prints `written=<n>`.
+   A re-run is safe (insert-if-absent) and prints `written=0`.
+
+After changing `CURRENCY_SYMBOL` (the account currency), re-run steps 3-4:
+the new account's pairs have no rows yet, so until the backfill runs, past
+amounts show `fx_missing` while the refresher is on.
+
+`snap` writes only the current Berlin day. A weekday it skips (no later bar yet:
+a Yahoo gap, a holiday or a failed fetch) stays empty until the backfill runs;
+a later snap never fills it.
+
+The snap writes a day's row only once the bar behind it is final (its London
+day ended). Expect the row later than 08:00 when the pair file was last
+written before London midnight; it arrives on the cycle after the next refresh.
+
+Rollback, in this order: (1) redeploy the previous image (§ Rolling back). The
+old code never reads the table, so it can stay. (2) Only to remove it, run
+`docker compose exec -T bot alembic downgrade <the revision v205_001 revises>`
+(`v200_001` when v205 was written). Downgrading to that revision also rolls
+back every later revision stacked on top of `v205_001`, so check
+`alembic history` first.
 
 ## Accessing the admin UI
 
@@ -389,6 +462,8 @@ replays one into a throwaway database (no default target; `swingbot` needs
 
 **Off-VM copy and stable snapshots (v120).** Every backup above sits on this VM's own disk. `/backup-pull` (`scripts/ops/pull_backups.sh`, run from the dev machine's main tree) brings a verified rebuild-from-zero set (a fresh `pg_dump`, `.env`, `deploys.jsonl`, an incremental mirror of `market_data/`) into the gitignored `backups/` there; it is manual, and the SessionStart `BACKUP` line warns when it is overdue. `/stable-snapshot <note>` pins a known-good point for good: `backups/stable/<name>/` on the VM (dump, `.env`, deploy record, manifest), a restic snapshot tagged `stable`, and an annotated `stable-*` git tag; `scripts/ops/restore_stable.sh <name> --dry-run` shows what restoring it would do (a real run needs `--i-mean-it`). Both run as root through `ssh-hetzner.sh`; git on the VM runs as `deploy`. Drills and numbers: `DB_RESTORE.md`, section "Off-VM copy and stable snapshots (v120)".
 
+**Undoing an account reset (v189).** Clearing history (`!trades clear history`, `/trades-clear-history`, the admin "Clear history" action) is a full reset: it writes every closed trade, finished plan (with its stars, followers and notification claims) and balance-history point to `data/archives/account-reset-<UTC>.json` on the data volume, deletes them in one transaction, and reseeds the balance history with one point at the base balance, so the drawdown peak and the throttle restart there. It is refused while the kill switch is tripped unless forced (`force=true`, `!trades clear history force`), and it never releases the switch. To undo one, dry-run first: `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T admin python scripts/ops/restore_account_reset.py data/archives/<file>.json"`, check the counts, then rerun with `--apply`. The restore re-inserts the archived rows in one transaction, removes that reset's reseed point and adds the restored realized P&L to every balance point written since; it refuses when a later reset has run since (restore the newest archive first). Archives are git-ignored and are not in the nightly `pg_dump`: copy one off the VM by hand if it must outlive the VM.
+
 ## Useful one-liners on the server
 
 ```bash
@@ -426,12 +501,14 @@ The CI pipeline above is for *code* changes.
 
 | Flag | Production value | Set |
 |---|---|---|
-| `MARKETDATA_LAYER` | `count` | 2026-10-20 (V171-36) |
-| `DAILY_DELTA_FETCH` | `false` | code default |
-| `PLAN_REBUILD_ENABLED` | `false` | code default |
-| `TAPE_SHARED_ENABLED` | `false` | code default |
+| `MARKETDATA_LAYER` | `on` | 2026-10-29 (V171-38 day A; was `count` from 2026-10-20) |
+| `DAILY_DELTA_FETCH` | `true` | 2026-10-30 18:19 UTC (V171-38 day B; read-back passed 2026-10-31: 75 CSV + 75 meta in `daily_alpaca`, no metals, 0 scan errors) |
+| `PLAN_REBUILD_ENABLED` | `true` | 2026-10-31 (V171-38 day C; read-back passed 2026-11-03: 11 plans stamped, max quote age 3.44 s, 0 misses) |
+| `TAPE_SHARED_ENABLED` | `true` | 2026-11-03 ~12:30 UTC (V171-38 day D, pre-open; four indices read back with prices; session read-back and 3-width screenshots pending) |
 
-Rollback order: (1) a flag off with `python3 scripts/ops/env_set.py <FLAG> off` (or `false`) plus `docker compose restart bot admin`;
+Success week: **skipped by the partner at close-out (2026-11-04); V171-39 never ran.** The report cron (21:15 UTC) and tape sampler (13:20 UTC) installed for 2026-11-04..11-10 stay on the VM, nobody reads them, and each removes itself after 2026-11-10 (`logs/v171_success_cron.log`, `logs/v171_tape_samples.jsonl`). Results: `docs/superpowers/results/2026-10-16-v171-success-week.md`.
+
+Rollback order: (1) a flag off with `python3 scripts/ops/env_set.py <FLAG> off` (or `false`) plus `docker compose restart bot admin refresher`;
 (2) the previous image per [Rolling back](#rolling-back);
 (3) `scripts/ops/rollback_to.sh` with `--dry-run` first, only for damaged data.
 The `v171_001` tables stay on every rollback.

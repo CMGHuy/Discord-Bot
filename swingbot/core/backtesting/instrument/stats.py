@@ -114,11 +114,14 @@ LEDGER_FIELDS = ("id", "date", "hypothesis", "instrument", "n", "exp_r", "p",
 #: v140 appends the idea screen's three verdicts and its instrument; v173
 #: appends the override-fidelity outcomes. WAITING is never written: a
 #: verdict that is not yet evaluable has no row. Existing rows are untouched
-#: (a ledger row is never edited).
+#: (a ledger row is never edited). v190 appends DESCRIPTION: a recorded
+#: description of an instrument change (the v3 re-baseline); it decides
+#: nothing, so it carries `p: null` and stays out of the BH family.
 VERDICTS = ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE", "WITHDRAWN", "OPEN",
             "SCREEN-PASS", "SCREEN-FAIL", "SCREEN-UNDERPOWERED",
-            "COST", "SAVED", "INCONCLUSIVE")
-INSTRUMENTS = ("v1", "v2", "screen-v1")
+            "COST", "SAVED", "INCONCLUSIVE", "DESCRIPTION")
+INSTRUMENTS = ("v1", "v2", "screen-v1", "v3")
+DESCRIPTION = "DESCRIPTION"
 #: v162 adds one OPTIONAL field: the bars a verdict was measured on. Rows
 #: written before v162 have none and mean yfinance (ledger_data_source); they
 #: are never rewritten (schema-evolution.md: an added field, no upcasting
@@ -160,6 +163,14 @@ _FIELD_CHECKS = {
 }
 
 
+def _row_rule_errors(row: dict) -> list[str]:
+    """Cross-field rules one field check cannot see. A DESCRIPTION row decides
+    nothing, so it may not carry a p-value (exp_r may be null, as anywhere)."""
+    if row["verdict"] == DESCRIPTION and row["p"] is not None:
+        return ["a DESCRIPTION row decides nothing: p must be null"]
+    return []
+
+
 def validate_ledger_row(row) -> None:
     """Raise ValueError unless ``row`` has exactly LEDGER_FIELDS plus any of
     OPTIONAL_LEDGER_FIELDS, each valid."""
@@ -174,6 +185,9 @@ def validate_ledger_row(row) -> None:
     bad = [name for name in present if not _FIELD_CHECKS[name](row[name])]
     if bad:
         raise ValueError(f"ledger row {row.get('id')!r}: invalid field(s) {bad}")
+    rules = _row_rule_errors(row)
+    if rules:
+        raise ValueError(f"ledger row {row.get('id')!r}: {'; '.join(rules)}")
 
 
 def ledger_data_source(row: dict) -> str:

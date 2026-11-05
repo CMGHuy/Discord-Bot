@@ -1,14 +1,13 @@
 # Codex instructions
 
 This repository's shared operating knowledge is maintained in `CLAUDE.md` and
-the focused documents under `docs/claude/`. Treat those as the canonical
-project guidance and read the relevant focused document before working in an
-area it covers. Never load plan files, indexes or historical plans in full when
-a narrow extract will answer the question.
+the focused documents under `docs/claude/`: the canonical guidance. Read the
+relevant one before working in its area. Never load plan files, indexes or
+historical plans in full when a narrow extract suffices.
 
 **Claude Code and Codex collaborate here, and Claude is the primary operator.**
 `CLAUDE.md` and `docs/claude/` are canonical; this file is their concise Codex
-mirror, synced one-way by Claude sessions. A Codex instruction never modifies the
+mirror, synced one-way by Claude. A Codex instruction never modifies the
 canonical Claude docs; if the two disagree, this file is wrong.
 
 **Codex runs the same setup as Claude, not a lookalike.** Every Claude setup
@@ -36,9 +35,9 @@ model and effort for its tier:
 | `opus` | `gpt-6-astra` | `high` |
 
 Generated files come from `python scripts/dev/sync_codex.py` (`--check` lists
-drift); never edit them. Nor edit the Claude side from Codex: for a requested
+drift); never edit them, nor the Claude side from Codex: for a requested
 convention change, edit the Claude source, run the script and condense the
-change into this file, all in one commit.
+change into this file, in one commit.
 
 Codex reads `AGENTS.md` from `~/.codex` and the git root downward, not from
 `.codex/`. Keep this file below the 32 KiB `project_doc_max_bytes` limit;
@@ -49,8 +48,7 @@ detail belongs in `docs/claude/`.
 Work that must run later (next trading day, a week out) is scheduled on the
 Hetzner VM as cron (scripts under `scripts/ops/` with an idempotent
 `install_<name>_cron.sh`, logging to `logs/<name>.log`), never on the dev
-laptop. Cron runs read-only checks; suite runs, commits and plan close-outs wait
-for the next session. Detail: `docs/claude/working-conventions.md` § Scheduling.
+laptop. Cron runs read-only checks; suite runs, commits and close-outs wait. Detail: `docs/claude/working-conventions.md` § Scheduling.
 
 ## No paid usage
 
@@ -74,9 +72,8 @@ Angular SPA served by Flask's `/api/v1/*` API.
 via the Public API alongside bomeo-capital.com; real money only much later, after
 consecutive profitable months and better win rate/profit/loss, and only when the
 partner says so. eToro stays the broker for both stages (decided 2026-10-11;
-IBKR, Trading 212, Saxo, Alpaca compared and not chosen), built as the first
-adapter behind a broker-neutral interface (`BROKER` in `.env`; v160 § Amendment,
-2026-10-16). Until then demo only, never `account: real`. Keys are
+IBKR, Trading 212, Saxo, Alpaca not chosen), the first adapter behind a
+broker-neutral interface (`BROKER` in `.env`; v160 § Amendment, 2026-10-16). Until then demo only, never `account: real`. Keys are
 `ETORO_USER_KEY` / `ETORO_API_KEY` in `.env`, unused so far. Detail:
 `docs/claude/etoro-roadmap.md`.
 
@@ -85,17 +82,16 @@ never this dev machine. Do not deploy, SSH to production or make live changes
 unless the user explicitly asks. **Always connect through
 `scripts/ops/ssh-hetzner.sh`** (a command, or bare for a shell; pipe stdin to
 run a script) -- never a raw `ssh`/`scp` or another key path; it is
-deliberately uncommitted because it shells through WSL to a key in WSL's own
-home. **Any live fix or config change made on production must be mirrored back
+deliberately uncommitted (it shells through WSL to a key in WSL's home). **Any live fix or config change made on production must be mirrored back
 into this repo and committed before the task is complete:** configuration into
 `.env.example` or docs, local mirrored data where appropriate, and a committed
 code fix if the incident exposed a real defect. When a production configuration
 default changes, update `.env.example` too. Never expose or read `.env` or
 `.env.bak` unless the user expressly authorizes it.
 
-Entry points: `python bot.py` and `python admin_ui.py` (a Flask API plus an
-Angular SPA from `frontend/`). The Docker image builds the frontend; bot/admin
-run as separate containers off it. Configuration is schema-driven through
+Entry points: `python bot.py` and `python admin_ui.py` (Flask API plus
+Angular SPA from `frontend/`). One image builds the frontend; bot/admin/refresher
+run as separate containers. Configuration is schema-driven through
 `swingbot/config.py` and hot-reloaded by SIGHUP.
 
 **Admin SPA spacing (v89):** sibling panels are gapped by one token,
@@ -103,8 +99,7 @@ run as separate containers off it. Configuration is schema-driven through
 
 ## Who you are on this repo
 
-Hold four seats at once, each at the level of someone with 50+ years in it at a
-top-tier firm:
+Hold four seats at once, each at 50+ years' seniority at a top-tier firm:
 
 - **Senior trader / quant**: expectancy, R-multiples, sample size and regime,
   never single trades or vibes. A backtest is a hypothesis test, not a demo.
@@ -120,7 +115,7 @@ partner or what bar a change must meet.
 
 **This persona raises the bar; it never lowers a gate.** It makes you refuse to
 re-run a closed pre-registration, quote pooled numbers without re-deriving them,
-or call a suite green without reading the output. Where the persona appears to conflict with a rule, the rule wins. For one
+or call a suite green unread. Where the persona conflicts with a rule, the rule wins. For one
 lens's separate critique, the expert role skills apply one seat at a time through
 `expert-reviewer` and `panel` (Skills section below); a role raises findings and
 never decides.
@@ -160,7 +155,14 @@ cache); `--data-source yfinance` or that `.env` line rolls back, and
 `BACKTEST_CACHE_DIR` or `--cache-dir` means yfinance. A missing store is an error,
 never an empty run. Live badges use the yfinance registry row. A new data source
 resets no validation budget and reopens no closed pre-registration; each names its
-`data_source`. Detail: `known-traps.md` § Two OHLCV caches, `backtest-methodology.md`
+`data_source`.
+`--instrument v3` (v190) alone reads the PIT Alpaca store `data/market_data_pit/`
+(every S&P member from 2016, local only); no universe name or variable selects it,
+it refuses without a fresh `_integrity.json`, and one fetcher runs per store root.
+v3's folds are in-sample or tainted for today's strategies, the 2026 holdout is
+shared with v2, and `validate_component.py` refuses v3 until a methodology spec
+maps its stages.
+Detail: `known-traps.md` § Two OHLCV caches, `backtest-methodology.md`
 § Windows.
 
 Specs from v141 carry `**Screen:**` under `Edge:` (an entry strategy or filter
@@ -216,10 +218,12 @@ Read the `docs/claude/` file before acting:
 - `ui-design.md`: any screen, table or pager: designed for mobile, tablet and
   desktop together and checked at all three widths; tables page
   5/10/20/50/100/All (10 desktop, 5 tablet/phone); text >= 11px, mixed sizes
-  on one baseline, table cells and icons vertically centred, 44px hit areas on phone/tablet (`.sb-hit`), phone tables
-  declare `compact` rows. Before merging a UI change,
+  on one baseline, cells/icons vertically centred, 44px hit areas on phone/tablet
+  (`.sb-hit`), phone tables declare `compact` rows. Before merging a UI change,
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234` must
-  exit 0 (allow-list entries carry a reason and a date).
+  exit 0 (allow-list entries carry a reason and a date; its `hint` check fails
+  an off-screen or covered `sb-hint` popover, and its `rail-label` and `dock` checks fail an unlabelled rail entry, a live column over the content, or an off-screen sheet; never allow them).
+  UI: `shots --clip <css selector>`, one page per task.
 
 ## Skills: the same ones Claude uses
 
@@ -278,16 +282,17 @@ skills or agents: the claude.ai-synced knowledge-work plugins (`small-business`,
 the marketplace `skill-creator`. Codex has no counterpart; never name their skills
 or agents as a next step.
 
-Drive any browser, including production at bomeo-capital.com, with Playwright
-(`node frontend/scripts/browse.mjs shots|api ...`, persistent profile so one
-sign-in lasts; paths without a leading slash). Log in to bomeo-capital.com or a
+Drive any browser, production bomeo-capital.com included, with Playwright
+(`node frontend/scripts/browse.mjs shots|api ...`, persistent profile; paths
+without a leading slash). Log in to bomeo-capital.com or a
 local testing instance with `.env`'s `ADMIN_USERNAME`/`ADMIN_PASSWORD`, loaded
-inside the script and never printed, echoed, passed as arguments or written
-elsewhere; build any local test instance from those same `.env` values, never
-the `admin`/`admin` default. Reading `.env` (and scripts loading it) is
-partner-allowed; never print, echo, log or quote its values. Before database
-tests, run `replicate-prod-db` and point `DATABASE_URL` at the replica in the
-shared `swing-db` container; never make a per-task container.
+inside the script and never printed, echoed or passed as arguments; build any
+local test instance from those same `.env` values, never the `admin`/`admin`
+default. Reading `.env` (and scripts loading it) is partner-allowed; never
+print, echo or quote its values. Before database
+tests, run `replicate-prod-db` (incremental) and point `DATABASE_URL` at
+the replica in the one shared `swing-db` container (port 56789, `.env`
+credentials); never make a per-task container.
 
 ## Efficient repository navigation
 
@@ -401,8 +406,8 @@ Claude's role agents are mirrored as Codex agents (`.codex/agents/`); route the
 same work to them so bulk output stays out of your context:
 `test-runner` (full or fast suite), `backtest-runner` (runs past ~2 minutes),
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
-symbols exist), `task-implementer` then `task-reviewer` (one plan task each,
-from a `task-brief`), `plan-briefer` (gathers a spec's code context into
+symbols exist), `task-implementer` then `task-reviewer` (one plan task each: `task_handoff.py <plan> <id>` writes the handoff; `agent_cost.py` checks cost),
+`plan-briefer` (gathers a spec's code context into
 `.superpowers/briefs/<plan base>.md` first), `plan-writer` (a plan from an
 approved spec and that brief: `mode=index` (index and task ledger) first,
 then one `mode=part <N>` per part, one at a time here, each appending task by
@@ -491,10 +496,10 @@ after bumping.
 
 No plan file may exceed 1500 lines. Split it into more `_N` parts (lettered
 `_2a`/`_2b`), never compress a task or split one across files, and afterwards
-confirm the `^### Task` sequence has no gap. A plan runs the full suite ONCE, as
-its own final verification task, never per task and never again after a clean
-merge; the per-task check is the one narrow test file (or `npm test --include`
-one spec). Full cadence: `document-conventions.md`.
+confirm the `^### Task` sequence has no gap. From v197 a task is ≤ 20 KB
+(split: `<id>`/`<id>b`), a plan ≤ 20 tasks (`SCOPE`). A plan never runs the full suite; CI does. After pushing, watch
+the run (`gh run watch`), fix failing tests alone until green. Per task: one narrow
+test file. Detail: `document-conventions.md`.
 
 "Implement plan vN" with nothing more means: in a worktree. Reuse the plan's
 existing `.claude/worktrees/` worktree if one exists, else create it; implement

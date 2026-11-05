@@ -18,13 +18,13 @@ def test_the_steps_run_in_the_spec_order(src):
         'if [ "$DRY_RUN" = 1 ]',                           # --dry-run stops here
         "--type=diff backup",                              # 2 checkpoint of now
         "scripts/ops/restic_hourly.sh",
-        "docker compose stop bot admin",                   # 4
+        "docker compose stop bot admin refresher",                   # 4
         "restic restore",                                  # 5
         'cat "$env_file" > .env',                          # 6 (in place)
         "env_set.py SWING_BOT_IMAGE",
         "--type=time",                                     # 7
         "scan_paused",                                     # 8 pause before start
-        "docker compose up -d --no-build --wait bot admin",  # 9
+        "docker compose up -d --no-build --wait $SERVICES",  # 9
     ]
     positions = [src.index(marker) for marker in markers]
     assert positions == sorted(positions)
@@ -35,7 +35,7 @@ def test_the_restore_promotes_and_uses_delta(src):
 
 
 def test_images_must_still_be_on_ghcr_before_anything_stops(src):
-    assert src.index("docker manifest inspect") < src.index("docker compose stop bot admin")
+    assert src.index("docker manifest inspect") < src.index("docker compose stop bot admin refresher")
 
 
 def test_it_logs_every_rollback_and_never_sed(src):
@@ -52,7 +52,7 @@ DEPLOY_DOC = SCRIPT.parents[2] / "docs" / "deploy" / "DEPLOY_HETZNER.md"
 def test_it_reminds_to_clear_the_v184_monitor_key_after_the_restart(src):
     """v184 spec section 3: a stale `monitor` key reads monitor_stale for good."""
     assert "REMINDER (v184)" in src and MONITOR_KEY_SQL in src
-    start = src.index("docker compose up -d --no-build --wait bot admin")
+    start = src.index("docker compose up -d --no-build --wait $SERVICES")
     paused = src.index("Scanning is PAUSED")
     reminder = src.index("REMINDER (v184)")
     finished = src.index('rollback to $TARGET finished')
@@ -66,3 +66,10 @@ def test_the_deploy_doc_names_the_key_removal_in_both_rollback_sections():
     assert MONITOR_KEY_SQL in image
     assert "not_deployed" in image and "monitor_stale" in image
     assert "REMINDER (v184)" in pitr and "Rolling back" in pitr
+
+
+def test_the_refresher_starts_only_if_the_target_image_has_it(src):
+    probe = src.index('-c "import swingbot.refresher"')
+    assert src.index("scan_paused") < probe < src.index(
+        "docker compose up -d --no-build --wait $SERVICES")
+    assert 'SERVICES="bot admin"' in src and 'SERVICES="bot admin refresher"' in src

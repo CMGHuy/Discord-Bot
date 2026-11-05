@@ -136,7 +136,8 @@ describe('TradeSparkline', () => {
     for (const series of [null, undefined]) {
       const el = await render(series);
       expect(el.querySelector('svg')).toBeNull();
-      expect(el.querySelector('.spark-empty')?.textContent?.trim()).toBe('—');
+      expect(el.querySelector('.spark-empty')?.textContent?.trim()).toBe('no cached bars');
+      expect(el.querySelector('.spark-empty')?.hasAttribute('title')).toBe(false);
     }
   });
 });

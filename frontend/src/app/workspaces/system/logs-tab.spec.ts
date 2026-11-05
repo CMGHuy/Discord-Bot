@@ -14,7 +14,7 @@ import {
 } from '../../api/interceptors';
 import { Logs } from '../../api/models';
 import { SystemStore } from '../../stores/system.store';
-import { LogsTab } from './logs-tab';
+import { LOG_CONTROLS, LogsTab } from './logs-tab';
 
 function payload(overrides: Partial<Logs> = {}): Logs {
   return { source: 'bot', lines: 500, path: 'logs/bot.log', content: '', ...overrides };
@@ -100,5 +100,26 @@ describe('LogsTab states', () => {
       b.textContent?.includes('Refresh'),
     );
     expect(refresh).toBeTruthy();
+  });
+});
+
+describe('LogsTab after System moved onto sb-page (v195 Phase 4)', () => {
+  it('leaves Clear to the page header and keeps source, Refresh and Raw', async () => {
+    expect(LOG_CONTROLS.map((control) => control.id)).toEqual(['source', 'refresh', 'raw']);
+
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    backend
+      .expectOne((r) => r.url === '/api/v1/system/logs')
+      .flush(payload({ content: 'started' }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const labels = [...el.querySelectorAll('button')].map((b) => b.textContent!.trim());
+    expect(labels).toContain('Refresh');
+    expect(labels).not.toContain('Clear');
+    expect(el.querySelector('sb-confirm-dialog')).toBeNull();
+    expect(el.querySelector('a.raw')).toBeTruthy();
   });
 });

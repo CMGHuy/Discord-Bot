@@ -231,3 +231,39 @@ describe('ApiClient — dashboard range scope (v181)', () => {
     plain.flush({ items: [], total: 0, page: 1, per_page: 25 });
   });
 });
+
+describe('ApiClient — live (v203)', () => {
+  let api: ApiClient;
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor])),
+        provideHttpClientTesting(),
+        { provide: RouteRefreshService, useValue: { requestMutationRefresh: () => undefined } },
+      ],
+    });
+    api = TestBed.inject(ApiClient);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => http.verify());
+
+  it('GETs /live with no limit by default, and returns the body untouched', () => {
+    const body = { heat: {}, awaiting: {}, killswitch: {}, events: [], events_meta: {} };
+    let seen: unknown;
+    api.live().subscribe((snapshot) => (seen = snapshot));
+    const req = http.expectOne((r) => r.url === '/api/v1/live');
+    expect(req.request.method).toBe('GET');
+    expect(req.request.params.keys()).toEqual([]);
+    req.flush(body);
+    expect(seen).toEqual(body);
+  });
+
+  it('sends a limit only when one is given', () => {
+    api.live(20).subscribe();
+    expect(http.expectOne((r) => r.url === '/api/v1/live').request.params.get('limit')).toBe('20');
+  });
+});

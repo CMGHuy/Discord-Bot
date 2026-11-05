@@ -410,7 +410,7 @@ describe('sb-equity-candles', () => {
     at(fixture, 0, 2);
     expect(readout(el)).toEqual([
       'Equity change +12.00 € (+12.00%)', 'High 120.00', 'Low 90.00',
-      'Max drawdown within range -4.55%',
+      'Max drawdown within range −4.55%',
     ]);
     expect(tones(el)).toEqual(['pos', 'neutral', 'neutral', 'neg']);
   });
@@ -431,8 +431,10 @@ describe('sb-equity-candles', () => {
     fixture.detectChanges();
     const pctPart = [...el.querySelectorAll('.readout .part')]
       .find((p) => p.textContent!.includes('vs prev close'))!;
-    expect(pctPart.getAttribute('title'))
-      .toBe("Change from the previous candle's close, not a return on capital");
+    expect(pctPart.hasAttribute('title')).toBe(false);
+    const tip = el.querySelector('.readout sb-hint [role="tooltip"]')!.textContent!.trim();
+    expect(tip).toContain("Change from the previous candle's close, not a return on capital.");
+    expect(tip).toContain('gross of commissions and slippage, pre-tax');   // A4 audit
   });
 
   it('follows the crosshair, and returns to the range summary when it leaves', () => {
@@ -442,7 +444,7 @@ describe('sb-equity-candles', () => {
     fixture.detectChanges();
     expect(readout(el)[0]).toBe('Oct 19, 2026');
     expect(readout(el)).toContain('approx');
-    expect(tones(el)[readout(el).indexOf('-5.00 €')]).toBe('neg');
+    expect(tones(el)[readout(el).indexOf('−5.00 €')]).toBe('neg');
 
     fixture.componentInstance['onCrosshair']({ logical: undefined });
     fixture.detectChanges();

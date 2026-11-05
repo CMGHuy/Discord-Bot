@@ -136,3 +136,22 @@ def test_to_json_is_the_manifest_identity_object():
     result = identity.IdentityResult(identity.OK, 1.00012345678, 2710, None)
     assert result.to_json() == {"status": "ok", "median_ratio": 1.000123,
                                 "overlap": 2710, "dropped_before": None}
+
+
+def test_no_market_dir_means_backtest_cache_only(tmp_path):
+    """v190 section 2.2: on the PIT store the mutable market_data/daily cache is never a reference."""
+    _csv(tmp_path / "md", "AAPL.csv", "Date,Open,High,Low,Close,Volume\n2016-01-04,1,1,1,12,5\n")
+    assert identity.reference_frame("AAPL", backtest_dir=tmp_path / "bc", market_dir=None) is None
+    assert identity.reference_path("AAPL", backtest_dir=tmp_path / "bc", market_dir=None) is None
+    assert identity.reference_path("AAPL", backtest_dir=tmp_path / "bc",
+                                   market_dir=tmp_path / "md") == tmp_path / "md" / "AAPL.csv"
+
+
+def test_reference_path_names_the_file_reference_frame_reads(tmp_path):
+    _csv(tmp_path / "bc", "MSFT.csv", "Date,Open,High,Low,Close,Volume\n2016-01-04,1,1,1,10,5\n")
+    _csv(tmp_path / "md", "MSFT.csv", "Date,Open,High,Low,Close,Volume\n2016-01-04,1,1,1,99,5\n")
+    assert identity.reference_path("MSFT", backtest_dir=tmp_path / "bc",
+                                   market_dir=tmp_path / "md") == tmp_path / "bc" / "MSFT.csv"
+    _csv(tmp_path / "bc", "MSFT.csv", "Date,Open\n2016-01-04,1\n")          # no Close column
+    assert identity.reference_path("MSFT", backtest_dir=tmp_path / "bc",
+                                   market_dir=tmp_path / "md") == tmp_path / "md" / "MSFT.csv"

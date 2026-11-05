@@ -15,10 +15,10 @@ reasoning about how long the suite takes. Every number here was measured on
   `test_analytics_perf`) is confirmed by the same narrow run, and recorded as
   such in the plan's results.
 - **A fix that touches other files** widens to `testrun.py changed`, not `full`.
-- **No full suite after merging back to `main`.** The plan's final task ran it
-  once on the branch; the merge adds no code the branch run did not see. A merge
-  that needed conflict resolution is checked with `changed` over the resolved
-  files. Close-out never ends with a full run.
+- **No local full suite for a plan, before or after the merge.** The CI
+  pipeline runs every suite on push to `main`; Claude watches it and fixes
+  failures (`working-conventions.md` § Pipeline watch). A merge that needed
+  conflict resolution is checked with `changed` over the resolved files.
 
 ## Baseline
 
@@ -39,8 +39,14 @@ there is fine; a `failed` anywhere is yours.
 **5819 passed, 2 skipped, 0 failed** (the 2 skips are Windows-only: POSIX modes,
 symlinks). The suite is ~5x larger than the numbers below; full `-n 4` is now
 roughly 5 minutes, and single runs swing 250-380s with machine load. The DB
-tests need the `swing-db-test` container running (`docker start swing-db-test`),
-otherwise ~1200 tests skip silently.
+tests use the project's one database container, `swing-db`, published on
+`127.0.0.1:56789` by the git-ignored `docker-compose.override.yml` (`docker compose
+up -d db` from the main checkout; 55432 is inside a Windows reserved port range
+and cannot be bound). Credentials are `.env`'s `DATABASE_URL`, resolved by
+`scripts/dev/swing_db.py` from the main checkout so every worktree and agent
+connects without a copy of `.env` (never print the values); `TEST_DATABASE_URL`
+still wins. Base database `swingbot_test`. If the container is down ~1200 tests
+skip silently: `docker start swing-db`.
 
 `full` uses `--dist worksteal` so one long test cannot leave workers idle at the
 tail: 295s vs 337s for default `load` back to back (one sample each, noisy).

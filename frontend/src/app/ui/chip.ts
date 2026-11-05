@@ -83,6 +83,10 @@ export function qualityTone(value: number | string | null | undefined): ChipTone
  * Mono caps by default (v80 D4), so a tag reads as a tag and not as a word in
  * the sentence beside it. `caps` exists for the one chip that must keep its
  * case: a quality level is named `Lv4`, and `LV4` reads as something else.
+
+ *
+ * v195 Phase 2: flat. One hairline frame (--border-strong) and the 4px
+ * --chip-radius; the state tones tint, the quality tones colour the text.
  */
 @Component({
   selector: 'sb-chip',
@@ -113,13 +117,16 @@ export function qualityTone(value: number | string | null | undefined): ChipTone
        neutral still reads as a plain category tag, and COHORT_UNKNOWN is
        "no opinion yet", not a category. */
     .muted { color: var(--text-muted); }
-    .q1 { color: var(--quality-1); border-color: color-mix(in srgb, var(--neg) 35%, transparent); }
-    .q2 { color: var(--quality-2); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+    /* v195 Phase 2: a band is its text colour on the chip's one hairline;
+       the label (Lv4, Tier B) says the rest. The tinted borders mixed from
+       a valence hue are gone with the rest of the decoration. Level 4 keeps
+       its own hue, not --info's: info is lavender, level 4 the ramp's
+       yellow-green. */
+    .q1 { color: var(--quality-1); }
+    .q2 { color: var(--quality-2); }
     .q3 { color: var(--quality-3); }
-    /* Its own hue, not --info's: info is lavender since v80 D1, and level 4
-       is the ramp's yellow-green. */
-    .q4 { color: var(--quality-4); border-color: color-mix(in srgb, var(--quality-4) 35%, transparent); }
-    .q5 { color: var(--quality-5); border-color: color-mix(in srgb, var(--pos) 35%, transparent); }
+    .q4 { color: var(--quality-4); }
+    .q5 { color: var(--quality-5); }
 
   `,
 })

@@ -91,3 +91,18 @@ def test_autopsy_fetch_includes_warmup_before_the_first_plan():
     assert "260 daily bars" in step
     assert "BACKTEST_CACHE_DIR=<scratchpad>/autopsy_bars" in fetch
     assert "--end today" in fetch
+
+
+def test_merge_step_describes_the_two_sided_rule_and_the_legacy_schema():
+    _, body = _parsed(SKILL)
+    step = " ".join(_section(body, "## Step 3 — Merge").split())
+    for phrase in ('"autopsy_schema": 2', "`exploit`", "`avoid`", "not known at entry",
+                   "two-value cut", "schema-1", "legacy banner", "exit code 2"):
+        assert phrase in step, phrase
+
+
+def test_scout_agent_states_the_direction_field():
+    _, body = _parsed(AGENT)
+    section = " ".join(_section(body, "## Evidence rule").split())
+    assert "`direction: exploit | avoid`" in section
+    assert "not known at entry" in section

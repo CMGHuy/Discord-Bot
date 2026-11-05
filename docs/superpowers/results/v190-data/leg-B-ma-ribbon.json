@@ -1,0 +1,19 @@
+{
+  "MA Ribbon": {
+    "n_eval": 230,
+    "wins": 116,
+    "losses": 114,
+    "scratches": 52,
+    "timeouts": 0,
+    "closed": 282,
+    "win_rate": 50.43478260869565,
+    "expectancy_r": 0.5479822695035461,
+    "excluded_share": 0.18439716312056736,
+    "avg_win_r": 2.3149224137931035,
+    "max_dd_pct": -11.63541111692403,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 25.0,
+    "runner_be_pct": 67.24137931034483,
+    "runner_timeout_pct": 7.758620689655173
+  }
+}

@@ -44,18 +44,21 @@ export interface SelectOption {
   `,
   styles: `
     .field { display: inline-flex; flex-direction: column; gap: var(--space-4); }
-    /* v80 D4: a hairline field on the panel's own ground. The caption is the
-       global .sb-label. --text-control is 16px on touch, the size below which
-       a phone zooms into a focused field. */
+    /* v80 D4: a hairline field; the caption is the global .sb-label.
+       --text-control is 16px on touch, the size below which a phone zooms
+       into a focused field. v195 Phase 2: the panel is the flat --surface
+       now, so the field sits one step down on the --bg well, behind the
+       strong hairline, and its edge brightens on hover. */
     select {
       height: var(--control-h);
       padding: 0 var(--space-8);
-      background: var(--surface);
+      background: var(--bg);
       border: 1px solid var(--border-strong);
       border-radius: var(--control-radius);
       color: var(--text);
       font: inherit;
       font-size: var(--text-control);
+      transition: border-color var(--transition);
     }
     select:hover:not(:disabled) { border-color: var(--text-muted); }
     select:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
@@ -108,12 +111,13 @@ export class Select {
       min-width: 0;
       height: var(--control-h);
       padding: 0 var(--space-8);
-      background: var(--surface);
+      background: var(--bg);
       border: 1px solid var(--border-strong);
       border-radius: var(--control-radius);
       color: var(--text);
       font: inherit;
       font-size: var(--text-control);
+      transition: border-color var(--transition);
     }
     input::placeholder { color: var(--text-muted); }
     input:hover:not(:disabled) { border-color: var(--text-muted); }

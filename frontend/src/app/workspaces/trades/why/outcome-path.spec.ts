@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { EventStream } from '../../../api/event-stream';
 import { Leg, StatusEvent, TradeDetailStore } from '../../../stores/trade-detail.store';
+import { FakeLiveValues } from '../../../testing/fake-live-values';
+import { LiveValuesStore } from '../../../stores/live-values.store';
 import { dateTime } from '../../../ui/format';
 import { OutcomePath } from './outcome-path';
 
@@ -30,6 +32,7 @@ describe('OutcomePath', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: { changes: () => signal(0) } },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
       ],
     });
@@ -67,7 +70,7 @@ describe('OutcomePath', () => {
     expect(root.textContent).toContain('TP1');
     expect(root.textContent).toContain('still open');
     render([LEGS[0], { fraction: null, exitPrice: 95, r: -1, reason: 'Stop' }]);
-    expect(root.querySelector('.neg')?.textContent).toBe('-1.00R');
+    expect(root.querySelector('.neg')?.textContent).toBe('−1.00R');
     expect(root.textContent).toContain('Stop');
   });
 

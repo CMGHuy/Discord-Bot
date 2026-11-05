@@ -19,4 +19,13 @@ describe('focusWorkspaceHeading', () => {
     document.body.innerHTML = '<main class="workspace"></main>';
     expect(() => focusWorkspaceHeading(document)).not.toThrow();
   });
+
+  it('focuses the page heading, never a heading outside the workspace (v195 correction 9)', () => {
+    // The top bar leads with a breadcrumb list, not a heading; a stray h1
+    // outside .workspace must never take focus from the page's own.
+    document.body.innerHTML = '<header class="topbar"><nav aria-label="Breadcrumb"><ol><li>Review</li></ol></nav>'
+      + '<h1>Stray</h1></header><main class="workspace"><h1>Trades</h1></main>';
+    focusWorkspaceHeading(document);
+    expect(document.activeElement?.textContent).toBe('Trades');
+  });
 });

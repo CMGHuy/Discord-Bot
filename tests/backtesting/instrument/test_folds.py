@@ -38,6 +38,25 @@ def test_v2_has_twelve_anchored_yearly_folds():
                            test_start="2025-01-01", test_end="2025-12-31")
 
 
+V3 = resolve("v3")
+
+
+def test_v3_has_five_anchored_yearly_folds_from_a_2017_research_start():
+    got = folds.anchored_folds(V3)
+    assert [f.test_year for f in got] == [2021, 2022, 2023, 2024, 2025]
+    assert got[0] == Fold(test_year=2021, train_start="2017-01-01", train_end="2020-12-31",
+                          test_start="2021-01-01", test_end="2021-12-31")
+    assert got[-1] == Fold(test_year=2025, train_start="2017-01-01", train_end="2024-12-31",
+                           test_start="2025-01-01", test_end="2025-12-31")
+
+
+def test_min_train_years_stays_four_so_2020_is_not_a_legal_v3_test_year():
+    """Lowering the constant would loosen a gate v2 shares (quant-engineer finding 2)."""
+    assert folds.MIN_TRAIN_YEARS == 4
+    with pytest.raises(ValueError, match="fewer than 4 training years"):
+        folds.anchored_folds(dataclasses.replace(V3, fold_test_years=(2020, 2021)))
+
+
 def test_every_v2_train_fold_is_anchored_and_ends_the_day_before_its_test_fold():
     for fold in folds.anchored_folds(V2):
         assert fold.train_start == V2.research_start

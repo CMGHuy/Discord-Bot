@@ -24,6 +24,7 @@ Run `!commands` (or `!help`) in Discord any time for the full command list.
 | [docs/strategy/strategy-signals.md](docs/strategy/strategy-signals.md) | Finding setups: levels from every method, filters, duplicate merging, horizons |
 | [docs/strategy/strategy-plans.md](docs/strategy/strategy-plans.md) | Building the plan: entry, target, stop, confidence, alert contents, tracking |
 | [docs/strategy/strategy-gates.md](docs/strategy/strategy-gates.md) | Gates: market regime, relative strength, trend alignment, symbol resolution |
+| [docs/strategy/r-and-expectancy.md](docs/strategy/r-and-expectancy.md) | What R and ExpR mean, and why win rate can rise while ExpR falls |
 | [docs/strategy-types/README.md](docs/strategy-types/README.md) | One page per strategy: idea, exact algorithm, wiring, measured results, for all 12 strategies plus their shared mechanics |
 | [docs/guides/setup.md](docs/guides/setup.md) | Creating the Discord bot, configuring `.env`, installing, running 24/7 |
 | [docs/guides/commands.md](docs/guides/commands.md) | Every Discord command |

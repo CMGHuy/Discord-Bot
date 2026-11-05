@@ -80,9 +80,9 @@ describe('ConfidenceCell', () => {
     expect(root.getPropertyValue('--quality-4').trim().toLowerCase()).toBe('#9acd32');
   });
 
-  it('keeps info off the quality ramp (v167 §2: violet, not blue)', () => {
+  it('keeps info off the quality ramp (v195: violet, not blue)', () => {
     const root = getComputedStyle(document.documentElement);
-    expect(root.getPropertyValue('--info').trim().toLowerCase()).toBe('#c3a6ff');
+    expect(root.getPropertyValue('--info').trim().toLowerCase()).toBe('#c193ed');
   });
 });
 

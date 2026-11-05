@@ -190,6 +190,13 @@ describe('PaginationComponent narrow layout (v167)', () => {
   });
 });
 
+describe('PaginationComponent inset (v195 Phase 2)', () => {
+  it('pads sideways with the table cells\' --cell-pad-x, so the pager shares their left edge', () => {
+    expect(SOURCE).toMatch(/\.bar \{[^}]*padding: var\(--space-10\) var\(--cell-pad-x\);/);
+    expect(SOURCE).toContain("the table cells' --cell-pad-x inset");
+  });
+});
+
 describe('PaginationComponent per-page reflects the active page size', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });

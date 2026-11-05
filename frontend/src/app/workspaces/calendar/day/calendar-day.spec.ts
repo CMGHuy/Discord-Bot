@@ -22,6 +22,7 @@ import {
   PnlCalendar,
 } from '../../../api/models';
 import { CalendarDayStore } from '../../../stores/calendar-day.store';
+import { RouteTitleService } from '../../../routing/route-title.service';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
 import { calendarRoutes } from '../calendar.routes';
@@ -213,11 +214,11 @@ describe('calendar-day helpers', () => {
 describe('CalendarDayPage', () => {
   it('shows the paper caption, the long date and the seven tiles, R explained', async () => {
     const fixture = await open('2026-08-05');
-    expect(text(el(fixture), '.caption')).toBe(PAPER_CAPTION);
-    expect(text(el(fixture), '.long-date')).toBe('Wednesday, August 5, 2026');
+    expect(text(el(fixture), 'sb-page p.description')).toBe(PAPER_CAPTION);
+    expect(text(el(fixture), 'sb-page h1.title')).toBe('Wednesday, August 5, 2026');
     expect(el(fixture).querySelectorAll('.tiles sb-stat-tile')).toHaveLength(7);
     const explained = [...el(fixture).querySelectorAll('.tiles sb-stat-tile')]
-      .filter((tile) => tile.getAttribute('title') === R_TOOLTIP);
+      .filter((tile) => tile.querySelector('sb-hint [role="tooltip"]')?.textContent?.trim() === R_TOOLTIP);
     expect(explained).toHaveLength(3);
     expect(text(el(fixture), '.r-note')).toBe(R_TOOLTIP);   // touch has no hover
   });
@@ -235,7 +236,7 @@ describe('CalendarDayPage', () => {
     expect(text(root, '.compare .rank')).toBe('3rd best of 3 days in August 2026');
     expect(text(root, '.vs-day')).toBe('+12.50 € · +0.25R');
     expect(text(root, '.vs-weekday-label')).toBe('vs average Wednesday');
-    expect(text(root, '.vs-weekday')).toBe('-3.00 € · —');
+    expect(text(root, '.vs-weekday')).toBe('−3.00 € · —');
     expect(root.querySelectorAll('.compare .pos, .compare .neg')).toHaveLength(0);
     expect(text(root, '.caveat')).toBe(ONE_DAY_CAVEAT);
   });
@@ -267,9 +268,10 @@ describe('CalendarDayPage', () => {
   it('draws the month so far with this day marked and month-to-date figures', async () => {
     const root = el(await open('2026-08-05'));
     expect(root.querySelector('svg.month-line circle.marker')).not.toBeNull();
-    expect(text(root, '.mtd-pnl')).toBe('-60.00 €');
-    expect(text(root, '.mtd-r')).toBe('-1.20R');
-    expect(root.querySelector('.mtd-r')?.getAttribute('title')).toBe(R_TOOLTIP);
+    expect(text(root, '.mtd-pnl')).toBe('−60.00 €');
+    expect(text(root, '.mtd-r')).toBe('−1.20R');
+    expect(root.querySelector('.mtd-r')?.hasAttribute('title')).toBe(false);
+    expect(root.querySelector('.mtd-r + sb-hint [role="tooltip"]')?.textContent?.trim()).toBe(R_TOOLTIP);
     expect(text(root, '.month-panel .rank')).toBe('3rd best of 3 days in August 2026');
   });
 
@@ -277,7 +279,12 @@ describe('CalendarDayPage', () => {
     const fixture = await open('2026-08-05');
     const heads = [...el(fixture).querySelectorAll('.breakdown thead th')].map((th) => th.textContent?.trim());
     expect(heads).toEqual(['Strategy', 'n', 'P&L', 'R', 'Win %', '']);
-    expect(el(fixture).querySelector('.breakdown thead th.r-head')?.getAttribute('title')).toBe(R_TOOLTIP);
+    expect(el(fixture).querySelector('.breakdown thead th.r-head')?.hasAttribute('title')).toBe(false);
+    const drove = [...el(fixture).querySelectorAll('sb-panel')].find((p) => p.querySelector('h2')?.textContent?.trim() === 'What drove it')!;
+    expect(drove.querySelector('header sb-hint [role="tooltip"]')?.textContent?.trim()).toBe(R_TOOLTIP);
+    const tileHints = el(fixture).querySelectorAll('.tiles sb-stat-tile sb-hint');
+    expect(tileHints).toHaveLength(3);
+    expect(el(fixture).querySelector('.tiles [title]')).toBeNull();
     const keys = () => [...el(fixture).querySelectorAll('.breakdown-row .key')].map((k) => k.textContent?.trim());
     expect(keys()).toEqual(['EMA20', 'VWAP']);
     await click(fixture, 'sb-tab-bar button', 'Horizon');
@@ -290,6 +297,7 @@ describe('CalendarDayPage', () => {
     const cellOf = (root: HTMLElement) => root.querySelector('.breakdown-row .win');
     expect(cellOf(thin)?.textContent?.trim()).toBe('—');
     expect(cellOf(thin)?.classList.contains('withheld')).toBe(true);
+    expect(cellOf(thin)?.hasAttribute('title')).toBe(false);
     expect(text(thin, '.win-note')).toBe('— : win % withheld, fewer than 5 rows');
     expect(thin.querySelector('.breakdown thead th:last-child')?.getAttribute('aria-hidden')).toBe('true');
     const wide = el(await open('2026-08-05', dayBody({
@@ -321,18 +329,18 @@ describe('CalendarDayPage', () => {
   it('shows a 404 day as the empty state, with working prev/next and the caption', async () => {
     const root = el(await open('2026-08-04', 404));
     expect(text(root, 'sb-empty-state .empty-title')).toBe('No closed trades on 2026-08-04 under this filter');
-    expect(root.querySelector('a.prev')?.getAttribute('href')).toBe('/calendar/2026-08-03?strategy=EMA20');
-    expect(root.querySelector('a.next')?.getAttribute('href')).toBe('/calendar/2026-08-05?strategy=EMA20');
+    expect(root.querySelector('a.prev')?.getAttribute('href')).toBe('/trades/calendar/2026-08-03?strategy=EMA20');
+    expect(root.querySelector('a.next')?.getAttribute('href')).toBe('/trades/calendar/2026-08-05?strategy=EMA20');
     expect(root.querySelector('.tiles')).toBeNull();
-    expect(text(root, '.caption')).toBe(PAPER_CAPTION);
+    expect(text(root, 'sb-page p.description')).toBe(PAPER_CAPTION);
   });
 
   it('steps to the next month at the month edge, skipping its empty days', async () => {
     const root = el(await open('2026-08-10', dayBody({ date: '2026-08-10' }), {
       '2026-09': [{ ...cell('2026-09-01', 0, 0), trade_count: 0 }, cell('2026-09-02', 15, 0.3)],
     }));
-    expect(root.querySelector('a.prev')?.getAttribute('href')).toBe('/calendar/2026-08-05?strategy=EMA20');
-    expect(root.querySelector('a.next')?.getAttribute('href')).toBe('/calendar/2026-09-02?strategy=EMA20');
+    expect(root.querySelector('a.prev')?.getAttribute('href')).toBe('/trades/calendar/2026-08-05?strategy=EMA20');
+    expect(root.querySelector('a.next')?.getAttribute('href')).toBe('/trades/calendar/2026-09-02?strategy=EMA20');
   });
 
   it('disables a step with nowhere to go', async () => {
@@ -341,15 +349,16 @@ describe('CalendarDayPage', () => {
     expect(text(root, '.next.off')).toBe('next day ›');
   });
 
-  it('goes back to the same filtered month', async () => {
+  it('links back to the same filtered month from the day stepper, with no ← link', async () => {
     const root = el(await open('2026-08-05'));
-    expect(text(root, 'a.back')).toBe('← Calendar · August 2026');
-    expect(root.querySelector('a.back')?.getAttribute('href')).toBe('/calendar?month=2026-08&strategy=EMA20');
+    expect(text(root, 'nav.steps a.month')).toBe('August 2026');
+    expect(root.querySelector('nav.steps a.month')?.getAttribute('href')).toBe('/trades/calendar?month=2026-08&strategy=EMA20');
+    expect(root.querySelector('a.back')).toBeNull();
   });
 });
 
 describe('calendar/:date route', () => {
-  const ROUTES: Routes = [{ path: 'calendar', children: calendarRoutes }];
+  const ROUTES: Routes = [{ path: 'trades/calendar', children: calendarRoutes }];
 
   async function take(predicate: (r: HttpRequest<unknown>) => boolean): Promise<TestRequest> {
     const backend = TestBed.inject(HttpTestingController);
@@ -369,7 +378,7 @@ describe('calendar/:date route', () => {
   it('hands the date and the filters from the URL to the day store', async () => {
     configure(ROUTES);
     const harness = await RouterTestingHarness.create();
-    const navigation = harness.navigateByUrl('/calendar/2026-08-05?strategy=EMA20&horizon=4w');
+    const navigation = harness.navigateByUrl('/trades/calendar/2026-08-05?strategy=EMA20&horizon=4w');
     const day = await take((r) => r.url === DAY_URL);
     expect(day.request.params.get('date')).toBe('2026-08-05');
     expect(day.request.params.get('strategy')).toBe('EMA20');
@@ -380,12 +389,12 @@ describe('calendar/:date route', () => {
     (await take((r) => r.url === SPARK_URL)).flush(SPARKS);
     harness.detectChanges();
     expect(harness.routeDebugElement?.componentInstance).toBeInstanceOf(CalendarDayPage);
-    expect(text(harness.routeNativeElement!, '.long-date')).toBe('Wednesday, August 5, 2026');
+    expect(text(harness.routeNativeElement!, 'sb-page h1.title')).toBe('Wednesday, August 5, 2026');
   });
 
   it('shows the empty state for an impossible date without a single request', async () => {
     configure(ROUTES);
-    const harness = await RouterTestingHarness.create('/calendar/2026-02-30');
+    const harness = await RouterTestingHarness.create('/trades/calendar/2026-02-30');
     TestBed.inject(HttpTestingController).verify();
     expect(text(harness.routeNativeElement!, 'sb-empty-state .empty-title'))
       .toBe('No closed trades on 2026-02-30 under this filter');
@@ -394,7 +403,7 @@ describe('calendar/:date route', () => {
   it('keeps the tiles on screen when the same URL is resolved again', async () => {
     configure(ROUTES);
     const harness = await RouterTestingHarness.create();
-    const first = harness.navigateByUrl('/calendar/2026-08-05?strategy=EMA20');
+    const first = harness.navigateByUrl('/trades/calendar/2026-08-05?strategy=EMA20');
     (await take((r) => r.url === DAY_URL)).flush(dayBody());
     (await take((r) => r.url === MONTH_URL)).flush(AUGUST);
     await first;
@@ -402,7 +411,7 @@ describe('calendar/:date route', () => {
     harness.detectChanges();
     expect(harness.routeNativeElement!.querySelectorAll('.tiles sb-stat-tile')).toHaveLength(7);
 
-    const again = TestBed.inject(Router).navigateByUrl('/calendar/2026-08-05?strategy=EMA20',
+    const again = TestBed.inject(Router).navigateByUrl('/trades/calendar/2026-08-05?strategy=EMA20',
       { onSameUrlNavigation: 'reload', replaceUrl: true });
     const day = await take((r) => r.url === DAY_URL);   // a refresh is in flight
     harness.detectChanges();
@@ -415,19 +424,82 @@ describe('calendar/:date route', () => {
   it('asks for the new day when the date in the URL changes', async () => {
     configure(ROUTES);
     const harness = await RouterTestingHarness.create();
-    const first = harness.navigateByUrl('/calendar/2026-08-05?strategy=EMA20');
+    const first = harness.navigateByUrl('/trades/calendar/2026-08-05?strategy=EMA20');
     (await take((r) => r.url === DAY_URL)).flush(dayBody());
     (await take((r) => r.url === MONTH_URL)).flush(AUGUST);
     await first;
     (await take((r) => r.url === SPARK_URL)).flush(SPARKS);
 
-    const second = harness.navigateByUrl('/calendar/2026-08-10?strategy=EMA20');
+    const second = harness.navigateByUrl('/trades/calendar/2026-08-10?strategy=EMA20');
     const day = await take((r) => r.url === DAY_URL);
     expect(day.request.params.get('date')).toBe('2026-08-10');
     day.flush(dayBody({ date: '2026-08-10' }));
     (await take((r) => r.url === MONTH_URL)).flush(AUGUST);
     await second;
     harness.detectChanges();
-    expect(text(harness.routeNativeElement!, '.long-date')).toBe('Monday, August 10, 2026');
+    expect(text(harness.routeNativeElement!, 'sb-page h1.title')).toBe('Monday, August 10, 2026');
+  });
+});
+
+/* -- v195 Phase 4 and §5.2 -- the day page on sb-page ----------------------- */
+
+describe('CalendarDayPage on sb-page (v195 Phase 4, §5.2)', () => {
+  it('renders the long date as the one h1', async () => {
+    const root = el(await open('2026-08-05'));
+    expect(root.querySelectorAll('h1')).toHaveLength(1);
+    expect(root.querySelector('h2.long-date')).toBeNull();
+    expect(root.querySelector('p.caption')).toBeNull();
+  });
+
+  it('names the day as the breadcrumb detail segment', async () => {
+    await open('2026-08-05');
+    expect(TestBed.inject(RouteTitleService).detail()).toBe('Wednesday, August 5, 2026');
+  });
+
+  it('puts the crumb back after a title update clears it while the page is open', async () => {
+    const fixture = await open('2026-08-05');
+    const titles = TestBed.inject(RouteTitleService);
+    titles.set('Calendar', null, '/somewhere-else');
+    expect(titles.detail()).toBeNull();
+    fixture.detectChanges();
+    expect(titles.detail()).toBe('Wednesday, August 5, 2026');
+  });
+
+  it('steps days from the header, with no scope bar', async () => {
+    const root = el(await open('2026-08-05'));
+    const actions = root.querySelector('sb-page [page-actions]')!;
+    expect(actions.querySelector('nav.steps a.prev')).not.toBeNull();
+    expect(actions.querySelector('nav.steps a.month')).not.toBeNull();
+    expect(root.querySelector('[page-scope]')).toBeNull();
+    expect(actions.querySelector('.danger, .danger-quiet')).toBeNull();
+  });
+
+  it('rules the seven tiles as one strip in the KPI slot, R explained beneath', async () => {
+    const root = el(await open('2026-08-05'));
+    const summary = root.querySelector<HTMLElement>('sb-page [page-kpis]')!;
+    expect(summary.querySelectorAll('sb-stat-strip.tiles sb-stat-tile')).toHaveLength(7);
+    expect(text(summary, '.r-note')).toBe(R_TOOLTIP);
+  });
+
+  it('makes the trades the primary panel and the comparisons the secondary grid', async () => {
+    const root = el(await open('2026-08-05'));
+    const primary = root.querySelector('sb-page [page-primary]')!;
+    expect(primary.querySelectorAll('sb-day-trade-card').length).toBeGreaterThan(0);
+    const secondary = [...root.querySelectorAll<HTMLElement>('sb-page [page-secondary]')];
+    expect(secondary).toHaveLength(3);
+    expect(secondary[0].textContent).toContain('How this day compares');
+    expect(secondary[1].textContent).toContain('Month so far');
+    expect(secondary[2].textContent).toContain('What drove it');
+    expect(secondary.every((panel) => panel.style.display !== 'none')).toBe(true);
+  });
+
+  it('keeps every slot node on a 404 day, the empty state primary and the comparisons hidden', async () => {
+    const root = el(await open('2026-08-04', 404));
+    expect(root.querySelector('sb-page [page-kpis]')).not.toBeNull();
+    expect(root.querySelector('[page-kpis] .tiles')).toBeNull();
+    expect(root.querySelector('sb-page [page-primary] sb-empty-state')).not.toBeNull();
+    const secondary = [...root.querySelectorAll<HTMLElement>('sb-page [page-secondary]')];
+    expect(secondary).toHaveLength(3);
+    expect(secondary.every((panel) => panel.style.display === 'none')).toBe(true);
   });
 });

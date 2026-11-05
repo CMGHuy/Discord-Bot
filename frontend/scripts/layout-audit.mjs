@@ -5,7 +5,7 @@
  * docs/superpowers/specs/2026-10-19-v179-mobile-layout-consistency-design.md §3.5, §6a.6).
  *
  * Visits every route and tab (layout-audit-lib.mjs ROUTES) at each width,
- * headless, on browse.mjs's persistent profile, and reports seven checks:
+ * headless, on browse.mjs's persistent profile, and reports ten checks:
  *   overflow   the page (document, body or the shell's <main> pane) is wider than the viewport
  *   offscreen  text past the right edge of the viewport, outside any scroll box
  *   clipped    text cut by its own overflow/ellipsis or by an overflow:hidden ancestor (never sr-only)
@@ -13,8 +13,19 @@
  *              and a checkbox's label)
  *   text       text under 11px (SVG text at its rendered size)
  *   baseline   side-by-side text in one flex/grid row whose baselines differ by more than 2px
+ *              (landmark columns -- main, aside, nav -- are regions, not a text line)
  *   vcenter    a table cell's content more than 2px off the middle of its row, or an icon
  *              (svg, img, checkbox/radio) more than 2px off the centre line of the text beside it
+ *   hint       an sb-hint popover that, opened the way the device opens it (hover at 1440, tap at
+ *              <= 1023), is zero-size, past a viewport edge, or not topmost at its centre and at
+ *              its top-left + 8px (spec v194 A2; the trigger's aria-label names it). Never allowed.
+ *   rail-label a labelled-rail entry (nav.rail a.rail-link; widths >= 640 only, the phone navigates by
+ *              its tab bar) with no accessible name, no visible .rail-label, or a name that does not
+ *              contain its label (spec v202 §3). Never allowed.
+ *   dock       from 1024px the docked Live column (aside.live-column) missing, over main.workspace's
+ *              content box, or a live strip beside it; below 1024px a docked column, no live strip,
+ *              or a sheet that a tap on the strip does not open inside the viewport (spec v202 §8).
+ *              Never allowed.
  * A finding the allow-list names (with a reason and a date) passes; anything
  * else makes the exit code 1. Entries nothing matches any more print as STALE;
  * --prune removes them (only on a run at 390, 768 and 1440).
@@ -39,8 +50,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import {
-  CHECKS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, ROUTES, TOUCH_MAX_WIDTH,
-  classify, countByCheck, dedupe, formatFinding, inScope, isVisuallyHidden, parseArgs, pickIds, resolveRoute, slug, validateAllow, vcenterGeometry,
+  CHECKS, DOCK_MIN_WIDTH, DOCK_SELECTORS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, RAIL_MIN_WIDTH, ROUTES, TOUCH_MAX_WIDTH,
+  classify, countByCheck, dedupe, dockVerdict, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs, pickIds, railLabelVerdict,
+  resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -158,8 +170,9 @@ function auditPage({ touch, minTap, minText, maxBaseline, maxCenter, hiddenSrc, 
   const isRow = (cs) => (/flex/.test(cs.display) ? cs.flexDirection.startsWith('row') : /grid/.test(cs.display));
 
   function checkBaselines(el) {
+    // Landmark columns (main, aside, nav) are regions side by side, not text on one line (v203's dock).
     const marks = [...el.children]
-      .filter((k) => visible(k) && getComputedStyle(k).position !== 'absolute')
+      .filter((k) => !/^(MAIN|ASIDE|NAV)$/.test(k.tagName) && visible(k) && getComputedStyle(k).position !== 'absolute')
       .map(baselineOf).filter(Boolean);
     for (let i = 0; i < marks.length; i += 1) {
       for (let j = i + 1; j < marks.length; j += 1) {
@@ -248,6 +261,183 @@ function auditPage({ touch, minTap, minText, maxBaseline, maxCenter, hiddenSrc, 
     if (el.matches('svg, img, input[type="checkbox"], input[type="radio"]') && !el.parentElement.closest('svg')) checkIcon(el);
   }
   return findings;
+}
+
+/** How long an opened hint gets to show and be placed (one frame plus the reposition) before it is measured. */
+const HINT_SETTLE_MS = 150;
+
+/** Runs inside the page (page.evaluate): the opened popover's geometry for hintVerdict. Self-contained. */
+function measureHint(id) {
+  const root = document.documentElement;
+  const viewport = { width: root.clientWidth, height: root.clientHeight };
+  const pop = id ? document.getElementById(id) : null;
+  if (!pop) return { rect: { left: 0, top: 0, width: 0, height: 0 }, viewport, hits: { center: false, corner: false } };
+  const r = pop.getBoundingClientRect();
+  const on = (x, y) => {
+    const hit = document.elementFromPoint(x, y);
+    return Boolean(hit && pop.contains(hit));
+  };
+  return {
+    rect: { left: r.left, top: r.top, width: r.width, height: r.height },
+    viewport,
+    hits: { center: on(r.left + r.width / 2, r.top + r.height / 2), corner: on(r.left + 8, r.top + 8) },
+  };
+}
+
+const hintFinding = (label, reason, rect) => ({
+  check: 'hint',
+  selector: `sb-hint > button[aria-label="${label}"]`,
+  text: label,
+  detail: `"${label}" popover ${reason} at ${Math.round(rect.left)},${Math.round(rect.top)} `
+    + `${Math.round(rect.width)}x${Math.round(rect.height)}`,
+});
+
+/** Escape closes a hint however it opened (hover, focus or a tap's pin); the mouse then leaves it. */
+async function closeHint(page, trigger, touch) {
+  await trigger.press('Escape', { timeout: 2000 }).catch(() => undefined);
+  if (!touch) await page.mouse.move(0, 0);
+}
+
+/**
+ * The hint check (spec v194 A2): open every visible sb-hint the way the device would -- hover at
+ * desktop widths, tap at or below TOUCH_MAX_WIDTH -- and judge its popover with hintVerdict.
+ * Playwright-side, not in auditPage, because hover and tap must be real input events. A trigger
+ * Playwright cannot hover or tap (detached by a re-render, or covered) is logged, not reported:
+ * the tap check owns hit areas.
+ */
+async function auditHints(page, width) {
+  const touch = width <= TOUCH_MAX_WIDTH;
+  const triggers = page.locator('sb-hint > button.trigger');
+  const findings = [];
+  for (let i = 0, n = await triggers.count(); i < n; i += 1) {
+    const trigger = triggers.nth(i);
+    if (!(await trigger.isVisible())) continue;
+    const label = (await trigger.getAttribute('aria-label')) ?? '';
+    try {
+      await (touch ? trigger.tap({ timeout: 2000 }) : trigger.hover({ timeout: 2000 }));
+    } catch (error) {
+      console.error(`  hint "${label}" @${width}: cannot ${touch ? 'tap' : 'hover'} (${String(error).split('\n')[0]})`);
+      continue;
+    }
+    await page.waitForTimeout(HINT_SETTLE_MS);
+    const geometry = await page.evaluate(measureHint, await trigger.getAttribute('aria-describedby'));
+    const verdict = hintVerdict(geometry.rect, geometry.viewport, geometry.hits);
+    if (!verdict.ok) findings.push(hintFinding(label, verdict.reason, geometry.rect));
+    await closeHint(page, trigger, touch);
+  }
+  return findings;
+}
+
+
+/** Runs inside the page (locator.evaluate): a rail link's accessible name (aria-labelledby,
+ *  aria-label, then text) and href, and its .rail-label's text and whether it shows.
+ *  Self-contained: isVisuallyHidden arrives as source. */
+function railEntry(link, hiddenSrc) {
+  const isVisuallyHidden = new Function(`return ${hiddenSrc}`)();
+  const shows = (el) => {
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    if (rect.width <= 0 || rect.height <= 0 || style.visibility === 'hidden') return false;
+    return !isVisuallyHidden(style, rect) && rect.left >= 0 && rect.right <= window.innerWidth;
+  };
+  const labelledBy = (link.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean)
+    .map((id) => document.getElementById(id)?.textContent ?? '').join(' ').trim();
+  const name = labelledBy || (link.getAttribute('aria-label') ?? '').trim() || (link.textContent ?? '').trim();
+  const label = link.querySelector('.rail-label');
+  return {
+    name, href: link.getAttribute('href') ?? '',
+    label: (label?.textContent ?? '').trim(), labelVisible: label ? shows(label) : false,
+  };
+}
+
+const railFinding = (entry, reason, extra) => ({
+  check: 'rail-label',
+  selector: entry.href ? `nav.rail a.rail-link[href="${entry.href}"]` : 'nav.rail a.rail-link',
+  text: entry.name,
+  detail: `rail entry ${entry.href || '(none)'}: ${reason}${extra ? ` (${extra})` : ''}`,
+});
+
+/**
+ * The rail-label check (spec v202 §3): every labelled-rail entry needs an accessible name and a
+ * visible .rail-label its name contains. Skipped below RAIL_MIN_WIDTH (the phone's tab bar
+ * navigates). Nothing is focused or hovered: the labels are always drawn.
+ */
+async function auditRailLabels(page, width) {
+  if (width < RAIL_MIN_WIDTH) return [];
+  const links = page.locator('nav.rail a.rail-link');
+  const count = await links.count();
+  if (count === 0) return [railFinding({ href: '', name: '' }, 'no rail entries found', `width ${width}`)];
+  const hiddenSrc = isVisuallyHidden.toString();
+  const findings = [];
+  for (let i = 0; i < count; i += 1) {
+    const entry = await links.nth(i).evaluate(railEntry, hiddenSrc);
+    const verdict = railLabelVerdict(entry);
+    if (!verdict.ok) findings.push(railFinding(entry, verdict.reason, entry.label));
+  }
+  return findings;
+}
+
+/** How long the opened live sheet gets for its entrance before it is measured. */
+const SHEET_SETTLE_MS = 400;
+
+/** Runs inside the page (page.evaluate): the dock check's DOM facts. Self-contained. */
+function measureDock() {
+  const rect = (el) => {
+    const r = el?.getBoundingClientRect();
+    return r && r.width > 0 && r.height > 0 ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
+  };
+  const workspace = document.querySelector('main.workspace');
+  const outer = rect(workspace);
+  const s = workspace ? getComputedStyle(workspace) : null;
+  const content = outer && s ? {
+    ...outer,
+    left: outer.left + parseFloat(s.borderLeftWidth) + parseFloat(s.paddingLeft),
+    right: outer.right - parseFloat(s.borderRightWidth) - parseFloat(s.paddingRight),
+  } : null;
+  const root = document.documentElement;
+  return {
+    column: rect(document.querySelector('aside.live-column')),
+    workspace: content,
+    strip: Boolean(rect(document.querySelector('sb-live-strip button.live-strip'))),
+    viewport: { width: root.clientWidth, height: root.clientHeight },
+  };
+}
+
+/** Runs inside the page: the open live sheet's dialog rect, or null. Self-contained. */
+function measureSheet() {
+  const r = document.querySelector('sb-live-sheet [role=dialog]')?.getBoundingClientRect();
+  return r && r.width > 0 && r.height > 0 ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
+}
+
+/** Tap the live strip, measure the sheet it opens, then close it with Escape. */
+async function openSheet(page, width) {
+  try {
+    await page.locator('sb-live-strip button.live-strip').tap({ timeout: 2000 });
+  } catch (error) {
+    console.error(`  live strip @${width}: cannot tap (${String(error).split('\n')[0]})`);
+    return null;
+  }
+  await page.locator('sb-live-sheet [role=dialog]').waitFor({ state: 'visible', timeout: 2000 }).catch(() => null);
+  await page.waitForTimeout(SHEET_SETTLE_MS);
+  const sheet = await page.evaluate(measureSheet);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(SHEET_SETTLE_MS);
+  return sheet;
+}
+
+/**
+ * The dock check (spec v202 §8 "Layout"): from DOCK_MIN_WIDTH the docked column sits beside the
+ * workspace, never over its content; below it the live strip opens the dock as a sheet inside the
+ * viewport. Judged by dockVerdict on measured facts.
+ */
+async function auditDock(page, width) {
+  // The strip mounts once the viewport signal settles; give a slow route a moment before judging.
+  if (width < DOCK_MIN_WIDTH) await page.locator('sb-live-strip button.live-strip').waitFor({ timeout: 2000 }).catch(() => null);
+  const facts = { ...(await page.evaluate(measureDock)), width, sheet: null };
+  if (width < DOCK_MIN_WIDTH && facts.strip) facts.sheet = await openSheet(page, width);
+  const verdict = dockVerdict(facts);
+  if (verdict.ok) return [];
+  return [{ check: 'dock', selector: DOCK_SELECTORS[verdict.reason], text: '', detail: `live dock ${verdict.reason} at ${width}px` }];
 }
 
 /** Same page-ready rule as browse.mjs: never 'networkidle' (the SPA holds an event stream open). */
@@ -349,7 +539,11 @@ async function auditWidth(width, opts) {
       const raw = await page.evaluate(auditPage, { ...limits, hiddenSrc: isVisuallyHidden.toString(), geometrySrc: vcenterGeometry.toString() });
       findings.push(...raw.map((f) => ({ route, width, ...f })));
       await screenshot(page, join(opts.out, `${slug(route)}@${width}.png`), width);
-      console.error(`${route} @${width}: ${raw.length} raw finding(s)`);
+      const hints = await auditHints(page, width);
+      const rails = await auditRailLabels(page, width);
+      const docks = await auditDock(page, width);
+      findings.push(...[...hints, ...rails, ...docks].map((f) => ({ route, width, ...f })));
+      console.error(`${route} @${width}: ${raw.length + hints.length + rails.length + docks.length} raw finding(s)`);
     }
     return findings;
   });

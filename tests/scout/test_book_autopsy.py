@@ -43,6 +43,7 @@ def _trade(i: int, ticker: str) -> dict:
         "strategy": "RSI" if i % 2 else "MACD", "horizon": "2w", "direction": "bullish",
         "plan_created_at": f"{plan_day} 00:00:00+00",
         "plan_first_status_at": f"{plan_day}T13:00:00+00:00", "plan_status": "CLOSED",
+        "plan_issued_at": f"{plan_day}T13:00:00+00:00", "plan_issued_at_source": "live",
         "entry_type": "stop_entry", "expiry_bars": "2", "planned_entry": "100",
         "opened_at": f"{plan_day + timedelta(days=1)}T15:00:00+00:00", "entry": "100",
         "stop_loss": "98", "take_profit": "103",
@@ -135,7 +136,7 @@ def test_bar_cells_carry_bar_covered_n(tmp_path):
     bar_names = {name for name, _ in bars.bar_cuts()}
     gaps = {c["value"]: (c["n"], c["bar_covered_n"])
             for c in data["cells"] if c["cut"] == "open_gap_bucket"}
-    assert gaps == {"flat": (20, 20), "adverse_small": (4, 4)}
+    assert gaps == {"flat": (20, 20), "open_worse_small": (4, 4)}
     assert data["header"]["bar_covered_n"] == 24
     assert all(c["bar_covered_n"] <= c["n"] for c in data["cells"] if c["cut"] in bar_names)
     assert all(c["bar_covered_n"] is None for c in data["cells"] if c["cut"] == "strategy_horizon")
@@ -199,7 +200,7 @@ def test_markdown_keeps_pipe_delimited_cell_ids_in_one_column():
     line = next(line for line in md.splitlines() if line.startswith("| strategy_horizon="))
     assert line == (
         "| strategy_horizon=RSI\\|2w | 40 | 10 | 50.0% | 0.100 | 0.120 | "
-        "+0.050 [0.010, 0.090] | 0.080 | tickers 1; top share 100.0% |")
+        "+0.050 [0.010, 0.090] | 0.080 | n/a | tickers 1; top share 100.0% |")
     assert data["cells"][0]["id"] == "strategy_horizon=RSI|2w"
 
 
@@ -226,8 +227,9 @@ def test_cli_records_input_hashes_effective_frictions_and_resolved_invocation(tm
     header = data["header"]
     assert header["frictions"] == {"slippage_bps": 17.0, "commission_per_trade": 2.5,
                                     "commission_risk_basis": 250.0, "min_risk_fraction": 0.001}
+    from autopsy import exclusions
     expected = {str(path.resolve()): hashlib.sha256(path.read_bytes()).hexdigest()
-                for path in (rows_csv, rej_csv, bars_dir / "AAA.csv")}
+                for path in (rows_csv, rej_csv, bars_dir / "AAA.csv", exclusions.EXCLUSIONS_PATH)}
     assert header["input_fingerprints"] == expected
     assert header["invocation"]["command"][2:] == argv
     assert header["invocation"]["options"]["balance"] == 25000.0
@@ -260,3 +262,61 @@ def test_sector_snapshot_records_exact_mapping_used_once_for_the_cuts(
     md = report.render_markdown(data)
     assert f"Sector map snapshot SHA-256: {digest}" in md
     assert len(md.splitlines()) <= report.MD_MAX_LINES
+
+
+def test_alert_hour_coverage_is_reported_by_source(tmp_path):
+    out = _build(tmp_path)
+    cov = out["header"]["alert_hour_coverage"]
+    assert cov == {"trades": {"live": 48, "discord": 0, "unknown": 0},
+                   "plans": {"live": 48, "discord": 0, "unknown": 1}}
+    assert set(out) == {"header", "cells", "tallies", "giveback"}
+    hour_cells = [c for c in out["cells"] if c["cut"] == "alert_hour"]
+    assert hour_cells and all(c["hour_coverage"] == cov["trades"] for c in hour_cells)
+    assert all("hour_coverage" not in c for c in out["cells"] if not c["cut"].startswith("alert_hour"))
+    sessions = [t for t in out["tallies"] if t["cut"] == "alert_hour_session"]
+    assert sessions and all(t["hour_coverage"] == cov["plans"] for t in sessions)
+    assert all("hour_coverage" not in t for t in out["tallies"] if not t["cut"].startswith("alert_hour"))
+
+
+def test_alert_hour_coverage_lines_sit_above_the_cells_and_the_tallies(tmp_path):
+    md = report.render_markdown(_build(tmp_path))
+    trades_line = "- alert-hour coverage (trades): live 48, discord 0, unknown 0"
+    plans_line = "- alert-hour coverage (plans): live 48, discord 0, unknown 1"
+    assert trades_line in md and plans_line in md
+    assert md.index(trades_line) < md.index("## Cells")
+    assert md.index("## Tallies") < md.index(plans_line)
+    assert len(md.splitlines()) <= report.MD_MAX_LINES
+
+
+def test_a_report_without_coverage_still_renders():
+    """An autopsy JSON written before v200 has no alert_hour_coverage key."""
+    built = {"header": {"window": [None, None], "n": 0, "bar_covered_n": 0, "pooled_net_expr": None,
+                        "pooled_win_rate": None, "net_of_frictions": "modelled", "cells_tested": 0,
+                        "resamples": 200, "seed": 42, "notes": []},
+             "cells": [], "tallies": [], "giveback": {"n": 0, "mean": None, "median": None}}
+    md = report.render_markdown(built)
+    assert "alert-hour coverage" not in md
+
+
+def test_every_cell_carries_three_eras_and_the_header_the_boundary(tmp_path):
+    from autopsy import eras
+    data = _build(tmp_path)
+    assert data["header"]["era_boundary"] == {
+        "utc": eras.ERA_BOUNDARY_UTC.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": eras.ERA_BOUNDARY_SOURCE}
+    for cell in data["cells"]:
+        assert set(cell["eras"]) == set(eras.ERAS), cell["id"]
+        assert cell["eras"]["pre"]["n"] == cell["n"], cell["id"]   # fixture trades close Jan-Apr 2026
+        assert cell["notes"] == []
+    assert len(report.render_markdown(data).splitlines()) <= report.MD_MAX_LINES
+
+
+def test_the_report_is_schema_2_and_every_cell_carries_its_cut_tag(tmp_path):
+    data = _build(tmp_path)
+    assert data["header"]["autopsy_schema"] == report.AUTOPSY_SCHEMA == 2
+    tags = report.cut_defined_at(data["header"]["sector_map"])
+    assert data["cells"]
+    for cell in data["cells"]:
+        assert cell["defined_at"] == tags[cell["cut"]], cell["id"]
+    assert set(data) == {"header", "cells", "tallies", "giveback"}
+    assert len(report.render_markdown(data).splitlines()) <= report.MD_MAX_LINES

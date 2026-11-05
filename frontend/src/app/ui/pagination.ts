@@ -36,10 +36,10 @@ import { ALL_PER_PAGE, PER_PAGE_OPTIONS } from './table-prefs';
     /* v167. One bar: range, rows-per-page and page controls share a row on a
        wide container and wrap into two on a narrow one. The query is on the
        host's own width (container-type), not the viewport, so a pager inside
-       a half-width panel wraps correctly on a desktop too. Padding matches
-       the table cells' --space-10 inset so everything shares one left edge. */
+       a half-width panel wraps correctly on a desktop too. Horizontal padding is
+       the table cells' --cell-pad-x inset (v195) so everything shares one left edge. */
     :host { display: block; container: pager / inline-size; }
-    .bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8) var(--space-10); padding: var(--space-10); font-size: var(--text-table); color: var(--text-secondary); }
+    .bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8) var(--space-10); padding: var(--space-10) var(--cell-pad-x); font-size: var(--text-table); color: var(--text-secondary); }
     .range { margin-right: auto; }
     .per-page { display: inline-flex; align-items: center; gap: var(--space-6); }
     .per-page select, .jump { height: var(--control-h); background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--control-radius); font: inherit; font-size: var(--text-control); }

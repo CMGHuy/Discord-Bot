@@ -96,6 +96,8 @@ class ScanParams:
     confluence_atr_target_mode: str = "rechoose"  # v191: rechoose (arm R) | keep (arm K)
     headroom_scope: str = "off"             # v135: off | strategy | confluence
     headroom_min_r: float = 0.0             # v135: 0 disables the gate
+    market_entry_next_open: bool = False    # v192: market plans wait for the next open
+    gap_reclaim_atr: float = 0.0            # v192: g; honoured only with market_entry_next_open
 
     def __post_init__(self):
         _validate_fvg(self.fvg_levels_mode, self.fvg_displacement_atr_k)
@@ -168,4 +170,6 @@ class ScanParams:
             confluence_atr_target_mode=config.CONFLUENCE_ATR_TARGET_MODE,
             headroom_scope=config.HEADROOM_SCOPE,
             headroom_min_r=config.HEADROOM_MIN_R,
+            market_entry_next_open=config.MARKET_ENTRY_NEXT_OPEN,
+            gap_reclaim_atr=config.GAP_RECLAIM_ATR,
         )

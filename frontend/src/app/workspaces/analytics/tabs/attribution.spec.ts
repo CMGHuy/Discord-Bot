@@ -2,12 +2,36 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { provideZonelessChangeDetection, signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { AnalyticsStore } from '../../../stores/analytics.store';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { AttributionTab, TAKEN_CAPTION } from './attribution';
+import { Hint } from '../../../ui/hint';
+import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
+
+/** The text of the sb-hint whose aria label is `label` (A4 audit). */
+function hintText(fixture: ComponentFixture<unknown>, label: string): string {
+  const hint = fixture.debugElement
+    .queryAll(By.directive(Hint))
+    .map((debug) => debug.componentInstance as Hint)
+    .find((h) => h.label() === label);
+  if (!hint) throw new Error(`no sb-hint labelled "${label}"`);
+  return hint.text();
+}
+
+/** Focus the first hit matching `hitSelector` and return the chart tooltip's text (A4 audit). */
+async function tooltipText(fixture: ComponentFixture<unknown>, hitSelector: string): Promise<string> {
+  const hit = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(hitSelector);
+  if (!hit) throw new Error(`no chart hit "${hitSelector}"`);
+  hit.dispatchEvent(new FocusEvent('focus'));
+  fixture.detectChanges();
+  await fixture.whenStable();
+  const tip = (fixture.nativeElement as HTMLElement).querySelector('sb-chart-tooltip .tooltip');
+  return tip?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+}
 
 describe('attribution.ts never widens the page (v179 §2.1)', () => {
   const src = readFileSync(join(process.cwd(), 'src/app/workspaces/analytics/tabs/attribution.ts'), 'utf8');
@@ -161,5 +185,38 @@ describe('attribution.ts breakpoints', () => {
     const widths = [...src.matchAll(/\(\s*(?:max|min)-width:\s*(\d+)px\s*\)/g)].map((m) => m[1]);
     expect(widths.length).toBeGreaterThan(0);
     expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
+  });
+});
+
+describe('AttributionTab hint and tooltip copy (A4 audit)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('Contribution and Strategy x horizon hints state the paper, gross, pre-tax basis', () => {
+    const { fixture } = render();
+    expect(hintText(fixture, 'Contribution definition')).toContain(PERFORMANCE_CAVEAT);
+    expect(hintText(fixture, 'Strategy x horizon definition')).toContain(PERFORMANCE_CAVEAT);
+  });
+
+  it('dot plot hint says a point is one group of the chosen breakdown, not always a strategy', () => {
+    const { fixture } = render();
+    const text = hintText(fixture, 'ExpR vs sample size definition');
+    expect(text).toContain('one group of the breakdown below');
+    expect(text).not.toContain('Each point is one strategy');
+    expect(text).toContain(PERFORMANCE_CAVEAT);
+  });
+
+  it('Contribution tooltip names its unit, R', async () => {
+    const { fixture } = render({ strategies: signal({ contribution: [{ strategy: 'RSI', total_r: 2.5, n: 30 }],
+      cumulative: {}, strategies: [], scope: {}, n: 30 }) });
+    const text = await tooltipText(fixture, 'sb-waterfall rect.hit');
+    expect(text).toContain('2.50R');
+  });
+
+  it('Strategy x horizon tooltip names its unit, R for ExpR', async () => {
+    const { fixture } = render({ heatGrid: signal({ rows: ['RSI'], cols: ['1w'],
+      cells: [{ r: 0, c: 0, n: 30, exp_r: 0.25, win_rate: 55 }], folded: { n_strategies: 0, cells: [] },
+      min_cell_n: 20, scope: {}, n: 30 }) });
+    const text = await tooltipText(fixture, 'sb-heat-grid td.sb-hit');
+    expect(text).toContain('0.25R');
   });
 });

@@ -25,7 +25,16 @@ import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { Dashboard, DASHBOARD_COLUMNS, DASHBOARD_PANEL_ORDER } from './dashboard';
+import { RouteTitleService } from '../../routing/route-title.service';
+import { MetricCard } from '../../ui/metric-card';
+import { StatTile } from '../../ui/stat-tile';
+import { LEG_HINT_TEXT } from '../trades/leg-label';
+import { fxMissingText } from '../analytics/scope-bar';
+import { tradeDrawerFields } from './trade-drawer';
+import { partialOpenTitle } from '../../ui/status-cell';
 import { DashboardStore } from '../../stores/dashboard.store';
+import { LiveValuesStore } from '../../stores/live-values.store';
+import { FakeLiveValues } from '../../testing/fake-live-values';
 import { ToastService } from '../../shell/toast.service';
 import { EquityCandlesStore } from '../../stores/equity-candles.store';
 import { equityCandlesStoreStub } from '../../testing/equity-candles-store.stub';
@@ -33,9 +42,11 @@ import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { provideMotion } from '../../ui/motion/motion.service';
 import { dashboardRoutes } from './dashboard.routes';
 import { PANEL_HELP } from './panels/panel-help';
-import { TradingPerformance } from './panels/trading-performance';
+import { PERF_BASIS, TradingPerformance, withBasis } from './panels/trading-performance';
 import { EquityCandles } from './panels/equity-candles';
 import { PositionsTable } from './positions-table';
+import { isInline } from '../../ui/priority';
+import { NEVER_COLLAPSED_COLUMNS } from '../trades/trades.columns';
 
 installMatchMediaPolyfill();
 
@@ -77,7 +88,7 @@ function payload(overrides: Partial<DashboardData> = {}): DashboardData {
     account_balance: 10000,
     open_pnl_pct: 1.2,
     open_pnl_amount: 120,
-    risk_used_pct: 3,
+    heat_enforced_pct: 3, risk_of_loss_pct: 1, risk_of_loss_amount: 100,
     risk_cap_pct: 20,
     open_trades: 2,
     avg_confidence: 3.5,
@@ -112,6 +123,7 @@ function seed(): { fixture: ComponentFixture<Dashboard>; backend: HttpTestingCon
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
       DashboardStore,
+      { provide: LiveValuesStore, useClass: FakeLiveValues },
       { provide: ConnectionStore, useValue: connectionStub },
       { provide: PreferencesStore, useValue: preferencesStub },
       { provide: EquityCandlesStore, useValue: equityCandlesStoreStub(CANDLES) },
@@ -209,11 +221,13 @@ describe('Dashboard states', () => {
     expect(el.querySelector('sb-market-movers')).not.toBeNull();
   });
 
-  it('renders no in-page heading, because the top bar owns the title', () => {
+  it('renders the route title as the one h1, from sb-page', () => {
     const { fixture } = seed();
+    TestBed.inject(RouteTitleService).set('Dashboard', "What's happening right now");
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.textContent).not.toContain('Dashboard');
+    expect(el.querySelectorAll('h1')).toHaveLength(1);
+    expect(el.querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Dashboard');
   });
 });
 
@@ -261,7 +275,7 @@ describe('Dashboard v85 layout', () => {
   it('drops the old metric rows the panels replaced', async () => {
     const fixture = await loaded();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('.primary')).toBeNull();
+    expect(el.querySelector('.primary:not(.slot)')).toBeNull();
     expect(el.querySelector('sb-chip-row.chips')).toBeNull();
     expect(el.querySelector('.lifecycle')).toBeNull();
   });
@@ -365,24 +379,25 @@ describe('Dashboard v85 layout', () => {
     expect(panels.length).toBeGreaterThanOrEqual(4);
     for (const section of panels) {
       const heading = section.querySelector('h2')?.textContent?.trim();
-      expect(section.getAttribute('title'), heading).toBeTruthy();
+      expect(section.hasAttribute('title'), heading).toBe(false);
       // Its own hint or the shared one: always something a tap or a keyboard focus can open.
       expect(section.querySelector('header sb-hint'), heading).not.toBeNull();
     }
-    const titles = panels.map((p) => p.getAttribute('title'));
-    expect(titles).toEqual(expect.arrayContaining([PANEL_HELP.tradingPerformance, PANEL_HELP.openPositions]));
+    const titles = panels.map((p) => p.querySelector('header [role="tooltip"]')?.textContent?.trim());
+    expect(titles).toEqual(expect.arrayContaining([withBasis(PANEL_HELP.tradingPerformance)]));
   });
 
-  it('explains each KPI card on hover, payoff ratio included', async () => {
+  it('explains each KPI card through a hint beside its label, payoff ratio included', async () => {
     const fixture = await loaded();
     const cards = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('sb-metric-card')];
     expect(cards.length).toBe(7);
     for (const card of cards) {
       const label = card.querySelector('.label')!.textContent!.trim();
-      expect(card.getAttribute('title'), label).toBeTruthy();
+      expect(card.hasAttribute('title'), label).toBe(false);
+      expect(card.querySelector('.label-row sb-hint [role="tooltip"]')?.textContent?.trim(), label).toBeTruthy();
     }
     const payoff = cards.find((c) => c.querySelector('.label')!.textContent!.trim() === 'Payoff ratio')!;
-    expect(payoff.getAttribute('title')).toContain('average winning trade divided by the average losing trade');
+    expect(payoff.querySelector('.label-row sb-hint [role="tooltip"]')!.textContent).toContain('average winning trade divided by the average losing trade');
   });
 
   it('routes the panel presets back into the store (v181 §1)', async () => {
@@ -469,7 +484,7 @@ describe('Dashboard explanatory help', () => {
     expect(hint).not.toBeNull();
     hint.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
-    expect(el.querySelector<HTMLElement>('sb-hint.lifecycle-hint [role="tooltip"]')!.hidden).toBe(false);
+    expect(el.querySelector<HTMLElement>('sb-hint.lifecycle-hint [role="tooltip"]')!.hasAttribute('data-popover-open')).toBe(true);
     expect(el.textContent).toContain('Only trades that meet');
     expect(el.querySelector('sb-hint.lifecycle-hint sb-plan-lifecycle-diagram')).not.toBeNull();
     expect(el.textContent).toContain('Share counts are snapshotted');
@@ -639,12 +654,13 @@ describe('dead card-mode contract', () => {
 /* -- v95 C3 -- panel order ------------------------------------------------- */
 
 describe('Dashboard panel order', () => {
-  it('leads with performance at every band', () => {
-    // Observed: at 390px positions came first and the portfolio figure was
-    // below a 900px table. At 768px performance came first. The phone case
-    // was the odd one out, and it was the wrong way round.
+  it('leads with Trading performance, then open positions, at every band', () => {
+    // v95 C3 put performance first because a phone buried the portfolio
+    // figure, win rate and expectancy under a ~900px table; v195 split them
+    // into a KPI strip that repeated the panel's own cards. The strip is
+    // merged into the panel, which leads again.
     for (const band of ['xs', 'sm', 'md', 'lg', 'xl'] as const) {
-      expect(DASHBOARD_PANEL_ORDER[band]?.[0] ?? 'performance').toBe('performance');
+      expect(DASHBOARD_PANEL_ORDER[band]).toEqual(['performance', 'positions', 'activity', 'movers']);
     }
   });
 
@@ -665,10 +681,20 @@ describe('DASHBOARD_COLUMNS', () => {
     expect(DASHBOARD_COLUMNS.length).toBeGreaterThan(0);
     expect(DASHBOARD_COLUMNS.filter((c) => c.inlineFrom === undefined)).toEqual([]);
   });
+
+  it('keeps the never-collapsed columns, the badge among them, inline on a tablet (v195 correction 8)', () => {
+    // Open positions is where a stop is checked before acting: it must not sit
+    // one tap away in the row expansion at 640-1023px.
+    for (const key of NEVER_COLLAPSED_COLUMNS) {
+      const column = DASHBOARD_COLUMNS.find((c) => c.key === key);
+      expect(column, `missing column: ${key}`).toBeDefined();
+      expect(isInline(column!.inlineFrom, 'sm'), `${key} collapses at sm`).toBe(true);
+    }
+  });
 });
 
-describe('Dashboard v171 price age hint', () => {
-  /** Open rows carry a live pnl_pct from the server, so the hint has to sit
+describe('Dashboard price age (v201)', () => {
+  /** Open rows carry a live pnl_pct from the server, so the age has to sit
    *  on that branch of the P&L cell, not only on the projected one a
    *  PENDING row falls through to (found by the V171-33 Playwright pass). */
   async function withActiveRow(row: Partial<TradeRow>) {
@@ -681,16 +707,27 @@ describe('Dashboard v171 price age hint', () => {
     backend.expectOne('/api/v1/dashboard?mode=today').flush(payload({ lifecycle: { ACTIVE: 1 } as never }));
     await fixture.whenStable();
     fixture.detectChanges();
-    return (fixture.nativeElement as HTMLElement).querySelectorAll('.age-hint');
+    return fixture.nativeElement as HTMLElement;
   }
 
-  it('shows the age beside a live P&L older than the dashboard window', async () => {
-    const hints = await withActiveRow({ price_age_s: 75 });
-    expect([...hints].map((h) => h.textContent?.trim())).toEqual(['1 min ago']);
+  it('the open P&L cell renders through sb-market-value with its age', async () => {
+    const asOf = new Date(Date.now() - 75_000).toISOString();
+    const el = await withActiveRow({ price_as_of: asOf });
+    const cell = el.querySelector('sb-positions-table tbody sb-market-value');
+    expect(cell).not.toBeNull();
+    expect(cell!.querySelector('.mv-age')?.textContent?.trim()).toBe('1 min ago');
+    expect(el.querySelector('sb-age-hint')).toBeNull();
   });
 
-  it('stays silent inside the window', async () => {
-    expect((await withActiveRow({ price_age_s: 5 })).length).toBe(0);
+  it('a projected (pending) P&L cell also renders through sb-market-value', async () => {
+    const asOf = new Date(Date.now() - 75_000).toISOString();
+    const el = await withActiveRow({ pnl_pct: null, price_as_of: asOf, current_price: 101 });
+    expect(el.querySelector('sb-positions-table tbody .pnl-plan sb-market-value')).not.toBeNull();
+  });
+
+  it('the open-positions panel has a Refresh control for the open tickers', async () => {
+    const el = await withActiveRow({});
+    expect(el.querySelector('.positions-panel sb-market-refresh')).not.toBeNull();
   });
 });
 
@@ -738,6 +775,7 @@ async function routed(url: string) {
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
       DashboardStore,
+      { provide: LiveValuesStore, useClass: FakeLiveValues },
       { provide: ConnectionStore, useValue: connectionStub },
       { provide: PreferencesStore, useValue: preferencesStub },
       { provide: EquityCandlesStore, useValue: equityCandlesStoreStub(CANDLES) },
@@ -901,5 +939,248 @@ describe('Dashboard v181 scope link', () => {
     // The loop guard: a hand-picked range never comes back to the chart as a target.
     expect(store.chartTarget().seq).toBe(seq);
     expect((fixture.nativeElement as HTMLElement).querySelector('.range-chip')).not.toBeNull();
+  });
+});
+
+describe('Dashboard lifecycle tab counts (v194 B1)', () => {
+  const LIFECYCLE = { PENDING: 2, ACTIVE: 8, PARTIAL: 1, CLOSED: 4, CANCELLED: 0 };
+  const OPEN_COUNTS = { PENDING: 2, ACTIVE: 8, PARTIAL: 1 };
+  const counts = (fixture: ComponentFixture<Dashboard>) =>
+    (fixture.debugElement.query(By.directive(PositionsTable)).componentInstance as PositionsTable).counts();
+  const tabLabels = (el: HTMLElement) => [...el.querySelectorAll('[role="tab"] .label')]
+    .map((node) => node.textContent?.replace(/\s+/g, ' ').trim());
+  const fail = (req: { flush(body: unknown, opts: { status: number; statusText: string }): void }) =>
+    req.flush('boom', { status: 500, statusText: 'Server Error' });
+
+  for (const width of [1440, 768, 390]) {
+    it(`feeds the API's counts to the tabs at ${width}px`, async () => {
+      // ViewportService reads innerWidth when created; seed() resets the module first.
+      vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(width);
+      const fixture = await loaded({ lifecycle: LIFECYCLE as never });
+      expect(counts(fixture)).toEqual(LIFECYCLE);
+    });
+  }
+
+  it('labels the tabs with those counts on desktop', async () => {
+    const fixture = await loaded({ lifecycle: LIFECYCLE as never });
+    expect(tabLabels(fixture.nativeElement as HTMLElement).slice(0, 3)).toEqual(['Pending 2', 'Open 8', 'Partial 1']);
+  });
+
+  /** 1D load superseded by 1M, then every today request fails; the 1M answer carries the counts. */
+  async function todayFailedInPeriod(): Promise<ComponentFixture<Dashboard>> {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    flushTradeGroups(backend);
+    const store = TestBed.inject(DashboardStore);
+    const first = backend.expectOne('/api/v1/dashboard?mode=today');
+    store.setPreset('1M');
+    fail(first);
+    for (const req of backend.match((r) => r.url === '/api/v1/dashboard')) {
+      if (req.request.params.get('mode') === 'today') fail(req);
+      else req.flush(payload({ scope: { mode: 'range' }, lifecycle: { ...LIFECYCLE, CLOSED: 40 } as never }));
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it("falls back to the scoped answer's open counts when today's fetch failed", async () => {
+    const fixture = await todayFailedInPeriod();
+    // PENDING/ACTIVE/PARTIAL are all-time in every scope (dashboard.py
+    // _lifecycle_counts); CLOSED/CANCELLED are today's only, so they stay unknown.
+    expect(counts(fixture)).toEqual(OPEN_COUNTS);
+  });
+
+  it("says today's figures could not load instead of ringing forever", async () => {
+    const fixture = await todayFailedInPeriod();
+    const card = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('sb-metric-card')]
+      .find((c) => c.querySelector('.label')!.textContent!.trim() === 'Realised today')!;
+    expect(card.classList.contains('loading')).toBe(false);
+    expect(card.textContent).toContain("couldn't load today's figures");
+  });
+
+  it("says today's figures could not load in the 390px phone summary too", async () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(390);
+    const fixture = await todayFailedInPeriod();
+    const row = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.mobile-summary > div')]
+      .find((d) => d.querySelector('span')!.textContent!.includes('Realised today'))!;
+    expect(row.querySelector('strong')!.textContent).toContain("couldn't load today's figures");
+  });
+});
+
+describe('Dashboard — leg rows and missing FX rates (v194 B3, B7)', () => {
+  it('labels each leg of a split plan in the positions table, with the plans-not-legs hint', async () => {
+    const el = await loadedWithRows([
+      tradeRow({ id: 'p1', leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }),
+      tradeRow({ id: 'p1', leg_index: 1, leg_total: 2, leg_exit_reason: null }),
+    ]);
+    const legs = [...el.querySelectorAll('sb-positions-table .leg')];
+    expect(legs.map((n) => n.firstChild!.textContent!.trim())).toEqual([
+      expect.stringMatching(/^Leg 1 of 2 · /),
+      'Leg 2 of 2',
+    ]);
+    expect(legs[0].querySelector('sb-hint')!.textContent).toContain(LEG_HINT_TEXT);
+    expect(legs[0].querySelector('sb-hint')!.textContent).toContain('count each realised leg as its own trade');   // A4 audit
+    expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
+  });
+
+  it('shows no leg label for a single-leg row', async () => {
+    const el = await loadedWithRows([tradeRow({ leg_index: 0, leg_total: 1 })]);
+    expect(el.querySelector('sb-positions-table .leg')).toBeNull();
+  });
+
+  it('names the trades left out of the money figures', async () => {
+    const fixture = await loaded({ fx_missing_count: 2 } as Partial<DashboardData>);
+    const caveat = (fixture.nativeElement as HTMLElement).querySelector('.performance-stack .fx-caveat');
+    expect(caveat!.textContent!.trim()).toBe(fxMissingText(2));
+  });
+
+  it('shows no caveat when every rate was found or the field is absent', async () => {
+    for (const overrides of [{ fx_missing_count: 0 }, {}] as Partial<DashboardData>[]) {
+      const fixture = await loaded(overrides);
+      expect((fixture.nativeElement as HTMLElement).querySelector('.fx-caveat')).toBeNull();
+    }
+  });
+
+  it('lists the leg in the trade drawer for a leg row only', () => {
+    const leg = tradeDrawerFields(tradeRow({ leg_index: 1, leg_total: 3, leg_exit_reason: null }), '$', 0);
+    expect(leg.find((f) => f.key === 'leg')?.value).toBe('Leg 2 of 3');
+    const single = tradeDrawerFields(tradeRow({ leg_index: 0, leg_total: 1 }), '$', 0);
+    expect(single.some((f) => f.key === 'leg')).toBe(false);
+  });
+});
+
+describe('Dashboard — explanations are hints, not titles (v194 A3)', () => {
+  it('explains a partly closed position in a hint outside the row link', async () => {
+    const row = tradeRow({ id: 'p9', status: 'PARTIAL', status_label: 'PARTIAL', banked_fraction: 0.5 });
+    const el = await loadedWithRows([row]);
+    expect(el.querySelector('sb-row-link sb-hint')).toBeNull();
+    const texts = [...el.querySelectorAll('sb-positions-table sb-hint [role="tooltip"]')].map((n) => n.textContent!.trim());
+    expect(texts).toContain(partialOpenTitle(row)!);
+    // The icon keeps its own generic label; only the share-still-open sentence moved.
+    expect(el.querySelector('.leg-icon')!.getAttribute('title')).not.toBe(partialOpenTitle(row));
+  });
+
+  it('defines the P&L and expected-R cells in the positions help, not on each cell', async () => {
+    const el = await loadedWithRows([tradeRow({ status: 'ACTIVE', status_label: 'ACTIVE', exit_price: null, pnl_pct: null })]);
+    expect(el.querySelector('.pnl-plan[title], .expected[title]')).toBeNull();
+    const help = el.querySelector('.lifecycle-hint')!.textContent!;
+    expect(help).toContain('live P&L, then projected P&L at target and at stop');
+    expect(help).toContain('projected R if price reaches target');
+  });
+});
+
+/* -- v195 Phase 4, §5.2 -- the Dashboard on sb-page ------------------------- */
+
+/** The Open risk tile's own inputs, read from the component: the rendered
+ *  value counts up, the input is the figure. */
+function openRiskTile(fixture: ComponentFixture<Dashboard>): StatTile {
+  return fixture.debugElement.query(By.css('sb-trading-performance sb-stat-tile')).componentInstance as StatTile;
+}
+
+describe('Dashboard on sb-page (v195 Phase 4)', () => {
+  it('puts Trading performance above open positions, then activity and movers', async () => {
+    const fixture = await loaded();
+    const el = fixture.nativeElement as HTMLElement;
+    const lead = el.querySelector('sb-page div.kpis.slot > [page-kpis]')!;
+    expect(lead.classList).toContain('performance-async');
+    expect(lead.querySelector('sb-trading-performance')).not.toBeNull();
+    expect(el.querySelector('sb-page div.primary.slot > sb-panel.positions-panel')).not.toBeNull();
+    // Document order is the visual order: the slots render kpis, then primary.
+    expect(lead.compareDocumentPosition(el.querySelector('sb-panel.positions-panel')!)
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const secondary = [...el.querySelectorAll('sb-page div.secondary.slot > [page-secondary]')];
+    const names = ['activity-async', 'movers-async'];
+    expect(secondary.map((s) => names.find((name) => s.classList.contains(name))))
+      .toEqual(names);
+  });
+
+  it('puts Close all in the header actions as danger-quiet, and nowhere in the table', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const el = fixture.nativeElement as HTMLElement;
+    const button = el.querySelector<HTMLButtonElement>('sb-page header.bar .actions [data-action="close-all"]');
+    expect(button).not.toBeNull();
+    expect(button!.classList).toContain('danger-quiet');
+    expect(button!.classList).not.toContain('danger');
+    expect(el.querySelector('sb-positions-table [data-action="close-all"]')).toBeNull();
+  });
+
+  it('opens the close-all menu from the header and closes it on an outside click', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-action="close-all"]')!.click();
+    fixture.detectChanges();
+    expect(el.querySelectorAll('sb-page header.bar .actions [role="menuitem"]')).toHaveLength(3);
+
+    el.querySelector<HTMLElement>('sb-page h1.title')!.click();
+    fixture.detectChanges();
+    expect(el.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
+  });
+
+  it('projects the close-all dialog and nothing destructive into a scope bar', async () => {
+    const el = (await loaded()).nativeElement as HTMLElement;
+    expect(el.querySelector('sb-page sb-confirm-dialog')).not.toBeNull();
+    expect(el.querySelector('sb-page div.scope.slot')!.children).toHaveLength(0);
+  });
+});
+
+describe('Dashboard headline figures, merged into Trading performance', () => {
+  const cardsOf = (fixture: ComponentFixture<Dashboard>) =>
+    fixture.debugElement.queryAll(By.css('sb-trading-performance sb-metric-card'))
+      .map((d) => d.componentInstance as MetricCard);
+
+  it('has no stat strip of its own: every strip on the page lives inside Trading performance', async () => {
+    const el = (await loaded()).nativeElement as HTMLElement;
+    const strips = [...el.querySelectorAll('sb-stat-strip')];
+    expect(strips.length).toBeGreaterThan(0);
+    expect(strips.every((strip) => strip.closest('sb-trading-performance') !== null)).toBe(true);
+  });
+
+  it('shows each figure once: no label repeats across the panel cards and the risk tile', async () => {
+    const fixture = await loaded();
+    const labels = [...cardsOf(fixture).map((c) => c.label()), openRiskTile(fixture).label()];
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels).toEqual(expect.arrayContaining(
+      ['Expectancy', 'Win rate', 'Realised today', 'Open trades', 'Open risk']));
+    // The strip's tiles that duplicated these cards are gone.
+    expect(labels).not.toContain('Open positions');
+  });
+
+  it('gives expectancy and win rate their N and the paper / pre-cost / pre-tax basis', async () => {
+    const cards = cardsOf(await loaded({ expectancy_r: -0.16, expectancy_n: 12, win_rate: 55, win_rate_n: 40 }));
+    const byLabel = new Map(cards.map((c) => [c.label(), c] as const));
+    expect(byLabel.get('Expectancy')!.value()).toBeCloseTo(-0.16);
+    expect(byLabel.get('Expectancy')!.sub()).toBe('N=12 · thin sample');
+    expect(byLabel.get('Expectancy')!.description()).toBe(PERF_BASIS.expectancy);
+    expect(byLabel.get('Win rate')!.value()).toBeCloseTo(55);
+    expect(byLabel.get('Win rate')!.sub()).toBe('N=40');
+    expect(byLabel.get('Win rate')!.description()).toBe(PERF_BASIS.winRate);
+  });
+
+  it('shows open risk as money and % of account, the cap beneath, linking to Risk', async () => {
+    const fixture = await loaded({ account_balance: 10000, heat_enforced_pct: 3, risk_cap_pct: 20 });
+    const tile = openRiskTile(fixture);
+    expect(tile.value()).toBe('300 $ · 3.00%');
+    expect(tile.secondary()).toBe('cap 2,000 $ · 20.00%');
+    expect(tile.hint()).toBe('Breakdown on Risk →');
+
+    const link = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a.risk-link')!;
+    expect(link.getAttribute('href')).toBe('/risk');
+    expect(link.querySelector('sb-stat-tile .label')!.textContent!.trim()).toBe('Open risk');
+  });
+
+  it('never invents money without a balance', async () => {
+    expect(openRiskTile(await loaded({ account_balance: null, heat_enforced_pct: 3 })).value())
+      .toBe('— · 3.00%');
+  });
+
+  it('shows realised money signed, with the closes behind it, and the open count', async () => {
+    const cards = cardsOf(await loaded({
+      realized: { amount: -40, pct: -0.4, n: 3, wins: 1, losses: 2 } as never, open_trades: 2,
+    }));
+    const byLabel = new Map(cards.map((c) => [c.label(), c] as const));
+    expect(byLabel.get('Realised today')!.value()).toBe(-40);
+    expect(byLabel.get('Realised today')!.sub()).toContain('3 closed · 1W 2L');
+    expect(byLabel.get('Open trades')!.value()).toBe(2);
   });
 });

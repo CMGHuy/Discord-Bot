@@ -115,6 +115,7 @@ class Kind(Enum):
     # ENTRY
     ENTRY_TRIGGERED = KindSpec(Family.ENTRY, "ENTRY TRIGGERED")
     FILLED = KindSpec(Family.ENTRY, "FILLED")
+    RECLAIM_ORDER = KindSpec(Family.ENTRY, "STOP ORDER AT ENTRY")   # v192: DAY stop at E
     # MANAGE
     BE_MOVED = KindSpec(Family.MANAGE, "BREAK-EVEN")
     TP1_HIT = KindSpec(Family.MANAGE, "TP1", emoji="💰")

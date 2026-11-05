@@ -17,7 +17,7 @@ import scout_merge as sm  # noqa: E402
 BASE = {
     "claim": "One sentence.",
     "evidence": "cell direction=bullish; N 40; weeks 10; Δ net ExpR 0.20 [0.05, 0.35]; q 0.05",
-    "exploratory": "yes", "edge": "expectancy", "mechanism": "Why a trader expects it to pay.",
+    "exploratory": "yes", "edge": "expectancy", "direction": "exploit", "mechanism": "Why a trader expects it to pay.",
     "order_form": "stop-buy above the signal high, one session", "manual_actions": "none",
     "pairs_with": "n/a", "divergence": "no", "route": "/prereg"}
 PLAYBOOK_IDS = ("gap-and-hold", "gap-fill-reversal", "tight-base-breakout",
@@ -37,8 +37,10 @@ def _doc(*sections) -> str:
 
 
 def test_row_fields_are_the_row_format_keys_in_order():
-    assert sm.ROW_FIELDS == ("idea", "claim", "evidence", "exploratory", "edge", "mechanism",
-                             "order_form", "manual_actions", "pairs_with", "divergence", "route")
+    assert sm.ROW_FIELDS == ("idea", "claim", "evidence", "exploratory", "edge", "direction",
+                             "mechanism", "order_form", "manual_actions", "pairs_with",
+                             "divergence", "route")
+    assert sm.DIRECTIONS == ("exploit", "avoid")
 
 
 def test_parse_rows_reads_each_row_under_its_role():
@@ -79,6 +81,10 @@ def test_evidence_properties(evidence, cell, playbook, n):
     ({"pairs_with": ""}, "missing pairs_with"),
     ({"exploratory": "no"}, "boundary 5"),
     ({"edge": "expectancy | harvest | volume"}, "edge must be"),
+    ({"drop": ("direction",)}, "missing direction"),
+    ({"direction": ""}, "missing direction"),
+    ({"direction": "both"}, "direction must be exploit or avoid"),
+    ({"direction": "Exploit"}, "direction must be exploit or avoid"),
     ({"divergence": "maybe"}, "divergence must be yes or no"),
     ({"extra": "  confidence: high\n"}, "unknown field confidence"),
     ({"extra": "  Confidence: high\n"}, "unknown field Confidence"),
@@ -183,3 +189,12 @@ def test_ledger_names_against_the_real_ledger():
     assert names["uptrend-pullback"] == "screen-uptrend_pullback"
     assert names["screen-uptrend-pullback"] == "screen-uptrend_pullback"
     assert names["e33-avwap-levels"] == "e33-avwap-levels"
+
+
+def test_parse_rows_reads_the_direction():
+    text = _doc(("regime-desk", [_block("friday-skip", direction="avoid"),
+                                 _block("risk-on-only")]))
+    rows, drops = sm.parse_rows(text)
+    assert drops == []
+    assert [(r.idea, r.direction) for r in rows] == [("friday-skip", "avoid"),
+                                                     ("risk-on-only", "exploit")]

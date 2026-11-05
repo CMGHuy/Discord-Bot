@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { authInterceptor, errorInterceptor, loadingInterceptor } from '../../api/interceptors';
 import { CANCELS_URL, CancelsStore, NO_FILTER } from '../../stores/cancels.store';
 import { CANCEL_PAYLOAD, EMPTY_CANCEL_PAYLOAD } from '../../testing/cancel-fixtures';
+import { RouteTitleService } from '../../routing/route-title.service';
 import { Cancels } from './cancels';
 
 function create(body: object = CANCEL_PAYLOAD, init?: { status: number; statusText: string }): ComponentFixture<Cancels> {
@@ -92,5 +93,34 @@ describe('Cancels', () => {
       .flush({ error: { code: 'internal', message: 'boom' } }, { status: 500, statusText: 'Server Error' });
     f.detectChanges();
     expect(host(f).querySelector('sb-cancels-summary')).not.toBeNull();
+  });
+});
+
+/* -- v195 Phase 4 -- Cancels on sb-page ------------------------------------- */
+
+describe('Cancels on sb-page (v195 Phase 4)', () => {
+  it('renders the route title as the one h1, from sb-page', () => {
+    const f = create();
+    TestBed.inject(RouteTitleService).set('Cancels', "Were the bot's own cancels right?");
+    f.detectChanges();
+    expect(host(f).querySelectorAll('h1')).toHaveLength(1);
+    expect(text(host(f).querySelector('sb-page h1.title'))).toBe('Cancels');
+  });
+
+  it('keeps the summary directly above the table, in one primary element', () => {
+    const f = create();
+    const primary = host(f).querySelector('sb-page [page-primary]')!;
+    expect(primary.tagName.toLowerCase()).toBe('sb-async');
+    const summary = primary.querySelector('sb-cancels-summary')!;
+    const table = primary.querySelector('sb-cancels-table')!;
+    expect(summary.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('is read-only: no header action, no scope bar, no KPI or secondary slot', () => {
+    const f = create();
+    for (const slot of ['[page-actions]', '[page-scope]', '[page-kpis]', '[page-secondary]']) {
+      expect(host(f).querySelector(slot), slot).toBeNull();
+    }
+    expect(host(f).querySelector('sb-page .danger, sb-page .danger-quiet')).toBeNull();
   });
 });

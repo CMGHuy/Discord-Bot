@@ -304,6 +304,67 @@ preregistration_verdicts = register(sa.Table("preregistration_verdicts", METADAT
     *standard_columns()),
     ("ledger_id", "verdict", "recorded_on"))
 
+# v201: the admin market refresher's stores. Written by the refresher process
+# (swingbot/refresher), read by the admin request door. No SSE trigger: the
+# refresher raises `market` itself, once per cycle.
+quote_currencies = register(sa.Table("quote_currencies", METADATA,
+    sa.Column("symbol", sa.Text, primary_key=True),
+    sa.Column("code", sa.Text),
+    sa.Column("outcome", sa.Text, nullable=False),
+    sa.Column("checked_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("retry_after", sa.TIMESTAMP(timezone=True)),
+    *standard_columns()),
+    ("symbol", "code", "outcome", "checked_at", "retry_after"))
+
+# v205: one FX rate per (major base, major account, Berlin day): the last positive
+# daily close strictly before that day. Written insert-if-absent by the refresher's
+# 08:00 Berlin snap and the one-off backfill (core/marketdata/fx_snap.py); read whole
+# by core/marketdata/fx_daily.py. No SSE trigger.
+fx_daily_rates = register(sa.Table("fx_daily_rates", METADATA,
+    sa.Column("base", sa.Text, primary_key=True),
+    sa.Column("account", sa.Text, primary_key=True),
+    sa.Column("day", sa.Date, primary_key=True),
+    sa.Column("rate", sa.Float(53), nullable=False),
+    sa.Column("bar_date", sa.Date, nullable=False),
+    sa.Column("snapped_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("source", sa.Text, nullable=False),
+    *standard_columns()),
+    ("base", "account", "day", "rate", "bar_date", "snapped_at", "source"))
+
+market_refresh_queue = register(sa.Table("market_refresh_queue", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("kind", sa.Text, nullable=False),
+    sa.Column("key", sa.Text, nullable=False),
+    sa.Column("priority", sa.SmallInteger, nullable=False),
+    sa.Column("requested_at", sa.TIMESTAMP(timezone=True), nullable=False,
+              server_default=sa.func.now()),
+    sa.Column("taken_at", sa.TIMESTAMP(timezone=True)),
+    *standard_columns(),
+    sa.Index("market_refresh_queue_pending_uq", "kind", "key", unique=True,
+             postgresql_where=sa.text("taken_at IS NULL")),
+    sa.Index("market_refresh_queue_take_idx", "taken_at", "priority", "requested_at")),
+    ("kind", "key", "priority", "requested_at", "taken_at"))
+
+market_refresh_marks = register(sa.Table("market_refresh_marks", METADATA,
+    sa.Column("key", sa.Text, primary_key=True),
+    sa.Column("started_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("expires_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("error", sa.Text),
+    sa.Column("error_at", sa.TIMESTAMP(timezone=True)),
+    *standard_columns(),
+    sa.Index("market_refresh_marks_updated_idx", "updated_at")),
+    ("key", "started_at", "expires_at", "error", "error_at"))
+
+refresher_heartbeat = register(sa.Table("refresher_heartbeat", METADATA,
+    sa.Column("key", sa.Text, primary_key=True),
+    sa.Column("beat_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("cadence_s", sa.Float(53), nullable=False),
+    sa.Column("session", sa.Text, nullable=False),
+    sa.Column("cycle_ms", sa.Integer),
+    sa.Column("last_error", sa.Text),
+    *standard_columns()),
+    ("key", "beat_at", "cadence_s", "session", "cycle_ms", "last_error"))
+
 
 # v171: the shared market-data layer (spec D1/D6/D9). No SSE event; none in TABLE_CHANNELS.
 market_cache = register(sa.Table("market_cache", METADATA,
@@ -314,7 +375,8 @@ market_cache = register(sa.Table("market_cache", METADATA,
     sa.Column("source", sa.Text),
     sa.Column("lease_holder", sa.Text),
     sa.Column("lease_until", sa.TIMESTAMP(timezone=True)),
-    *standard_columns()),
+    *standard_columns(),
+    sa.Index("market_cache_kind_updated_idx", "kind", "updated_at")),
     ("key", "kind", "symbol", "fetched_at", "source", "lease_holder", "lease_until"))
 
 provider_budget = register(sa.Table("provider_budget", METADATA,
@@ -484,5 +546,43 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "ledger_id": "primary key: one row per pre-registration, so a second insert is impossible",
         "verdict": "NOT NULL frozen outcome",
         "recorded_on": "NOT NULL date the verdict was recorded",
+    },
+    "quote_currencies": {
+        "symbol": "primary key: one quote-currency answer per symbol",
+        "code": "the currency code the admin converts by; NULL until known",
+        "outcome": "NOT NULL known/unknown answer the FX job branches on",
+        "checked_at": "NOT NULL time of the last lookup; the FX job's staleness test",
+        "retry_after": "the FX job's backoff WHERE for an unknown answer; NULL when known",
+    },
+    "fx_daily_rates": {
+        "base": "primary key (base, account, day): one rate per major-code pair per Berlin day",
+        "account": "primary key (base, account, day): the major account currency converted into",
+        "day": "primary key: the Berlin calendar day the rate serves; fx_daily.lookup's sort key",
+        "rate": "NOT NULL multiplier fx_daily.lookup returns; never 1.0 for a missing pair",
+        "bar_date": "NOT NULL date of the frame bar the rate came from; the FALLBACK_DAYS test",
+        "snapped_at": "NOT NULL write time; max(snapped_at) is half of the memo's version key",
+        "source": "NOT NULL snap/backfill provenance, checked after the deploy backfill",
+    },
+    "market_refresh_queue": {
+        "kind": "market_refresh_queue_pending_uq: one pending request per (kind, key)",
+        "key": "market_refresh_queue_pending_uq: one pending request per (kind, key)",
+        "priority": "market_refresh_queue_take_idx: the take order, foreground before background",
+        "requested_at": "market_refresh_queue_take_idx: FIFO within a priority",
+        "taken_at": "pending-vs-taken split in the partial unique index and the take index",
+    },
+    "market_refresh_marks": {
+        "key": "primary key: one in-flight mark per refreshed key",
+        "started_at": "NOT NULL time the refresh began; how long it has run",
+        "expires_at": "in-flight test (expires_at > now) in every active() read",
+        "error": "last refresh failure shown to the admin; NULL on success",
+        "error_at": "when that failure happened; NULL on success",
+    },
+    "refresher_heartbeat": {
+        "key": "primary key: one heartbeat row per refresher process",
+        "beat_at": "stalled test (age > 3 x cadence) in /system/health and /market/updates",
+        "cadence_s": "NOT NULL expected seconds between beats; the stalled test's multiplier",
+        "session": "NOT NULL market session the cadence was chosen for",
+        "cycle_ms": "duration of the last cycle in /system/health; NULL before the first",
+        "last_error": "last cycle failure in /system/health; NULL when clean",
     },
 }

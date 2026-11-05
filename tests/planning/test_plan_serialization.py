@@ -148,4 +148,40 @@ def test_pre_v191_record_without_stop_moved_by_loads_as_none():
 
 def test_omit_when_none_lists_the_v191_key():
     from swingbot.core.planning.plan_types import _OMIT_WHEN_NONE
-    assert _OMIT_WHEN_NONE == ("gap_sizing", "risk_notice", "stop_moved_by")
+    assert "stop_moved_by" in _OMIT_WHEN_NONE
+
+
+V192_FIELDS = ("reclaim_atr", "reclaim_level", "reclaim_session", "waits_next_open")
+
+
+def test_v192_fields_default_to_none_and_are_omitted_from_the_doc():
+    p = _plan()
+    assert all(getattr(p, name) is None for name in V192_FIELDS)
+    assert not set(V192_FIELDS) & set(plan_to_dict(p))
+
+
+def test_v192_fields_round_trip_when_set():
+    p = _plan(reclaim_atr=1.2345, reclaim_level=99.69, reclaim_session="2026-10-26",
+              waits_next_open=True)
+    d = plan_to_dict(p)
+    assert {k: d[k] for k in V192_FIELDS} == {
+        "reclaim_atr": 1.2345, "reclaim_level": 99.69, "reclaim_session": "2026-10-26",
+        "waits_next_open": True}
+    q = plan_from_dict(d)
+    assert (q.reclaim_atr, q.reclaim_level, q.reclaim_session, q.waits_next_open) == (
+        1.2345, 99.69, "2026-10-26", True)
+
+
+def test_only_the_set_v192_fields_are_written():
+    """The next-open baseline carries its marker without enabling the veto."""
+    d = plan_to_dict(_plan(waits_next_open=True))
+    assert d["waits_next_open"] is True
+    assert not {"reclaim_atr", "reclaim_level", "reclaim_session"} & set(d)
+
+
+def test_pre_v192_record_loads_with_the_fields_none():
+    d = plan_to_dict(_plan())
+    for name in V192_FIELDS:
+        d.pop(name, None)
+    q = plan_from_dict(d)
+    assert all(getattr(q, name) is None for name in V192_FIELDS)

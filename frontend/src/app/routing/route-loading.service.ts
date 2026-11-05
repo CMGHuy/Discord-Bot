@@ -7,7 +7,8 @@ export const LIVE_REFRESH_DEBOUNCE_MS = 300;
 
 /**
  * Navigation `info` marking a live refresh of the page already on screen.
- * Its resolver still runs, but the page keeps showing (and accepting
+ * Its resolver still runs (v201: `startRoute` only starts the load and resolves
+ * at once, so this veil rarely has anything to wait for), but the page keeps showing (and accepting
  * clicks on) the data it has until the new data lands: a veil over content
  * the reader is in the middle of reading is the one thing a live refresh
  * must never do. Only a navigation to somewhere new shows the overlay.

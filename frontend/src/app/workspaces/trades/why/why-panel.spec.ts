@@ -2,7 +2,7 @@ import { Component, computed, provideZonelessChangeDetection } from '@angular/co
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { GateRow } from '../../../api/models';
-import { GATE_CAVEAT, WHY_SECTIONS, WhyPanel, WhySection, marginTone } from './why-panel';
+import { GATE_CAVEAT, WHY_GATE_OFF_HINT, WHY_UNEVALUATED_HINT, WHY_SECTIONS, WhyPanel, WhySection, marginTone } from './why-panel';
 
 @Component({
   imports: [WhyPanel],
@@ -102,7 +102,8 @@ describe('WhyPanel', () => {
     expect(f.nativeElement.querySelector('.confidence').textContent).toContain('+3');
     expect(f.nativeElement.querySelector('.confidence').textContent).toContain('−1');
     expect(f.nativeElement.querySelector('.total').textContent).toContain('+4');
-    expect(f.nativeElement.querySelector('[title="no data — neutral points awarded"]')).not.toBeNull();
+    const factorHints = [...f.nativeElement.querySelectorAll('.factor-row sb-hint [role="tooltip"]')].map((n: Element) => n.textContent!.trim());
+    expect(factorHints).toContain(WHY_UNEVALUATED_HINT);
     expect(f.nativeElement.querySelector('.point.muted').textContent).toContain('+2');
   });
 
@@ -142,7 +143,8 @@ describe('WhyPanel', () => {
     expect(f.nativeElement.querySelector('.gates').textContent).toContain('+10');
     expect(f.nativeElement.querySelector('.gates').textContent).toContain('Rank');
     expect(f.nativeElement.querySelector('.gates').textContent).toContain('Current rank');
-    expect(f.nativeElement.querySelector('[title="off in current config"]').textContent).toContain('off');
+    expect(f.nativeElement.querySelector('.gate-summary sb-chip').textContent).toContain('off');
+    expect(f.nativeElement.querySelector('.gate-summary sb-hint [role="tooltip"]').textContent.trim()).toBe(WHY_GATE_OFF_HINT);
     expect(f.nativeElement.querySelector('.caveat').tagName).toBe('P');
     expect(f.nativeElement.querySelector('.caveat').textContent).toBe(GATE_CAVEAT);
     expect(f.nativeElement.querySelector('details')).toBeNull();

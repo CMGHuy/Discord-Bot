@@ -27,8 +27,12 @@ description = "the scan engine and everything it posts"
 paths = ["tests/scanning/"]
 
 [suites.planning]
-description = "trade-plan construction and lifecycle"
-paths = ["tests/planning/"]
+description = "trade-plan construction, exits and sizing: tests/planning/ files test_a* .. test_o* and test_q* .. test_z*"
+paths = ["tests/planning/test_[a-o]*.py", "tests/planning/test_[q-z]*.py"]
+
+[suites.planning-plans]
+description = "the plan engine, plan manager, plan feed and plan params: tests/planning/ files test_p*"
+paths = ["tests/planning/test_p*.py"]
 
 # tests/backtesting/ is ~40% of the suite's wall-clock, so it is four legs, cut by
 # measured per-file time (~320/290/270/190 CPU-s) rather than by feature -- one leg
@@ -50,9 +54,13 @@ paths = ["tests/backtesting/test_[a-k]*.py"]
 description = "backtesting top-level files test_l* .. test_z*, minus test_s* (validate_component, v131/v139 witnesses)"
 paths = ["tests/backtesting/test_[l-r]*.py", "tests/backtesting/test_[t-z]*.py"]
 
-[suites.edge-analytics]
-description = "edge modules and analytics"
-paths = ["tests/edge/", "tests/analytics/"]
+[suites.edge]
+description = "edge modules"
+paths = ["tests/edge/"]
+
+[suites.analytics]
+description = "analytics, journal metrics and reports"
+paths = ["tests/analytics/"]
 
 [suites.storage]
 description = "Postgres stores, migrations, and the paper trade log"
@@ -61,6 +69,14 @@ paths = ["tests/db/", "tests/tracking/"]
 [suites.admin]
 description = "Flask admin API"
 paths = ["tests/admin/"]
+
+[suites.admin-perf]
+description = "v205 admin read performance: SQL tally, Server-Timing, goldens and budgets of the profiled endpoints"
+paths = ["tests/admin_perf/"]
+
+[suites.live-api]
+description = "v202 GET /api/v1/live: heat, plans awaiting order, killswitch, activity feed"
+paths = ["tests/live_api/"]
 
 [suites.discord]
 description = "slash commands, embeds/presentation, infra"
@@ -89,3 +105,7 @@ paths = ["tests/history_store/"]
 [suites.scout]
 description = "v161 trade scout: book export, autopsy, merge, generator roles"
 paths = ["tests/scout/"]
+
+[suites.refresher]
+description = "v201 admin market refresher: contract, process, quote cycle, never-fetch request door"
+paths = ["tests/refresher/", "tests/admin_market/"]

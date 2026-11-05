@@ -9,6 +9,7 @@ import { authInterceptor, errorInterceptor, loadingInterceptor } from '../../api
 import { LedgerRow, ResearchLedger, StrategyRow } from '../../api/models';
 import { ResearchStore, filtersFromParams } from '../../stores/research.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
+import { RouteTitleService } from '../../routing/route-title.service';
 import { DISCLAIMER, Research, VERDICT_TONE } from './research';
 import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 
@@ -202,5 +203,35 @@ describe('Research on a phone (v179 §3.1, §6b.2)', () => {
     const reached = new Set([...compactKeys(ledger), 'id']);
     for (const [key, label] of Object.entries(HEADERS)) if (labels.includes(label)) reached.add(key);
     expect([...reached].sort()).toEqual(['date', 'exp_r', 'hypothesis', 'id', 'instrument', 'n', 'p', 'q', 'verdict']);
+  });
+});
+
+/* -- v195 Phase 4 -- Research on sb-page ------------------------------------ */
+
+describe('Research on sb-page (v195 Phase 4)', () => {
+  it('renders the route title as the one h1, from sb-page', () => {
+    const { fixture } = create();
+    TestBed.inject(RouteTitleService).set('Research', 'Every pre-registration and its verdict');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('h1')).toHaveLength(1);
+    expect(el.querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Research');
+  });
+
+  it('keeps the registry above the ledger and the footer last, in one primary element', () => {
+    const { fixture } = create();
+    const primary = (fixture.nativeElement as HTMLElement).querySelector('sb-page [page-primary]')!;
+    const text = primary.textContent ?? '';
+    expect(text.indexOf('Strategy registry')).toBeLessThan(text.indexOf('Pre-registration ledger'));
+    expect(primary.lastElementChild!.classList).toContain('disclaimer');
+    expect(primary.querySelectorAll('sb-data-table')).toHaveLength(2);
+  });
+
+  it('keeps the row drawer in the default slot, with no header action or scope bar', () => {
+    const { fixture } = create();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('sb-page > sb-drawer')).not.toBeNull();
+    expect(el.querySelector('[page-actions]')).toBeNull();
+    expect(el.querySelector('[page-scope]')).toBeNull();
   });
 });

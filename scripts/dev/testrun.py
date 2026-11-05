@@ -56,12 +56,15 @@ WORKERS = "4"
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from select_tests import ESCALATE_PREFIXES, Selection, select  # noqa: E402
 import suites  # noqa: E402
+import swing_db  # noqa: E402
 
 # 127.0.0.1, not localhost: docker publishes the port on IPv4 only, and on Windows
 # "localhost" tries IPv6 first and stalls ~5s per connection before falling back.
 # Kept aligned with tests/db/conftest.py by tests/dev/test_testrun_db_preflight.py.
 # Scripts must not import test modules just to discover this value.
-TEST_DB_URL_DEFAULT = "postgresql+psycopg://swingbot:swingbot@127.0.0.1:55432/swingbot_test"
+# The URL comes from swing_db.local_url(): `.env`'s credentials against the one
+# swing-db container (TEST_DATABASE_URL still wins). Never print it.
+TEST_DB_URL_DEFAULT = swing_db.FALLBACK_URL
 
 # Neutralise pytest.ini's `addopts = -q`: under -q, pytest 9.1.1 prints no
 # summary counts line at all, and a parser that sees no counts must never
@@ -241,7 +244,7 @@ def db_preflight() -> str | None:
     import socket
     import urllib.parse
 
-    url = os.getenv("TEST_DATABASE_URL", TEST_DB_URL_DEFAULT)
+    url = swing_db.local_url()
     parsed = urllib.parse.urlparse(url)
     host, port = parsed.hostname or "localhost", parsed.port or 5432
     try:
@@ -251,7 +254,7 @@ def db_preflight() -> str | None:
         return (
             f"WARNING: test database unreachable at {host}:{port} ({exc}).\n"
             "  Database tests will SKIP, not fail. Start it with:\n"
-            "    docker compose --profile test up -d db-test"
+            "    docker start swing-db   (the one local database; never `make up`)"
         )
 
 

@@ -34,7 +34,7 @@ CLOSED_STATUSES = frozenset({"win", "loss", "closed"})
 # exists to catch.
 ROW_KEYS = (
     "trade_id", "plan_id", "ticker", "strategy", "horizon", "direction", "day",
-    "opened_at", "closed_at", "outcome", "pnl_amount", "r_multiple", "mfe_r", "mae_r",
+    "opened_at", "closed_at", "outcome", "pnl_amount", "fx_missing", "r_multiple", "mfe_r", "mae_r",
     "exit_efficiency", "tags", "auto_lesson", "leg_index", "leg_total",
     # v165 D1 -- read from the part, never re-derived (see `_detail_fields`).
     "entry_price", "exit_price", "stop_price", "tp1", "tp2", "shares",
@@ -166,19 +166,39 @@ def _detail_fields(part: dict, trade: dict) -> dict:
         "exit_reason": row_exit_reason(part, trade),
     }
 
+def _part_r(part: dict, entry: dict) -> float | None:
+    """The R a calendar row adds to its day.
+
+    A whole trade (one part) keeps today's rule: the journal's r_realized
+    when present (computed by the same `metrics.r_multiple` at close), else
+    `metrics.r_multiple`. A leg row adds its CONTRIBUTION (v189 B2):
+    `fraction x r`, the leg's stored r or, when it has none, the leg's own
+    exit priced by `metrics.r_multiple` (a leg row has `legs: None`, so that
+    prices the single exit). A +2R TP1 on half the position adds +1R.
+    """
+    if part["leg_total"] == 1:
+        journal_r = _float_or_none(entry.get("r_realized"))
+        return journal_r if journal_r is not None else metrics.r_multiple(part)
+    leg_r = part.get("leg_r")
+    if leg_r is None:
+        leg_r = metrics.r_multiple(part)
+    return metrics.leg_contribution_r({"fraction": part.get("fraction"), "r": leg_r})
+
+
 def _row_for(part: dict, entry: dict, trade: dict) -> dict | None:
     """One calendar row for one realized part of a trade.
 
     `part` is a row of `performance.expand_realized_legs`: the trade itself
     when it never scaled out, else one realized leg. A leg is counted as an
-    individual trade -- its own day, its own win/loss, its own R -- which is
-    how the Dashboard's Trades table and its chips count it too.
+    individual trade -- its own day, its own win/loss, its own contribution
+    to R -- which is how the Dashboard's Trades table and its chips count it
+    too.
 
     For a whole trade the journal's r_realized is authoritative when
     present: it was computed by the same metrics.r_multiple at close time,
-    and reusing it avoids a second answer for one trade. A leg's R is the
-    leg's own (`metrics.r_multiple` on a leg row prices that leg's exit); the
-    journal only ever recorded the blended R of the whole position.
+    and reusing it avoids a second answer for one trade. A leg's R is its
+    contribution, fraction x r (`_part_r`, v189 B2); the journal only ever
+    recorded the blended R of the whole position.
 
     `trade` is the part's parent record: a leg part has `legs: None`, and its
     exit reason only lives in `trade["legs"]` (see `row_exit_reason`).
@@ -187,9 +207,7 @@ def _row_for(part: dict, entry: dict, trade: dict) -> dict | None:
     if day is None:
         return None
     whole = part["leg_total"] == 1
-    r = _float_or_none(entry.get("r_realized")) if whole else None
-    if r is None:
-        r = metrics.r_multiple(part)
+    r = _part_r(part, entry)
     return {
         "trade_id": part.get("id"),
         # The Trades detail route is keyed by plan id when the trade has
@@ -204,6 +222,7 @@ def _row_for(part: dict, entry: dict, trade: dict) -> dict | None:
         "closed_at": part.get("closed_at"),
         "outcome": (entry.get("outcome") if whole else None) or part.get("status"),
         "pnl_amount": _float_or_none(part.get("realized_pnl_amount")),
+        "fx_missing": bool(part.get("fx_missing")),
         "r_multiple": r,
         "mfe_r": _float_or_none(entry.get("mfe_r")),
         "mae_r": _float_or_none(entry.get("mae_r")),
@@ -216,7 +235,7 @@ def _row_for(part: dict, entry: dict, trade: dict) -> dict | None:
     }
 
 
-def joined_rows(trades: list[dict], entries: list[dict]) -> list[dict]:
+def joined_rows(trades: list[dict], entries: list[dict], *, convert=None) -> list[dict]:
     """One row per closed trade -- or per realized leg of a scaled-out
     one -- with its journal entry merged in.
 
@@ -230,17 +249,30 @@ def joined_rows(trades: list[dict], entries: list[dict]) -> list[dict]:
     counts on the day it banked -- even while its runner is still open --
     rather than vanishing into the runner's close. Its legs' dollars sum to
     the trade's own realized total.
+
+    `convert` maps a trade's realized parts to display money (the admin passes
+    `to_account_currency`); it runs after the leg split, never before it.
     """
     by_trade_id = {
         e["trade_id"]: e for e in entries if e.get("trade_id")
     }
 
-    rows: list[dict] = []
+    # Split every trade first, then convert ALL parts in one call: `convert`
+    # memoises quote codes and FX rates per call, so a call per trade re-looked
+    # them up (and re-read the account currency) for every closed trade.
+    owners: list[tuple[dict, dict]] = []
+    parts: list[dict] = []
     for t in trades:
         entry = by_trade_id.get(t.get("id")) or {}
         for part in expand_realized_legs(t):
-            if (row := _row_for(part, entry, t)) is not None:
-                rows.append(row)
+            owners.append((entry, t))
+            parts.append(part)
+    converted = convert(parts) if convert and parts else parts
+
+    rows: list[dict] = []
+    for part, (entry, t) in zip(converted, owners):
+        if (row := _row_for(part, entry, t)) is not None:
+            rows.append(row)
     return rows
 
 
@@ -267,7 +299,7 @@ def available_filters(rows: list[dict]) -> dict:
     }
 
 
-def load_rows(*, trade_log=None, journal=None) -> list[dict]:
+def load_rows(*, trade_log=None, journal=None, convert=None) -> list[dict]:
     """The module's one I/O boundary: read both stores and join them.
 
     Stores are constructed here rather than at import time (Global
@@ -289,7 +321,7 @@ def load_rows(*, trade_log=None, journal=None) -> list[dict]:
         # journal degrades to "no lessons" rather than failing a page whose
         # dollar figures came from trades.json and are fine.
         entries = []
-    return joined_rows(trades, entries)
+    return joined_rows(trades, entries, convert=convert)
 
 
 def _sum_or_none(values: list[float | None]) -> float | None:

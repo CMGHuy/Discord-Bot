@@ -29,7 +29,7 @@ describe('watchlist panel', () => {
     const el = render({ rows: [tape()] });
     expect(el.textContent).toContain('GS');
     expect(el.textContent).toContain('1,022.63');
-    expect(el.textContent).toContain('-0.06');
+    expect(el.textContent).toContain('−0.06');
   });
 
   it('tones the change by sign', () => {

@@ -3,7 +3,7 @@ import { ActivatedRouteSnapshot, Router, Routes } from '@angular/router';
 import { map, of } from 'rxjs';
 
 import { onEvents, routeData } from '../../routing/route-metadata';
-import { resolveRoute } from '../../routing/route-resolver';
+import { startRoute } from '../../routing/route-resolver';
 import { CalendarDayStore } from '../../stores/calendar-day.store';
 import { CalendarStore, CalendarUrlParams } from '../../stores/calendar.store';
 
@@ -33,7 +33,7 @@ export const calendarRoutes: Routes = [
     // per filter change. A first visit, a hand-edited URL, back/forward and
     // a background refresh still load.
     resolve: {
-      ready: resolveRoute((route) => {
+      ready: startRoute((route) => {
         const store = inject(CalendarStore);
         const params = listParams(route);
         if (store.data() !== null && store.matchesUrl(params) && !isBackgroundRefresh()) {
@@ -54,7 +54,7 @@ export const calendarRoutes: Routes = [
     runGuardsAndResolvers: 'always',
     data: routeData('Calendar day', onEvents('trades')),
     resolve: {
-      ready: resolveRoute((route) => {
+      ready: startRoute((route) => {
         const store = inject(CalendarDayStore);
         store.setRoute(
           route.paramMap.get('date'),

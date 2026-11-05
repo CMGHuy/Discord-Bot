@@ -7,38 +7,42 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  CHECKS, FULL_WIDTHS, ROUTES, classify, countByCheck, dedupe, formatFinding, inScope, isVisuallyHidden, parseArgs, pickIds,
-  resolveRoute, slug, validateAllow, vcenterGeometry,
+  CHECKS, DOCK_MIN_WIDTH, DOCK_SELECTORS, FULL_WIDTHS, RAIL_MIN_WIDTH, ROUTES, classify, countByCheck, dedupe, formatFinding, dockVerdict, hintVerdict, inScope, isVisuallyHidden,
+  parseArgs, pickIds, railLabelVerdict, resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TODAY = '2026-10-19';
 
 const finding = (over = {}) => ({
-  route: '/analytics?tab=attribution', width: 390, check: 'offscreen', selector: 'sb-heat-grid > div.cell',
+  route: '/insights/analytics?tab=attribution', width: 390, check: 'offscreen', selector: 'sb-heat-grid > div.cell',
   text: '8m', detail: 'right edge at 462px of 390px', ...over,
 });
 const entry = (over = {}) => ({
-  route: '/analytics?tab=attribution', width: 390, check: 'offscreen', selector: 'sb-heat-grid > div.cell',
+  route: '/insights/analytics?tab=attribution', width: 390, check: 'offscreen', selector: 'sb-heat-grid > div.cell',
   reason: 'canvas internals of a third-party chart', date: '2026-10-19', ...over,
 });
 
-test('ROUTES visits every route and tab once (spec §2 plus v188 /cancels: 28)', () => {
-  assert.equal(ROUTES.length, 28);
-  assert.ok(ROUTES.includes('/cancels'));
+test('ROUTES visits every destination, section and tab once, on the v202 paths only (29)', () => {
+  assert.equal(ROUTES.length, 29);
   assert.equal(new Set(ROUTES).size, ROUTES.length);
   assert.ok(ROUTES.every((route) => route.startsWith('/')));
   for (const tab of ['attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials']) {
-    assert.ok(ROUTES.includes(`/analytics?tab=${tab}`), tab);
+    assert.ok(ROUTES.includes(`/insights/analytics?tab=${tab}`), tab);
   }
-  for (const route of ['/dashboard', '/trades', '/trades/:id', '/trades/:id?tab=journal', '/plans/:plan', '/calendar/:date',
-    '/watchlist/:symbol', '/risk', '/system?tab=logs', '/system?tab=scan', '/versions', '/research', '/reports?tab=gates', '/ui']) {
+  for (const route of ['/dashboard', '/trades', '/trades/:id', '/trades/:id?tab=journal', '/trades/calendar',
+    '/trades/calendar/:date', '/trades/cancels', '/plans/:plan', '/insights/analytics', '/insights/research',
+    '/insights/reports', '/insights/reports?tab=gates', '/watchlist/:symbol', '/risk', '/system?tab=logs',
+    '/system?tab=scan', '/system?tab=providers', '/system/versions', '/ui']) {
     assert.ok(ROUTES.includes(route), route);
   }
+  // The six old names redirect (v202 §2): an audit of them would visit the same page twice.
+  const old = /^\/(analytics|calendar|cancels|research|reports|versions)(\/|\?|$)/;
+  assert.deepEqual(ROUTES.filter((route) => old.test(route)), []);
 });
 
-test('CHECKS are the spec six plus vcenter, in order', () => {
-  assert.deepEqual([...CHECKS], ['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter']);
+test('CHECKS are the spec six plus vcenter, hint (v194 A2), rail-label (v195 Phase 7) and dock (v203), in order', () => {
+  assert.deepEqual([...CHECKS], ['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter', 'hint', 'rail-label', 'dock']);
 });
 
 test('parseArgs: defaults are the local replica at the three widths', () => {
@@ -127,7 +131,7 @@ test("classify: width '*' matches every width, a number only its own", () => {
 });
 
 test('classify: route, check and selector must match exactly', () => {
-  for (const over of [{ route: '/analytics' }, { check: 'clipped' }, { selector: 'sb-heat-grid > div' }]) {
+  for (const over of [{ route: '/insights/analytics' }, { check: 'clipped' }, { selector: 'sb-heat-grid > div' }]) {
     assert.equal(classify([finding(over)], [entry()], TODAY).unallowed.length, 1, JSON.stringify(over));
   }
 });
@@ -162,14 +166,14 @@ test("inScope: '*' always, a number only when that width ran", () => {
 
 test('formatFinding names route, width, check, selector, text, detail and repeats', () => {
   assert.equal(formatFinding({ ...finding(), count: 3 }),
-    '/analytics?tab=attribution @390 offscreen sb-heat-grid > div.cell "8m" -- right edge at 462px of 390px (x3)');
+    '/insights/analytics?tab=attribution @390 offscreen sb-heat-grid > div.cell "8m" -- right edge at 462px of 390px (x3)');
   assert.equal(formatFinding({ ...finding({ text: '' }), count: 1 }),
-    '/analytics?tab=attribution @390 offscreen sb-heat-grid > div.cell -- right edge at 462px of 390px');
+    '/insights/analytics?tab=attribution @390 offscreen sb-heat-grid > div.cell -- right edge at 462px of 390px');
 });
 
 test('countByCheck counts every check, zero included', () => {
   assert.deepEqual(countByCheck([finding(), finding({ check: 'tap' }), finding({ check: 'tap' })]),
-    { overflow: 0, offscreen: 1, clipped: 0, tap: 2, text: 0, baseline: 0, vcenter: 0 });
+    { overflow: 0, offscreen: 1, clipped: 0, tap: 2, text: 0, baseline: 0, vcenter: 0, hint: 0, 'rail-label': 0, dock: 0 });
 });
 
 test('slug matches browse.mjs file names', () => {
@@ -240,4 +244,124 @@ test('nearestBeside: ignores text on another line, too far away, or with no heig
 test('vcenterGeometry survives the trip into the page as source', () => {
   const shipped = new Function(`return (${vcenterGeometry.toString()})()`)();
   assert.equal(shipped.centreOffset(rect(14, 24), rect(0, 30)), 4);
+});
+
+// hintVerdict (v194 A2): an opened sb-hint popover's rect, the viewport, and whether the
+// topmost element at its centre and at its top-left + 8px lies inside it.
+const VIEW = { width: 1440, height: 900 };
+const box = (left, top, width = 200, height = 60) => ({ left, top, width, height });
+const BOTH = { center: true, corner: true };
+
+test('hintVerdict: a popover inside the viewport and on top passes', () => {
+  assert.deepEqual(hintVerdict(box(100, 100), VIEW, BOTH), { ok: true, reason: null });
+  assert.deepEqual(hintVerdict(box(8, 8, 1424, 884), VIEW, BOTH), { ok: true, reason: null });
+});
+
+test('hintVerdict: clipped by an ancestor or painted over at its centre fails covered-center', () => {
+  // The v194 regression: an .sb-lift card's transform made the card the containing block, and the
+  // card's overflow clip left the card itself, not the popover, topmost at the popover's centre.
+  assert.deepEqual(hintVerdict(box(100, 100), VIEW, { center: false, corner: true }), { ok: false, reason: 'covered-center' });
+  assert.deepEqual(hintVerdict(box(100, 100), VIEW, { center: false, corner: false }), { ok: false, reason: 'covered-center' });
+});
+
+test('hintVerdict: covered only at the top-left corner fails covered-corner', () => {
+  assert.deepEqual(hintVerdict(box(100, 100), VIEW, { center: true, corner: false }), { ok: false, reason: 'covered-corner' });
+});
+
+test('hintVerdict: past any viewport edge fails off-screen, before the hit test', () => {
+  for (const rect of [box(-20, 100), box(100, -20), box(1300, 100), box(100, 870)]) {
+    assert.deepEqual(hintVerdict(rect, VIEW, BOTH), { ok: false, reason: 'off-screen' }, JSON.stringify(rect));
+  }
+  assert.equal(hintVerdict(box(1300, 100), VIEW, { center: false, corner: false }).reason, 'off-screen');
+});
+
+test('hintVerdict: sub-pixel rects within half a pixel of an edge are inside', () => {
+  assert.equal(hintVerdict(box(-0.4, 0, 200, 60), VIEW, BOTH).ok, true);
+  assert.equal(hintVerdict(box(1240.3, 100, 200, 60), VIEW, BOTH).ok, true);
+  assert.equal(hintVerdict(box(1241, 100, 200, 60), VIEW, BOTH).reason, 'off-screen');
+});
+
+test('hintVerdict: a popover with no area fails zero-size, whatever else is true', () => {
+  assert.deepEqual(hintVerdict(box(0, 0, 0, 0), VIEW, { center: false, corner: false }), { ok: false, reason: 'zero-size' });
+  assert.deepEqual(hintVerdict(box(100, 100, 200, 0), VIEW, BOTH), { ok: false, reason: 'zero-size' });
+  assert.deepEqual(hintVerdict(box(-500, 100, 0, 60), VIEW, BOTH), { ok: false, reason: 'zero-size' });
+});
+
+// railLabelVerdict (v202 §3): a labelled-rail entry's accessible name, its visible .rail-label, and
+// label-in-name (WCAG 2.5.3): the name a screen reader hears contains the word the eye reads.
+test('railLabelVerdict: a named entry whose label shows and is in its name passes', () => {
+  assert.deepEqual(railLabelVerdict({ name: 'Dashboard', label: 'Dashboard', labelVisible: true }), { ok: true, reason: null });
+  assert.deepEqual(railLabelVerdict({ name: 'Insights section', label: 'insights', labelVisible: true }), { ok: true, reason: null });
+});
+
+test('railLabelVerdict: no accessible name fails no-name first, whatever the label does', () => {
+  for (const name of ['', '   ', null, undefined]) {
+    assert.deepEqual(railLabelVerdict({ name, label: 'Risk', labelVisible: true }), { ok: false, reason: 'no-name' }, String(name));
+    assert.deepEqual(railLabelVerdict({ name, label: '', labelVisible: false }), { ok: false, reason: 'no-name' }, String(name));
+  }
+});
+
+test('railLabelVerdict: a missing label, a hidden one and a name without it each fail', () => {
+  assert.deepEqual(railLabelVerdict({ name: 'Risk', label: '  ', labelVisible: true }), { ok: false, reason: 'no-label' });
+  assert.deepEqual(railLabelVerdict({ name: 'Risk', label: 'Risk', labelVisible: false }), { ok: false, reason: 'label-hidden' });
+  assert.deepEqual(railLabelVerdict({ name: 'Open the book', label: 'Trades', labelVisible: true }),
+    { ok: false, reason: 'label-not-in-name' });
+});
+
+test('RAIL_MIN_WIDTH: the rail check runs at the tablet and desktop widths, never the phone', () => {
+  assert.equal(RAIL_MIN_WIDTH, 640);
+  assert.deepEqual(FULL_WIDTHS.filter((width) => width >= RAIL_MIN_WIDTH), [768, 1440]);
+});
+
+test('ROUTES: the providers tab sits with the other System tabs', () => {
+  assert.equal(ROUTES[ROUTES.indexOf('/system?tab=providers') - 1], '/system?tab=scan');
+});
+
+// dockVerdict (v203, spec v202 §8 "Layout"): the docked column beside the workspace from 1024px,
+// the strip and a sheet inside the viewport below it. Rects are {left, right, top, bottom}.
+const dockBox = (left, right, top = 0, bottom = 900) => ({ left, right, top, bottom });
+const docked = (over = {}) => ({
+  width: 1440, column: dockBox(1120, 1440), workspace: dockBox(94, 1106), strip: false, sheet: null,
+  viewport: { width: 1440, height: 900 }, ...over,
+});
+const narrow = (over = {}) => ({
+  width: 768, column: null, workspace: dockBox(94, 754), strip: true, sheet: dockBox(408, 768),
+  viewport: { width: 768, height: 900 }, ...over,
+});
+
+test('dockVerdict: an open or collapsed column beside the workspace passes', () => {
+  assert.deepEqual(dockVerdict(docked()), { ok: true, reason: null });
+  assert.deepEqual(dockVerdict(docked({ column: dockBox(1400, 1440), workspace: dockBox(94, 1386) })), { ok: true, reason: null });
+  // Meeting at one edge, within half a pixel, is not an overlap.
+  assert.deepEqual(dockVerdict(docked({ workspace: dockBox(94, 1120.4) })), { ok: true, reason: null });
+});
+
+test('dockVerdict: from 1024px a missing column, a column over the content, or a strip fails', () => {
+  assert.deepEqual(dockVerdict(docked({ column: null })), { ok: false, reason: 'no-column' });
+  assert.deepEqual(dockVerdict(docked({ workspace: dockBox(94, 1300) })), { ok: false, reason: 'overlaps-workspace' });
+  assert.deepEqual(dockVerdict(docked({ strip: true })), { ok: false, reason: 'strip-when-docked' });
+  assert.deepEqual(dockVerdict(docked({ width: 1024, column: null })), { ok: false, reason: 'no-column' });
+});
+
+test('dockVerdict: below 1024px a right sheet on a tablet and a bottom sheet on a phone pass', () => {
+  assert.deepEqual(dockVerdict(narrow()), { ok: true, reason: null });
+  const phone = { width: 390, workspace: dockBox(10, 380), sheet: dockBox(0, 390, 300, 788), viewport: { width: 390, height: 844 } };
+  assert.deepEqual(dockVerdict(narrow(phone)), { ok: true, reason: null });
+});
+
+test('dockVerdict: below 1024px a column, no strip, an unopened or an off-screen sheet fails, first rule first', () => {
+  assert.deepEqual(dockVerdict(narrow({ column: dockBox(448, 768) })), { ok: false, reason: 'docked-below-1024' });
+  assert.deepEqual(dockVerdict(narrow({ strip: false, sheet: null })), { ok: false, reason: 'no-strip' });
+  assert.deepEqual(dockVerdict(narrow({ sheet: null })), { ok: false, reason: 'sheet-not-opened' });
+  assert.deepEqual(dockVerdict(narrow({ sheet: dockBox(408, 800) })), { ok: false, reason: 'sheet-off-screen' });
+  assert.deepEqual(dockVerdict(narrow({ sheet: dockBox(408, 768, 0, 960) })), { ok: false, reason: 'sheet-off-screen' });
+  assert.deepEqual(dockVerdict(narrow({ sheet: dockBox(408.2, 768.4) })), { ok: true, reason: null });
+});
+
+test('DOCK_MIN_WIDTH docks at 1440 only of the three widths, and every reason names its element', () => {
+  assert.equal(DOCK_MIN_WIDTH, 1024);
+  assert.deepEqual(FULL_WIDTHS.filter((width) => width >= DOCK_MIN_WIDTH), [1440]);
+  assert.deepEqual(Object.keys(DOCK_SELECTORS).sort(), ['docked-below-1024', 'no-column', 'no-strip', 'overlaps-workspace',
+    'sheet-not-opened', 'sheet-off-screen', 'strip-when-docked']);
+  assert.ok(Object.values(DOCK_SELECTORS).every((selector) => selector.length > 0));
 });

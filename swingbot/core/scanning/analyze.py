@@ -34,6 +34,7 @@ from swingbot.core.planning.plan_engine import build_confluence_plan, primary_st
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
 from swingbot.core.planning.params import stamp_entry_context
 from swingbot.core.planning.gap_sizing import size_for_plan, stamp_gap_sizing
+from swingbot.core.planning import gap_reclaim
 from swingbot.core.scanning.risk_notice import stamp_risk_notice
 from swingbot.core.planning.builders import band_no_plan_reason, confluence_stop_dropped
 from swingbot.core.planning.stop_scope import band_sizing_verdict, plan_stop_ceiling, risk_sizing_ok
@@ -498,6 +499,24 @@ def _sizing_reject_reason(plan, df, now) -> str | None:
     return None
 
 
+def _stamp_next_open_live(plan, df, now) -> None:
+    """v192: a plan waiting for its next open takes a_t (and X) from COMPLETED bars
+    only -- today's forming bar is dropped during the session, as v183's gap sizing
+    does -- so live reads what the replay reads at bar t. Still once, at creation.
+    Never raises: a frame problem leaves no veto (the plan fills at the open)."""
+    if not gap_reclaim.waits_for_open(plan):
+        return
+    from .strategy_pass import completed_frame
+    plan.reclaim_atr = plan.reclaim_level = None
+    try:
+        frame = completed_frame(df, now or datetime.now(timezone.utc))
+        if frame is not None and len(frame):
+            gap_reclaim.stamp_next_open(plan, frame, len(frame) - 1)
+    except Exception as exc:
+        swallowed(log, "scan.analyze.next_open_frame", exc, level=logging.DEBUG)
+        plan.reclaim_atr = plan.reclaim_level = None
+
+
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                     regime=None, rs_percentile=None, breadth=None, regime2_state=None,
                     issued_at=None, now=None):
@@ -556,7 +575,12 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
         # attempted -- a render-only feature's stamping failure must never
         # unset the plan and silently fall the item through to legacy-number
         # rendering (final-review Fix 4).
-        plan.issued_at = issued_at or datetime.now(timezone.utc).isoformat()
+        if issued_at:
+            plan.issued_at = issued_at
+        else:
+            plan.issued_at = datetime.now(timezone.utc).isoformat()
+            plan.issued_at_source = "live"
+        _stamp_next_open_live(plan, df, now)
         item.plan_v2 = plan
         stamp_entry_context(plan, df, {
             "regime2_state": regime2_state,

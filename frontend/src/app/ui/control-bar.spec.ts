@@ -94,3 +94,31 @@ describe('ControlBar one row pattern (v179 §3.3)', () => {
     expect(el.querySelector('.scope #range')).not.toBeNull();
   });
 });
+
+/* v195 Phase 2: Clear is the same quiet control as sb-filter-bar's ghost
+ * "Clear all", not an accent link: the accent is for selected state. */
+describe('ControlBar Clear is a quiet control (v195 Phase 2)', () => {
+  const rule = (selector: string) =>
+    CONTROL_BAR_SOURCE.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{[^}]*\\}`))?.[0] ?? '';
+
+  it('sets Clear in the secondary text on no fill, one control tall, 4px corners', () => {
+    const clear = rule('.clear');
+    for (const declaration of [
+      'min-height: var(--control-h);',
+      'min-width: var(--control-h);',
+      'background: transparent;',
+      'border: 0;',
+      'border-radius: var(--control-radius);',
+      'color: var(--text-secondary);',
+      'font: inherit;',
+      'font-size: var(--text-table);',
+    ]) expect(clear, declaration).toContain(declaration);
+    expect(clear).not.toContain('accent');
+  });
+
+  it('raises Clear on hover and rings it in the accent on keyboard focus only', () => {
+    expect(rule('.clear:hover')).toContain('background: var(--surface-raised)');
+    expect(rule('.clear:hover')).not.toContain('accent');
+    expect(rule('.clear:focus-visible')).toContain('outline: 1px solid var(--accent)');
+  });
+});

@@ -66,4 +66,12 @@ describe('drawerColumns', () => {
     const reached = [...keys(line1), ...keys(line2), ...keys(drawerColumns(COLUMNS, rendered))];
     expect([...reached].sort()).toEqual([...rendered].sort());
   });
+  it('repeats an opted-in interactive cell in the drawer without removing it from the compact row', () => {
+    const interactive: ColumnDef<Row> = { ...COLUMNS[1], compact: { line: 1, order: 2, drawer: true } };
+    const columns = COLUMNS.map(column => column.key === 'pnl' ? interactive : column);
+    expect(keys(drawerColumns(columns, ['ticker', 'pnl', 'held']))).toEqual(['pnl', 'held']);
+    expect(keys(compactLines(columns, ['ticker', 'pnl', 'held']).line1)).toEqual(['ticker', 'pnl']);
+    expect(keys(drawerColumns(columns, ['ticker']))).toEqual([]);
+  });
+
 });

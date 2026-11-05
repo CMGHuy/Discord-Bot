@@ -88,27 +88,31 @@ def test_portfolio_report_kill_state_prominent():
 
 
 def test_collect_portfolio_state_degrades_on_account_config_failure(monkeypatch):
-    """Task E52 review Finding (Important): load_account_config() is file I/O
-    plus a possible write-back and was the one sub-collector in
-    collect_portfolio_state() NOT try/excepted. If it raises, `balance`
-    must still fall back to 0.0 (not NameError) and the growth-path section
-    must degrade to {} rather than the whole command crashing."""
+    """An unavailable account leaves exposure unknown and preserves the report."""
     from swingbot.core.edge.portfolio_state import collect_portfolio_state
     from swingbot.core.planning import account as account_module
 
     def _boom():
         raise OSError("disk read failed")
 
+    from swingbot.core.edge import throttle
+    from swingbot.core.marketdata import universe
+    from swingbot.core.tracking.performance import TradeLog
+
     monkeypatch.setattr(account_module, "load_account_config", _boom)
+    monkeypatch.setattr(account_module, "get_balance_history_points", lambda: [])
+    monkeypatch.setattr(TradeLog, "get_trades", lambda self, **kwargs: [])
+    monkeypatch.setattr(universe, "sector_map", lambda name: {})
+    monkeypatch.setattr(throttle, "kill_state", lambda: {"on": False, "reason": None})
 
     state = collect_portfolio_state()
 
-    # Must return a dict with safe defaults, not propagate the exception.
+    # Preserve the report without inventing measured exposure.
     assert isinstance(state, dict)
     assert state.get("growth") == {}
-    # heat/sector_heat/throttle must have used balance=0.0, not raised.
-    assert state.get("open_heat") == pytest.approx(0.0)
-    assert state.get("sector_heat") == {}
+    assert state["open_heat"] is None
+    assert state["sector_heat"] is None
+    assert state["availability"]["heat"]["reason"] == "account_unavailable"
 
 
 def test_weekly_risk_report_renders():

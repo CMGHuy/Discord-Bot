@@ -89,7 +89,9 @@ export const loadingInterceptor: HttpInterceptorFn = (req, next) => {
 export const routeRefreshInterceptor: HttpInterceptorFn = (req, next) => {
   const refresh = inject(RouteRefreshService);
   return next(req).pipe(tap((event) => {
-    if (event instanceof HttpResponse && req.method !== 'GET' && !req.context.get(SKIP_ROUTE_REFRESH)) {
+    if (event instanceof HttpResponse && req.method !== 'GET' && !req.context.get(SKIP_ROUTE_REFRESH)
+      // A Refresh click queues a fetch; it must never re-navigate and refetch the page.
+      && !req.url.endsWith('/market/refresh')) {
       refresh.requestMutationRefresh();
     }
   }));

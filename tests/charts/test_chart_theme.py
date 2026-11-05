@@ -45,6 +45,8 @@ STYLE_PINS: tuple[tuple[str, str], ...] = (
     ("fb0f840658155cd0", "v80"),
     ("96d64692ba7c2abf", "v167"),  # v167 §4: Arctic Navy
     ("4f15a0f1fb8a6d1e", "v181"),  # v181 §5: saturated teal/red valence pair
+    ("05dcbfb119a03e02", "v195a"),  # v195 Phase 6: THEME gains accent, entry reads it
+    ("f04168edd2b2e287", "v195"),  # v195 §1.1: Graphite
 )
 
 # constant -> the THEME key it must equal (the plan's D5 role table)
@@ -61,7 +63,7 @@ COLOUR_CONSTANTS = {
     "DOWN_COLOR": "neg",
     "STOP_COLOR": "neg",
     "CURRENT_PRICE_COLOR": "warn",
-    "ENTRY_COLOR": "chart-1",
+    "ENTRY_COLOR": "accent",
     "TARGET2_COLOR": "chart-3",
     "TARGET_STRATEGY_COLOR": "chart-2",
     "STOP_STRATEGY_COLOR": "chart-5",
@@ -150,6 +152,15 @@ def test_resolver_reproduces_the_committed_fixture():
 @pytest.mark.parametrize("constant, token", sorted(COLOUR_CONSTANTS.items()))
 def test_each_colour_constant_is_its_token(constant, token):
     assert getattr(cs, constant) == cs.THEME[token]
+
+
+def test_the_entry_line_is_the_app_accent():
+    """v195 Phase 6: the alert image's entry line is the app's entry line.
+
+    frontend/src/app/ui/chart/plan-lines.ts draws entry in --accent, so the
+    PNG reads the same token instead of a chart series (it read chart-1)."""
+    assert cs.THEME["accent"] == _resolve()["accent"]
+    assert cs.ENTRY_COLOR == cs.THEME["accent"]
 
 
 def test_every_colour_constant_is_accounted_for():

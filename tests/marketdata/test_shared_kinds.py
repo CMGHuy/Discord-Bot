@@ -17,7 +17,7 @@ def test_kind_values_are_short_stable_strings():
 
 
 def test_priorities_put_money_first():
-    assert [a.priority for a in Asker] == [1, 2, 3, 4, 5, 5, 5]
+    assert [a.priority for a in Asker] == [1, 2, 3, 4, 5, 5, 5, 5]
     assert Asker.STOP_MONITOR.priority < Asker.REQUOTE.priority < Asker.SCAN.priority
 
 
@@ -25,6 +25,7 @@ def test_priorities_put_money_first():
     (Asker.STOP_MONITOR, "QUOTE_MAX_AGE_MONITOR_S"), (Asker.REQUOTE, "QUOTE_MAX_AGE_REQUOTE_S"),
     (Asker.SCAN, "QUOTE_MAX_AGE_SCAN_S"), (Asker.BACKGROUND, "QUOTE_MAX_AGE_SCAN_S"),
     (Asker.ADMIN_DASHBOARD, "QUOTE_MAX_AGE_DASHBOARD_S"), (Asker.ADMIN_PAGE, "QUOTE_MAX_AGE_ADMIN_S"),
+    (Asker.ADMIN_REFRESH, "ADMIN_REFRESH_REGULAR_S"),
 ])
 def test_quote_window_reads_the_askers_knob_at_call_time(monkeypatch, asker, attr):
     monkeypatch.setattr(config, attr, 7)
@@ -90,3 +91,9 @@ def test_fresh_request_resolves_admin_askers_only():
         assert resolve_asker(Asker.ADMIN_DASHBOARD) is Asker.ADMIN_FRESH
         assert resolve_asker(Asker.STOP_MONITOR) is Asker.STOP_MONITOR
     assert is_fresh_request() is False
+
+
+def test_refresher_asker_is_tier_5_and_never_turned_fresh():
+    assert Asker.ADMIN_REFRESH.value == "admin_refresh" and Asker.ADMIN_REFRESH.priority == 5
+    with fresh_request():
+        assert resolve_asker(Asker.ADMIN_REFRESH) is Asker.ADMIN_REFRESH

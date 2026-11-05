@@ -19,6 +19,30 @@ interpreting any backtest, grid, or validation result.
   nothing: no switching back, no per-ticker or per-strategy source. Each new
   pre-registration names its `data_source` in its frozen block before TRAIN
   is read.
+- **Instrument v3 (v190): the PIT S&P 500 on Alpaca bars.** `--instrument v3`
+  is v2's contract (fills, costs, causal liquidity floor, PIT masking, purge,
+  270-day embargo, holdout guard) on the PIT Alpaca store
+  `data/market_data_pit/`: warm-up from 2016-01-04, research
+  2017-01-01..2025-12-31 on five purged anchored yearly folds (test years
+  2021–2025, `MIN_TRAIN_YEARS = 4` unchanged), holdout from 2026-01-01. Three
+  rules come with it. **Every v3 fold is in-sample or tainted for every
+  strategy, filter or knob that exists today:** 2021–2023 lie inside v1 TRAIN,
+  which tuned them, and 2024–2025 is v1 VALIDATION; out-of-fold figures are
+  never read as out-of-sample, and a component whose v1 VALIDATION shot is
+  spent gets no gating use of the 2024 or 2025 folds. **The 2026 holdout
+  budget is shared by v2 and v3:** a 2026 shot spent under one is spent under
+  the other, and the v104 Part A retries keep their frozen 74-ticker universe.
+  **The funnel does not accept v3 yet:** `validate_component.py --instrument
+  v3` exits with `V3_FUNNEL_REFUSAL` until a methodology spec maps Stage 2
+  and Stage 3 to five folds (on five folds "2 improving" would be looser than
+  "2 of 3"). The v190 re-baseline
+  (`docs/superpowers/results/2026-10-v190-v3-rebaseline.md`, ledger row
+  `v190-v3-rebaseline`, verdict `DESCRIPTION`) describes an instrument
+  change; never a lift; selects nothing. A later spec may cite only its power
+  columns (N, the A/B and C/B ratios, coverage, first counted date, MDE),
+  never its WR or ExpR, and any v3 badge rule is frozen before that table is
+  read or is scored on the 2026 holdout alone. The default instrument stays
+  `v1`, and no closed pre-registration re-runs on v3.
 
 ## Acceptance gate
 
@@ -324,3 +348,4 @@ current defaults without a re-run.
 | Turtle Soup structural arm — low under the prior 20-bar low (set ≥ 4 bars before `t`), close back above it; buy the next open, stop `Low[t] − 0.25 × ATR14`, nearest level in the 1.5–2.5 R:R band (no level, no plan), one whole leg, 10-session cap (fill = session 1), bullish `2w`, research knob `TURTLE_SOUP_RESEARCH_MODE` (v180) | **NO-LIFT at Stage 0; VALIDATION not spent.** A1 TRAIN ΔWR −0.21pp vs paired MDE 0.31pp (N 9405), so the shot was refused. Alpaca bars; v119 A1–A3 pooled-WR amendment; costs on the added rows only. Closes Turtle Soup under this shape; arm A (screened 1.5/3 ATR shape) closed without a run; a new shape needs its own screen. | `results/2026-10-23-v180-turtle-soup-result.md` |
 | `range_breakdown_close` -- Schwab short range breakdown: 30-bar range (R - S <= 5 ATR14, two touches each side), falling SMA50, close below S, short at the next open, fixed 1.5/3.0 ATR race vs K=20 short null, cap 20, borrow 0.5%/yr [v182] | **SCREEN-FAIL, one shot spent.** N 426, ΔExpR −0.3210R, lower95 −0.4964R, 1 of 9 years; event arm −0.1158R after costs, the null is flattered by the 2010-2019 bull window (+0.2052R) and the trend-only control is worse (−0.4082R). Never re-run; the upper95 < 0 is not a long signal without its own SCREEN-PASS. | `results/2026-10-23-screen-range_breakdown_close.md` |
 | `range_breakdown_stop` -- same range, resting sell-stop at S filled on the event bar, 2 x entry slippage, depth-copy null [v182] | **NOT RUN, shot unspent; check 5 FAIL** (median fill depth 0.294 vs 0.157 ATR, null_unfilled 40.7%; N 642). 100% nested with the failed close idea, so a revival is a new name in the same family with that conditioning declared, a null redesign that is fair to real fill depths, a stated stop-market exit-slippage factor and a hard-to-borrow gate. | `results/2026-10-23-v182-counts.md` |
+| Gap-toward-stop reclaim veto on market plans — fill at the next open; when that open sits at or beyond `E ∓ g × ATR14` toward the stop, wait for a same-session reclaim of `E` (stop order at `E`, one adverse tick) or cancel at the close; `g` ∈ {0.10, 0.25, 0.50}, both arms on the next-open fill, knobs `MARKET_ENTRY_NEXT_OPEN` + `GAP_RECLAIM_ATR` (v192) | **NO-LIFT at Stage 1; VALIDATION not spent, remains available.** Fold-train 2018-06-01..2022-12-31, baseline N 7100: g=0.10 dWR +3.49pp but dExpR −0.129R, g=0.25 dWR +1.85pp but dExpR −0.078R (both failed `expectancy_floor`; the re-priced trades fell from +0.82R to −0.07R at g=0.10); g=0.50 refused at Stage 0 (effect +0.44pp < paired MDE 0.495pp). Alpaca bars, instrument v1, `cached_universe()`. Both knobs ship merged and inert. Reopening needs a fill rule other than a same-session reclaim of the planned entry after a next-open gap toward the stop of `g × ATR14`; another grid, window, reclaim length or MDE ceiling is not a new mechanism. | `results/2026-10-24-v192-gap-reclaim.md`, ledger `v192-gap-reclaim` |

@@ -31,7 +31,8 @@ from swingbot.admin import spa
 # The four whose URL the Jinja UI does not already own. `/risk` and
 # `/trades/<trade_id>` are still Jinja routes until NG57 -- see
 # test_a_workspace_the_jinja_ui_still_owns_stays_jinja.
-SPA_WORKSPACES = ("cockpit", "trades", "analytics", "universe", "system", "plans", "cancels")
+SPA_WORKSPACES = ("cockpit", "trades", "analytics", "universe", "system", "plans", "cancels",
+                  "insights")
 
 
 @pytest.fixture
@@ -80,12 +81,25 @@ def test_each_workspace_serves_the_spa(client, workspace, built):
 @pytest.mark.parametrize("path", [
     "/universe/AAPL",
     "/plans/44444444-4444-4444-8444-444444444444",
+    "/trades/calendar/2026-10-01",
+    "/insights/analytics",
+    "/system/versions",
+    "/calendar/2026-10-01",
 ])
 def test_a_detail_url_reloads_into_the_spa(client, path, built):
     """Refreshing on /trades/:id must not 404 -- the route only exists in
     the browser, so the server has to hand back the shell and let the
     router take it from there."""
     assert client.get(path).status_code == 200
+
+
+def test_the_old_names_stay_served_until_phase_4():
+    """v202 moved six pages under new destinations. Their old names keep
+    serving index.html, so a bookmark still reaches Angular's redirect instead
+    of a server 404. Phase 4's close-out removes them with cockpit/universe."""
+    for name in ("calendar", "cancels", "analytics", "research", "reports", "versions",
+                 "cockpit", "universe"):
+        assert name in spa.WORKSPACES, name
 
 
 def test_an_unknown_path_is_still_a_404(client, built):

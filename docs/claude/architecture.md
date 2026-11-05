@@ -16,7 +16,11 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   `core/` is fully packaged (v27 repo restructure, 2026-08-15) — no flat
   `.py` modules remain under it, only ten subpackages: `core/marketdata/`
   (fetching and caching: both OHLCV caches, the v162 Alpaca history store
-  `history_store.py` and the training-data switch `training_data.py`), `core/market/`
+  `history_store.py`, the training-data switch `training_data.py`, and since
+  v190 the PIT store's integrity reader `pit_integrity.py`; instrument v3
+  selects that store through `training_data.select(name, store, until)`;
+  v205 `fx_daily.py`, the admin's one FX rate per pair per Berlin day: the
+  rule `rate_before` and the `fx_daily_rates` memo), `core/market/`
   (everything computed from bars — indicators, levels, strategies, entry
   filters; v191 `atr_band.py` is the pure ATR-band stop arithmetic shared by
   admission, the builder, the live scan and the replay), `core/planning/`
@@ -30,7 +34,9 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   definition — main-book realized legs walk plus open-position unrealized —
   shared by the equity recorder, the backfill and the admin), `core/infra/`
   (JSON, locks and delivery channels — `jsonio.py`, `state.py`,
-  `notifier.py`, `silent_channel.py`), plus the four that predate the
+  `notifier.py`, `silent_channel.py`; v205 `read_memo.py`, the opt-in
+  `contextvars` memo that loads each store once per admin GET request,
+  switched on only by `@read_scope`), plus the four that predate the
   restructure: `core/edge/`, `core/scanning/`, `core/analytics/`,
   `core/charts/`, and `core/presentation/`. `presentation/` owns every
   Discord colour, glyph, number format and embed part: pure `tokens.py`,
@@ -154,6 +160,15 @@ Every Alpaca and yfinance request in `swingbot/` (bot, spawned `_run_bounded` wo
   off/shadow/on, `SCALE_OUT_ENABLED`, `INTRADAY_MANAGER_V2`) are documented in
   the README; `shadow` mode logs to `data/shadow_plans.jsonl` via
   `backtesting/shadow_log.py`.
+- **Market-on-open path (v192, off by default).** With
+  `MARKET_ENTRY_NEXT_OPEN` on, the builders build market plans PENDING
+  (`gap_reclaim.stamp_next_open`); `planning/gap_reclaim.py` is the one pure
+  rule (tick, `a_t`, `X`, `decide_at_open`) shared by the replay
+  (`planning/market_next_open.py`, dispatched from `exit_sim._market_exit`)
+  and the live step (`planning/market_open.py` session timing,
+  `PlanManager._step_market_open`). `GAP_RECLAIM_ATR` adds the reclaim
+  veto. Traps and coupling: `known-traps.md` § Market-on-open and the
+  gap-reclaim veto (v192).
 - **Opex-day caution (v44):** `swingbot/core/market/opex.py` holds both the
   US options-expiration calendar (`opex_tier` -> `"monthly"`/`"weekly"`/None,
   stdlib only) and the policy built on it — effective confidence/confluence

@@ -24,6 +24,7 @@ LEDGER_READERS = ("tests/backtesting/test_preregistration_ledger_file.py",
                   "tests/admin/test_api_v1_research.py")
 
 CASES = {
+    "scripts/reports/autopsy/exclusions.json": ("tests/scout/",),
     "docs/superpowers/results/preregistration-ledger.jsonl": LEDGER_READERS + ("tests/scout/",),
     "docs/claude/backtest-methodology.md": DOCS_CLAUDE + ("tests/scout/test_scout_merge_parse.py",
                                                           "tests/scout/test_scout_merge.py"),

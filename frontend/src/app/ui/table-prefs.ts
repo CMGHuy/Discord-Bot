@@ -59,6 +59,15 @@ export function perPageForApi(perPage: number): number {
   return perPage === ALL_PER_PAGE ? API_MAX_PER_PAGE : perPage;
 }
 
+/** An offered per-page choice spelled in a URL, else null so the caller
+ *  can use its saved choice. Empty values must not become "All" through
+ *  Number(''), and both resolver requests and visible pagers use this rule. */
+export function readPerPageParam(raw: string | null | undefined): number | null {
+  if (typeof raw !== 'string' || !/^\d+$/.test(raw)) return null;
+  const value = Number(raw);
+  return (PER_PAGE_OPTIONS as readonly number[]).includes(value) ? value : null;
+}
+
 function key(tableId: string, density: Density, name: string): string {
   return `tables.${tableId}.${density}.${name}`;
 }

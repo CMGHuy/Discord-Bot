@@ -14,14 +14,24 @@ function context(status = 'CLOSED', overrides: Partial<TradeRow> = {}): StripCon
   };
 }
 
-describe('outcomeTiles price age (v171 D2)', () => {
-  it('the open Price tile carries the price age, other tiles none', () => {
-    const tiles = outcomeTiles(context('ACTIVE', { price_age_s: 42 }));
-    expect(tiles[0].ageS).toBe(42);
-    expect(tiles[1].ageS).toBeNull();
+describe('outcomeTiles price age (v201)', () => {
+  const A = '2026-10-29T14:00:00Z';
+  it('the open price and unrealised tiles carry the price as-of, spinner and error', () => {
+    const tiles = outcomeTiles(context('ACTIVE', { price_as_of: A, price_refreshing: true }));
+    for (const tile of [tiles[0], tiles[1]]) {
+      expect(tile.asOf).toBe(A);
+      expect(tile.refreshing).toBe(true);
+      expect(tile.error).toBeNull();
+    }
+    expect(tiles[0].id).toBe('price');
+    expect(tiles[1].id).toBe('unrealised');
   });
-  it('an absent age reads null', () => {
-    expect(outcomeTiles(context('ACTIVE'))[0].ageS).toBeNull();
+  it('the other open tiles carry no price age', () => {
+    const tiles = outcomeTiles(context('ACTIVE', { price_as_of: A }));
+    expect(tiles.slice(2).every((t) => t.asOf === null && !t.refreshing && t.error === null)).toBe(true);
+  });
+  it('an absent as-of reads null', () => {
+    expect(outcomeTiles(context('ACTIVE'))[0].asOf).toBeNull();
   });
 });
 
@@ -55,13 +65,26 @@ describe('outcomeTiles', () => {
     ctx.banked = { fraction: 0.5, exitPrice: 110, r: 2, reason: 'tp1' };
     ctx.bankedStats = { pct: 10, amount: 50 };
     expect(outcomeTiles(ctx).at(-1)).toMatchObject({ id: 'banked', value: '50% @ 110.00',
-      sub: '+2.00R · +10.00% · +50.00', tone: 'pos', costCaption: true });
+      sub: 'TP1 +2.00R on 50% · +10.00% · +50.00', tone: 'pos', costCaption: true });
+  });
+
+  it('leads the banked tile with the trade-level contribution (v189 B3)', () => {
+    const ctx = context('PARTIAL', { banked_contribution_r: 1 });
+    ctx.banked = { fraction: 0.5, exitPrice: 110, r: 2, reason: 'tp1' };
+    ctx.bankedStats = { pct: 10, amount: 500 };
+    expect(outcomeTiles(ctx).at(-1)?.sub).toBe('banked +1.00R (TP1 +2.00R on 50%) · +10.00% · +500.00');
+  });
+
+  it.each([['ACTIVE', 'to T1'], ['PARTIAL', 'to T2']])('names the target the %s price tile measures to', (status, word) => {
+    const price = outcomeTiles(context(status, { target: 120 })).find((tile) => tile.id === 'price')!;
+    expect(price.sub).toContain(word);
+    expect(price.sub).not.toContain(word === 'to T1' ? 'to T2' : 'to T1');
   });
 
   it('uses pending status before an exit price', () => {
     const tiles = outcomeTiles(context('PENDING'));
     expect(tiles.map(t => t.id)).toEqual(['trigger', 'distance', 'expires', 'created']);
-    expect(tiles[0]).toMatchObject({ value: '101.00', sub: 'now 105.00 · -3.81% to trigger' });
+    expect(tiles[0]).toMatchObject({ value: '101.00', sub: 'now 105.00 · −3.81% to trigger' });
     expect(tiles[1].value).toBe('0.20R');
     expect(tiles[2].sub).toBe('3 bars left');
   });

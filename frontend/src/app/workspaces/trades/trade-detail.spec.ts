@@ -23,9 +23,12 @@ import {
 } from '../../api/interceptors';
 import { ChartStore } from '../../stores/chart.store';
 import { TradeDetailStore } from '../../stores/trade-detail.store';
+import { FakeLiveValues } from '../../testing/fake-live-values';
+import { LiveValuesStore } from '../../stores/live-values.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
-import { TradeDetail, arrivalBanner } from './trade-detail';
+import { RouteTitleService } from '../../routing/route-title.service';
+import { TradeDetail, arrivalBanner, tradeCrumb } from './trade-detail';
 
 // The Chart tab now mounts the shared chart, which asks for matchMedia the
 // moment a chart exists. See the polyfill for why.
@@ -140,6 +143,7 @@ describe('TradeDetail — the fields that rendered nowhere', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -291,6 +295,7 @@ describe('TradeDetail — identity line (v166 TD6)', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -358,15 +363,15 @@ describe('TradeDetail — identity line (v166 TD6)', () => {
     ['PENDING', ['Cancel plan', 'Delete']], ['CLOSED', ['Delete']],
   ])('offers the %s commands in the header', (status, labels) => {
     const { el } = mount(status as string, {}, 3, 'live');
-    const buttons = [...el.querySelectorAll<HTMLButtonElement>('.identity > .actions > button[sb-button]')];
+    const buttons = [...el.querySelectorAll<HTMLButtonElement>('sb-page [page-actions] button[sb-button]:not(sb-market-refresh button)')];
     expect(buttons.map(button => button.textContent?.trim())).toEqual(labels);
-    expect(buttons.at(-1)?.classList).toContain('danger');
+    expect(buttons.at(-1)?.classList).toContain('danger-quiet');
     expect([...el.querySelectorAll('sb-panel')].some(panel => panel.getAttribute('heading') === 'Actions')).toBe(false);
   });
 
   it('offers Close on a live position (SR48, through the real component)', () => {
     const { fixture, el } = mount();
-    const close = el.querySelector<HTMLButtonElement>('.identity .actions button');
+    const close = el.querySelector<HTMLButtonElement>('sb-page [page-actions] button:not(sb-market-refresh button)');
     expect(close?.textContent).toContain('Close');
     close!.click();
     fixture.detectChanges();
@@ -387,6 +392,7 @@ describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -424,11 +430,10 @@ describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
     expect(chip).toBeTruthy();
     expect(chip!.classList).toContain('bad');
     expect(chip!.textContent).toContain('Poor cohort');
-    // [title] binds to the sb-chip HOST element (Chip has no `title` input
-    // to forward it onto the inner span), not the .chip span itself.
-    const host = el.querySelector('.tags > sb-chip')!;
-    expect(host.getAttribute('title')).toContain('41.2% WR');
-    expect(host.getAttribute('title')).toContain('-0.38R');
+    expect(el.querySelector('.tags > sb-chip')!.hasAttribute('title')).toBe(false);
+    const hint = el.querySelector('.tags > sb-chip + sb-hint [role="tooltip"]')!.textContent!;
+    expect(hint).toContain('41.2% WR');
+    expect(hint).toContain('−0.38R');
   });
 
   it('renders a positive-toned chip for COHORT_STRONG', () => {
@@ -460,8 +465,7 @@ describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
       regime2_state: 'bear_volatile', win_rate: 0.0, expectancy_r: 0.0,
       n_live: 3, n_backtest: 0, run_date: '2026-09-14',
     });
-    const host = el.querySelector('.tags > sb-chip')!;
-    const title = host.getAttribute('title') ?? '';
+    const title = el.querySelector('.tags > sb-chip + sb-hint [role="tooltip"]')?.textContent ?? '';
     expect(title).toContain('Not enough closed trades');
     expect(title).toContain('n=3');
     expect(title).not.toContain('0.0% WR');
@@ -493,6 +497,7 @@ describe('TradeDetail — banked leg and open runner', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -510,7 +515,7 @@ describe('TradeDetail — banked leg and open runner', () => {
     fixture.detectChanges();
     backend.expectOne(`/api/v1/trades/${ID}`).flush(
       tradeResponse({ ...DETAIL, legs_realized: legsRealized, working_stop: 101.33 },
-                    'PARTIAL'),
+                    'PARTIAL', { entry_shares: 10 }),
     );
     fixture.detectChanges();
     return (fixture.nativeElement as HTMLElement).textContent ?? '';
@@ -527,7 +532,7 @@ describe('TradeDetail — banked leg and open runner', () => {
 
   it('shows the pct and dollar figures for the banked leg', () => {
     const text = renderPartial();
-    // tradeResponse() defaults entry=100, shares=10: (110-100)*0.5*10 = 50
+    // entry=100, entry_shares=10 (v189 B1: the ORIGINAL size): (110-100)*0.5*10 = 50
     expect(text).toContain('+10.00%');
     expect(text).toContain('+50.00');
   });
@@ -559,6 +564,7 @@ describe('TradeDetail states', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -601,6 +607,7 @@ describe('TradeDetail — the shared Why components (v151)', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -659,6 +666,29 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     expect(strip.querySelector('[data-tile="unrealised"] .stale-flag')?.textContent).toContain('delayed');
   });
 
+  it('stop and target proximity carry the price age', () => {
+    const el = mount('overview', DETAIL, 'ACTIVE', { price_as_of: new Date().toISOString() });
+    const tile = el.querySelector('sb-outcome-strip [data-tile="price"]')!;
+    expect(tile.querySelector('sb-market-value .tile-sub')?.textContent).toContain('to stop');
+    expect(tile.querySelector('sb-market-value .tile-value')).not.toBeNull();
+    expect(el.querySelector('sb-outcome-strip [data-tile="unrealised"] sb-market-value')).not.toBeNull();
+    expect(el.querySelector('sb-outcome-strip [data-tile="held"] sb-market-value')).toBeNull();
+  });
+
+  it('offers Refresh for the ticker while the trade is live', () => {
+    const el = mount('overview', DETAIL, 'ACTIVE');
+    const refresh = el.querySelector<HTMLButtonElement>('sb-page [page-actions] sb-market-refresh button');
+    expect(refresh).not.toBeNull();
+    refresh!.click();
+    const live = TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues;
+    expect(live.requestRefresh).toHaveBeenCalledWith(['AAPL']);
+  });
+
+  it('no Refresh on a closed trade', () => {
+    const el = mount('overview', DETAIL, 'CLOSED');
+    expect(el.querySelector('sb-page [page-actions] sb-market-refresh')).toBeNull();
+  });
+
   it('does not flag a fresh current price in the outcome strip', () => {
     const el = mount('overview', DETAIL, 'ACTIVE', { current_price_stale: false });
     expect(el.querySelector('sb-outcome-strip .stale-flag')).toBeNull();
@@ -685,12 +715,12 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     expect(el.textContent).toContain('Paper plan — this page places no orders.');
   });
 
-  it('uses the current stop in the Outcome next block and original risk in Position', () => {
+  it("uses the current stop in the Outcome next block and in Position's risk of loss", () => {
     const el = mount('overview', { ...DETAIL, working_stop: 101 }, 'PARTIAL',
       { risk_stop: 95, stop_loss: 101, shares: 5, position_value: 500 });
     const position = el.querySelector('sb-trade-position-card')!;
     expect(position.querySelector('[data-row="Open shares"]')?.textContent).toContain('5');
-    expect(position.querySelector('[data-row="$ at risk"]')?.textContent).toContain('25.00');
+    expect(position.querySelector('[data-row="Risk of loss"]')?.textContent).toContain('0.00');
     expect(position.querySelector('[data-row="Deployed"]')?.textContent).toContain('500.00');
     expect(el.querySelector('sb-trade-outcome-card sb-if-it-gets-there')?.textContent).toContain('101.00');
   });
@@ -910,6 +940,7 @@ describe('TradeDetail — arrival banner from the plan page (v151)', () => {
           withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
         ),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         TradeDetailStore,
         ChartStore,
         { provide: EventStream, useValue: new FakeEventStream() },
@@ -975,11 +1006,6 @@ describe('arrivalBanner', () => {
 describe('TradeDetail — responsive card layout (v166 TD11)', () => {
   const source = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trade-detail.ts'), 'utf8');
   const styles = source.split('styles: `')[1].split('`,')[0];
-
-  it('gives back navigation the shared control height for phone touch targets', () => {
-    const backStyles = styles.match(/\.back\s*\{([^}]+)\}/)?.[1] ?? '';
-    expect(backStyles).toMatch(/min-height:\s*var\(--control-h\)/);
-  });
 
   it('sizes the cards container independently of the viewport', () => {
     expect(styles).toMatch(/\.grid-host\s*\{[^}]*container:\s*cards\s*\/\s*inline-size/);
@@ -1073,5 +1099,122 @@ describe('TradeDetail — one numeric face, one baseline (v179 §3.3, §3.4)', (
     const src = read('workspaces/trades/trade-detail.ts');
     expect(src.match(/\.identity \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
     expect(src.match(/\.tags \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
+  });
+});
+
+/* -- v195 Phase 4, §5.2, §1.4 -- trade detail on sb-page -------------------- */
+
+describe('tradeCrumb (v195 §3)', () => {
+  it('names the ticker and the short id the Trades list shows', () => {
+    expect(tradeCrumb('NVDA', 'ffffffffff000812')).toBe('NVDA #000812');
+    expect(tradeCrumb('NVDA', 'abc812')).toBe('NVDA #abc812');
+    expect(tradeCrumb('NVDA', '812')).toBe('NVDA #812');
+  });
+
+  it('drops a missing part and is empty with neither', () => {
+    expect(tradeCrumb('NVDA', null)).toBe('NVDA');
+    expect(tradeCrumb(null, '44444444-4444-4444-8444-444444444444')).toBe('#444444');
+    expect(tradeCrumb(null, null)).toBe('');
+  });
+});
+
+describe('TradeDetail on sb-page (v195 Phase 4, §5.2, §1.4)', () => {
+  let backend: HttpTestingController;
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
+        TradeDetailStore,
+        ChartStore,
+        { provide: EventStream, useValue: new FakeEventStream() },
+      ],
+    });
+    backend = TestBed.inject(HttpTestingController);
+    TestBed.inject(RouteTitleService).set('Trade detail', 'One position, end to end');
+  });
+
+  function mount(status = 'ACTIVE', flush = true) {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.componentRef.setInput('tab', 'overview');
+    fixture.detectChanges();
+    if (flush) {
+      backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(DETAIL, status));
+      fixture.detectChanges();
+    }
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  it('renders the route title as the one h1, from sb-page', () => {
+    const { el } = mount();
+    expect(el.querySelectorAll('h1')).toHaveLength(1);
+    expect(el.querySelector('sb-page h1.title')!.textContent!.trim()).toBe('Trade detail');
+  });
+
+  it('names the trade as the breadcrumb detail segment once it loads', () => {
+    const { fixture } = mount('ACTIVE', false);
+    const titles = TestBed.inject(RouteTitleService);
+    expect(titles.detail()).toBeNull();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(DETAIL, 'ACTIVE'));
+    fixture.detectChanges();
+    expect(titles.detail()).toBe('AAPL #ffffff');
+  });
+
+  it('puts the crumb back after a title update clears it while the page is open', () => {
+    const { fixture } = mount();
+    const titles = TestBed.inject(RouteTitleService);
+    titles.set('Trade detail', null, '/somewhere-else');
+    expect(titles.detail()).toBeNull();
+    fixture.detectChanges();
+    expect(titles.detail()).toBe('AAPL #ffffff');
+  });
+
+  it('renders no command before the trade has loaded', () => {
+    const { fixture, el } = mount('ACTIVE', false);
+    expect(el.querySelectorAll('sb-page [page-actions] button')).toHaveLength(0);
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(DETAIL, 'ACTIVE'));
+    fixture.detectChanges();
+    expect(el.querySelectorAll('sb-page [page-actions] button:not(sb-market-refresh button)')).toHaveLength(2);
+  });
+
+  it('opens the delete confirm from the header', () => {
+    const { fixture, el } = mount('CLOSED');
+    const buttons = [...el.querySelectorAll<HTMLButtonElement>('sb-page [page-actions] button[sb-button]:not(sb-market-refresh button)')];
+    const del = buttons.at(-1)!;
+    expect(del.textContent!.trim()).toBe('Delete');
+    expect(del.classList).toContain('danger-quiet');
+    expect(del.classList).not.toContain('danger');
+    del.click();
+    fixture.detectChanges();
+    expect(el.querySelector('sb-page sb-confirm-dialog')!.textContent).toContain('AAPL');
+  });
+
+  it('has no scope bar and no in-page back link: the breadcrumb is the way back', () => {
+    const { el } = mount();
+    expect(el.querySelector('[page-scope]')).toBeNull();
+    expect(el.querySelector('a.back')).toBeNull();
+  });
+
+  it('keeps identity then the outcome strip as the summary, and the tabs as the primary panel', () => {
+    const { el } = mount();
+    const summary = el.querySelector('sb-page [page-kpis]')!;
+    expect(summary.querySelector('header.head > .identity > .trade-title .ticker')!.textContent).toBe('AAPL');
+    expect(summary.querySelector('header.head + sb-outcome-strip')).toBeTruthy();
+    expect(summary.querySelector('.actions')).toBeNull();
+    const primary = el.querySelector('sb-page [page-primary]')!;
+    expect(primary.querySelector('sb-tab-bar')).toBeTruthy();
+    expect(primary.querySelector('sb-async')).toBeTruthy();
+  });
+
+  it('sets its order figures on the 14px body step, in both densities', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trade-detail.ts'), 'utf8');
+    expect(src).toMatch(/:host \{[^}]*--text-table: var\(--text-body\);/);
   });
 });

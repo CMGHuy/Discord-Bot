@@ -1,8 +1,8 @@
 # Known traps
 
 Referenced from the root `CLAUDE.md`. Each of these has already cost a
-session — read this before touching data caching, `scan_engine`/`scan_embeds`,
-`embeds.py`, or the scan loop.
+session — read this before touching data caching, `scanning/scan_run.py`,
+`alert_embeds.py`/`embeds.py`, or the scan loop.
 
 ## Two OHLCV caches
 
@@ -53,6 +53,37 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   `data/backtest_cache/` stays: it is the live bot's daily cache, the journal
   backfill's source, the `yfinance` training source and the identity-check
   reference.
+- **The PIT Alpaca store is a fourth directory, chosen only by instrument v3
+  (v190).** `data/market_data_pit/{daily,hourly,15min}/{TICKER}.csv` has the
+  v162 store's layout and manifests, holds every `sp500_pit` member (delisted
+  names included) from 2016-01-04 plus SPY, the regime ticker and every
+  `data/universe/etfs.json` symbol, and lives on this laptop only (never the
+  VM, no cron). `history_store.store_root("pit")` never reads
+  `HISTORY_STORE_DIR`; `store_root()` (the watchlist store) still does. **No
+  universe name and no environment variable selects it:** `sp500_pit` is v2's
+  universe too, and `training_data.available_tickers()` feeds about a dozen
+  scripts their universe, so a store chosen by name would widen them. Only
+  `contract.resolve("v3").store == "pit"` selects it, inside
+  `fetch_backtest_data.apply_data_source`, which also cuts every frame
+  (SPY and the ETFs included) at `research_end`; pool workers receive the
+  choice through `training_data.selection_args()`. **Integrity before use:**
+  `scripts/data/check_history_store.py --pit` writes
+  `data/market_data_pit/_integrity.json`; selection refuses without it and
+  raises `StaleIntegrityError` once the daily manifest's sha256 differs from
+  the one frozen in it, so a `--mode update` after a freeze stops every v3 run
+  until the report is rebuilt. It carries **frame trims** (a reused symbol's
+  foreign bars, MON after mid-2018, removed in `history_store.load` before
+  any indicator reads them) and **signal-date cuts** (runs of more than 5
+  missing sessions; dates whose trailing 60 sessions hold under 95% of their
+  bars), subtracted from the membership spans. `flagged: no-reference` is
+  admitted on the PIT store only; the watchlist store's `_manifest_exclusions`
+  is unchanged. Renamed members map through `data/universe/symbol_aliases.json`
+  (`fetch_alpaca_history.py --universe sp500_pit`). **One fetcher per root at
+  a time:** each process rewrites the whole per-timeframe manifest, so two on
+  one root lose each other's entries. **Worktrees:** both store roots resolve
+  through `history_store.resolve_data_root`, so a worktree without its own
+  `data/market_data[_pit]` reads the main checkout's; a directory that exists
+  in the worktree wins.
 - **The history store holds the same tickers as `data/backtest_cache/`:** the
   watchlist plus `MARKET_REGIME_TICKER`. The sector ETFs of
   `data/universe/etfs.json` (QQQ, IWM, DIA, the XL* funds, GLD, TLT) are in
@@ -181,6 +212,35 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
   useful stretch, so more threads bought no real parallelism and were
   measurably slower than serial). Anything touching shared state
   (`state.confirm_or_update`, funnel counters) must stay serial/post-join.
+- **Every plan write is one guarded call (v189).** `PlanStore.update` takes
+  the plan row `FOR UPDATE`, returns `False` instead of overwriting a CLOSED
+  or CANCELLED row with a stale copy, and keeps the tighter of the stored and
+  incoming stops. Never write a plan document any other way (a raw repository
+  upsert brings back the lost update v189 closed). Lock order is plan row,
+  then trade row, then account rows; no `threading.Lock` is held while
+  waiting on a row, and network calls happen before any lock.
+- **A trade's leg, fill and close commit with the plan, or not at all.** The
+  plan manager's `_persist_*` helpers pass one `conn` to `TradeLog` and the
+  account balance; only the journal and the snapshot refresh run after
+  commit (`run_after_commit`). A new close path passes `conn=` through and
+  collects its hooks the same way. A failed exit is retried once and then
+  posted to the ops channel (`take_exit_failures`), never dropped silently.
+- **Deleting a trade ends its plan.** `clear_open` and `delete_trade` end the
+  linked plan in the same transaction (`plan_links.end_linked_plan`): a
+  PENDING plan is cancelled (`cancelled_trade_deleted`), an ACTIVE/PARTIAL
+  one closed with no P&L. A reversal against an unfilled placeholder cancels
+  the plan instead of booking P&L.
+- **Clearing history is an archived reset.** `account_reset.reset_closed_history`
+  writes `data/archives/account-reset-<UTC>.json` first, then deletes closed
+  trades, terminal plans and the balance history and reseeds one point at
+  `base_balance`. It is refused while the kill switch is tripped unless
+  forced, and never releases it. `scripts/ops/restore_account_reset.py`
+  undoes the latest reset (`docs/deploy/DEPLOY_HETZNER.md`).
+- **Leg sums use the contribution, labels use the net.** Anything that adds
+  legs uses `metrics.leg_contribution_r` (fraction × R); a close with two or
+  more legs is labelled by `metrics.net_outcome` (live only — the backtest
+  still labels a TP1 touch `win`, pinned by a test). Scaled-out labels before
+  `metrics.LABEL_BASIS_SINCE` were not backfilled.
 
 ## Full-history cache and the live scan read
 
@@ -249,6 +309,15 @@ session — read this before touching data caching, `scan_engine`/`scan_embeds`,
 
 ## `PlanManager.check_bar()` is unwired — do not "fix" it
 
+`check_bar` / `_check_bar_active` / `_check_bar_partial` model overnight gap fills and are tested, but production never calls them. The live bot exits exclusively through `poll()`. Keep the path inert: wiring it would create a second authority for the `plans` table. Change `_step_active` / `_step_partial` for live exits; mirror bar checks only to keep their tests honest.
+
+v189 routed every plan write through the guarded `PlanStore.update` (row lock,
+stale-terminal refusal, tighter-stop merge) and the `_persist_fill` /
+`_persist_partial` / `_persist_terminal` transactions. `check_bar` shares those
+helpers, so it inherits the guards, but it has no dedicated tests and its
+exit-retry path is reachable from tests only. Wiring it in is still a design
+change, not a fix.
+
 ## Scan parameter and replay gate parity (v74)
 
 `ScanParams` is frozen and picklable so process-pool search cells cannot share
@@ -258,8 +327,6 @@ Do not silently unify them: v68 deliberately measured `min_confluence=1` and
 `min_risk_reward=0.0`, unlike the shipped 2 and 1.5, and its fixture inherits
 that population. `tests/backtesting/test_knob_observability.py` documents the
 replay harness blind spots explicitly.
-
-`check_bar` / `_check_bar_active` / `_check_bar_partial` model overnight gap fills and are tested, but production never calls them. The live bot exits exclusively through `poll()`. Keep the path inert: wiring it would create a second authority for the `plans` table. Change `_step_active` / `_step_partial` for live exits; mirror bar checks only to keep their tests honest.
 
 ## The full state machine now runs across the whole Berlin-local active window
 
@@ -540,3 +607,71 @@ Two things that look broken in the live book but aren't. Don't "fix" either one.
 - **Two daily caches, one adjustment basis each.** `market_data/daily_alpaca/` is Alpaca `Adjustment.ALL`, 10 years, written only by `daily_delta.write_daily` under the key's lease; `market_data/daily/` is yfinance `auto_adjust`, full history, written by its existing yfinance writers. Never splice or write a frame across them. The admin reads only the yfinance file (`freshness.page_daily`). Each file has a `.meta.json` sidecar; a failed D4 delta check means a full refetch, never `history_splice`'s shallow live-only path.
 - **`count` mode is the D9 baseline**: it must make exactly today's provider calls. Anything that shares or caches belongs behind `on`.
 - **The admin's fresh mark** (`X-Swingbot-Fresh: 1`) lasts one request (`freshness.install`); a background thread keeps it only through `contextvars.copy_context()`.
+
+## Market-on-open and the gap-reclaim veto (v192): two knobs, both off
+
+Two knobs, inert by default: `MARKET_ENTRY_NEXT_OPEN` (`"false"`) and
+`GAP_RECLAIM_ATR` (`g`, `"0"`). With both at default, replay `ExitResult`s,
+arm rows and plan dicts are byte-identical to before v192, pinned by the
+goldens in `tests/fixtures/v192/`. A golden that moves is a behaviour
+change, never a fixture to refresh.
+
+- **Coupling.** `GAP_RECLAIM_ATR > 0` is honoured only with
+  `MARKET_ENTRY_NEXT_OPEN` on. At import and at every SIGHUP reload
+  `config.enforce_gap_reclaim_coupling()` sets it to 0 and logs an ERROR; in
+  measurement `arms.knobs.apply_knobs` raises
+  `ValueError(GAP_RECLAIM_NEEDS_NEXT_OPEN)` on the merged arm config. A veto
+  that "does nothing" live is this guard first. `gap_reclaim.effective_g()`
+  is the one reader that applies it.
+- **What "waiting" means.** With the first knob on, a market plan (v180
+  Turtle Soup excepted) is built PENDING with `entry_price=None` and
+  `waits_next_open=True`. `gap_reclaim.waits_for_open(plan)` reads that
+  marker, not status and entry type alone: about ten test modules build
+  PENDING market plans that must keep the close fill. The marker, `a_t`
+  (`reclaim_atr`) and `X` (`reclaim_level`) are stamped once at creation
+  and never rewritten by a reload, a knob flip or a restart.
+- **`a_t` reads bars through `t` only** (Wilder ATR14,
+  `market/indicators.atr`). Under 15 bars, NaN or ≤ 0 gives no
+  `reclaim_level`: the plan fills at the open like the baseline, never a
+  crash. Live re-derives `E`, `a_t`, `X` from the completed frame, and a
+  parity test pins them against the replay.
+- **One decision for live and replay.** `gap_reclaim.decide_at_open` runs in
+  this order: open at or through the stop → `open_through_stop`; `X` set and
+  the open at or beyond it → `reclaim_wait`; past the stop ceiling →
+  `risk_cap`; else fill at the open. Replay fills a reclaim at `E ± 1 tick`
+  (the stop order's slippage; the v1 arm replay applies no other frictions);
+  live fills at `E` on the first RTH poll one tick through it.
+- **The fill bar is walked in both arms**
+  (`market_next_open.next_open_fill_bar`): stop first, then TP1 (scale-out
+  plans bank TP1 and continue the runner from the fill bar), so an ambiguous
+  reclaim bar is −1R. An open at or beyond TP1 is v180's 0R `gap_target`.
+  `_fill_bar_exit`'s 0R `gap_through_stop` scratch is not reused.
+- **Live timing.** `market_open.deciding_session(plan)` is the first NYSE
+  session whose 09:30 ET open is at or after `issued_at`
+  (`strategy_pass._stamp_issued_for_open` stamps it). Extended-hours polls
+  before that open run a two-poll stop-cross debounce
+  (`PREMARKET_STOP_CONFIRM_POLLS`), new code: the old
+  `EXTENDED_HOURS_EXIT_CHECK` / `EXTENDED_HOURS_DEBOUNCE_TICKS` fields are
+  still read by nothing. A first RTH poll on a later session cancels
+  `cancelled_expired` / `missed_open`; a plan resting for its reclaim
+  cancels `gap_no_reclaim` on the first poll after that session's close.
+  `PlanManager._step_market_open` runs ahead of `_step_pending`, whose
+  stop-entry fill would otherwise fill a waiting market plan at any price.
+- **Feed and followers.** `cancelled_open_through_stop`,
+  `cancelled_gap_no_reclaim` and `gap_reclaim_order` are `NOTICE_EVENTS`
+  (re-sent until acked), have `instructions` builders and the
+  `Kind.RECLAIM_ORDER` copy, and the two cancels are in
+  `PLACEHOLDER_DISCARD_EVENTS`, so the alert-time placeholder trade never
+  sits open after a cancel. A cancel transition added later must join that
+  set and `_CANCEL_LEADS`, or `_cancel_why` raises KeyError.
+- **Measurement needs a baseline delta.** Both arms run with
+  `MARKET_ENTRY_NEXT_OPEN=true`; the component adds `GAP_RECLAIM_ATR=g`
+  (`measure_arms.py --baseline-knob`, stamped `baseline_knob_delta`). The
+  veto is not a subset feature: the census sidecar
+  `<out stem>.gap_reclaim.json` names the re-priced (reclaimed) keys, and
+  `gap_reclaim_clauses.strata_split` scores removed / re-priced / added /
+  unchanged, with a SKIPPED clause failing. The verdict is in
+  `docs/superpowers/results/2026-10-24-v192-gap-reclaim.md`.
+- **A pass licenses neither knob.** `MARKET_ENTRY_NEXT_OPEN` changes every
+  market plan's fill and needs its own non-inferiority pre-registration
+  (next-open vs close fill) before the partner flips both.

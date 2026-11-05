@@ -338,12 +338,13 @@ describe('input and layout components', () => {
     expect(dialog.open).toBe(false);
   });
 
-  it('defaults the confirm action to the danger variant', () => {
+  it('defaults the confirm action to danger-quiet, the housekeeping variant (v195 correction 6)', () => {
     host.confirmOpen.set(true);
     fixture.detectChanges();
 
     const confirm = [...el().querySelectorAll('sb-confirm-dialog button')].at(-1)!;
-    expect(confirm.className).toContain('danger');
+    expect(confirm.classList).toContain('danger-quiet');
+    expect(confirm.classList).not.toContain('danger');
   });
 
   it('routes cancelling and dismissing down the same path', () => {
@@ -540,5 +541,56 @@ describe('dialog exits under Motion = Off (v168 §3a)', () => {
     fixture.detectChanges();
     expect(drawer.open).toBe(false);
     expect(host.drawerOpen()).toBe(false);
+  });
+});
+
+@Component({
+  imports: [ConfirmDialog],
+  template: `
+    <sb-confirm-dialog
+      [open]="true"
+      title="Engage the killswitch"
+      consequence="No new trade opens until it is released."
+      [destructive]="destructive()"
+      [dangerVariant]="variant()"
+    />
+  `,
+})
+class DangerHost {
+  readonly destructive = signal(true);
+  readonly variant = signal<'danger' | 'danger-quiet'>('danger');
+}
+
+/* v195 Phase 2, correction 6: the killswitch confirms on the solid danger,
+ * everything else on danger-quiet; a non-destructive confirm stays primary. */
+describe('ConfirmDialog dangerVariant', () => {
+  let fixture: ComponentFixture<DangerHost>;
+
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(DangerHost);
+    fixture.detectChanges();
+  });
+
+  const confirm = (): HTMLButtonElement =>
+    [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('sb-confirm-dialog button')].at(-1)!;
+
+  it('paints the confirm action solid danger when the caller asks for it', () => {
+    expect(confirm().classList).toContain('danger');
+    expect(confirm().classList).not.toContain('danger-quiet');
+  });
+
+  it('paints it danger-quiet when asked', () => {
+    fixture.componentInstance.variant.set('danger-quiet');
+    fixture.detectChanges();
+    expect(confirm().classList).toContain('danger-quiet');
+  });
+
+  it('stays primary for a non-destructive confirm, whatever the danger variant', () => {
+    fixture.componentInstance.destructive.set(false);
+    fixture.detectChanges();
+    expect(confirm().classList).toContain('primary');
+    expect(confirm().className).not.toContain('danger');
   });
 });

@@ -7,7 +7,8 @@ import { RouterLink } from '@angular/router';
 import { TapeRow } from '../../api/models';
 import { MarketIndexStore } from '../../stores/market-index.store';
 import { TapeStore } from '../../stores/tape.store';
-import { AgeHint, TAPE_WINDOW_S } from '../../ui/age-hint';
+import { MarketValue } from '../../ui/market-value';
+import { Hint } from '../../ui/hint';
 import { Flash } from '../../ui/flash';
 import { ABSENT, num, pct } from '../../ui/format';
 import { TAPE_MIN_DURATION_S, tapeDurationSeconds } from './tape-speed';
@@ -36,7 +37,9 @@ interface Tile {
   context_label: string | null;
   context_kind: string | null;
   proxyLabel: string | null;
-  ageS: number | null;
+  asOf: string | null;
+  refreshing: boolean;
+  error: string | null;
 }
 
 /**
@@ -55,16 +58,25 @@ interface Tile {
  * `tape-slide` keyframes) so the loop has no snap-back — same convention
  * the two lanes this replaces already used.
  */
+/** v194 A3: what a proxy tile's figure is. One hint for the lane: the tiles
+ *  are links, and a hint button cannot sit inside a link. */
+export const TAPE_PROXY_HINT = "Yahoo had no value; an ETF tracking this index stands in. Change only, never the ETF's price.";
+
 @Component({
   selector: 'sb-tape',
   standalone: true,
-  imports: [RouterLink, Flash, AgeHint],
+  imports: [RouterLink, Flash, MarketValue, Hint],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styleUrl: './tape.css',
   template: `
     <div class="lane" role="region" aria-label="Market tape"
          [attr.title]="asOfTime() === ABSENT ? null : 'Tape data as of ' + asOfTime()">
-      <div class="cap">mkt</div>
+      <div class="cap-row">
+        <div class="cap">mkt</div>
+        @if (hasProxy()) {
+          <sb-hint [text]="proxyHint" label="About proxy figures" align="left" />
+        }
+      </div>
       <div class="viewport">
         <div class="track" #track [style.animation-duration.s]="duration()">
           @for (pass of [0, 1]; track pass) {
@@ -77,7 +89,7 @@ interface Tile {
                   @if (tile.change_pct !== null) {
                     <span [class.up]="up(tile)" [class.down]="down(tile)">{{ pct(tile.change_pct) }}</span>
                   }
-                  <span class="ctx proxy" title="Yahoo had no value; an ETF tracking this index stands in. Change only, never the ETF's price.">{{ tile.proxyLabel }}</span>
+                  <span class="ctx proxy">{{ tile.proxyLabel }}</span>
                 } @else if (tile.price !== null) {
                   <span class="px" [class.up]="up(tile)" [class.down]="down(tile)">{{ num(tile.price) }}</span>
                   @if (tile.change_pct !== null) {
@@ -91,7 +103,8 @@ interface Tile {
                     {{ tile.context_label }}
                   </span>
                 }
-                <sb-age-hint [ageS]="tile.ageS" [windowS]="tapeWindowS" />
+                <!-- v201: the price's age and refresh spinner. -->
+                <sb-market-value [asOf]="tile.asOf" [refreshing]="tile.refreshing" [error]="tile.error" />
               </a>
             }
           }
@@ -106,13 +119,14 @@ export class Tape {
   protected readonly num = num;
   protected readonly pct = pct;
   protected readonly ABSENT = ABSENT;
-  protected readonly tapeWindowS = TAPE_WINDOW_S;
 
   private readonly trackRef = viewChild<ElementRef<HTMLElement>>('track');
   /** Measured from the track's own rendered width (after every render the
    *  row data could have changed it) rather than a fixed duration -- see
    *  tape-speed.ts. */
   protected readonly duration = signal(TAPE_MIN_DURATION_S);
+
+  protected readonly proxyHint = TAPE_PROXY_HINT;
 
   protected readonly tiles = computed<Tile[]>(() => {
     const indices: Tile[] = this.market.rows().map((r) => ({
@@ -124,7 +138,9 @@ export class Tape {
       context_label: null,
       context_kind: null,
       proxyLabel: proxyLabel(r),
-      ageS: r.age_s ?? null,
+      asOf: r.price_as_of ?? null,
+      refreshing: r.price_refreshing ?? false,
+      error: r.price_error ?? null,
     }));
     const stocks: Tile[] = this.tape.rows().map((r) => ({
       key: `stk:${r.symbol}`,
@@ -135,10 +151,14 @@ export class Tape {
       context_label: r.context_label,
       context_kind: r.context_kind,
       proxyLabel: proxyLabel(r),
-      ageS: r.age_s ?? null,
+      asOf: r.price_as_of ?? null,
+      refreshing: r.price_refreshing ?? false,
+      error: r.price_error ?? null,
     }));
     return [...indices, ...stocks];
   });
+
+  protected readonly hasProxy = computed(() => this.tiles().some((t) => t.proxyLabel !== null));
 
   /** Whichever source has answered — the two stores refetch on the same
    *  `scan` event, so they age together in practice. */

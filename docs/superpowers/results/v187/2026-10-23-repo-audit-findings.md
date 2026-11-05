@@ -9,7 +9,7 @@ The findings are split across four specs, written in this order. The partner cho
 | Spec | Scope | Status |
 |---|---|---|
 | **v187** safety hardening | D below | spec written, panel-reviewed |
-| next: book integrity + partial-trade truth | A, B, F1 | not yet written |
+| **v189** book integrity + partial-trade truth | A, B, F1 (partly) | implemented (plan `2026-10-23-v189-book-integrity-partial-truth`) |
 | next: one metric definition | C, plus the parity items v187 hands over | not yet written; needs partner decisions (counting unit, day definition) |
 | next: frontend hygiene | E | not yet written |
 | optional | F2–F3 | not yet written |
@@ -31,6 +31,13 @@ A5. **The daily recap's R ignores legs.** `tracking/retrospective.py:188 _r_mult
 A6. **Clearing trade history lowers the balance.** The balance is `base + Σ realized` over the trades table (`account.py:138`), while `balance_history` keeps the old peak. The next close then writes a fake drawdown that `throttle.drawdown_pct` reads.
 A7. **`clear_open` and legacy-id `delete_trade` remove plan-linked trades but leave their plans open** (`performance.py:1531`, `trade_commands.py:262,271`).
 A8. **No locking between the bot and admin processes.** `_LOCK` (`performance.py:39`, `plan_store.py`) is a `threading.Lock`, and `PlanStore.update` is last-writer-wins. An admin close can be overwritten by the bot's next `store.update`, which brings the plan back as PARTIAL.
+
+*v189 fixed these forward only.* The 23 production records counted on
+2026-10-23 (2 multi-leg `win` with net R < 0, 10 multi-leg `closed` with net
+R > 0, 10 plans missing the manual runner leg, 1 reversal settled on a
+never-filled placeholder) were not backfilled. The metric-definitions spec
+owns that decision (backfill through a data migration, or state why the mixed
+labelling is acceptable).
 
 ## B. Partial trades on screen
 
@@ -107,5 +114,13 @@ The v186 working tree, uncommitted at audit time and owned by another session:
 ## F. Smells
 
 F1. **The R/P&L formula is written out about 72 times in the backend,** under three named variants: `metrics.r_multiple`, `performance.closed_r_multiple` and `retrospective._r_multiple`. A5 is the drift this caused.
+
+*v189:* `retrospective._r_multiple` is gone and `performance.closed_r_multiple`
+delegates to `metrics.r_multiple`, so one trade-level R is left; leg sums go
+through `metrics.leg_contribution_r`. Only the formulas inside code v189 edited
+were migrated. The rest of the ~72 inline R/P&L formulas are left on purpose
+(no correctness payoff this spec could measure); a later refactor finds them
+with `git grep -n "entry - stop\|stop_loss - entry\|/ risk"`.
+
 F2. **Each 60s `poll()` decodes the full tables several times.** `PlanStore.get/update/open_plans` each call `list_all()`, and `TradeLog._all()` reads the whole trades table per lookup.
 F3. **Complexity hotspots:** `trade_chart.generate_trade_chart` (191), `retrospective.build_daily_retrospective` (106), `scan_run._sync_run_scan` (96). The largest modules are `performance.py` (1787 lines) and `plan_manager.py` (1703 lines).

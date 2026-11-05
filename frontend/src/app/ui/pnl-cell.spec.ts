@@ -50,7 +50,7 @@ describe('PnlCell (v80 cell contract)', () => {
 
   it('colours a loss red, with both figures signed', () => {
     set(-1.35, -6.1);
-    expect(text()).toBe('-1.35% (-6.10 €)');
+    expect(text()).toBe('−1.35% (−6.10 €)');
     expect(cell().classList).toContain('neg');
   });
 

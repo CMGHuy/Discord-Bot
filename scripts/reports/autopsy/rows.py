@@ -20,6 +20,7 @@ from swingbot import config
 from swingbot.core.edge.frictions import apply_frictions, commission_r
 from swingbot.core.market.session import US_MARKET_TZ
 
+ISSUED_COLUMNS = ("plan_issued_at", "plan_issued_at_source")
 EXPORT_COLUMNS = (
     "row_kind", "trade_id", "plan_id", "ticker", "strategy", "horizon", "direction",
     "plan_created_at", "plan_first_status_at", "plan_status", "plan_status_reason",
@@ -27,8 +28,10 @@ EXPORT_COLUMNS = (
     "stop_loss", "take_profit", "target2", "closed_at", "exit_price", "close_reason",
     "last_leg_reason", "outcome", "r_realized", "mfe_r", "mae_r", "exit_efficiency",
     "holding_days", "stop_width_atr", "atr_pct", "regime2_state", "session_bucket",
-    "days_to_earnings", "rs_percentile",
+    "days_to_earnings", "rs_percentile", *ISSUED_COLUMNS,
 )
+#: Exports written before v200: no issue-time columns; every hour reads as unknown.
+LEGACY_EXPORT_COLUMNS = EXPORT_COLUMNS[:-2]
 REJECTION_COLUMNS = ("date", "reason", "count")
 
 #: Below this fraction of the entry the stop is no longer the planned risk
@@ -79,6 +82,9 @@ class BookRow:
     rs_percentile: float | None = None
     regime2_state: str | None = None
     session_bucket: str | None = None
+    hour_source: str = "unknown"
+    opened_at_utc: dt.datetime | None = None
+    closed_at_utc: dt.datetime | None = None
     bars: dict = field(default_factory=dict)
 
 
@@ -122,15 +128,23 @@ def _eastern_date(raw: str | None) -> str | None:
     return None if stamp is None else stamp.astimezone(US_MARKET_TZ).date().isoformat()
 
 
-def _alert_hour(first_status_at: str | None, created_at: str | None) -> int | None:
-    """Eastern hour the plan was issued. A created_at at exactly 00:00 UTC is a
-    bar date with no time (TradePlanV2.created_at), so it gives no hour."""
-    stamp = _timestamp(first_status_at)
-    if stamp is None:
-        stamp = _timestamp(created_at)
-        if stamp is None or stamp.astimezone(dt.timezone.utc).time() == dt.time(0, 0):
-            return None
+def _alert_hour(issued_at: str | None) -> int | None:
+    """Eastern hour of the plan's real issue time (TradePlanV2.issued_at: the live
+    stamp or the v200 Discord backfill). Nothing else is an hour source:
+    status_history[0].at is a fill or expiry time for non-market plans (lookahead)
+    and created_at is a bar date.
+    """
+    text = _text(issued_at)
+    if text is None or len(text) <= 10:
+        return None
+    stamp = _timestamp(text)
     return stamp.astimezone(US_MARKET_TZ).hour
+
+
+def _hour_source(hour: int | None, source: str | None) -> str:
+    if hour is None:
+        return "unknown"
+    return "discord" if _text(source) == "discord" else "live"
 
 
 def _close_reason(close_reason: str | None, last_leg_reason: str | None) -> str:
@@ -140,9 +154,11 @@ def _close_reason(close_reason: str | None, last_leg_reason: str | None) -> str:
 
 def _plan_fields(raw: dict) -> dict:
     created = _text(raw["plan_created_at"])
+    hour = _alert_hour(raw.get("plan_issued_at"))
     return {
         "plan_date": created[:10] if created else None,
-        "plan_hour": _alert_hour(raw["plan_first_status_at"], raw["plan_created_at"]),
+        "plan_hour": hour,
+        "hour_source": _hour_source(hour, raw.get("plan_issued_at_source")),
         "plan_status": _text(raw["plan_status"]),
         "plan_status_reason": _text(raw["plan_status_reason"]),
         "entry_type": _text(raw["entry_type"]),
@@ -152,14 +168,21 @@ def _plan_fields(raw: dict) -> dict:
     }
 
 
+def _utc(raw: str | None) -> dt.datetime | None:
+    stamp = _timestamp(raw)
+    return None if stamp is None else stamp.astimezone(dt.timezone.utc)
+
+
 def _trade_fields(raw: dict) -> dict:
     return {
         "entry_date": _eastern_date(raw["opened_at"]),
+        "opened_at_utc": _utc(raw["opened_at"]),
         "entry": _float(raw["entry"]),
         "stop": _float(raw["stop_loss"]),
         "take_profit": _float(raw["take_profit"]),
         "target2": _float(raw["target2"]),
         "exit_date": _eastern_date(raw["closed_at"]),
+        "closed_at_utc": _utc(raw["closed_at"]),
         "exit_price": _float(raw["exit_price"]),
         "close_reason": _close_reason(raw["close_reason"], raw["last_leg_reason"]),
         "outcome": _text(raw["outcome"]),
@@ -186,13 +209,15 @@ def _row(raw: dict, frictions: dict | None = None) -> BookRow:
     return row
 
 
-def _check_header(found, expected: tuple[str, ...], label: str) -> None:
+def _check_header(found, expected: tuple[str, ...], label: str,
+                  accepted: tuple[tuple[str, ...], ...] = ()) -> None:
     found = tuple(found or ())
-    if found != expected:
-        missing = [c for c in expected if c not in found]
-        extra = [c for c in found if c not in expected]
-        raise ValueError(f"{label}: header is not {','.join(expected)} "
-                         f"(missing {missing}, extra {extra})")
+    if found == expected or found in accepted:
+        return
+    missing = [c for c in expected if c not in found]
+    extra = [c for c in found if c not in expected]
+    raise ValueError(f"{label}: header is not {','.join(expected)} "
+                     f"(missing {missing}, extra {extra})")
 
 
 def read_input(path: Path, input_fingerprints: dict | None = None) -> str:
@@ -217,7 +242,7 @@ def load_rows(path: Path, *, frictions: dict | None = None,
     """Every export row, using one explicit friction snapshot and exact input hash."""
     settings = frictions if frictions is not None else friction_settings()
     reader = csv.DictReader(StringIO(read_input(path, input_fingerprints), newline=""))
-    _check_header(reader.fieldnames, EXPORT_COLUMNS, str(path))
+    _check_header(reader.fieldnames, EXPORT_COLUMNS, str(path), accepted=(LEGACY_EXPORT_COLUMNS,))
     return [_row(raw, settings) for raw in reader]
 
 

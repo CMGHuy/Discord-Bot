@@ -19,10 +19,12 @@ AGENTS_DIR = _REPO_ROOT / ".claude" / "agents"
 
 # Each v107 agent task appends its own entry.
 EXPECTED = {
+    # v199: verification-before-completion dropped from the preload; the
+    # report's verbatim TESTS: line carries that rule. TDD stays (spec v199,
+    # Decision 2).
     "task-implementer": {
         "model": "sonnet",
-        "skills": {"superpowers:test-driven-development",
-                   "superpowers:verification-before-completion"},
+        "skills": {"superpowers:test-driven-development"},
     },
     "task-reviewer": {
         "model": "sonnet",

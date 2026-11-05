@@ -12,4 +12,8 @@ describe('PanelError', () => {
     expect(el.getAttribute('role')).toBe('alert'); expect(el.textContent).toContain('Could not load'); expect(el.textContent).toContain('The admin is not responding.');
     (el.querySelector('button') as HTMLButtonElement).click(); expect(retry).toHaveBeenCalledTimes(1);
   });
+  it('names its Retry like sb-async does, so one rule styles both (v195 Phase 2)', () => {
+    const fixture = TestBed.createComponent(PanelError); fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('button')!.classList).toContain('retry');
+  });
 });

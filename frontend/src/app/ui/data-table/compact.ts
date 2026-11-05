@@ -40,7 +40,8 @@ export function hasCompact<T>(columns: ColumnDef<T>[], rendered: readonly string
   return resolve(columns, rendered).some((column) => column.compact !== undefined);
 }
 
-/** Rendered, not on the compact row, in rendered order: the drawer's fields. */
+/** Rendered columns outside the compact row, plus cells explicitly repeated
+ *  for their interactive content, in rendered order: the drawer's fields. */
 export function drawerColumns<T>(columns: ColumnDef<T>[], rendered: readonly string[]): ColumnDef<T>[] {
-  return resolve(columns, rendered).filter((column) => column.compact === undefined);
+  return resolve(columns, rendered).filter((column) => column.compact === undefined || column.compact.drawer === true);
 }

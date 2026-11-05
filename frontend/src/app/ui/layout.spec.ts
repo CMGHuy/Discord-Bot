@@ -119,9 +119,9 @@ describe('sb-panel (v80 D4, v186 D1)', () => {
       return f.nativeElement as HTMLElement;
     }
 
-    it('shows its description when the panel is hovered, and as an info hint for touch and keyboard', () => {
+    it('explains itself through the header hint, not a native title', () => {
       const el = mount('Profit already locked in.');
-      expect(el.getAttribute('title')).toBe('Profit already locked in.');
+      expect(el.hasAttribute('title')).toBe(false);
       const hint = el.querySelector('header sb-hint')!;
       expect(hint.querySelector('[role="tooltip"]')!.textContent!.trim()).toBe('Profit already locked in.');
       expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe('About Realised P&L');
@@ -133,14 +133,14 @@ describe('sb-panel (v80 D4, v186 D1)', () => {
       expect(el.querySelector('sb-hint')).toBeNull();
     });
 
-    it('keeps the tooltip but drops the second glyph when the panel has a hint of its own', () => {
+    it('adds no title and no hint when the panel has a hint of its own', () => {
       const f = TestBed.createComponent(Panel);
       f.componentRef.setInput('heading', 'Open positions');
       f.componentRef.setInput('description', 'Every plan by stage.');
       f.componentRef.setInput('descriptionHint', false);
       f.detectChanges();
       const el = f.nativeElement as HTMLElement;
-      expect(el.getAttribute('title')).toBe('Every plan by stage.');
+      expect(el.hasAttribute('title')).toBe(false);
       expect(el.querySelector('sb-hint')).toBeNull();
     });
   });
@@ -318,7 +318,7 @@ describe('sb-panel header: one height, one baseline (v179 §3.3, §3.4)', () => 
 
   it('keeps one gap between the header and the first row of the body', () => {
     expect(PANEL).toContain(':host ::ng-deep .panel > .body > :first-child { margin-top: 0; }');
-    expect(ruleIn(PANEL, '.body')).toContain('padding: var(--space-14)');
+    expect(ruleIn(PANEL, '.body')).toContain('padding: var(--panel-pad)');
   });
 
   it('allocates header width to actions even when a toolbar has size containment', () => {
@@ -331,6 +331,27 @@ describe('sb-panel header: one height, one baseline (v179 §3.3, §3.4)', () => 
   it('wraps long headings within the padded header', () => {
     expect(ruleIn(PANEL, 'h2')).toContain('max-width: 100%');
     expect(ruleIn(PANEL, 'h2')).toContain('overflow-wrap: anywhere');
+  });
+
+  /* v195 §1.4: the panel's padding follows row density (14px dense, 20px
+   * comfortable on a desktop fine pointer), header and body alike, so the
+   * title stays aligned with the content under it. */
+  it('pads the header, body, digest and problem rows with the density token', () => {
+    expect(ruleIn(PANEL, 'header')).toContain('padding: var(--space-10) var(--panel-pad)');
+    expect(ruleIn(PANEL, '.body')).toContain('padding: var(--panel-pad)');
+    expect(ruleIn(PANEL, '.panel-digest')).toContain('padding: var(--space-10) var(--panel-pad)');
+    expect(ruleIn(PANEL, '.panel-problem')).toContain('padding: var(--space-10) var(--panel-pad)');
+    expect(PANEL).not.toContain('var(--space-14)');
+  });
+
+  it('puts the hint right beside the title, before the actions (v195 Phase 2)', () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const f = TestBed.createComponent(Panel);
+    f.componentRef.setInput('heading', 'Exposure');
+    f.componentRef.setInput('description', 'What is at risk, by ticker.');
+    f.detectChanges();
+    const header = (f.nativeElement as HTMLElement).querySelector('header')!;
+    expect([...header.children].map((child) => child.tagName.toLowerCase())).toEqual(['h2', 'sb-hint', 'div']);
   });
 
   it('renders the actions slot inside the header, beside the label', () => {
@@ -563,11 +584,11 @@ describe('sb-drawer swipe down to close (phone sheet)', () => {
   });
 });
 
-/** v186 D1: the one panel title -- the same list is pinned in panel-header.spec.ts. */
+/** v186 D1, v195 Phase 2: the one panel title, 13px -- the same list is pinned in panel-header.spec.ts. */
 const PANEL_TITLE = [
   'font-family: var(--font-sans);',
   'font-weight: 600;',
-  'font-size: var(--text-body);',
+  'font-size: var(--text-table);',
   'color: var(--text);',
   'letter-spacing: normal;',
 ];
@@ -584,11 +605,12 @@ describe('sb-panel title and conditional header rule (v186 D1, D2)', () => {
     return { header: el.querySelector('header'), body: el.querySelector('.body')! };
   }
 
-  it('sets the title in the UI face, 600, at body size, as the text was given', () => {
+  it('sets the title in the UI face, 600, at the 13px table step, as the text was given', () => {
     const h2 = ruleIn(PANEL, 'h2');
     for (const declaration of PANEL_TITLE) expect(h2, declaration).toContain(declaration);
     expect(h2).not.toContain('text-transform');
     expect(PANEL).not.toContain('<h2 class=');
+    expect(h2).not.toContain('--text-body');
   });
 
   it('keeps a 1px header rule on every header, transparent unless ruled', () => {
@@ -624,7 +646,7 @@ describe('sb-panel title and conditional header rule (v186 D1, D2)', () => {
     const { header, body } = mount({});
     expect(header).toBeNull();
     expect(body.classList).not.toContain('tight');
-    expect(ruleIn(PANEL, '.body')).toContain('padding: var(--space-14)');
+    expect(ruleIn(PANEL, '.body')).toContain('padding: var(--panel-pad)');
   });
 
   it('draws the collapse toggle in a readable colour, not the rule colour', () => {
@@ -647,7 +669,7 @@ describe('panels whose body opens with a tab strip or a table are divided (v186 
   for (const [path, heading] of DIVIDED) {
     it(`${path}: "${heading}"`, () => {
       const source = readFileSync(join(process.cwd(), path), 'utf8');
-      const tag = source.match(new RegExp(`<sb-panel heading="${esc(heading)}"[^>]*>`))?.[0] ?? '';
+      const tag = source.match(new RegExp(`<sb-panel[^>]*? heading="${esc(heading)}"[^>]*>`))?.[0] ?? '';
       expect(tag, `no <sb-panel heading="${heading}"> in ${path}`).not.toBe('');
       expect(tag).toContain('[divided]="true"');
     });

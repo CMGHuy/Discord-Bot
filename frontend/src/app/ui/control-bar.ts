@@ -45,15 +45,25 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
       gap: var(--space-10);
       min-width: 0;
     }
+    /* v195 Phase 2: the same quiet control as sb-filter-bar's ghost
+       "Clear all" -- secondary text, the raised step on hover, the accent
+       only as the keyboard focus ring. It used to be an accent link, and
+       the accent is for selected state. */
     .clear {
-      font-size: var(--text-micro);
-      color: var(--accent);
-      background: none;
-      border: 0;
-      cursor: pointer;
       min-height: var(--control-h);
       min-width: var(--control-h);
+      padding: 0 var(--space-8);
+      background: transparent;
+      border: 0;
+      border-radius: var(--control-radius);
+      color: var(--text-secondary);
+      font: inherit;
+      font-size: var(--text-table);
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition);
     }
+    .clear:hover { color: var(--text); background: var(--surface-raised); }
+    .clear:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
     /* At phone width the two groups stack rather than compete for one row.
        Nothing is hidden — the plan forbids a control that vanishes silently.
        v179 §3.3: the filter selects become two equal columns, so five selects

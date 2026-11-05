@@ -2,11 +2,43 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { provideZonelessChangeDetection, signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AnalyticsStore } from '../../../stores/analytics.store';
 import { LIVE_LOSS_LOOKS_CAVEAT, LIVE_LOSS_MEANING } from '../analytics.columns';
 import { EdgeTab } from './edge';
+import { Hint } from '../../../ui/hint';
+import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
+
+/** The text of the sb-hint whose aria label is `label` (A4 audit). */
+function hintText(fixture: ComponentFixture<unknown>, label: string): string {
+  const hint = fixture.debugElement
+    .queryAll(By.directive(Hint))
+    .map((debug) => debug.componentInstance as Hint)
+    .find((h) => h.label() === label);
+  if (!hint) throw new Error(`no sb-hint labelled "${label}"`);
+  return hint.text();
+}
+
+describe('EdgeTab hint copy (A4 audit)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('Live loss watch hint names its population and basis', () => {
+    const { fixture } = render(stub());
+    const text = hintText(fixture, 'Live loss watch definition');
+    expect(text).toContain('opened on or after 2026-10-16');
+    expect(text).toContain(PERFORMANCE_CAVEAT);
+  });
+
+  it('Win-rate drift hint names N and ExpR beside the win rate', () => {
+    const { fixture } = render(stub());
+    const text = hintText(fixture, 'Win-rate drift definition');
+    expect(text).toContain('N is the trade count behind each rate');
+    expect(text).toContain('Live ExpR');
+    expect(text).toContain(PERFORMANCE_CAVEAT);
+  });
+});
 
 const LOSS_ROW = {
   source: 'confluence', strategy: 'ALL', horizon: '4w', live_n: 24, live_wr: 41.7, live_expr: -0.25,

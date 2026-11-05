@@ -243,6 +243,34 @@ def is_nyse_regular_session(now: dt.datetime | None = None) -> bool:
     return RTH_OPEN <= et.time() < session_close(d)
 
 
+SESSION_REGULAR = "regular"
+SESSION_EXTENDED = "extended"
+SESSION_CLOSED = "closed"
+
+
+def session_state(now: dt.datetime | None = None) -> str:
+    """v201: the refresher's clock. Regular = NYSE regular session (holiday and
+    half-day aware); extended = the rest of the live tape; closed otherwise."""
+    if is_nyse_regular_session(now):
+        return SESSION_REGULAR
+    if is_tape_open(now):
+        return SESSION_EXTENDED
+    return SESSION_CLOSED
+
+
+def last_regular_close(now: dt.datetime | None = None) -> dt.datetime:
+    """v201: the UTC instant the latest NYSE session closed at or before now."""
+    et = now_et(now)
+    day = et.date()
+    for _ in range(14):
+        if day.weekday() < 5 and day not in NYSE_HOLIDAYS:
+            close = dt.datetime.combine(day, session_close(day), tzinfo=US_MARKET_TZ)
+            if close <= et:
+                return close.astimezone(dt.timezone.utc)
+        day -= dt.timedelta(days=1)
+    raise ValueError(f"no NYSE session closed in the 14 days before {et.isoformat()}")
+
+
 @functools.lru_cache(maxsize=1)
 def nyse_calendar() -> SessionCalendar:
     """Every NYSE session covered by the frozen holiday table."""

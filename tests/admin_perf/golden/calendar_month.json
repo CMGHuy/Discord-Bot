@@ -1,0 +1,98 @@
+{
+ "as_of": "2026-11-04T12:00:00+00:00",
+ "best_day": {
+  "date": "2026-11-03",
+  "net_pnl_amount": 163.5,
+  "net_r": 2.2,
+  "trade_count": 2,
+  "win_rate": 100.0
+ },
+ "day_of_week": [
+  {
+   "avg_pnl_amount": -4.34,
+   "avg_r": -0.1,
+   "trade_count": 2,
+   "weekday": "Mon",
+   "win_rate": 50.0
+  },
+  {
+   "avg_pnl_amount": 81.75,
+   "avg_r": 1.1,
+   "trade_count": 2,
+   "weekday": "Tue",
+   "win_rate": 100.0
+  },
+  {
+   "avg_pnl_amount": null,
+   "avg_r": null,
+   "trade_count": 0,
+   "weekday": "Wed",
+   "win_rate": null
+  },
+  {
+   "avg_pnl_amount": 43.25,
+   "avg_r": 1.0,
+   "trade_count": 1,
+   "weekday": "Thu",
+   "win_rate": 100.0
+  },
+  {
+   "avg_pnl_amount": null,
+   "avg_r": null,
+   "trade_count": 0,
+   "weekday": "Fri",
+   "win_rate": null
+  }
+ ],
+ "days": [
+  {
+   "date": "2026-11-02",
+   "net_pnl_amount": -8.68,
+   "net_r": -0.2,
+   "trade_count": 2,
+   "win_rate": 50.0
+  },
+  {
+   "date": "2026-11-03",
+   "net_pnl_amount": 163.5,
+   "net_r": 2.2,
+   "trade_count": 2,
+   "win_rate": 100.0
+  }
+ ],
+ "filters": {
+  "horizons": [
+   "4w"
+  ],
+  "strategies": [
+   "S/R Confluence"
+  ]
+ },
+ "fx_missing_count": 0,
+ "longest_hold": {
+  "closed_at": "2026-11-03T20:30:00+00:00",
+  "held_hours": 174.5,
+  "opened_at": "2026-10-27T14:00:00+00:00",
+  "plan_id": null,
+  "ticker": "AAPL",
+  "trade_id": "golden-t2-usd-win"
+ },
+ "month": "2026-11",
+ "streak": {
+  "days": 1,
+  "direction": "winning"
+ },
+ "totals": {
+  "net_pnl_amount": 154.82,
+  "net_r": 2.0,
+  "trade_count": 4,
+  "win_rate": 75.0
+ },
+ "worst_day": {
+  "date": "2026-11-02",
+  "net_pnl_amount": -8.68,
+  "net_r": -0.2,
+  "trade_count": 2,
+  "win_rate": 50.0
+ }
+}

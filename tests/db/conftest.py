@@ -1,5 +1,6 @@
 """Real-PostgreSQL fixtures with fast transaction-rollback isolation."""
 import hashlib
+import importlib.util
 import os
 import pathlib
 
@@ -11,12 +12,19 @@ from swingbot.core.db.events import TABLE_CHANNELS
 from swingbot.core.db.schema import METADATA
 
 MAX_IDENTIFIER_BYTES = 63
-DEFAULT_TEST_URL = "postgresql+psycopg://swingbot:swingbot@127.0.0.1:55432/swingbot_test"
+_SWING_DB = importlib.util.spec_from_file_location(
+    "swing_db", pathlib.Path(__file__).resolve().parents[2] / "scripts/dev/swing_db.py")
+swing_db = importlib.util.module_from_spec(_SWING_DB)
+_SWING_DB.loader.exec_module(swing_db)
+DEFAULT_TEST_URL = swing_db.FALLBACK_URL  # only when no .env is readable
 
 
 def test_database_url() -> str:
-    """URL for the disposable Compose test database."""
-    return os.getenv("TEST_DATABASE_URL", DEFAULT_TEST_URL)
+    """URL for the test database inside the one swing-db container.
+
+    TEST_DATABASE_URL wins; else `.env`'s credentials via scripts/dev/swing_db.py,
+    read from the main checkout so worktrees work. Never print it."""
+    return swing_db.local_url()
 
 
 def _checkout_token(root: pathlib.Path | None = None) -> str:

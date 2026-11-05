@@ -52,14 +52,45 @@ each width (Playwright, never claude-in-chrome — `skills-tools.md`).
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234`
   must exit 0 at 390, 768 and 1440. It checks page overflow, off-screen and
   clipped text, sub-44px targets (phone/tablet), sub-11px text, baseline
-  offsets over 2px, and (`vcenter`) table-cell content or an icon more than
-  2px off centre, on every route and tab. A finding is fixed, not allowed;
+  offsets over 2px, (`vcenter`) table-cell content or an icon more than
+  2px off centre, and (`hint`) every visible `sb-hint`: it opens each one
+  (hover at 1440, tap at 390 and 768) and fails a popover that is
+  zero-size, outside the viewport, or not the topmost element at its centre
+  and at its top-left + 8px; the finding names the trigger's `aria-label`.
+  The `hint` check is the only tooltip probe: never an ad-hoc script.
+  (`rail-label`, v203) every rail entry (`nav.rail a.rail-link`, at 768 and
+  1440; the phone navigates by its tab bar) has an accessible name and a
+  visible `.rail-label` its name contains (the labelled rail has no hint per
+  link), and (`dock`, v203) at 1024px and wider the docked `aside.live-column`
+  never intersects `main.workspace`'s content box, while at smaller widths a
+  tap on the live strip opens a sheet that stays inside the viewport. The checks run
+  on every route and tab. A finding is fixed, not allowed;
   only canvas/third-party chart internals and browser-native parts go in
   `frontend/scripts/layout-audit.allow.json`, each entry with a reason and the
   date it was added. Entries nothing matches any more print as `STALE`; a run
   with `--prune` removes them. A route or tab added to the app is added to
   `ROUTES` in `frontend/scripts/layout-audit-lib.mjs` in the same commit. It
   is not in CI (spec v179 §6a.6).
+
+## UI tasks (v199)
+
+- **One page per task.** A UI fix-wave plan task covers one page (its route
+  and tabs) at all three widths; an audit that finds issues on several pages
+  produces one task per page. Open-ended "fix all audit findings" tasks ran
+  40–110 minutes each.
+- **Audit first.** A `task-implementer` on a UI task runs
+  `node frontend/scripts/layout-audit.mjs --base http://localhost:1234`
+  first, works from its findings, and finishes with it exiting 0 at 390,
+  768 and 1440: the audit covers the three widths the full-page
+  screenshots used to.
+- **Clipped screenshots only.** A screenshot is read only for a named
+  element: `node frontend/scripts/browse.mjs shots --path <route> --widths <w> --clip <css selector>`
+  captures that element's box plus 8px (an element taller than the
+  viewport whole). No match exits 1 naming the selector, never a full page.
+- **At most 4 image reads per task.** Every image read stays in context for
+  every later turn. Needing more is `BLOCKED:` with the reason.
+  `scripts/dev/agent_cost.py` counts image reads per run; nothing enforces
+  the cap mechanically.
 
 ## Tables and pagers
 

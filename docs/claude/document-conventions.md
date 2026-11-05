@@ -270,6 +270,8 @@ whole context window for a single file.
 |---|---|---|
 | Spec | ~350 lines / 20 KB | 500 lines — a spec is read **whole** |
 | Plan **file** | 1000–1500 lines | **1500 lines**, no exceptions |
+| Plan **task** (above v196) | ≤ 14 KB | **20 KB** (UTF-8 bytes, `### Task` to the next task or `# `/`## ` heading) — split into `<id>` + `<id>b` |
+| **Plan** (above v196) | — | **20 tasks** (ledger rows, `b` rows included) — split the spec |
 
 Over the limit, **split — do not compress.**
 
@@ -317,25 +319,38 @@ git either.
 
 ### Why splitting, and not writing less
 
-The measurement that decides it, across every plan the repo has:
+The first measurement here (v2–v24, 2.7–5.7 KB per task) concluded that cost per
+task is near-constant, so trimming tasks buys nothing. **That premise is false from
+at least v186 on.** Bytes per task, from each `### Task` heading to the next
+`### Task` or `# Phase` (v196 spec):
 
-| Plan | Size | Tasks | Per task |
-|---|---|---|---|
-| `v24-control-alignment` | 48 KB | 14 | 3.4 KB |
-| `v21-spa-refresh` | 136 KB | 51 | 2.7 KB |
-| `v2-unified-plan-engine` | 300 KB | 110 | 2.7 KB |
-| `v3-cockpit` | 652 KB | 115 | 5.7 KB |
+| Plan | Tasks | Median KB/task | p90 KB/task | Max | Tasks > 14 KB | Plan size |
+|---|---|---|---|---|---|---|
+| v186 | 12 | 11.9 | 17.9 | 20.4 | 5 | 179 KB |
+| v187 | 13 | 11.1 | 14.9 | 21.2 | 3 | 193 KB |
+| v190 | 25 | 10.6 | 20.9 | 32.2 | 7 | 351 KB |
+| v192 | 26 | 17.9 | 26.7 | 34.8 | 17 | 552 KB |
+| v194 | 28 | 12.8 | 18.4 | 23.9 | 11 | 407 KB |
+| v195 | 37 | 27.2 | 38.4 | 45.7 | 34 | 1146 KB |
 
-Cost per task is near-constant at 2.7–5.7 KB, in the tight plans and the
-landmines alike. **The landmines are not verbose, they are long** — 652 KB is 115
-tasks in one file. Trimming prose inside tasks buys almost nothing, and buys it at
-the worst price: `superpowers:writing-plans` requires real test code, real
-implementation code and exact file paths in every task, and a task thinned to hit
-a byte target becomes the "add appropriate error handling" placeholder that skill
-exists to forbid. A vague task costs the *executing* session far more than the
-bytes saved.
+About half of every plan is fenced code. Two things drive the cost. **Tasks got
+fat**: a task that rewrites a whole component pastes the whole component.
+**Plans got long**: writer output, part-writer re-reads and the controller's
+bookkeeping all scale with the task count, and the 1500-line file cap only moves
+tasks into more files (v195 has 22 parts).
 
-The lever is the number of tasks in one file, never the completeness of one task.
+So plans above v196 carry two caps, both checked by `plan_lint.py` in its one
+pass: **a task is at most 20 KB** (aim 14 KB), and **a plan is at most 20 tasks**.
+Splitting is the lever. An over-cap task becomes two tasks, `<id>` and `<id>b`,
+and an over-cap plan becomes two specs. **Compression stays forbidden.**
+`superpowers:writing-plans` requires real test code, real implementation code and
+exact file paths in every task, and a task thinned to hit a byte target becomes
+the "add appropriate error handling" placeholder that skill exists to forbid.
+A vague task costs the *executing* session far more than the bytes it saves.
+
+A limit that a script checks in one pass costs less than a process that tries to
+steer the writer. v193's slice/stat tooling was reverted for that reason, so the
+caps add no new tool, flag or agent step.
 
 ### Splitting
 
@@ -352,6 +367,20 @@ A spec over budget usually is not one spec. Check whether it is really two
 subjects sharing a document — `v22` and `v23` were separated during their own
 brainstorm for exactly this reason. Decompose first; split only what genuinely
 cannot be decomposed.
+
+**A plan over 20 tasks is the same case.** When `plan-writer` `mode=index` returns
+`SCOPE: <N> tasks > 20 -- split the spec`, the controller asks the partner where
+to cut (`AskUserQuestion`). Then:
+
+- The committed spec keeps its `vN` and is revised in place to hold the first
+  half, with a `**Split:** second half in vM` line under `Status:`.
+- The second half becomes a new spec, numbered through `/new-doc` (`vM`), with its
+  own `Panel:` run. The first half's panel trail stands, and it is not
+  re-panelled unless its scope changed beyond the cut.
+- The uncommitted index for `vN` is deleted and rewritten from the revised spec.
+
+A task split under the 20 KB cap that pushes the ledger past 20 follows the same
+rule. The cap is never raised.
 
 ### Being greppable is the other half
 
@@ -412,49 +441,30 @@ Be honest about a group of one. A phase that is genuinely a chain says so —
 and that sentence is worth as much as a wide group, because it stops the next
 session re-deriving the dependency graph to find out.
 
-## One full suite run, at the end of the plan
+## No full suite in a plan: the pipeline runs it
 
-**A plan verifies itself once, as its own final task — not after every step.**
-This applies to **every** suite a plan's own files touch, not just the Python
-one: a plan that only edits `frontend/` verifies itself once with
-`cd frontend && npm test`; a plan that touches both gets one full run of each,
-still only at the end. The per-task check is the narrow one — Python:
-`python scripts/dev/testrun.py file tests/test_<the file that task touched>.py`
-(~7s), or `... fast` (~27s) when the task's blast radius genuinely crosses
-files; frontend: `npm test -- --include <the one spec file that task
-touched>`. Neither `... full` nor a bare `npm test` (no `--include`) is a
-per-task step, and a plan that writes "run the full suite" into every task's
-verification block is writing a plan that costs an extra 40–260s (Python) or
-several seconds of a full Angular rebuild (frontend) per task for information
-the narrow run already gave.
+**A plan never schedules a full-suite task, Python or frontend.** The full
+suites run in the CI pipeline (`.github/workflows/deploy.yml`, one job per suite
+from `tests/suites.toml`, on push to `main`), which is faster than a local run
+and names the failing tests directly. The per-task check is the narrow one only
+— Python: `python scripts/dev/testrun.py file tests/test_<the file that task
+touched>.py` (~7s), or `... fast` (~27s) when the blast radius genuinely crosses
+files; frontend: `npm test -- --include <the one spec file that task touched>`.
+Neither `... full` nor a bare `npm test` is a plan step.
 
-So every plan ends with a verification task that runs each touched suite's
-full run **once**, over everything the plan implemented:
+A plan's last task is therefore its release/verification-by-pipeline task: the
+plan-specific checks that are not unit tests (layout audit, post-deploy timing,
+a measured claim) and the note that the pipeline is the gate. It carries no
+"run the full suite" step.
 
-```markdown
-### Task A9: Full-suite verification
+**After the plan's branch is merged to `main` and pushed, Claude watches the
+pipeline** (`working-conventions.md` § Pipeline watch): it follows the run to
+its end, and on a failure reads the failing tests from the run log, fixes them
+(re-running each alone with `testrun.py file`), commits, pushes and watches
+again, until the run is green. The plan is not closed out before that.
 
-Run `python scripts/dev/testrun.py full` (or dispatch the `test-runner`
-subagent) once, over all of Phase A. Expect `0 failed`, `0 xfailed`.
-If the plan touched `frontend/`, also run `cd frontend && npm test` once.
-**If either is not green, fix forward from those failures** — they are this
-plan's regressions, and the task is not done until both runs are.
-```
-
-That final run is the gate, and it is a real one: it is where the plan's
-regressions surface, so a red result is the start of the work, not a reason to
-re-litigate earlier tasks. Fix from the failures the run names.
-
-**A full run triggered mid-plan to chase a real, already-observed failure
-(a compile error, a suspicious ordering bug) is debugging, not a second
-verification task** — it doesn't need its own plan step and isn't the
-violation this section forbids. What the section forbids is *routinely
-scheduling* a full run after every task as if it were the per-task check.
-
-**After merging the plan's branch to `main`, do not run either suite again.**
-The branch was green when the merge started and a conflict-free merge does not
-produce code nobody ran. The one exception is a merge that actually resolved
-conflicts — that resolution is new, unrun code, and it gets the one run.
+**A full run triggered locally to chase a real, already-observed failure is
+debugging, not a plan step.** It is the exception, never the schedule.
 
 ## When a plan stops being live
 

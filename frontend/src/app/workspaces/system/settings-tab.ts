@@ -6,8 +6,8 @@ import { SettingField } from '../../api/models';
 import { SystemStore } from '../../stores/system.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
+import { Hint } from '../../ui/hint';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
-import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { dateTime } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
 import { edgeFades, revealActive } from '../../ui/scroll-rail';
@@ -26,11 +26,14 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
  * diff comes from the same `settings_diff` the save runs, over the same
  * overlay, so what is approved is what is written.
  */
+/** v194 A3: what the "restart" mark means. */
+export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
+
 @Component({
   selector: 'sb-settings-tab',
   host: { '(window:resize)': 'measureRail()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow, ConfirmDialog, Async],
+  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow, Async, Hint],
   template: `
     @if (store.settingsStale()) {
       <!-- Spec v14 Decision 8: warn, do not silently reload. Another
@@ -178,7 +181,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
                     <!-- Named per field rather than only in the diff: it is
                          the difference between a change that takes effect and
                          one that waits for a restart nobody knew to do. -->
-                    <span class="restart" title="Restart required to take effect">restart</span>
+                    <span class="restart">restart</span><sb-hint [text]="restartHint" label="About restart" align="left" />
                   }
                   @if (field.sensitive) {
                     <span class="secret">stored value hidden — type to replace</span>
@@ -214,6 +217,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
     </div>
     </div>
 
+    <!-- v195 Phase 4: Discard is the page header's; the bar keeps Preview and Save. -->
     <!-- the save bar --------------------------------------------------- -->
 
     @if (store.dirty()) {
@@ -223,15 +227,6 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
       </span>
 
       <sb-control-row class="bar-actions">
-        <button
-          sb-button
-          variant="ghost"
-          type="button"
-          [disabled]="!store.dirty() || store.saving()"
-          (click)="confirmDiscard.set(true)"
-        >
-          Discard
-        </button>
         <button
           sb-button
           variant="secondary"
@@ -313,15 +308,6 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
       </p>
     }
     </sb-async>
-
-    <sb-confirm-dialog
-      [open]="confirmDiscard()"
-      title="Discard unsaved settings?"
-      consequence="Every unsaved setting change in this form will be lost."
-      confirmLabel="Discard changes"
-      (confirmed)="discardDraft()"
-      (cancelled)="confirmDiscard.set(false)"
-    />
 
     <!-- audit, export, import ------------------------------------------ -->
 
@@ -633,6 +619,7 @@ import { controlOf, groupByControl, settingsCategories } from './settings-groupi
   `,
 })
 export class SettingsTab {
+  protected readonly restartHint = SETTINGS_RESTART_HINT;
   protected readonly store = inject(SystemStore);
 
   /** Settings is a fixed schema -- once loaded it is never meaningfully
@@ -650,7 +637,6 @@ export class SettingsTab {
   protected readonly exportUrl = this.store.exportUrl();
 
   protected readonly importText = signal('');
-  protected readonly confirmDiscard = signal(false);
   protected readonly activeCategory = signal<string | null>(null);
   private readonly rail = viewChild<ElementRef<HTMLElement>>('rail');
   protected readonly railFades = signal({ start: false, end: false });
@@ -698,11 +684,6 @@ export class SettingsTab {
    *  their own tests rather than methods on a 585-line component. */
   protected readonly groupsOf = groupByControl;
   protected readonly controlOf = controlOf;
-
-  protected discardDraft(): void {
-    this.store.resetDraft();
-    this.confirmDiscard.set(false);
-  }
 
   protected inputTypeOf(field: SettingField): 'text' | 'number' | 'password' {
     if (field.sensitive || field.type === 'password') return 'password';

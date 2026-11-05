@@ -8,12 +8,13 @@ import {
 } from '../../stores/reports.store';
 import { BarList } from '../../ui/bar-list';
 import { Chip } from '../../ui/chip';
+import { rMultiple } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 
-/** Signed R to two places, or an em dash: an absent figure is never zero. */
+/** Signed R to two places, or an em dash: an absent figure is never zero.
+ *  v195 §1.1: the shared rMultiple, true minus. */
 export function formatR(value: number | null): string {
-  if (value === null) return '—';
-  return `${value > 0 ? '+' : ''}${value.toFixed(2)}R`;
+  return rMultiple(value);
 }
 
 export function formatInterval(low: number | null, high: number | null): string {

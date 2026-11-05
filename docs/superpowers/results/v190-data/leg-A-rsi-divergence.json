@@ -1,0 +1,26 @@
+{
+  "RSI Divergence": {
+    "n_eval": 30751,
+    "wins": 11152,
+    "losses": 19599,
+    "scratches": 7149,
+    "timeouts": 168,
+    "closed": 38068,
+    "win_rate": 36.265487301225974,
+    "expectancy_r": -0.012714169381107495,
+    "excluded_share": 0.19220867920563203,
+    "avg_win_r": 2.0689413558106167,
+    "max_dd_pct": -99.99999999999949,
+    "runner_tp2_pct": 0.0,
+    "runner_trail_pct": 32.218436154949785,
+    "runner_be_pct": 64.47274031563846,
+    "runner_timeout_pct": 3.308823529411765
+  },
+  "_watchlist_slice": {
+    "RSI Divergence": {
+      "status": "thin",
+      "n": 0,
+      "expectancy_r": null
+    }
+  }
+}

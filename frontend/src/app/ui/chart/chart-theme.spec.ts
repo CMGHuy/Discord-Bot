@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveToken } from '../testing/resolve-token';
-import { chartOptions, chartPalette, tokenPx } from './chart-theme';
+import { TICK_FALLBACK_PX, chartOptions, chartPalette, tokenPx } from './chart-theme';
 
 /**
  * These tests exist to prove the fallbacks are not needed.
@@ -133,5 +133,48 @@ describe('tokenPx', () => {
     } as CSSStyleDeclaration);
 
     expect(tokenPx('--whatever', 11)).toBe(11);
+  });
+});
+
+/* -- v195 Phase 6 -- the canvas chart on the Graphite tokens ----------------- */
+
+describe('chart theme on the Graphite tokens (v195 Phase 6)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('draws the entry in the accent, a hue no chart series uses', () => {
+    // The Discord image's ENTRY_COLOR reads THEME["accent"] since V195-1, so
+    // the entry line is one colour in the app and in an alert. --chart-1 was
+    // the old Discord entry colour; the two must not converge again.
+    const palette = chartPalette();
+    expect(palette.accent).toBe(resolveToken('--accent'));
+    expect(palette.accent).not.toBe(resolveToken('--chart-1'));
+    expect(new Set([palette.up, palette.down, palette.accent]).size).toBe(3);
+  });
+
+  it('keeps the chrome neutral: no valence or accent hue on grid, axis, ground, ticks or volume', () => {
+    const palette = chartPalette();
+    const hued = new Set([palette.up, palette.down, palette.accent, palette.warn, palette.info]);
+    for (const [name, value] of Object.entries({
+      border: palette.border, axis: palette.axis, surface: palette.surface,
+      textMuted: palette.textMuted, volume: palette.volume, separator: palette.separator,
+    })) {
+      expect(hued.has(value), `palette.${name} is ${value}`).toBe(false);
+    }
+  });
+
+  it('falls back to the 12px micro floor when the tick size cannot be resolved', () => {
+    const palette = chartPalette();
+    const real = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) => {
+      if (el instanceof HTMLElement && el.style.fontSize.startsWith('var(')) {
+        return { fontSize: 'var(--text-micro)' } as CSSStyleDeclaration;
+      }
+      return real(el, pseudo);
+    });
+
+    expect(TICK_FALLBACK_PX).toBe(12);
+    expect(chartOptions(palette).layout?.fontSize).toBe(TICK_FALLBACK_PX);
   });
 });

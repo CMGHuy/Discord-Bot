@@ -12,7 +12,9 @@ import { ApiError } from '../api/api-error';
 import { routeRequest } from '../routing/route-request';
 import { Observable, forkJoin, map, of } from 'rxjs';
 import {
+  DataSourcesHealth,
   Logs,
+  Risk,
   ScanStatus,
   SettingField,
   Settings,
@@ -27,8 +29,25 @@ import {
  *  the bot is idle. */
 export type LogSource = 'bot' | 'admin';
 
-export const SYSTEM_TABS = ['settings', 'logs', 'scan'] as const;
+/** v195 §5.1 and correction 4: the bar reads Scan · Providers · Settings ·
+ *  Logs. The order is the bar's; the landing tab is not the first one, see
+ *  `systemTabFrom`. */
+export const SYSTEM_TABS = ['scan', 'providers', 'settings', 'logs'] as const;
 export type SystemTab = (typeof SYSTEM_TABS)[number];
+
+/**
+ * The tab a `?tab=` value opens. Settings stays the landing tab (correction
+ * 4): it holds the unsaved draft, and moving the landing tab would put a
+ * reader somewhere they did not expect with edits still pending. So an
+ * absent, empty or unknown value falls back to Settings, not to the first
+ * tab in the bar -- which also keeps a hand-edited URL showing something.
+ *
+ * One rule for the route resolver and the component, so the data the route
+ * loads and the tab the page shows can never disagree.
+ */
+export function systemTabFrom(raw: string | null | undefined): SystemTab {
+  return (SYSTEM_TABS as readonly string[]).includes(raw ?? '') ? (raw as SystemTab) : 'settings';
+}
 
 /** One entry of the settings audit log. Narrowed here rather than typed in
  *  `models.ts`: the file is JSONL appended to over time, so an older build's
@@ -95,12 +114,21 @@ interface SystemSlice {
   /** Which command is in flight, so one button locks rather than all four. */
   scanPending: ScanCommand | null;
   scanMessage: string | null;
-  /** v148 — provider rows and swallowed-error counts for the Scan tab's two
-   *  health panels. Null until the first answer. A failed refresh keeps the
+  /** v148 — provider rows and swallowed-error counts for the Providers tab's
+   *  two health panels (on the Scan tab until v195). Null until the first answer. A failed refresh keeps the
    *  last good payload and says so in `healthError`: a stale table that is
    *  labelled stale beats an empty one. */
   health: SystemHealth | null;
   healthError: string | null;
+  /** v195 §5.1 — the `GET /risk` payload, read here for its `scan_health`
+   *  block only (scan durations, the slowdown flag, the data source), which
+   *  the Providers tab shows beside the provider rows. The existing
+   *  endpoint `RiskStore` reads; System cannot inject that route-scoped
+   *  store, so it reads the endpoint itself (correction 3). Null until the
+   *  first answer; a failed refresh keeps the last good payload and says so
+   *  in `riskError`, as `health` does. */
+  risk: Risk | null;
+  riskError: string | null;
 
   /* bot restart */
   restarting: boolean;
@@ -257,7 +285,7 @@ function auditEntry(value: unknown): AuditEntry | null {
 }
 
 /**
- * Settings, logs and scan control — the three tabs of the System workspace.
+ * Settings, logs, scan control and provider health — the four tabs of the System workspace.
  *
  * One store rather than three because spec v13's table says so, and because
  * the three share one refetch story: `settings`, `scan` and `bot` are
@@ -313,6 +341,8 @@ export const SystemStore = signalStore(
     scanMessage: null,
     health: null,
     healthError: null,
+    risk: null,
+    riskError: null,
 
     restarting: false,
     restartMessage: null,
@@ -391,6 +421,22 @@ export const SystemStore = signalStore(
      *  a "nothing matched" empty state is measured against. */
     visibleFields: computed<SettingField[]>(() =>
       visibleSections().flatMap((section) => section.fields),
+    ),
+  })),
+
+  // v195 §5.1: scan health and the data source, moved here from RiskStore.
+  // The same expressions, on this store's own read of GET /risk.
+  withComputed(({ risk }) => ({
+    /** Oldest first, as the server sends them -- the sparkline's order. */
+    scanDurations: computed<readonly number[]>(
+      () => risk()?.scan_health?.durations_s ?? [],
+    ),
+    scanLatestS: computed(() => risk()?.scan_health?.latest_s ?? null),
+    scanSlowdown: computed(() => risk()?.scan_health?.slowdown ?? false),
+    /** Null before v106 and before the first answer: "no reading yet", which
+     *  the panel says in words, never an empty source name. */
+    dataSources: computed<DataSourcesHealth | null>(
+      () => risk()?.scan_health?.data_sources ?? null,
     ),
   })),
 
@@ -493,28 +539,53 @@ export const SystemStore = signalStore(
       }),
     });
 
-    /** v148: the Scan tab is the status AND the two health panels. One
-     *  resolver for both means the route's existing `scan`/`bot` refresh
-     *  updates all three; `routeRequest` turns a non-auth failure into a
-     *  completed `undefined`, so a health failure never blocks the status. */
-    const resolveScan = (): Observable<void> =>
-      forkJoin([resolveScanStatus(), resolveHealth()]).pipe(map(() => undefined));
+    /** v195 correction 3: the scan-health and data-source figures come from
+     *  GET /risk. Same error wording as the other reads. */
+    const resolveRisk = (): Observable<void> => routeRequest(api.risk(), {
+      start: () => undefined,
+      next: (risk) => patchState(store, { risk, riskError: null }),
+      error: (error) => patchState(store, {
+        riskError: error.code === 'unavailable'
+          ? 'The admin is not responding.' : error.message,
+      }),
+    });
+
+    /** v195 §5.1: the Providers tab is the provider rows and swallowed
+     *  errors (`/system/health`) and scan health and the data source
+     *  (`/risk`). `routeRequest` completes a non-auth failure with
+     *  `undefined`, so one failed read never blocks the other or the route. */
+    const resolveProviders = (): Observable<void> =>
+      forkJoin([resolveHealth(), resolveRisk()]).pipe(map(() => undefined));
+
+    /** The Scan tab is the scan status and the bot process. v148's two
+     *  health panels moved to the Providers tab (v195 §5.1), which reads
+     *  them through `resolveProviders` on the same `scan`/`bot` refresh. */
+    const resolveScan = (): Observable<void> => resolveScanStatus();
 
     const resolveTab = (tab: SystemTab): Observable<void> =>
-      ({ settings: resolveSettings, logs: resolveLogs, scan: resolveScan })[tab]();
+      ({
+        scan: resolveScan,
+        providers: resolveProviders,
+        settings: resolveSettings,
+        logs: resolveLogs,
+      })[tab]();
 
     const loadSettings = (): void => { resolveSettings().subscribe(); };
     const loadLogs = (): void => { resolveLogs().subscribe(); };
     const loadScan = (): void => { resolveScan().subscribe(); };
+    const loadProviders = (): void => { resolveProviders().subscribe(); };
     return {
       resolveSettings,
       resolveLogs,
       resolveScan,
       resolveHealth,
+      resolveRisk,
+      resolveProviders,
       resolveTab,
       loadSettings,
       loadLogs,
       loadScan,
+      loadProviders,
       currentValue,
 
       /**

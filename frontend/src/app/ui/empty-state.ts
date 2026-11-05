@@ -18,7 +18,7 @@ import type { AsyncEmptyReason } from './async';
   template: `
     <div class="empty">
       @if (reason(); as why) {
-        <span class="reason sb-label">{{ why === 'measured-zero' ? 'Result: 0' : 'Awaiting data' }}</span>
+        <span class="reason sb-label" [class.awaiting]="why === 'no-data-yet'">{{ why === 'measured-zero' ? 'Result: 0' : 'Awaiting data' }}</span>
       }
       <p class="empty-title">{{ title() }}</p>
       @if (hint(); as hintText) {
@@ -27,10 +27,16 @@ import type { AsyncEmptyReason } from './async';
     </div>
   `,
   styles: `
-    .empty { display: grid; justify-items: center; gap: var(--space-6); padding: var(--space-20); border: 1px dashed var(--border-strong); border-radius: var(--panel-radius); text-align: center; }
+    /* v195 Phase 2: the one empty style, inside the panel body. No box of
+       its own -- the panel is the frame -- centred and quiet. */
+    .empty { display: grid; justify-items: center; gap: var(--space-6); padding: var(--space-20) var(--panel-pad); text-align: center; }
     .empty-title { margin: 0; color: var(--text-secondary); font-size: var(--text-body); }
     .empty-hint { margin: 0; color: var(--text-muted); font-size: var(--text-table); }
+    /* A measured zero is a neutral fact (the muted label); missing data is
+       a caution. The words carry the difference, the colour repeats it. */
+    .reason.awaiting { color: var(--warn); }
   `,
+
 })
 export class EmptyStateComponent {
   readonly title = input.required<string>();

@@ -3,6 +3,7 @@ import { CalendarRow, GateRow } from '../../../api/models';
 import { ConfidenceFactor, Confirmation, QualityFactor } from '../../../stores/trade-detail.store';
 import { Panel } from '../../../ui/layout';
 import { Chip } from '../../../ui/chip';
+import { Hint } from '../../../ui/hint';
 import { InlineMd } from '../../../ui/inline-md';
 import { num, signed, text } from '../../../ui/format';
 
@@ -21,10 +22,13 @@ export function marginTone(
   return 'signed';
 }
 
+export const WHY_UNEVALUATED_HINT = 'No data: neutral points awarded.';
+export const WHY_GATE_OFF_HINT = 'This gate is off in the current config.';
+
 @Component({
   selector: 'sb-why-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Chip, InlineMd],
+  imports: [Panel, Chip, Hint, InlineMd],
   template: `
     @if (has('levels')) {
       <sb-panel heading="Levels & methods">
@@ -57,7 +61,7 @@ export function marginTone(
               <div class="factor-row">
                 <span>{{ row.factor }}
                   @if (row.unevaluated) {
-                    <sb-chip label="unevaluated" tone="muted" [caps]="false" title="no data — neutral points awarded" />
+                    <sb-chip label="unevaluated" tone="muted" [caps]="false" /><sb-hint [text]="unevaluatedHint" label="About unevaluated factors" align="left" />
                   }
                 </span>
                 <span class="point num" [class.muted]="row.unevaluated">{{ fmtSigned(row.points, 0) }}</span>
@@ -89,7 +93,7 @@ export function marginTone(
             <div class="gate-row">
               <div class="gate-summary">
                 <span>{{ gate.label }}</span>
-                @if (!gate.applies) { <sb-chip label="off" [caps]="false" title="off in current config" /> }
+                @if (!gate.applies) { <sb-chip label="off" [caps]="false" /><sb-hint [text]="gateOffHint" label="About gates that are off" align="left" /> }
                 <span>Value <span class="num">{{ gateValue(gate.value) }}</span></span>
                 <span>Threshold <span class="num">{{ fmtNum(gate.threshold) }}</span></span>
                 <span>Margin <span class="margin num" [class.pos]="coloredMargin(gate) > 0" [class.neg]="coloredMargin(gate) < 0">{{ fmtSigned(gate.margin) }}</span></span>
@@ -180,6 +184,8 @@ export class WhyPanel {
 
   protected readonly fmtSigned = signed;
   protected readonly caveat = GATE_CAVEAT;
+  protected readonly unevaluatedHint = WHY_UNEVALUATED_HINT;
+  protected readonly gateOffHint = WHY_GATE_OFF_HINT;
   protected readonly tone = computed(() => marginTone(this.status(), this.barsToExpiry(), this.sessionsSinceCreated()));
   protected readonly sources = computed(() => [
     { label: 'Target confirmed by', values: this.targetSources() },

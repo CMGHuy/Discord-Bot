@@ -325,6 +325,27 @@ FIELDS: list[Field] = [
                "this multiple of the plan's risk. 0 turns the veto off whatever the scope. "
                "v135's frozen grid is 0.5 / 0.75 / 1.0; the field stops at 1.0 so a plan's "
                "own first target can never be its blocker."),
+    Field("MARKET_ENTRY_NEXT_OPEN", "MARKET_ENTRY_NEXT_OPEN", "Trade Filters & Risk",
+          "Market plans wait for the next open (v192)",
+          type="checkbox", default="false",
+          help="v192. When on, every market plan is built PENDING and the alert reads "
+               "'Enter at the open (market-on-open)': at the next session's open it fills "
+               "at the open, or cancels when the open is at or through the stop or the "
+               "stop sits past the 2% ceiling from the open. Stop-entry, limit and v180 "
+               "Turtle Soup plans are untouched. Ships OFF: it changes every market "
+               "plan's fill and needs its own non-inferiority pre-registration before "
+               "it can go live."),
+    Field("GAP_RECLAIM_ATR", "GAP_RECLAIM_ATR", "Trade Filters & Risk",
+          "Gap-toward-stop reclaim threshold g x ATR14 (v192)",
+          type="float", default="0", min=0, max=1.0, step=0.05,
+          help="v192. With MARKET_ENTRY_NEXT_OPEN on: when the next open sits at or "
+               "beyond entry -/+ g x ATR14 toward the stop, the plan does not fill at "
+               "the open but rests as a DAY buy-stop (sell-stop for a short) at the "
+               "planned entry and cancels at the close without a reclaim. 0 turns it "
+               "off. Honoured only with MARKET_ENTRY_NEXT_OPEN on -- otherwise it is "
+               "set to 0 at load with an error in the log. Frozen grid 0.10 / 0.25 / 0.50. "
+               "v192 result: NO-LIFT at Stage 1 (docs/superpowers/results/2026-10-24-v192-gap-reclaim.md); "
+               "stays 0 until the partner decides."),
     Field("FIB_SR_CONFLUENCE_ATR", "FIB_SR_CONFLUENCE_ATR", "Trade Filters & Risk",
           "Fibonacci: Rolling S/R confluence tolerance (x ATR)",
           type="float", default="0.0", min=0.0, max=2.0, step=0.25,
@@ -840,7 +861,7 @@ FIELDS: list[Field] = [
                "Alpaca/yfinance call is made exactly as today and counted per hour by provider, "
                "kind, asker and outcome (the baseline week). 'on' = one shared, Postgres-"
                "coordinated cache with per-asker freshness windows, cross-process single-flight "
-               "and one money-first budget. Production ships 'count'."),
+               "and one money-first budget. Production runs 'on' since 2026-10-29."),
     Field("DAILY_DELTA_FETCH", "DAILY_DELTA_FETCH", "Data Sources",
           "Daily bars: delta fetch + write-back", type="checkbox", default="false",
           help="v171 D3/D4. On: the scan keeps closed daily bars on disk (Alpaca-basis "
@@ -850,7 +871,7 @@ FIELDS: list[Field] = [
     Field("PLAN_REBUILD_ENABLED", "PLAN_REBUILD_ENABLED", "Data Sources",
           "Rebuild plans from a last-second quote", type="checkbox", default="false",
           help="v171 D5. On: every main-scan and SHORT-lane plan is re-priced from a quote "
-               "at most 5 s old right before it posts, and its price gates re-run."),
+               "(a trade or bid/ask midpoint under 60 s old; the quote-to-persist clock is 5 s) right before it posts, and its price gates re-run."),
     Field("TAPE_SHARED_ENABLED", "TAPE_SHARED_ENABLED", "Data Sources",
           "Admin tape from the bot's shared copy", type="checkbox", default="false",
           help="v171 D7. On: the bot fetches the index tape once a minute into the shared "
@@ -918,6 +939,44 @@ FIELDS: list[Field] = [
           default="^GSPC=SPY,^NDX=QQQ,^DJI=DIA,^VIX=VIXY,SI=F=SLV",
           help="v171 D7. Shown as change % only, labelled as a proxy, when Yahoo is blank for "
                "the index. The last '=' separates the ETF (so 'SI=F=SLV' maps SI=F to SLV)."),
+    # v201: admin market refresher (compose service "refresher").
+    Field("ADMIN_REFRESHER", "ADMIN_REFRESHER", "Data Sources",
+          "Admin market refresher", type="select", default="on", options=["on", "off"],
+          help="v201. 'on' (with MARKETDATA_LAYER=on) = admin pages read prices and FX only "
+               "from what the refresher service stored; no page load fetches. "
+               "'off' = the pre-v201 request-time fetch paths, exactly."),
+    Field("ADMIN_REFRESH_REGULAR_S", "ADMIN_REFRESH_REGULAR_S", "Data Sources",
+          "Refresher cadence: regular hours (s)", type="number", default="30",
+          min=10, max=300, step=1,
+          help="v201. Seconds between refresher quote cycles during the NYSE regular session."),
+    Field("ADMIN_REFRESH_EXTENDED_S", "ADMIN_REFRESH_EXTENDED_S", "Data Sources",
+          "Refresher cadence: pre/after hours (s)", type="number", default="300",
+          min=60, max=3600, step=1,
+          help="v201. Seconds between refresher quote cycles in pre-market and after-hours."),
+    Field("ADMIN_REFRESH_CLOSED_S", "ADMIN_REFRESH_CLOSED_S", "Data Sources",
+          "Refresher cadence: market closed (s)", type="number", default="1800",
+          min=300, max=7200, step=1,
+          help="v201. Seconds between refresher quote cycles while the market is closed."),
+    Field("ADMIN_REFRESH_YF_FALLBACK_CAP", "ADMIN_REFRESH_YF_FALLBACK_CAP", "Data Sources",
+          "Refresher: yfinance fallback cap per cycle", type="number", default="25",
+          min=0, max=500, step=1,
+          help="v201. Most symbols one refresher cycle may fetch from yfinance when Alpaca has no quote."),
+    Field("ADMIN_REFRESH_MARK_TIMEOUT_S", "ADMIN_REFRESH_MARK_TIMEOUT_S", "Data Sources",
+          "Refresher: in-flight mark timeout (s)", type="number", default="120",
+          min=30, max=900, step=1,
+          help="v201. An in-flight refresh mark older than this is treated as abandoned."),
+    Field("ADMIN_REFRESH_FX_UNKNOWN_RETRY_S", "ADMIN_REFRESH_FX_UNKNOWN_RETRY_S", "Data Sources",
+          "Refresher: retry an unknown quote currency after (s)", type="number", default="21600",
+          min=600, max=604800, step=60,
+          help="v201. A symbol whose quote currency could not be resolved is retried after this long."),
+    Field("ADMIN_STALE_PRICE_REGULAR_S", "ADMIN_STALE_PRICE_REGULAR_S", "Data Sources",
+          "Price stale after: regular hours (s)", type="number", default="120",
+          min=30, max=1800, step=1,
+          help="v201. A stored price older than this is labelled stale during the regular session."),
+    Field("ADMIN_STALE_PRICE_EXTENDED_S", "ADMIN_STALE_PRICE_EXTENDED_S", "Data Sources",
+          "Price stale after: pre/after hours (s)", type="number", default="900",
+          min=60, max=7200, step=1,
+          help="v201. A stored price older than this is labelled stale in pre-market and after-hours."),
     # v148: ops alerts (spec O3/O4).
     Field("PROVIDER_FALLBACK_ALERT_PCT", "PROVIDER_FALLBACK_ALERT_PCT", "Data Sources",
           "Ops alert: provider fallback above (%)", type="number", default="20",
@@ -956,6 +1015,11 @@ FIELDS: list[Field] = [
           type="number", default="10", min=2, max=300, step=1,
           help="How often the Logs page auto-refreshes while its own 'Auto-refresh' checkbox is on. "
                "Takes effect on your next Logs page load -- no restart needed."),
+    Field("ADMIN_SLOW_REQUEST_MS", "ADMIN_SLOW_REQUEST_MS", "Admin UI", "Slow admin request log threshold (ms)",
+          type="number", default="2000", min=100, max=60000, step=100,
+          help="v205. An /api/v1 request slower than this logs one 'slow request' line in the admin log "
+               "(path, total, db time, statement count). Read on every request: a saved .env applies "
+               "on the next request, no restart."),
 
     # --- Discord Alerts (Cockpit v3 / Plan B) ---
     Field("ALERT_EMBED_LAYOUT", "ALERT_EMBED_LAYOUT", "Discord Alerts", "Alert embed layout",
@@ -1506,6 +1570,7 @@ _SEARCH_CLASSES = {
         "MA_RIBBON_CONFIRM_BARS", "SR_MIN_LEVEL_TOUCHES",
         "FIB_TARGET_1_0_EXTENSION", "PULLBACK_DRYUP_SCOPE", "PULLBACK_DRYUP_MAX_RATIO",
         "HEADROOM_SCOPE", "HEADROOM_MIN_R",
+        "MARKET_ENTRY_NEXT_OPEN", "GAP_RECLAIM_ATR",
         "SHORT_UNIVERSE_RESEARCH_MODE",
         "COMPRESSION_SHORT_RESEARCH_MODE",
         "TURTLE_SOUP_RESEARCH_MODE",
@@ -1566,6 +1631,7 @@ _MODE_VALUES = {
     "TURTLE_SOUP_RESEARCH_MODE": ("off", "structural"),
     "FVG_LEVELS_MODE": ("all", "displacement", "off"),
     "TRAINING_DATA_SOURCE": ("alpaca", "yfinance"),
+    "ADMIN_REFRESHER": ("on", "off"),
 }
 
 # v128: "off" is a signal change for FVG_LEVELS_MODE (it removes a level
@@ -1636,6 +1702,28 @@ def _note_floor_change(changed: dict, before) -> None:
         changed["CONFLUENCE_ATR_STOP_FLOOR"] = (before, 0.0)
 
 
+def enforce_gap_reclaim_coupling() -> bool:
+    """v192: GAP_RECLAIM_ATR > 0 is honoured only with MARKET_ENTRY_NEXT_OPEN on
+    (the veto decides at the next open, which only that knob creates). Otherwise
+    set it to 0.0 and log at ERROR. True when it zeroed the value."""
+    g = globals()
+    if g.get("GAP_RECLAIM_ATR", 0.0) > 0 and not g.get("MARKET_ENTRY_NEXT_OPEN", False):
+        log.error("GAP_RECLAIM_ATR=%r needs MARKET_ENTRY_NEXT_OPEN on -- treated as 0",
+                  g["GAP_RECLAIM_ATR"])
+        g["GAP_RECLAIM_ATR"] = 0.0
+        return True
+    return False
+
+
+def _settle_change(changed: dict, attr: str, before) -> None:
+    """Rewrite `changed[attr]` after a coupling rule moved the value the loop set."""
+    now = globals()[attr]
+    if before == now:
+        changed.pop(attr, None)
+    else:
+        changed[attr] = (before, now)
+
+
 def _apply_env() -> dict:
     """
     Reads every FIELDS entry from the current environment (after
@@ -1646,6 +1734,7 @@ def _apply_env() -> dict:
     changed = {}
     g = globals()
     floor_before = g.get("CONFLUENCE_ATR_STOP_FLOOR")
+    gap_before = g.get("GAP_RECLAIM_ATR")
     for f in FIELDS:
         raw = os.getenv(f.key, f.default)
         try:
@@ -1672,6 +1761,8 @@ def _apply_env() -> dict:
             changed[f.attr] = (old_value, new_value)
     if enforce_atr_band_coupling():
         _note_floor_change(changed, floor_before)
+    if enforce_gap_reclaim_coupling():
+        _settle_change(changed, "GAP_RECLAIM_ATR", gap_before)
     return changed
 
 

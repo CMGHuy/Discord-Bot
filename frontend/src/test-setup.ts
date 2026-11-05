@@ -1,4 +1,5 @@
 import { flattenedRootCss, readFixture } from './app/ui/testing/resolve-token';
+import { installPopoverPolyfill } from './app/testing/popover-polyfill';
 
 /**
  * Put the real design tokens into the test document.
@@ -64,3 +65,18 @@ document.head.appendChild(style);
  * with MOTION_TEST_DEFAULT_KEY in ui/motion/motion.service.ts.
  */
 (globalThis as Record<string, unknown>)['__sbMotionTestDefault'] = 'off';
+
+/**
+ * The Popover API, for every spec (spec v194 A1).
+ *
+ * sb-hint shows its popover through showPopover(), and every sb-panel heading
+ * renders an sb-hint, so a page spec that hovers any heading needs the API.
+ * Per-spec installation (the dialog polyfill's pattern) would leave that
+ * failure waiting in whichever page spec first hovers a panel. Patching
+ * HTMLElement.prototype from here is safe under `ng test` for the reason the
+ * motion default above records: prototypes are shared, only module
+ * singletons are not. See app/testing/popover-polyfill.ts for what it does
+ * and does not simulate.
+ */
+installPopoverPolyfill();
+

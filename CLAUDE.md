@@ -21,10 +21,10 @@ Far-off scheduled work (cron, `scripts/ops/`) also runs **on the VM**, never thi
 **Any live fix or config change made directly on production must be mirrored back into this repo and committed before the task is considered done.** Reasoning and what "mirrored" means: `docs/claude/working-conventions.md`.
 
 Entry points: `bot.py` and `admin_ui.py` (Flask API + Angular SPA in
-`frontend/`), two Docker containers off one image (`docs/deploy/`). `.env` is
+`frontend/`), three Docker containers off one image (`bot`, `admin`, `refresher`) (`docs/deploy/`). `.env` is
 the single config source, hot-reloaded via SIGHUP (schema: `swingbot/config.py`).
 **Drive bomeo-capital.com (and any browser) with Playwright only**, never claude-in-chrome. **Log in (bomeo-capital.com or a local instance) with `.env`'s `ADMIN_USERNAME`/`ADMIN_PASSWORD`, loaded inside the script and never printed or echoed; build any local test instance from those same `.env` values**, never the `admin`/`admin` default. **Partner-allowed (2026-10-21): reading `.env` (and scripts loading it) is fine; never print, echo, log or quote its values.** `skills-tools.md`.
-**A task that runs tests against the database runs `/replicate-prod-db` first** (sync the production data into the local replica) **into this project's one shared `swing-db` container**, never a per-task container or database; parallel tasks share it: `skills-tools.md`.
+**A task that runs tests against the database runs `/replicate-prod-db` first** (tops the local replica up with rows production gained) **in this project's one shared `swing-db` container** (port 56789, `.env` credentials: any worktree/agent may read them, never print them), never a per-task container or database: `skills-tools.md`.
 
 ## eToro roadmap: demo next, real money much later
 
@@ -88,7 +88,7 @@ v192). Detail: `edge-priorities.md`, `backtest-methodology.md` § Stage −2.
   `python scripts/dev/testrun.py changed` (diff-selected; widens when unsure),
   `... file tests/test_foo.py` (~7s), `... fast` (~27s) or `... suite <name>`.
   Dispatch the `test-runner` subagent for a full run so none of it reaches
-  this context. When a *plan* schedules its runs: "Naming specs and plans".
+  this context. Plans schedule no full run: "Naming specs and plans".
 - Hand wide/exploratory searches to the `Explore` agent so raw grep output
   never lands in this context.
 - **Route mechanical work to the role agents** (`task-implementer`,
@@ -104,7 +104,7 @@ hook's NEXT id blind** — verify with `grep -n "^### Task" <plan>`. Tooling:
 ## Commands
 
 ```bash
-python scripts/dev/testrun.py full             # full suite via -n 4 — the pre-commit gate
+python scripts/dev/testrun.py full             # full suite via -n 4 — the CI pipeline's job; local only to chase an observed failure
 python scripts/dev/testrun.py fast             # ~27s, skips the slow tier; auto-escalates if charts/templates touched
 python scripts/dev/testrun.py changed          # only tests reaching your diff; widens to full when unsure (--dry-run: print, don't run)
 python scripts/dev/testrun.py file tests/test_foo.py  # one file (~7s) — use this while iterating
@@ -122,8 +122,8 @@ failure. Baseline, and why counts/timings swing with machine load:
 `docs/claude/testing-cost.md`.
 
 **A failed test is fixed and re-run alone** (`testrun.py file …` or `pytest
-path::test`), never by re-running the whole suite. **No full suite after
-merging back to `main`**: it ran once, before the merge. **Commit in several
+path::test`), never by re-running the whole suite. **No plan or merge runs the
+full suite locally; CI does. After pushing, watch the run and fix failing tests until green** (`working-conventions.md` § Pipeline watch). **Commit in several
 scoped commits, never one big one** (`working-conventions.md`). **Every feature, fix or change you implement ships its own unit tests in the same work** (backend and frontend alike, edge and empty cases included), run green before you call it done; the partner never has to ask (`working-conventions.md` § How the human partner wants work done).
 
 **Tests live in suites** (`tests/suites.toml`; `testrun.py suite <name>`, `suites`
@@ -138,8 +138,8 @@ one job per suite from that file — never hand-list one. `testing-cost.md` § T
 **`docs/superpowers/{specs,plans}/YYYY-MM-DD-vN-<name>.md`, numbered at
 creation** from one repo-wide counter (doc filenames + commit log), recomputed
 right before the commit. `Bump:` states a level only, never a version number.
-**No plan file over 1500 lines** — split into `_N` parts, never compress a
-task. **Full suite once per plan, as its final task.** Specs and plans are
+**No file over 1500 lines, no task over 20 KB, no plan over 20 tasks** — split,
+never compress a task. **No plan schedules a full suite; CI runs it.** Specs and plans are
 committed on `main` **the moment written (each plan index/part once `plan_lint.py` passes), never left uncommitted**; branch only to implement. Run `/new-doc`; detail: `document-conventions.md`, `document-lifecycle.md`.
 **Write a plan in two phases** after `plan-briefer` (Sonnet) gathers the code
 into one brief: `plan-writer` `mode=index`, then one (its **Goal** explains *why* and *what changes*: `document-conventions.md`)

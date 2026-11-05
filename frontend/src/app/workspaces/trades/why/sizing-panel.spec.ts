@@ -24,7 +24,7 @@ describe('SizingPanel', () => {
     expect(f.nativeElement.querySelector('.section-help')?.textContent?.replace(/\s+/g, ' ').trim())
       .toBe('Position size is snapshotted when the trade opens. A trade with no sizing snapshot was logged before that feature existed.');
     expect(rows(f).slice(0, 4)).toEqual([
-      ['Shares', '1,234'], ['Deployed', '12,345.60'], ['Sizing mode', 'risk'], ['Working stop', '98.50'],
+      ['Shares', '1,234.4'], ['Deployed', '12,345.60'], ['Sizing mode', 'risk'], ['Working stop', '98.50'],
     ]);
   });
 
@@ -42,7 +42,8 @@ describe('SizingPanel', () => {
     const chip: HTMLElement = f.nativeElement.querySelector('dl > div:last-child sb-chip');
     expect(chip?.textContent?.trim()).toBe('fragile');
     expect(chip?.querySelector('.warn')).not.toBeNull();
-    expect(chip?.getAttribute('title'))
+    expect(chip!.hasAttribute('title')).toBe(false);
+    expect(f.nativeElement.querySelector('dl > div:last-child sb-hint [role="tooltip"]')!.textContent!.trim())
       .toBe('The stop sits inside 90th-percentile gap noise: an overnight gap can jump it.');
   });
 
@@ -59,4 +60,9 @@ describe('SizingPanel', () => {
     expect(f.nativeElement.textContent).not.toContain('%');
     expect(f.nativeElement.querySelector('sb-chip')).toBeNull();
   });
+  it('keeps a fractional share count, two decimals at most (v194 B4)', () => {
+    expect(rows(mount({ shares: 2.72 }))[0]).toEqual(['Shares', '2.72']);
+    expect(rows(mount({ shares: 3 }))[0]).toEqual(['Shares', '3']);
+  });
+
 });
