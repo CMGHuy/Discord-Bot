@@ -174,7 +174,7 @@ No Stage 1 report exists, so there are no component-side dollar-exceedance count
 
 ### Observations
 
-Every cell has observed N above its target N, yet none meets the 0.10R MDE ceiling. The cause is paired-row scarcity: only 728 / 357 / 77 paired rows come from tens of thousands of stratum rows, because most band plans are newly admitted and have no baseline twin. The ceiling, windows and cells are frozen and are not widened.
+None of the three cells meets the 0.10R MDE ceiling. `target N` is the projected VALIDATION N (observed N scaled by the VALIDATION/fold-train day ratio, about 0.437), so observed N above target N holds by construction and does not mean the sample was large enough. Paired-row scarcity is the cause, though not the whole story: most band plans are newly admitted and have no baseline twin, and most baseline plans also lose their band twin (Stage -1 `removed`). About 81% of the floor-moved stratum was never seen by the paired estimator (newly admitted 32,075 of 39,492 at k0.75). Closing the arm is therefore not evidence that ATR bands do not pay; it records that this paired design cannot measure them. For future stop-change specs, check the paired count at Stage -1, before Stage 0. Cells looked at: 3 per arm, 6 in the family; the ledger `n` is the k0.75 cell's paired N.: only 728 / 357 / 77 paired rows come from tens of thousands of stratum rows, because most band plans are newly admitted and have no baseline twin. The ceiling, windows and cells are frozen and are not widened.
 
 ## Arm R (second)
 
@@ -202,7 +202,7 @@ No Stage 1 report exists, so there are no component-side dollar-exceedance count
 
 ### Observations
 
-Every cell has observed N above its target N, yet none meets the 0.10R MDE ceiling. As with arm K, paired-row scarcity is the cause: only 1487 / 997 / 342 paired rows come from tens of thousands of stratum rows, because most band plans are newly admitted and have no baseline twin. The ceiling, windows and cells are frozen and are not widened.
+None of the three cells meets the 0.10R MDE ceiling. `target N` is the projected VALIDATION N (observed N scaled by the VALIDATION/fold-train day ratio, about 0.437), so observed N above target N holds by construction and does not mean the sample was large enough. Paired-row scarcity is the cause, though not the whole story: most band plans are newly admitted and have no baseline twin, and most baseline plans also lose their band twin (Stage -1 `removed`). About 81% of the floor-moved stratum was never seen by the paired estimator (newly admitted 35,742 of 43,188 at k0.75). Closing the arm is therefore not evidence that ATR bands do not pay; it records that this paired design cannot measure them. For future stop-change specs, check the paired count at Stage -1, before Stage 0. Cells looked at: 3 per arm, 6 in the family; the ledger `n` is the k0.75 cell's paired N. The ceiling, windows and cells are frozen and are not widened.
 
 ## Family (Holm)
 

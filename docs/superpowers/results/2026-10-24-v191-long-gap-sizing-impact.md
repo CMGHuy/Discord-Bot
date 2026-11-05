@@ -12,7 +12,7 @@ Each closed long (status win/loss/closed, direction bullish) is sized twice at a
 
 | Measure | Value |
 |---|---|
-| Closed longs in the book | 773 |
+| Closed longs in the book (closes 2026-07-06 to 2026-11-05, production replica) | 773 |
 | Analysed (R computable) | 772 |
 | p99 from a stored stamp / from bars / none | 0 / 761 / 11 |
 | Gap-sized (share cut) | 757 (98.1%) |
@@ -62,6 +62,12 @@ After (gap sizing):
 - No long carried a down-gap stamp before v191 shipped; its p99 is recomputed from the cached daily bars before the open, so a bar-cache gap shows up as `none` (size unchanged).
 - R, win rate and ExpR are identical on both sides by construction (R is measured on the stop); only dollars move.
 - A gap beyond the ticker's own p99 can still exceed the budget; the exceedance rows count those losses.
+
+## Reading the dollar change (quant-researcher advisories, close-out)
+
+- **Part of the drop is a size effect.** The after side risks about a third of the dollars at the stop (mean cut 66.9%) on a book with negative mean R, so a uniform 66.9% cut alone would take -$6,778 to about -$2,244. Only the remainder, down to -$1,462, comes from the gap-weighted cut. Before and after do not carry equal exposure.
+- **Concentration.** Four of the five worst pre-change losses closed on 2026-08-04, one gap day; the dollar change leans on a few gap events, and the share carried by the top one or two dates was not computed.
+- **Bootstrap drawdown percentiles resample trades i.i.d.** (`ruin.simulate`), which breaks up same-day clusters like 2026-08-04 and understates tail drawdown on both sides. Read them as optimistic, not as clustered intervals.
 
 ## Rollback
 
