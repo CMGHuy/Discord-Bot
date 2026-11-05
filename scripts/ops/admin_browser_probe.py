@@ -109,3 +109,107 @@ def run_label(samples) -> str:
     if values and all(value is False for value in values):
         return "quiet"
     return "mixed"
+
+
+def _first_heavy(calls) -> dict | None:
+    heavy = [c for c in calls if is_heavy(normalise_endpoint(c["url"]))]
+    return min(heavy, key=lambda c: c["start_s"]) if heavy else None
+
+
+def _page_row(page: dict) -> dict:
+    first = _first_heavy(page["calls"])
+    return {
+        "round": page["round"], "route": page["route"], "settle_s": page["settle_s"],
+        "capped": page["settle_s"] is None, "requests": len(page["calls"]),
+        "rpm": requests_per_minute(len(page["calls"]), page["window_s"]),
+        "first_heavy": None if first is None else normalise_endpoint(first["url"]),
+        "first_heavy_ttfb_ms": None if first is None else first["ttfb_ms"],
+        "scan_running": page["scan_running"],
+    }
+
+
+def _round_row(number: int, pages: list[dict]) -> dict:
+    """Rounds are reported apart (round 1 is cold); settle stats cover uncapped pages only."""
+    settled = [p["settle_s"] for p in pages if p["settle_s"] is not None]
+    capped = len(pages) - len(settled)
+    return {
+        "round": number, "pages": len(pages), "capped": capped,
+        "capped_share": round(capped / len(pages), 3) if pages else 0.0,
+        "settle_s": _spread(settled),
+        "endpoints": endpoint_stats(c for p in pages for c in p["calls"]),
+    }
+
+
+def summarise(raw: dict) -> dict:
+    """What every output renders: provenance, label, Goal figures, rounds, pages, idle."""
+    pages, idle = raw["pages"], raw["idle"]
+    rows = [_page_row(p) for p in pages]
+    endpoints = endpoint_stats(c for p in pages for c in p["calls"])
+    idle_rpm = requests_per_minute(len(idle["calls"]), idle["window_s"])
+    return {
+        "meta": dict(raw["meta"]),
+        "label": run_label(p["scan_running"] for p in pages),
+        "goal": {
+            "first_heavy_ms": _spread(r["first_heavy_ttfb_ms"] for r in rows
+                                      if r["first_heavy_ttfb_ms"] is not None),
+            "endpoints_over_5s": [r["endpoint"] for r in endpoints if goal_value(r) > GOAL_ENDPOINT_MS],
+            "idle_rpm": idle_rpm,
+        },
+        "rounds": [_round_row(n, [p for p in pages if p["round"] == n])
+                   for n in sorted({p["round"] for p in pages})],
+        "endpoints": endpoints,
+        "pages": rows,
+        "idle": {"requests": len(idle["calls"]), "window_s": idle["window_s"],
+                 "rpm": idle_rpm, "settle_s": idle.get("settle_s")},
+    }
+
+
+def _num(value, digits: int = 0) -> str:
+    return "-" if value is None else f"{value:,.{digits}f}"
+
+
+def _cells(spread: dict, digits: int = 0) -> str:
+    p90 = "thin" if spread["thin"] else _num(spread["p90"], digits)
+    return f"{spread['n']} | {_num(spread['median'], digits)} | {p90} | {_num(spread['max'], digits)}"
+
+
+def _endpoint_table(rows) -> list[str]:
+    return ["| Endpoint | n | Median ms | p90 ms | Max ms |", "|---|---|---|---|---|",
+            *(f"| `{r['endpoint']}` | {_cells(r)} |" for r in rows)]
+
+
+def _page_line(p: dict) -> str:
+    settle = "cap" if p["capped"] else _num(p["settle_s"], 1)
+    heavy = f"`{p['first_heavy']}`" if p["first_heavy"] else "-"
+    return (f"| {p['round']} | {p['route']} | {settle} | {p['requests']} | {p['rpm']} | "
+            f"{heavy} | {_num(p['first_heavy_ttfb_ms'])} | {p['scan_running']} |")
+
+
+def _round_lines(rnd: dict) -> list[str]:
+    return ["", f"## Round {rnd['round']}",
+            f"- Pages {rnd['pages']}, capped {rnd['capped']} ({rnd['capped_share']:.0%}); "
+            f"settle s over uncapped pages, n | median | p90 | max: {_cells(rnd['settle_s'], 1)}",
+            "", *_endpoint_table(rnd["endpoints"])]
+
+
+def render_markdown(report: dict) -> str:
+    meta, goal, idle = report["meta"], report["goal"], report["idle"]
+    lines = [
+        f"# Admin browser probe, {meta.get('berlin_time', '-')}", "",
+        f"- Label: **{report['label']}** (only `scan` counts toward the Goal)",
+        f"- Probe `{meta.get('probe_sha', '-')}`, image `{meta.get('image_tag') or '-'}`, base {meta.get('base', '-')}",
+        f"- Date {meta.get('date', '-')}, rounds {meta.get('rounds', '-')}, "
+        f"cap {meta.get('cap_s', '-')} s, quiet {meta.get('quiet_s', '-')} s",
+        f"- Open SSE streams at start: {_num(meta.get('sse_streams'))}",
+        "", "## Goal",
+        f"- First heavy call per page (ms), n | median | p90 | max: {_cells(goal['first_heavy_ms'])}",
+        f"- Endpoints over 5 s (p90, or max when thin): {', '.join(goal['endpoints_over_5s']) or 'none'}",
+        f"- Idle tab: {idle['requests']} requests in {idle['window_s']:.0f} s = {idle['rpm']} per minute",
+        "", "## All rounds", "", *_endpoint_table(report["endpoints"]),
+    ]
+    for rnd in report["rounds"]:
+        lines += _round_lines(rnd)
+    lines += ["", "## Pages", "",
+              "| Round | Route | Settle s | Requests | Per min | First heavy | TTFB ms | Scan |",
+              "|---|---|---|---|---|---|---|---|", *(_page_line(p) for p in report["pages"])]
+    return "\n".join(lines) + "\n"

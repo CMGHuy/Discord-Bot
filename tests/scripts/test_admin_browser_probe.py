@@ -4,6 +4,7 @@ Only the Playwright loop goes without a unit test (spec P1-a); every metric
 the Goal reads -- settle time, nearest-rank percentiles with the thin rule,
 the heavy-call rule, requests per minute, the run label -- is pinned here.
 """
+import json
 import sys
 from pathlib import Path
 
@@ -129,3 +130,79 @@ def test_requests_per_minute_needs_a_window():
 ])
 def test_only_a_scan_on_every_page_labels_the_run_scan(samples, label):
     assert probe.run_label(samples) == label
+
+
+# --- summarise and render (V206-1b) ------------------------------------------
+
+FIXTURE = Path(__file__).parent / "fixtures" / "admin_browser_probe_raw.json"
+
+
+@pytest.fixture
+def raw():
+    return json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+
+def test_summary_carries_provenance_and_the_run_label(raw):
+    report = probe.summarise(raw)
+    assert report["label"] == "scan"
+    assert report["meta"] == raw["meta"]
+
+
+def test_summary_goal_figures(raw):
+    goal = probe.summarise(raw)["goal"]
+    # First heavy TTFB per page: 1200, 4000, 800, 1100 -> n=4, thin, median rank 2 = 1100.
+    assert goal["first_heavy_ms"] == {"n": 4, "median": 1100, "p90": None, "max": 4000, "thin": True}
+    assert goal["endpoints_over_5s"] == ["/system/scan"]
+    assert goal["idle_rpm"] == 3.0
+
+
+def test_summary_rounds_are_apart_and_settle_stats_skip_capped_pages(raw):
+    first, second = probe.summarise(raw)["rounds"]
+    assert (first["round"], first["pages"], first["capped"], first["capped_share"]) == (1, 2, 1, 0.5)
+    assert first["settle_s"] == {"n": 1, "median": 3.5, "p90": None, "max": 3.5, "thin": True}
+    assert (second["capped"], second["settle_s"]["median"], second["settle_s"]["max"]) == (0, 1.2, 2.1)
+    assert [r["endpoint"] for r in second["endpoints"]] == ["/trades", "/dashboard", "/system/scan", "/health"]
+
+
+def test_summary_endpoints_pool_every_round(raw):
+    rows = probe.summarise(raw)["endpoints"]
+    assert [r["endpoint"] for r in rows] == ["/system/scan", "/trades", "/dashboard", "/health"]
+    assert rows[1] == {"endpoint": "/trades", "n": 4, "median": 900, "p90": None, "max": 4000, "thin": True}
+
+
+def test_page_rows_carry_cap_and_the_first_heavy_call(raw):
+    pages = probe.summarise(raw)["pages"]
+    capped = pages[1]
+    assert capped["capped"] is True and capped["settle_s"] is None
+    assert (capped["first_heavy"], capped["first_heavy_ttfb_ms"]) == ("/trades", 4000)
+    # /health starts first on the dashboard but is light; the heavy call is /dashboard.
+    assert (pages[0]["first_heavy"], pages[0]["first_heavy_ttfb_ms"]) == ("/dashboard", 1200)
+    assert (pages[0]["requests"], pages[0]["rpm"]) == (4, 43.6)
+
+
+def test_a_page_with_only_light_calls_has_no_first_heavy_call(raw):
+    raw["pages"] = [{**raw["pages"][0], "calls": raw["pages"][0]["calls"][:1]}]
+    page = probe.summarise(raw)["pages"][0]
+    assert (page["first_heavy"], page["first_heavy_ttfb_ms"]) == (None, None)
+    assert probe.summarise(raw)["goal"]["first_heavy_ms"]["n"] == 0
+
+
+def test_summary_idle(raw):
+    assert probe.summarise(raw)["idle"] == {"requests": 6, "window_s": 120.0, "rpm": 3.0, "settle_s": 2.4}
+
+
+def test_markdown_shows_the_label_thin_rows_cap_and_the_idle_rate(raw):
+    text = probe.render_markdown(probe.summarise(raw))
+    assert "Label: **scan**" in text
+    assert "Open SSE streams at start: 3" in text
+    assert "| `/system/scan` | 6 | 250 | 6,000 | 6,000 |" in text
+    assert "| `/trades` | 4 | 900 | thin | 4,000 |" in text
+    assert "| 1 | trades | cap |" in text
+    assert "## Round 2" in text
+    assert "6 requests in 120 s = 3.0 per minute" in text
+    assert "Endpoints over 5 s (p90, or max when thin): /system/scan" in text
+
+
+def test_markdown_shows_a_dash_for_an_unknown_stream_count(raw):
+    raw["meta"]["sse_streams"] = None
+    assert "Open SSE streams at start: -" in probe.render_markdown(probe.summarise(raw))
