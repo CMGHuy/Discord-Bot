@@ -68,7 +68,10 @@ one % axis with four benchmarks.
     stat and "Beat?" is computed in it:
     - **USD** (the default when the account currency is not USD): the bot's
       daily equity close is converted to USD at that session's rate.
-      Comparison = trading skill only.
+      Comparison = what the account is worth to a USD holder. *Panel
+      (quant-researcher):* this is **not** "trading skill only", because the
+      idle cash also moves with EUR/USD. The tooltip says so, and the
+      FX-neutral view of the trades is Bot · deployed (below).
     - **Account currency:** each index level is converted into the account
       currency at that session's rate. Comparison = what holding the index
       would have earned in the partner's wallet.
@@ -76,11 +79,20 @@ one % axis with four benchmarks.
       modes are the same series. A test pins that.
     - FX comes from the bot's existing FX store and refresher steps (the
       `fx_convert` path behind `admin/api_v1/money.py`). Do not add a second
-      FX source. A session with no rate shows "—" for that session in the
-      converted series and is counted as "missing", never as flat.
-      Exposure % is currency-free and does not change with the switch.
-      Bot · deployed converts its numerator and denominator in the same
-      currency, so its % only moves through the FX change of the open P&L.
+      FX source. The FX store keys rates by **Berlin day**
+      (`swingbot/core/marketdata/fx_convert.py:37`): an NYSE session maps to
+      the Berlin calendar day of its 16:00 ET close (the same date). The
+      admin reads FX cache-only (`fetch=False`), so the plan includes a
+      one-off **historical-rate backfill** back to `live_since` for the
+      account currency pair. A session with no rate after that shows "—" in
+      the converted series and counts as "missing" (see *Gaps*), never as
+      flat.
+    - Exposure % is currency-free and does not change with the switch.
+    - **Bot · deployed is always computed in account currency and is
+      FX-neutral:** its numerator is trade P&L only, never cash revaluation
+      (see below). It is the same series in both modes, and the switch
+      leaves it untouched. *Panel (quant-researcher):* converting the whole
+      equity delta would have booked cash FX moves as deployed return.
 
 ## Data
 
@@ -96,14 +108,33 @@ one % axis with four benchmarks.
   - Bot days are then aligned to benchmark sessions: for each NYSE session,
     the bot's close is the candle of that calendar day. A weekend/holiday
     candle (backfill) is not a session and is skipped. A session with no
-    candle is "missing" (gap, "—"), and the next session's return is taken
-    against the last present close, flagged as spanning the gap.
+    candle is "missing" (gap, "—"); see *Gaps* below.
 - **Daily return** `r_t = E_t / E_{t-1} - 1`.
-- **Rebase:** cumulative `Π(1+r) - 1` from the first session in range. The
-  paper account has no deposits or withdrawals, so `base_balance` changes
-  (if the partner ever edits it) are the one known break. *Builder's call:*
-  detect a `base_balance` change inside the range and show a marker. Don't
-  silently chain across it.
+- **Rebase:** the base is the **close of the session before the range's
+  first session**, so the first session's return is included. The chart's
+  0% point sits on that prior close, and `N` = the number of daily returns
+  actually used. Chart, Total % and the N on the tiles always agree. If no
+  prior close exists (the very start of the live book), the first session's
+  close is the base, and `N` counts one fewer.
+- **`base_balance` change:** the paper account has no deposits or
+  withdrawals, so an edit to `base_balance` is the one known break. The
+  return of the session containing the change is **excluded** from every
+  stat (Total %, drawdown, Sharpe, beta, alpha, capture, Beat?). The
+  cumulative line carries flat across it, and a marker on the chart names
+  it. *Panel (quant-researcher).*
+
+### Gaps (missing bot or FX sessions)
+
+*Panel (quant-researcher):* when a bot return spans one or more missing
+sessions (no equity candle, or no FX rate in the selected currency):
+
+- the index return for that pair is the **compounded `day_pct` over the same
+  span**, so the cumulative index curve never loses a day;
+- the spanning pair is **excluded from beta, alpha, Sharpe, capture and
+  Beat?**, which need one-session returns. It still counts toward Total %
+  and drawdown for both sides (same span, same compounding);
+- the daily table shows the missing sessions as "—" rows and the spanning
+  row marked "covers N sessions".
 
 ### Exposure and Bot · deployed (new stored field)
 
@@ -129,19 +160,55 @@ recovered from the existing columns. Add one column:
     checks the derivation against a fixture, not against live prices.
   - Follow `docs/claude/schema-evolution.md`: an Alembic revision, no
     read-time upcasting.
+  - **Seam** (*panel, staff-engineer*): the recorder builds its row from
+    `EquitySnapshot`/`snapshot_at` in `swingbot/core/tracking/equity.py`
+    (`equity_recorder.py:73-77`, `:90`). So `EquitySnapshot` gains
+    `open_notional` (and the per-session trade P&L used below), computed in
+    `equity.py`, the one equity definition. A test pins every existing
+    `EquitySnapshot` field, and the Dashboard candles, unchanged on a
+    fixture.
+  - **Production run of the backfill** (*panel, staff-engineer, was
+    BLOCKING*), following `schema-evolution.md` § Before running a data
+    revision on production:
+    - Order: dry-run on the local replica (`/replicate-prod-db`) printing
+      the row counts it would touch, then the PITR/backup check, then the
+      run in the `bot` container
+      (`docker compose exec -T bot python scripts/data/backfill_equity_samples.py --open-notional`).
+    - The script touches **only** `open_notional`/`open_notional_approx`,
+      never the existing equity columns.
+    - **Rollback:** `UPDATE equity_samples SET open_notional = NULL,
+      open_notional_approx = NULL WHERE open_notional_approx IS TRUE`
+      (recorder-written rows keep their values). The plan writes this into
+      its production task.
+  - **Long-run cost:** `open_notional_approx` stays as long as approximated
+    rows are in range. Nothing removes it, and it costs one boolean per row.
+    The owner is the equity module (`equity.py`).
 - **Exposure_t** = mean over the session's samples of
   `open_notional / equity`, as a %.
   - Time-weighted, so a position held for an hour does not count as a full
     day.
   - A session with no `open_notional` values shows exposure "—".
-- **Bot · deployed daily return** = `(E_t - E_{t-1}) / D_t`, where `D_t` is
-  the session's mean `open_notional`. *My call:* the time-weighted average,
-  not the prior close, because a trade opened and closed intraday has a prior
-  close notional of 0. That would divide by zero or explode.
-  - If `D_t` is 0 or missing, the day's deployed return is 0 for chaining and
-    shown "—" in the table.
-  - Cap the denominator below at 1% of equity to stop tiny exposures
-    producing absurd %s. *Builder may tune this, but must test it.*
+- **Bot · deployed daily return** (*redesigned after the panel,
+  quant-researcher*):
+  `r_dep_t = P_t / D_t`, where
+  - `P_t` = the session's **trade P&L only**: the change in (realized +
+    unrealized) trade P&L in account currency, from the previous session
+    close to this one. It is not the equity delta, so cash revaluation and
+    `base_balance` edits never enter it.
+  - `D_t` = the **peak** `open_notional` over the session's samples and the
+    previous close. A position held for one hour is divided by its full
+    notional, so short holds are not inflated (a time-weighted mean would
+    have inflated a 1-hour round trip about 6.5×).
+  - If `D_t` is below **5% of equity**, or missing, the session is **not
+    chained**: the deployed line carries flat and shows "—" in the table,
+    and the session is excluded from deployed stats. This replaces the
+    earlier 1% floor, which allowed 100× scaling.
+  - `r_dep_t ≤ −100%` cannot happen with a peak-notional denominator for
+    long positions. It can for shorts that gap past 100%. Such a session is
+    clipped at −100% and flagged. A test covers it.
+  - Label everywhere: **"on capital in trades — not account return"**.
+- **Exposure_t** keeps the time-weighted mean (it answers "how much of the
+  day was capital at work"). Only the deployed denominator uses the peak.
 
 ### Benchmark series (new table + refresher step)
 
@@ -170,19 +237,38 @@ recovered from the existing columns. Add one column:
   - After the close (and on start-up catch-up), it writes the official daily
     close with `final=true` and back-fills any missing sessions since the
     first equity session.
+  - **The full adjusted-history re-fetch runs once per session day**,
+    guarded by a stored "last full refresh" date (*panel, staff-engineer*).
+    It never runs on every post-close cycle.
   - It respects the existing scan-running skip that `_refresh_index` uses.
+  - `docs/deploy/DEPLOY_HETZNER.md` § The refresher service (v201) lists the
+    new step.
+  - **Refresher off** (`ADMIN_REFRESHER=off`): `benchmark_bars` stops
+    filling. The tab shows the index lines up to the last stored session with
+    an empty-state note ("Benchmarks not updating — refresher is off").
+    With no rows at all it shows "No benchmark data yet". It never shows
+    zeros. A test covers both.
+  - **Long-run cost:** about 4 rows a session (~1,000 a year), owned by the
+    refresher. Nothing to remove.
 - **Source:** yfinance daily bars for `SPY`, `QQQ`, `^IXIC`, `^DJI`, like the
   tape (`marketdata/shared/tape.py`). Intraday comes from the existing
   `latest_prices` path (Alpaca for SPY/QQQ, the yfinance tape path for the ^
   symbols).
-  - If Yahoo returns nothing for an index, fall back through
-    `TAPE_PROXY_SYMBOLS` (`^DJI=DIA`). Add `^IXIC=ONEQ` to its default.
+  - If Yahoo returns nothing for an index, fall back to a proxy ETF. *Panel
+    (staff-engineer):* the proxies come from a **new config key
+    `BENCHMARK_PROXY_SYMBOLS`** (default `^IXIC=ONEQ,^DJI=DIA`), not from
+    `TAPE_PROXY_SYMBOLS`. That key also drives the tape
+    (`swingbot/core/marketdata/shared/tape.py:58-60`) and may be overridden
+    in the production `.env`. The tape is untouched, and the new key has a
+    safe default, so production needs no `.env` edit.
   - A proxy-sourced day is flagged and shown as such in the tooltip.
 - **Total return vs price:**
   - SPY and QQQ use `adj_close` (dividends included). That is what holding
     them actually earned.
-  - ^IXIC and ^DJI are price indexes and use `close`. The tooltip and a
-    footnote say "price only".
+  - ^IXIC and ^DJI are price indexes and use `close`. Their **chip labels
+    themselves** read "Nasdaq Comp. (price)" and "Dow (price)", and the
+    tooltip and footnote repeat it (*panel, financial-advisor*). The
+    default-on pair stays SPY + QQQ, both total return.
   - *My call.* The partner may prefer DIA/ONEQ total-return ETFs instead.
     Flag it, don't decide it silently.
 - **Session calendar:** the bot's existing NYSE session helper
@@ -203,19 +289,52 @@ selected range only.
 | Beta | OLS slope of bot-account daily returns on index daily returns |
 | Alpha | annualised Jensen alpha, `(mean(r_bot) - β·mean(r_idx)) × 252`. **Risk-free = 0**, labelled "rf = 0" |
 | Sharpe | `mean(r)/std(r) × √252`, rf = 0, sample std (ddof=1) |
-| Up-capture | `Σ r_bot on index-up days / Σ r_idx on index-up days`, % |
+| Up-capture | `Σ r_bot on index-up days / Σ r_idx on index-up days`, %. The tooltip states this sum-ratio formula (not the geometric standard form) |
 | Down-capture | the same over index-down days (flat days excluded) |
 | Capture ratio | up-capture / down-capture |
 | Beat count | sessions where `r_bot > r_idx`, split up and down |
+| Bot $ drawdown | the max drawdown of the account line in money (selected currency) |
+| Losing-day streak | the longest run of consecutive negative-return sessions for each bot line |
 
-**Small-sample guard:**
-- Beta, alpha, Sharpe and capture show "—" with the tooltip "needs ≥ 20
-  sessions" when the range has fewer than 20 joined sessions.
-- Every stat tile shows its `N` (sessions).
-- The live book is young, so these numbers are noisy. The tab says so in one
-  line under the strip ("N sessions — treat beta/alpha as indicative").
+The last two are from the *panel (financial-advisor)*: drawdown in units a
+retail trader feels.
+
+**Small-sample guard** (tightened by the *panel, quant-researcher*):
+- Beta and Sharpe need **N ≥ 20** one-session pairs. Alpha needs **N ≥ 60**.
+  Below that they show "—" with the tooltip "needs ≥ N sessions".
+- Capture needs **≥ 10 index-up and ≥ 10 index-down sessions** each.
+- Beta shows its standard error, and alpha its t-stat, next to the value
+  ("β 0.42 ± 0.18", "α +6.1% (t 0.9)").
+- Every stat tile shows its `N`.
+- The tab says in one line under the strip: "N sessions, paper book —
+  beta/alpha are indicative, not evidence of edge."
+- **Multiple comparisons:** alpha is computable for 4 indexes × 2
+  currencies × 6 ranges. The **headline pair is fixed: SPY, USD, All**. It
+  is the only alpha shown in bold. Every other alpha cell is plain and
+  carries "1 of 48 cells" in its tooltip.
 - Never present alpha as edge. It is not a pre-registered measurement and
   `Edge:` stays `none`.
+- Deployed-line stats show the **share of sessions in range built from
+  approximated `open_notional`** next to them ("38% approx."), not only in a
+  tooltip (*panel, quant-researcher*).
+
+## Labelling: paper, pre-tax, not advice
+
+*Panel (financial-advisor), was BLOCKING.* The tab answers "worth running?",
+so its copy must not read as a verdict or a recommendation:
+
+- **A standing line under the Today card:** "Paper trades only. Returns are
+  pre-tax; bot figures include modelled frictions, indexes are buy-and-hold
+  with no costs. Not a recommendation or forecast." The frictions wording
+  names whatever `frictions.py` models; the plan verifies that.
+- **One sentence on tax drag** in the footnote: swing turnover is taxed as
+  short-term gains, so after-tax results would differ from this chart.
+- **"Beat?" and lead/lag are labelled descriptive:** the column header
+  tooltip says "this session's return was higher, not evidence of edge".
+- **The Today card's bot cells** read "unrealised · paper" while the session
+  is open.
+- **Bot · deployed** stays default-on (the partner asked for both lines), but
+  its chip and tooltip carry "on capital in trades — not account return".
 
 ## API
 
@@ -278,7 +397,12 @@ date range, with a one-line note. *My call.*
     per-page default.
 - **Remove the dead v94 overlay:**
   - drop `_index_benchmark` and `benchmark.spy_indexed` from the
-    equity-curve endpoint and `models.ts:653`;
+    equity-curve endpoint and `models.ts:653`, plus the `benchmarkSeries`
+    computed at `tabs/overview.ts:264-269`, and update the tests that pin
+    the shape *in the same task* (*panel, staff-engineer*):
+    `tests/admin/test_api_v1_analytics.py:347`,
+    `stores/analytics.snapshot.spec.ts:75`, `analytics.store.spec.ts:219`,
+    `tabs/overview.spec.ts:56`;
   - replace the two Overview caption notes with a one-line link "Compare
     with indexes → Benchmark tab".
 
@@ -311,6 +435,9 @@ tests. Otherwise v207's viewer matrix gains the route.
 - Alpha shown without its N and rf=0 label, or worded as proven edge.
 - Today's intraday figures shown without an "as of" stamp, or not marked
   final after the close.
+- Any return shown without the paper / pre-tax / not-advice line on the tab.
+- The USD mode described as "trading skill only".
+- A bot return spanning a gap compared with a one-session index return.
 
 ## Tests (ship with the work)
 
@@ -319,8 +446,16 @@ tests. Otherwise v207's viewer matrix gains the route.
   (Sharpe "—") inputs, and the N < 20 guard.
 - **Day-close equality:** this tab's daily equity closes equal the Dashboard
   `mtm_candles(…, '1D')` closes on the same fixture.
-- **Deployed denominator:** an intraday round-trip day, a zero-exposure day,
-  and the 1% floor.
+- **Deployed return:** an intraday round-trip day (peak denominator), a
+  zero-exposure day, the 5% no-chain threshold, a short gapping past −100%
+  (clipped and flagged), and a cash-FX-only day giving 0 deployed return.
+- **Gaps:** a missing bot session (index compounded over the span, the pair
+  excluded from beta/Sharpe/capture/Beat?), a `base_balance` change
+  excluded from stats, and rebase N matching the returns used.
+- **Guards:** N thresholds (20 / 60 / 10+10), beta SE and alpha t-stat on a
+  known fixture, and headline-alpha bolding.
+- **Labelling:** the paper/pre-tax line present, price-only chip labels,
+  and the refresher-off empty state.
 - **`open_notional`:**
   - the recorder writes it (shorts counted absolute, FX-converted);
   - the migration leaves old rows NULL;
@@ -350,3 +485,37 @@ tests. Otherwise v207's viewer matrix gains the route.
   ^IXIC/^DJI to ONEQ/DIA (one config line plus a label).
 - Once Stage 1 eToro demo trading lands (`docs/claude/etoro-roadmap.md`), a
   third bot line from the demo account balance could sit on the same chart.
+
+## Panel review
+
+Run 2026-11-05 on a6814db8: staff-engineer, financial-advisor, quant-researcher (serial).
+
+**BLOCKING**
+- staff-engineer: open_notional backfill rewrites prod rows with no run plan or rollback -- applied (dry-run on replica, PITR check, bot-container command, NULL-reset rollback, columns touched limited).
+- financial-advisor: figures not labelled pre-tax / pre-cost / paper -- applied (standing line under Today card, tax-drag footnote, anti-goal).
+- financial-advisor: "worth running?" + Beat?/lead-lag invite a verdict on a small paper book -- applied (paper/not-advice line, Beat? and lead/lag labelled descriptive, "not evidence of edge" under the strip).
+
+**ADVISORY**
+- quant-researcher: USD mode is not "trading skill only"; cash FX leaks into deployed numerator -- applied (USD mode relabelled; deployed redesigned on trade P&L only, FX-neutral, identical in both modes).
+- quant-researcher: time-weighted denominator inflates short holds, 1% floor allows 100x, r <= -100% -- applied (peak-notional denominator, 5% no-chain threshold, clip + flag at -100%, tests).
+- quant-researcher: gap-spanning bot returns paired with one-session index returns -- applied (new Gaps section: compound index over span, exclude pair from beta/Sharpe/capture/Beat?).
+- quant-researcher: one N>=20 gate too weak; capture needs up/down counts; show uncertainty -- applied (alpha N>=60, capture 10+10, beta SE, alpha t-stat).
+- quant-researcher: alpha across 48 cells, no headline pair -- applied (headline SPY/USD/All, others tooltip "1 of 48 cells").
+- quant-researcher: base_balance break undefined for stats -- applied (session excluded from all stats, line carries flat, marker).
+- quant-researcher: rebase point vs N ambiguous -- applied (base = prior session close, N = returns used).
+- quant-researcher: sum-ratio capture not the standard form -- applied (formula in tooltip).
+- quant-researcher: share of approximated exposure days hidden in tooltip -- applied (shown next to deployed stats).
+- quant-researcher: stale mark prices bias beta (hand-off to quant-engineer) -- rejected: out of this panel's roles; the recorder already skips writes with open positions but no live prices (equity_recorder.py `_record`), noted for the plan's quant-engineer review if one runs.
+- staff-engineer: ^IXIC=ONEQ in TAPE_PROXY_SYMBOLS reaches the tape and may be overridden by prod .env -- applied (separate BENCHMARK_PROXY_SYMBOLS key with safe default; tape untouched).
+- staff-engineer: FX store keyed by Berlin day, cache-only on admin, no history -- applied (session->Berlin-day mapping stated, one-off historical FX backfill to live_since).
+- staff-engineer: full adj-history refetch every post-close cycle; refresher-off empty state undefined -- applied (once-per-session-day guard, empty states, DEPLOY_HETZNER step listed).
+- staff-engineer: recorder change goes through EquitySnapshot in equity.py -- applied (seam named, existing fields + Dashboard pinned unchanged).
+- staff-engineer: dropping spy_indexed breaks pinned tests -- applied (tests and benchmarkSeries listed for the same task).
+- staff-engineer: new column/table have no owner or removal note -- applied (long-run cost lines).
+- staff-engineer: deployed denominator soundness (hand-off) -- applied via the quant-researcher redesign above.
+- financial-advisor: deployed % not comparable to indexes, don't default-on -- applied in part (labelled "on capital in trades -- not account return"); rejected the default-off: the partner asked for both bot lines on the chart.
+- financial-advisor: drawdown only in % -- applied (bot $ drawdown, losing-day streak).
+- financial-advisor: price-only label only in tooltip -- applied (in chip labels; default pair stays SPY+QQQ total return).
+- financial-advisor: tax drag of swing turnover unnamed -- applied (footnote sentence).
+- financial-advisor: intraday bot cell could read as banked -- applied ("unrealised · paper").
+- financial-advisor: alpha/beta validity and polling design (hand-offs) -- applied via quant-researcher and staff-engineer findings above.
