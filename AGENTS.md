@@ -220,7 +220,7 @@ Read the `docs/claude/` file before acting:
   (`.sb-hit`), phone tables declare `compact` rows. Before merging a UI change,
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234` must
   exit 0 (allow-list entries carry a reason and a date; its `hint` check fails
-  an off-screen or covered `sb-hint` popover, and its `rail-label` check fails an icon-rail entry with no accessible name or no visible label on keyboard focus; fix either, never allow it).
+  an off-screen or covered `sb-hint` popover, and its `rail-label` and `dock` checks fail an unlabelled rail entry, a live column over the content, or an off-screen sheet; never allow them).
   UI: `shots --clip <css selector>`, one page per task.
 
 ## Skills: the same ones Claude uses

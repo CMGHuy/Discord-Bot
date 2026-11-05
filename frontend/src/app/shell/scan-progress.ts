@@ -34,7 +34,7 @@ const STAGE_LABELS: Record<string, string> = {
 /**
  * The scan progress bar, over the top of the workspace.
  *
- * **Pure inputs, no store.** Like `sb-connection-status` beside it: the shell
+ * **Pure inputs, no store.** Like the shell's other status pieces: the shell
  * owns the wiring and this owns the presentation, which is what lets every
  * state below be a two-line test instead of a store harness.
  *

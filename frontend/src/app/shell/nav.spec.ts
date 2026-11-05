@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { routes } from '../app.routes';
@@ -221,5 +224,13 @@ describe('detailCrumb', () => {
     [null, '', ''],
   ] as const)('(%j, %j) is %j', (ticker, id, expected) => {
     expect(detailCrumb(ticker, id)).toBe(expected);
+  });
+});
+
+describe('v203: the v195 group model is gone', () => {
+  it('exports no NAV_GROUPS or NavGroup, and the sliding indicator is deleted', () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/shell/nav.ts'), 'utf8');
+    expect(source).not.toMatch(/\bNAV_GROUPS\b|\bNavGroup\b/);
+    expect(existsSync(join(process.cwd(), 'src/app/shell/nav-indicator.ts'))).toBe(false);
   });
 });
