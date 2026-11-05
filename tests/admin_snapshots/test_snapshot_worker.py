@@ -297,6 +297,20 @@ def test_stop_then_start_runs_again():
         env.w.stop()
 
 
+def test_start_builds_a_key_left_pending_by_a_stop():
+    env = make()
+    env.builders["risk"] = lambda: result({"heat": 1})
+    env.w.start()
+    env.w.stop()
+    assert env.w.submit(["risk"]) == ["risk"]          # lands in _pending near shutdown
+    env.w._wake.clear()                                 # the old loop consumed that wake and broke
+    env.w.start()
+    try:
+        assert wait_until(lambda: env.w.drain_landed() == ["risk"], timeout=3.0)
+    finally:
+        env.w.stop()
+
+
 def test_start_after_a_stop_that_timed_out_mid_build_keeps_a_live_worker():
     env = make()
     building, release = threading.Event(), threading.Event()

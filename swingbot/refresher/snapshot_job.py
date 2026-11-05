@@ -82,10 +82,12 @@ class SnapshotWorker:
             accepted = [k for k in dict.fromkeys(keys) if k not in busy]
             self._marking.update(accepted)
         if accepted:
-            self._mark(accepted)
-            with self._lock:
-                self._marking.difference_update(accepted)
-                self._pending.extend(accepted)
+            try:
+                self._mark(accepted)
+            finally:  # even a BaseException never strands a key in _marking
+                with self._lock:
+                    self._marking.difference_update(accepted)
+                    self._pending.extend(accepted)
             self._wake.set()
         return accepted
 
@@ -101,6 +103,7 @@ class SnapshotWorker:
             self._stop.clear()
             self._thread = threading.Thread(target=self._loop, name="snapshot-worker", daemon=True)
             self._thread.start()
+            self._wake.set()  # take whatever a stopped loop left pending (an empty take is a no-op)
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop.set()
