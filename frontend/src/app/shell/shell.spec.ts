@@ -596,7 +596,7 @@ describe('shell labelled rail (v202 §3)', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect(el.querySelector('.shell')!.className).toBe('shell');
-    for (const gone of ['.collapse', '.menu-button', '.scrim', '.sidebar', '.rail-tagline', '.brand .word']) {
+    for (const gone of ['.collapse', '.menu-button', '.scrim', '.sidebar', '.rail-tagline', 'nav.rail .word']) {
       expect(el.querySelector(gone), gone).toBeNull();
     }
     // Read nowhere and written nowhere: no preference write left the page.
@@ -613,7 +613,7 @@ describe('shell top bar (v195 Phase 3, correction 9)', () => {
     TestBed.configureTestingModule({ providers: shellProviders([{ path: 'trades', component: Blank }]) });
   });
 
-  it('leads the bar with the breadcrumb and renders no heading of its own', async () => {
+  it('leads the bar with the wordmark, the divider and the breadcrumb, and renders no heading of its own', async () => {
     const fixture = TestBed.createComponent(Shell);
     fixture.detectChanges();
     await TestBed.inject(Router).navigateByUrl('/trades');
@@ -622,7 +622,9 @@ describe('shell top bar (v195 Phase 3, correction 9)', () => {
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     const bar = el.querySelector('header.topbar')!;
-    expect(bar.firstElementChild!.tagName.toLowerCase()).toBe('sb-breadcrumb');
+    // v203 Moved: the wordmark leads the bar; the breadcrumb follows the divider.
+    ['a.brand', 'span.topbar-divider', 'sb-breadcrumb.topbar-lead'].forEach((selector, index) =>
+      expect(bar.children[index].matches(selector), selector).toBe(true));
     const crumbs = [...bar.querySelectorAll('nav[aria-label="Breadcrumb"] li')]
       .map((li) => li.textContent!.replace('/', '').trim());
     expect(crumbs).toEqual(['Trades', 'Book']);
@@ -795,12 +797,17 @@ describe('shell on a phone (v195 Phase 3)', () => {
     expect(phoneBlock).toContain('.main { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }');
   });
 
-  it('collapses the bar to the title, the two chips, a search icon and the avatar', async () => {
+  it('leads the phone bar with the diamond and the wordmark, then the cluster, the search icon and the avatar', async () => {
+    // v203 Retired 'collapses the bar to the title, the two chips, …' (spec v202 §3).
     const { el } = await mount();
     const bar = el.querySelector('header.topbar')!;
-    const order = ['sb-breadcrumb.topbar-lead', 'div.status-cluster', 'button.search-trigger', 'sb-profile-menu', 'sb-scan-progress'];
+    const order = ['a.brand', 'div.status-cluster', 'button.search-trigger', 'sb-profile-menu', 'sb-scan-progress'];
     expect(bar.children).toHaveLength(order.length);
     order.forEach((selector, index) => expect(bar.children[index].matches(selector), selector).toBe(true));
+    const brand = bar.querySelector('a.brand')!;
+    expect(brand.firstElementChild!.matches('sb-icon')).toBe(true);
+    expect(brand.querySelectorAll('.word span')).toHaveLength(2);
+    expect(bar.querySelector('sb-breadcrumb, span.topbar-divider, button.palette-trigger')).toBeNull();
     const search = bar.querySelector('button.search-trigger')!;
     expect(search.getAttribute('aria-label')).toBe('Search or jump to a page');
     // The magnifier: sb-icon's default label for 'search' (V195-14).
@@ -915,11 +922,12 @@ describe('shell command palette (v195 §3.1)', () => {
     return node;
   };
 
-  it('puts the trigger between the breadcrumb and the cluster, and opens the palette from it', async () => {
+  it('puts the trigger after the cluster, before the avatar, and opens the palette from it', async () => {
     const { fixture, el } = await mount();
     const trigger = el.querySelector<HTMLButtonElement>('header.topbar > button.palette-trigger')!;
-    expect(trigger.previousElementSibling!.matches('sb-breadcrumb.topbar-lead')).toBe(true);
-    expect(trigger.nextElementSibling!.matches('div.status-cluster')).toBe(true);
+    // v203 Moved (spec v202 §3): the Ctrl K trigger follows the cluster.
+    expect(trigger.previousElementSibling!.matches('div.status-cluster')).toBe(true);
+    expect(trigger.nextElementSibling!.matches('sb-profile-menu')).toBe(true);
     expect(trigger.textContent).toContain('Search or jump…');
     expect(trigger.getAttribute('aria-keyshortcuts')).toBe('Control+K Meta+K /');
     expect(trigger.querySelector('kbd.shortcut')!.getAttribute('aria-hidden')).toBe('true');
@@ -1223,5 +1231,47 @@ describe('shell live dock (v203)', () => {
     el.querySelector<HTMLButtonElement>('sb-alarm-chip button.alarm-chip')!.click();
     await settle(fixture);
     expect(el.querySelector('sb-live-sheet [role=dialog] sb-live-dock')).not.toBeNull();
+  });
+});
+
+describe('shell top bar (v203, spec v202 §3)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: shellProviders([{ path: 'trades', component: Blank }]) });
+    TestBed.overrideProvider(ViewportService, { useValue: { isPhone: signal(false), isNarrow: signal(false), viewport: signal('lg') } });
+  });
+
+  function render(): HTMLElement {
+    const f = TestBed.createComponent(Shell);
+    f.detectChanges();
+    return f.nativeElement as HTMLElement;
+  }
+
+  it('orders the bar: wordmark, divider, breadcrumb, cluster, search, avatar', () => {
+    const bar = render().querySelector('header.topbar')!;
+    const order = ['a.brand', 'span.topbar-divider', 'sb-breadcrumb.topbar-lead', 'div.status-cluster',
+      'button.palette-trigger', 'sb-profile-menu', 'sb-scan-progress'];
+    expect(bar.children).toHaveLength(order.length);
+    order.forEach((selector, index) => expect(bar.children[index].matches(selector), selector).toBe(true));
+    expect(bar.querySelector('span.topbar-divider')!.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('renders the two-tone wordmark as two spans, not one coloured string', () => {
+    // Restored from fdf6b78a^ (spec v202 D2).
+    expect(render().querySelectorAll('.brand .word span').length).toBe(2);
+  });
+
+  it('gives the wordmark the pre-v195 treatment, Capital in the accent, linking to the Dashboard', () => {
+    const brand = render().querySelector('header.topbar > a.brand')!;
+    expect([...brand.querySelectorAll('.word span')].map((x) => x.textContent)).toEqual(['Bomeo', 'Capital']);
+    expect(brand.getAttribute('href')).toBe('/dashboard');
+    expect(brand.getAttribute('aria-label')).toContain('Bomeo Capital');
+    expect(brand.querySelector('sb-icon')).toBeNull();          // the diamond heads the rail above phone width
+    const css = readSource('src/app/shell/shell.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    const rule = (selector: string) => css.match(new RegExp('^' + selector.replace(/[.]/g, '[.]') + ' [{][^}]*[}]', 'm'))?.[0] ?? '';
+    for (const declaration of ['font-family: var(--font-mono);', 'font-size: var(--text-body);', 'font-weight: 700;',
+      'letter-spacing: -0.02em;', 'white-space: nowrap;']) {
+      expect(rule('.brand .word')).toContain(declaration);
+    }
+    expect(rule('.brand .word span:last-child')).toContain('color: var(--accent);');
   });
 });

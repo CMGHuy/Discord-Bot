@@ -47,20 +47,19 @@
 
   <div class="main">
     <header class="topbar">
-      <!-- A labelled list, never a heading: the page's one <h1> belongs to
-           sb-page (correction 9), which route-focus.ts finds inside .workspace. -->
-      <sb-breadcrumb class="topbar-lead" />
-      <!-- v195 §3.1: the command palette's trigger, centred between the
-           breadcrumb and the cluster (both carry an auto left margin, which
-           splits the free space). Phones use the search icon instead. -->
+      <!-- v203 (spec v202 §3, D2): the two-tone BomeoCapital wordmark leads
+           the bar on every device. On a phone the diamond sits before it (the
+           rail that carries it elsewhere is hidden there). A link, never a
+           heading: the page's one <h1> belongs to sb-page (correction 9). -->
+      <a class="brand sb-hit" routerLink="/dashboard" aria-label="Bomeo Capital — go to the Dashboard">
+        @if (isPhone()) {
+          <sb-icon name="brand" title="" />
+        }
+        <span class="word"><span>Bomeo</span><span>Capital</span></span>
+      </a>
       @if (!isPhone()) {
-        <button sb-button variant="ghost" type="button" class="palette-trigger"
-                aria-haspopup="dialog" [attr.aria-expanded]="paletteOpen()"
-                aria-keyshortcuts="Control+K Meta+K /" (click)="openPalette()">
-          <span class="glyph" aria-hidden="true"><sb-icon name="search" /></span>
-          <span class="trigger-text">Search or jump…</span>
-          <kbd class="shortcut" aria-hidden="true">{{ paletteShortcut }}</kbd>
-        </button>
+        <span class="topbar-divider" aria-hidden="true"></span>
+        <sb-breadcrumb class="topbar-lead" />
       }
       <!-- v203 (spec v202 D5): only the killswitch chip stays, plus the alarm
            chip while the bot is down, the stream is down or data is stale.
@@ -70,9 +69,17 @@
         <sb-alarm-chip [alarm]="alarm()" (reveal)="dock.reveal()" />
         <sb-killswitch-chip [on]="killswitchOn()" [stale]="killswitchStale()" />
       </div>
-      <!-- Phone only: the bar collapses to the title, the two chips, this
-           search icon and the avatar (the one place to sign out there). -->
-      @if (isPhone()) {
+      <!-- v195 §3.1: the command palette's trigger (Ctrl K), after the cluster
+           from v203. A phone uses the search icon instead. -->
+      @if (!isPhone()) {
+        <button sb-button variant="ghost" type="button" class="palette-trigger"
+                aria-haspopup="dialog" [attr.aria-expanded]="paletteOpen()"
+                aria-keyshortcuts="Control+K Meta+K /" (click)="openPalette()">
+          <span class="glyph" aria-hidden="true"><sb-icon name="search" /></span>
+          <span class="trigger-text">Search or jump…</span>
+          <kbd class="shortcut" aria-hidden="true">{{ paletteShortcut }}</kbd>
+        </button>
+      } @else {
         <button sb-button variant="icon" type="button" class="search-trigger"
                 aria-label="Search or jump to a page" (click)="onSearchRequested()">
           <sb-icon name="search" />

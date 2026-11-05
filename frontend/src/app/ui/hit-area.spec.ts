@@ -92,6 +92,9 @@ describe('v179: controls that keep their look and take .sb-hit', () => {
     ['src/app/workspaces/system/settings-tab.ts', /<summary class="sb-hit">/],
     // The rail's brand mark pads with .sb-hit rather than grow.
     ['src/app/shell/shell.html', /<a class="rail-brand sb-hit" routerLink="\/dashboard"/],
+    // v203: the top bar's wordmark link and its alarm chip keep their size and pad with .sb-hit.
+    ['src/app/shell/shell.html', /<a class="brand sb-hit" routerLink="\/dashboard"/],
+    ['src/app/shell/alarm-chip.ts', /<button type="button" class="alarm-chip sb-hit"/],
     // Tooltip-only chart marks and the Versions timeline (v179 audit): thin by data, padded by .sb-hit.
     ['src/app/ui/bar-list.ts', /<li class="sb-hit" tabindex="0"/],
     ['src/app/ui/histogram.ts', /<li class="sb-hit" tabindex="0"/],
