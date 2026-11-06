@@ -1,6 +1,7 @@
 """Measured deployment windows and the telemetry that can honestly support them."""
 from __future__ import annotations
 
+import bisect
 import json
 import os
 import statistics
@@ -55,34 +56,53 @@ def windows() -> list[dict]:
     return sorted(result, key=lambda row: row["from"], reverse=True)
 
 
-def _in_window(at: str | None, window: dict) -> bool:
-    if not at or at < window["from"]:
-        return False
-    return window["to"] is None or at < window["to"]
+# /versions asks for one window per release (~180) and the file is megabytes,
+# so it is parsed once per (path, mtime, size) and kept sorted by `at`; each
+# window is then a bisect, not a re-read (it took 30-90 s per request in prod).
+_SCAN_CACHE: dict = {"key": None, "ats": [], "rows": []}
 
 
-def _scan_rows() -> list[dict]:
+def _parse_scan_file(path: str) -> list[dict]:
+    rows = []
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict) and row.get("type") != "deploy" and isinstance(row.get("at"), str) and row["at"]:
+                rows.append(row)
+    rows.sort(key=lambda row: row["at"])
+    return rows
+
+
+def _sorted_scan_rows() -> tuple[list[str], list[dict]]:
+    """Scan rows with a string `at`, sorted by it, plus the parallel `at` list."""
     path = os.path.join(config.DATA_DIR, "scan_telemetry.jsonl")
     try:
-        with open(path, encoding="utf-8") as handle:
-            rows = []
-            for line in handle:
-                try:
-                    row = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(row, dict) and row.get("type") != "deploy":
-                    rows.append(row)
-            return rows
+        stat = os.stat(path)
+        key = (path, stat.st_mtime_ns, stat.st_size)
+        if _SCAN_CACHE["key"] != key:
+            rows = _parse_scan_file(path)
+            _SCAN_CACHE.update(key=key, ats=[row["at"] for row in rows], rows=rows)
     except OSError:
-        return []
+        return [], []
+    return _SCAN_CACHE["ats"], _SCAN_CACHE["rows"]
+
+
+def _window_rows(window: dict) -> list[dict]:
+    """Rows with window["from"] <= at < window["to"] (no upper bound when to is None)."""
+    ats, rows = _sorted_scan_rows()
+    start = bisect.bisect_left(ats, window["from"])
+    end = len(ats) if window["to"] is None else bisect.bisect_left(ats, window["to"])
+    return rows[start:max(start, end)]
 
 
 def telemetry_for(window: dict) -> dict:
     """Measured scan timing; unsupported telemetry is explicitly nullable."""
-    rows = [row for row in _scan_rows() if _in_window(row.get("at"), window)]
+    rows = _window_rows(window)
     durations = [row.get("duration_s") for row in rows if isinstance(row.get("duration_s"), (int, float))]
-    days = {str(row.get("at"))[:10] for row in rows if row.get("at")}
+    days = {row["at"][:10] for row in rows}
     return {
         "uptime_pct": None,
         "error_rate": None,
