@@ -27,8 +27,8 @@ export const PAGES = [
   { name: 'Dashboard', rail: 'Dashboard', selectors: ['sb-portfolio-value sb-market-value'] },
   { name: 'Trades', rail: 'Trades' }, { name: 'Trade detail', path: 'TRADE' }, { name: 'Watchlist', rail: 'Watchlist' },
   { name: 'Risk', rail: 'Risk', phrases: ['FX rates as of', 'daily bars through', PNL_BASIS] },
-  { name: 'Analytics', rail: 'Analytics', phrases: [PNL_BASIS] },
-  { name: 'Calendar', rail: 'Calendar', phrases: [PNL_BASIS] },
+  { name: 'Analytics', rail: 'Analytics', route: '/insights/analytics', phrases: [PNL_BASIS] },
+  { name: 'Calendar', rail: 'Calendar', route: '/trades/calendar', phrases: [PNL_BASIS] },
 ];
 const LABEL = /\bago\b|last close|\bas of\b/;
 const ENV_FILE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '.env');
@@ -162,7 +162,13 @@ async function navigate(ctx, spec, hardLoad) {
   if (spec.path === 'TRADE') { await page.goto(`${base}/trades/${tradeId}`, { waitUntil: 'domcontentloaded' }); return; }
   if (hardLoad) { await page.goto(`${base}/${spec.rail.toLowerCase()}`, { waitUntil: 'domcontentloaded' }); return; }
   const before = page.url();
-  await page.locator(`a.rail-link[aria-label="${spec.rail}"]`).first().click();
+  // The deployed rail carries its label as text, not aria-label, and Analytics / Calendar are
+  // sub-pages of Insights / Trades rather than rail entries: reach those by an in-app router
+  // navigation (history + popstate, no reload), the same path a link click takes.
+  const link = page.locator('a.rail-link').filter({ has: page.locator('.rail-label', { hasText: new RegExp(`^\\s*${spec.rail}\\s*$`) }) });
+  if (await link.count()) await link.first().click();
+  else if (spec.route) await page.evaluate((r) => { history.pushState({}, '', r); dispatchEvent(new PopStateEvent('popstate')); }, spec.route);
+  else throw new Error(`no navigation for ${spec.name}`);
   await page.waitForFunction((u) => location.href !== u, before).catch(() => {});
 }
 
@@ -268,11 +274,11 @@ function versionsOf(body) {
 /** After a pass's visits: GET-only reads of the deployed versions, scan state, risk clocks and snapshots. */
 async function recordInputs(ctx, passName) {
   const { page, out } = ctx;
-  const [session, scan, risk, updates] = await Promise.all(
-    ['/api/v1/session', '/api/v1/system/scan', '/api/v1/risk', '/api/v1/market/updates'].map((p) => getJson(page, p)));
+  const [health, scan, risk, updates] = await Promise.all(
+    ['/api/v1/health', '/api/v1/system/scan', '/api/v1/risk', '/api/v1/market/updates'].map((p) => getJson(page, p)));
   const meta = risk.body?.bars_meta ?? {};
   appendLine(out, { pass: passName, kind: 'inputs', at: new Date().toISOString(),
-    versions: versionsOf(session.body), scanRunning: scan.body?.running ?? null,
+    versions: versionsOf(health.body), scanRunning: scan.body?.running ?? null,
     risk: { computed_at: risk.body?.computed_at ?? null, oldest: meta.oldest ?? null,
       newest: meta.newest ?? null, stale_inputs: meta.stale_inputs ?? null },
     snapshots: (updates.body?.snapshots ?? []).map((s) => ({ key: s.key, computed_at: s.computed_at,
