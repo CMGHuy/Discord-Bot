@@ -1473,6 +1473,10 @@ export interface TickerAddResult {
   added: string[];
   already_present: string[];
   invalid: string[];
+  /** Well-formed symbols the market-data provider has no price bars for. */
+  not_found: string[];
+  /** What the bot found out about each added symbol. */
+  details: { symbol: string; company_name: string | null; bars: number }[];
   /** The watchlist size after the add. */
   total: number;
 }
