@@ -103,6 +103,8 @@ function auditPage({ touch, minTap, minText, maxBaseline, maxCenter, hiddenSrc, 
   /** The nearest ancestor that scrolls or clips sideways, below <main>. */
   function container(el) {
     for (let p = el.parentElement; p && p !== document.body && p.tagName !== 'MAIN'; p = p.parentElement) {
+      // A declared marquee (the shell tape): its content slides past a faded edge by design.
+      if (p.hasAttribute('data-marquee')) return { kind: 'marquee', box: p };
       const overflowX = getComputedStyle(p).overflowX;
       if (overflowX === 'auto' || overflowX === 'scroll') return { kind: 'scroll', box: p };
       if (overflowX === 'hidden' || overflowX === 'clip') return { kind: 'clip', box: p };

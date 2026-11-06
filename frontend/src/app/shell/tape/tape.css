@@ -36,7 +36,12 @@
    correct on the left/right, but not vertically centred, so the tile text
    read with more margin below it than above. */
 .viewport { flex: 1 1 0%; min-width: 0; overflow: hidden;
-            display: flex; align-items: center; }
+            display: flex; align-items: center;
+            /* Tiles enter and leave through a fade, not a hard cut
+               (ui-design.md: wide content scrolls in its own box with an edge fade). */
+            --tape-fade: var(--space-20);
+            mask-image: linear-gradient(to right, transparent, #000 var(--tape-fade),
+                                        #000 calc(100% - var(--tape-fade)), transparent); }
 
 /* Rendered twice and translated -50%, so the loop has no snap-back.
    animation-duration is set inline per lane (tape-speed.ts), scaled by
