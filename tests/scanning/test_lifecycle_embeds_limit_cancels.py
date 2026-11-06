@@ -39,7 +39,7 @@ def test_the_feed_styles_the_new_cancels_as_cancel(transition):
 def test_a_limit_cancel_embed_names_the_level_and_the_price():
     embed = build_plan_event_embed(_limit(), PlanEvent(
         "p1", "cancelled_limit", {"live_price": 101.2, "limit_cancel_level": 101.0}))
-    assert embed.title == "🚫 ▲ LONG AAPL · CANCEL"
+    assert embed.title == "🚫 ▲ LONG AAPL · CANCEL ORDER"
     assert embed.color.value == kinds.MANAGE_AMBER
     assert _why(embed) == (
         "Price ran to 101.20, past the limit's cancel level 101.00, before the "
@@ -50,7 +50,7 @@ def test_a_gap_through_stop_embed_names_the_limit_the_price_and_the_stop():
     embed = build_plan_event_embed(_limit(), PlanEvent(
         "p1", "cancelled_gap_through_stop",
         {"entry_price": 100.0, "live_price": 98.4, "stop_loss": 98.5}))
-    assert embed.title == "🚫 ▲ LONG AAPL · CANCEL"
+    assert embed.title == "🚫 ▲ LONG AAPL · CANCEL ORDER"
     assert _why(embed) == (
         "Touched the 100.00 limit at 98.40, already at or through the stop 98.50. "
         "Never opened; no position, no P&L.")

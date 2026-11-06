@@ -82,7 +82,7 @@ def test_both_embed_tables_render_it_as_cancel():
 
 def test_the_history_embed_says_why():
     embed = build_plan_event_embed(_cancelled(), PlanEvent("p1", EVENT, CANCEL_DETAIL))
-    assert embed.title == "🚫 ▲ LONG AAPL · CANCEL"
+    assert embed.title == "🚫 ▲ LONG AAPL · CANCEL ORDER"
     why = next(f.value for f in embed.fields if f.name == "Why")
     assert why == ("The trade record was deleted before the 100.00 order filled. "
                    "Never opened; no position, no P&L.")

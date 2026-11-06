@@ -117,19 +117,19 @@ class Kind(Enum):
     FILLED = KindSpec(Family.ENTRY, "FILLED")
     RECLAIM_ORDER = KindSpec(Family.ENTRY, "STOP ORDER AT ENTRY")   # v192: DAY stop at E
     # MANAGE
-    BE_MOVED = KindSpec(Family.MANAGE, "BREAK-EVEN")
-    TP1_HIT = KindSpec(Family.MANAGE, "TP1", emoji="💰")
-    MOVE_STOP = KindSpec(Family.MANAGE, "MOVE STOP", emoji="✂️")
-    CANCEL = KindSpec(Family.MANAGE, "CANCEL", emoji="🚫")
-    RISK_CAP = KindSpec(Family.MANAGE, "RISK CAP", emoji="🚫")
+    BE_MOVED = KindSpec(Family.MANAGE, "MOVE STOPLOSS TO BREAKEVEN")
+    TP1_HIT = KindSpec(Family.MANAGE, "TAKE PROFIT (TP1)", emoji="💰")
+    MOVE_STOP = KindSpec(Family.MANAGE, "MOVE STOPLOSS", emoji="✂️")
+    CANCEL = KindSpec(Family.MANAGE, "CANCEL ORDER", emoji="🚫")
+    RISK_CAP = KindSpec(Family.MANAGE, "CANCEL ORDER (RISK CAP)", emoji="🚫")
     PLAN_UPDATE = KindSpec(Family.MANAGE, "PLAN UPDATE")   # history-only fallback
     # WATCH
     NEAR_STOP = KindSpec(Family.WATCH, "NEARING STOP", colour=WATCH_STOP_ORANGE)
     NEAR_TP = KindSpec(Family.WATCH, "NEARING TP", colour=WATCH_TP_LIME)
     # RESULT -- the outcome mark rides in the detail, via outcome_detail().
     CLOSED_TRADE = KindSpec(Family.RESULT, "CLOSED", R_RAMP)
-    STOPPED = KindSpec(Family.RESULT, "STOPPED", R_RAMP)
-    WIN = KindSpec(Family.RESULT, "WIN", R_RAMP)
+    STOPPED = KindSpec(Family.RESULT, "TAKE STOPLOSS", R_RAMP)
+    WIN = KindSpec(Family.RESULT, "TAKE PROFIT", R_RAMP)
     SCRATCHED = KindSpec(Family.RESULT, "SCRATCHED")
     EXITED = KindSpec(Family.RESULT, "EXITED", R_RAMP)
     CLOSE_AT_MARKET = KindSpec(Family.RESULT, "CLOSE AT MARKET", R_RAMP)
@@ -198,6 +198,10 @@ def title(kind: Kind, ticker: str, direction: str | None = None, detail: str = "
 
 def content_line(kind: Kind, ticker: str, direction: str | None = None, detail: str = "") -> str:
     """The phone push preview: ``🏁 RESULT · ▲ LONG AAPL · CLOSED · ✅ WIN +1.8R``."""
+    if kind.family is Family.MANAGE:
+        # The action names the event itself ("TAKE PROFIT", "MOVE STOPLOSS ..."),
+        # so the generic family word MANAGE would only hide it.
+        return f"{badge(kind)} {_join(kind.label, _head(ticker, direction), detail)}"
     return f"{badge(kind)} {_join(kind.family.label, _head(ticker, direction), kind.label, detail)}"
 
 
