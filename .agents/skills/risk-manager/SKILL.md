@@ -32,7 +32,7 @@ rule is dollar risk on the account, not a percentage of price.
 - A gap through the stop is counted in R as the loss it is, not as the planned loss.
 - A rejected plan logs why (the "plan rejected (" lines), so a quiet day caused by the cap is diagnosable.
 - An ExpR gain bought with wider stops is also shown in dollars at fixed risk.
-- The admin risk view (`swingbot/admin/api_v1/risk.py`) shows the same heat the scanner enforces.
+- The admin risk view shows the same heat the scanner enforces: since v204 the payload is built in `swingbot/core/analytics/risk_payload.py` (by the refresher's snapshot worker, stored in `admin_snapshots`) and `swingbot/admin/api_v1/risk.py` serves it.
 
 ## Red flags
 
