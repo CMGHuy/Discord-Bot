@@ -41,14 +41,6 @@ export const PreferencesStore = signalStore(
     let timer: ReturnType<typeof setTimeout> | null = null;
     let inFlight: Observable<void> | null = null;
 
-    /**
-     * Write after the burst settles.
-     *
-     * A column picker produces one change per checkbox, so an un-debounced
-     * save would PUT four times while someone chooses four columns. The
-     * write is a whole-object replace, so only the last one carries
-     * anything the others did not.
-     */
     // Role is read when the write fires, not when it was queued (v207).
     const write = () => {
       if (!session.isAdmin()) return;
@@ -59,6 +51,14 @@ export const PreferencesStore = signalStore(
         error: () => undefined,
       });
     };
+    /**
+     * Write after the burst settles.
+     *
+     * A column picker produces one change per checkbox, so an un-debounced
+     * save would PUT four times while someone chooses four columns. The
+     * write is a whole-object replace, so only the last one carries
+     * anything the others did not.
+     */
     const scheduleWrite = () => {
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => {

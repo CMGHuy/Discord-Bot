@@ -75,8 +75,6 @@ const fakeLiveValues = () => ({ stalled: signal(false), status: signal(null) });
 @Component({ template: '' })
 class Blank {}
 
-/** The providers every v195 shell describe uses: the same fakes as the
- *  `shell navigation` block, with a route table the breadcrumb can read. */
 /** The shell as the admin sees it, unless a test already gave the session a
  *  role (v207). Called late so a test can still override providers first. */
 function createShell() {
@@ -85,6 +83,8 @@ function createShell() {
   return TestBed.createComponent(Shell);
 }
 
+/** The providers every v195 shell describe uses: the same fakes as the
+ *  `shell navigation` block, with a route table the breadcrumb can read. */
 function shellProviders(routes: Routes = []) {
   return [
     provideZonelessChangeDetection(),
