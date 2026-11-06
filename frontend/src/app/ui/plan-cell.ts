@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { Hint } from './hint';
+import { Icon } from './icon';
 import { money, num, pct, rMultiple, share } from './format';
 
 /**
@@ -25,7 +26,7 @@ import { money, num, pct, rMultiple, share } from './format';
 @Component({
   selector: 'sb-plan-cell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Hint],
+  imports: [Hint, Icon],
   template: `
     @if (runnerMode()) {
       <span class="plan runner">
@@ -56,6 +57,9 @@ import { money, num, pct, rMultiple, share } from './format';
         <span class="sep">{{ ' / ' }}</span>
         <span class="stop">{{ fmt(stop()) }}</span>
         <span class="sep">{{ ' (' }}</span><span class="rise" [class.loss]="runnerLoss()">{{ riseText() }}</span><span class="sep">{{ ' - ' }}</span><span class="drop">{{ fmtPct(dropPct()) }}</span><span class="sep">{{ ')' }}</span>
+        @if (closedAt() !== null) {
+          <span class="sep">{{ '  ·  ' }}</span><sb-icon name="closed" class="closed-icon" /><span class="sep">{{ ' ' }}</span><span class="closed" [attr.aria-label]="'Closed out at ' + fmt(closedAt())" [class.win]="closedTone() === 'win'" [class.loss]="closedTone() === 'loss'">{{ fmt(closedAt()) }}</span>
+        }
       </span>
     }
   `,
@@ -95,6 +99,12 @@ import { money, num, pct, rMultiple, share } from './format';
     /* A signed figure on the loss side of the entry (a gap through the stop,
        a runner closed below its fill) keeps the loss colour with its minus. */
     .target.loss, .rise.loss, .peak.loss, .lock.loss { color: var(--neg); }
+    /* The price the trade actually closed at: a muted "Closed" label, then the
+       figure -- green when it beat the entry, red when it lost, plain when flat. */
+    .closed-icon { color: var(--text-muted); vertical-align: middle; }
+    .closed { color: var(--text); font-weight: 600; }
+    .closed.win { color: var(--pos); }
+    .closed.loss { color: var(--neg); }
     /* Spacing lives in the TEXT, not in a margin. Angular strips whitespace
        between elements, so a margin-only gap renders correctly and leaves
        textContent as '178.00→195.00/170.00' -- which is what a screen reader
@@ -172,6 +182,23 @@ export class PlanCell {
   readonly runnerExitPct = input<number | null>(null);
   /** What closed the runner, a leg reason (see `runnerExitLabel`). */
   readonly runnerExitReason = input<string | null>(null);
+
+  /** The price a closed trade (or closed leg) actually exited at, shown at
+   *  the end of the line. Null for anything still open. */
+  readonly closedAt = input<number | null>(null);
+
+  /** Win or loss of the exit against the entry. Direction is not an input:
+   *  a long's stop sits below its entry, a short's above (the target fills in
+   *  when there is no stop). Flat or unknown stays neutral. */
+  protected readonly closedTone = computed((): 'win' | 'loss' | null => {
+    const exit = this.closedAt();
+    const entry = this.entry();
+    if (exit === null || entry === null || exit === entry) return null;
+    const level = this.stop() ?? this.target();
+    const isShort = level !== null && (this.stop() !== null ? level > entry : level < entry);
+    const gain = isShort ? entry - exit : exit - entry;
+    return gain > 0 ? 'win' : 'loss';
+  });
 
   protected readonly runnerMode = computed(() => this.planTp1() !== null);
   protected readonly planRisePct = computed(() => this.movePct(this.planTp1()));

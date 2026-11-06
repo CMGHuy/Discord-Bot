@@ -40,6 +40,46 @@ describe('PlanCell', () => {
     expect(render(178, null, 170).textContent).toContain('—');
   });
 
+  /* -- the closed-out price at the end of the line ------------------------ */
+
+  function renderClosed(entry: number, target: number, stop: number, closedAt: number | null) {
+    const f = TestBed.createComponent(PlanCell);
+    f.componentRef.setInput('entry', entry);
+    f.componentRef.setInput('target', target);
+    f.componentRef.setInput('stop', stop);
+    f.componentRef.setInput('closedAt', closedAt);
+    f.detectChanges();
+    return f.nativeElement as HTMLElement;
+  }
+
+  it('ends a closed trade with a closed icon and its closed-out price', () => {
+    const el = renderClosed(178, 195, 170, 190.5);
+    expect(el.textContent!.replace(/\s+/g, ' ').trim()).toBe('178.00 → 195.00 / 170.00 (9.6% - 4.5%) · 190.50');
+    expect(el.querySelector('sb-icon.closed-icon[name="closed"], sb-icon.closed-icon')).not.toBeNull();
+    expect(el.querySelector('.closed')!.getAttribute('aria-label')).toBe('Closed out at 190.50');
+  });
+
+  it('shows nothing extra for an open trade', () => {
+    const el = renderClosed(178, 195, 170, null);
+    expect(el.querySelector('.closed')).toBeNull();
+    expect(el.querySelector('.closed-icon')).toBeNull();
+  });
+
+  it('tints a winning long green and a losing long red', () => {
+    expect(renderClosed(178, 195, 170, 190).querySelector('.closed')!.classList.contains('win')).toBe(true);
+    expect(renderClosed(178, 195, 170, 170).querySelector('.closed')!.classList.contains('loss')).toBe(true);
+  });
+
+  it('reads direction from the stop: a short that fell is a win, one that rose a loss', () => {
+    expect(renderClosed(178, 162, 186, 165).querySelector('.closed')!.classList.contains('win')).toBe(true);
+    expect(renderClosed(178, 162, 186, 186).querySelector('.closed')!.classList.contains('loss')).toBe(true);
+  });
+
+  it('leaves a flat exit untinted', () => {
+    const el = renderClosed(178, 195, 170, 178).querySelector('.closed')!;
+    expect(el.classList.contains('win') || el.classList.contains('loss')).toBe(false);
+  });
+
   /* -- the planned rise%/drop% pair -------------------------------------- */
 
   it('shows the planned rise and drop as unsigned magnitudes', () => {

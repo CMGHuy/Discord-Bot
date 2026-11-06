@@ -483,7 +483,7 @@ describe('Dashboard Plan cell for runners (v177)', () => {
 
   it('shows a closed runner\'s exit and names the give-back stop', async () => {
     const [cell] = (await loadedWithRows([closedRunner])).querySelectorAll('sb-plan-cell');
-    expect(cell.textContent!.replace(/\s+/g, ' ').trim()).toBe('60.67 → 52.44 / 61.85 (+13.6% - 1.9%)');
+    expect(cell.textContent!.replace(/\s+/g, ' ').trim()).toBe('60.67 → 52.44 / 61.85 (+13.6% - 1.9%) · 52.44');
     expect(cell.querySelector('[title]')!.getAttribute('title'))
       .toContain('Runner exit (give-back stop): 52.44');
   });

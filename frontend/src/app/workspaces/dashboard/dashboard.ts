@@ -409,6 +409,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
         [planTp1]="rc.planTp1" [planStop]="rc.planStop"
         [trailBest]="rc.trailBest" [trailBestPct]="rc.trailBestPct" [trailExitPct]="rc.trailExitPct"
         [runnerExit]="rc.runnerExit" [runnerExitPct]="rc.runnerExitPct" [runnerExitReason]="rc.runnerExitReason"
+        [closedAt]="row.status === 'CLOSED' ? row.exit_price : null"
         [currency]="connection.currency()"
       />
     </ng-template>
