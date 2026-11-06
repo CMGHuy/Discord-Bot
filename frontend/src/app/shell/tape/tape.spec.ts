@@ -50,6 +50,26 @@ describe('Tape', () => {
     expect(el.querySelectorAll('.tile').length).toBe(4);
   });
 
+  it('declares its viewport a marquee so edge-crossing tiles are not audited as clipped', () => {
+    const el = setup([index], [stock]).nativeElement as HTMLElement;
+    const viewport = el.querySelector('.viewport');
+    expect(viewport?.hasAttribute('data-marquee')).toBe(true);
+    expect(viewport?.querySelectorAll('.tile').length).toBe(4);
+  });
+
+  it('gives every tile the 44px touch hit area, while the strip stays compact', () => {
+    const el = setup([index], [stock]).nativeElement as HTMLElement;
+    const tiles = [...el.querySelectorAll('.tile')];
+    expect(tiles.length).toBe(4);
+    expect(tiles.every((tile) => tile.classList.contains('sb-hit'))).toBe(true);
+  });
+
+  it('marks no tile and keeps the marquee when both sources are empty', () => {
+    const el = setup([], []).nativeElement as HTMLElement;
+    expect(el.querySelectorAll('.tile').length).toBe(0);
+    expect(el.querySelector('.viewport')?.hasAttribute('data-marquee')).toBe(true);
+  });
+
   it('never shows the word "live" ', () => {
     const el = setup([index], [stock]).nativeElement as HTMLElement;
     expect(el.textContent?.toLowerCase()).not.toContain('live');

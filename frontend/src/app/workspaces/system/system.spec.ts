@@ -46,9 +46,16 @@ const selected = (el: HTMLElement) =>
   el.querySelector('[role="tab"][aria-selected="true"]')!.textContent!.trim();
 
 describe('System tabs (v195 §5.1, correction 4)', () => {
-  it('orders the bar Scan, Providers, Settings, Logs', async () => {
+  it('orders the bar Scan, Providers, Settings, Logs, Users', async () => {
     const { el } = await mount();
-    expect(tabLabels(el)).toEqual(['Scan', 'Providers', 'Settings', 'Logs']);
+    expect(tabLabels(el)).toEqual(['Scan', 'Providers', 'Settings', 'Logs', 'Users']);
+  });
+
+  it('opens the Users tab from ?tab=users, with no header command', async () => {
+    const { el } = await mount('users');
+    expect(selected(el)).toBe('Users');
+    expect(el.querySelector('sb-users-tab')).toBeTruthy();
+    expect(el.querySelectorAll('sb-page header.bar .actions button')).toHaveLength(0);
   });
 
   it('opens the Providers tab from ?tab=providers', async () => {

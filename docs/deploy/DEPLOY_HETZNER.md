@@ -349,12 +349,18 @@ The snap writes a day's row only once the bar behind it is final (its London
 day ended). Expect the row later than 08:00 when the pair file was last
 written before London midnight; it arrives on the cycle after the next refresh.
 
-Rollback, in this order: (1) redeploy the previous image (§ Rolling back). The
-old code never reads the table, so it can stay. (2) Only to remove it, run
-`docker compose exec -T bot alembic downgrade <the revision v205_001 revises>`
-(`v200_001` when v205 was written). Downgrading to that revision also rolls
-back every later revision stacked on top of `v205_001`, so check
-`alembic history` first.
+Rollback: an image-only rollback is **not** safe once `v207_001` is applied:
+the previous image does not know that revision, so `deploy.sh` aborts before
+`up` with bot, admin and refresher stopped (§ Rolling back). In this order:
+(1) with the writers stopped, run the downgrade from the **v207** image:
+`docker compose run --rm --no-deps bot alembic downgrade v197_001`
+(the revision `v207_001` revises). This **drops `admin_users` and every
+viewer account**, and also rolls back every later revision stacked on top of
+`v207_001`, so check `alembic history` first. (2) Then redeploy the previous
+image (§ Rolling back). Viewer accounts therefore do not survive a rollback;
+re-create them on the Users tab after rolling forward. The other route is
+`scripts/ops/rollback_to.sh` (point-in-time restore), which also discards
+everything written since.
 
 ## Accessing the admin UI
 

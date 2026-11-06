@@ -17,6 +17,8 @@ export interface NavEntry {
   sections?: readonly NavSection[];
   /** Drawn at the rail's foot, apart from the work destinations. */
   foot?: boolean;
+  /** v207: hidden from viewers; the server refuses its API anyway. */
+  adminOnly?: boolean;
 }
 
 /**
@@ -24,6 +26,8 @@ export interface NavEntry {
  * sections. One model for the rail, the phone tab bar and More sheet, the
  * command palette, the section tabs and the breadcrumb. The /ui gallery is
  * a developer surface, reachable by URL and the palette, never the rail.
+ * Every consumer reads it through `navEntriesFor` (v207), which hides the
+ * admin-only entries from a viewer.
  */
 export const NAV_ENTRIES: readonly NavEntry[] = [
   { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
@@ -46,13 +50,19 @@ export const NAV_ENTRIES: readonly NavEntry[] = [
     ],
   },
   {
-    path: '/system', label: 'System', icon: 'system', foot: true,
+    path: '/system', label: 'System', icon: 'system', foot: true, adminOnly: true,
     sections: [
       { path: '/system', label: 'Health' },
       { path: '/system/versions', label: 'Versions' },
     ],
   },
 ];
+
+/** The entries a principal may see: all of them for the admin (the same
+ *  array), without the `adminOnly` ones for a viewer (v207). */
+export function navEntriesFor(isAdmin: boolean, entries: readonly NavEntry[] = NAV_ENTRIES): readonly NavEntry[] {
+  return isAdmin ? entries : entries.filter((entry) => !entry.adminOnly);
+}
 
 /** A section label that is not its route's title. The route keeps the page
  *  name the browser tab shows ('Trades', 'System'); the tab names the view

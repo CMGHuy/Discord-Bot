@@ -23,6 +23,7 @@ import {
   loadingInterceptor,
   routeRefreshInterceptor,
 } from './api/interceptors';
+import { forbiddenInterceptor } from './auth/forbidden.interceptor';
 import { routes } from './app.routes';
 import { PwaUpdateService } from './pwa/pwa-update.service';
 import { SubtitleTitleStrategy } from './routing/route-title.service';
@@ -72,6 +73,8 @@ export const appConfig: ApplicationConfig = {
     //   error     runs after auth on the way back, so it is the last handler
     //             to touch the failure and the caller always receives an
     //             ApiError, never an HttpErrorResponse;
+    //   forbidden sits outside error, so on the way back it sees the ApiError
+    //             error built, and can branch on `code === 'forbidden'`;
     //   loading   is FIRST, so its finalize() wraps the entire lifetime,
     //             including the time the other two spend on the way back.
     //   fresh     is innermost: it only adds a header on the way out and never
@@ -79,7 +82,7 @@ export const appConfig: ApplicationConfig = {
     // Swapping auth and error would silently break 401 detection: auth would
     // be matching `status === 401` against an ApiError that no longer is one.
     provideHttpClient(
-      withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor, freshInterceptor]),
+      withInterceptors([loadingInterceptor, forbiddenInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor, freshInterceptor]),
     ),
     // Answer "who am I" BEFORE the app bootstraps. Angular waits on the
     // returned promise, so App never renders in the 'unknown' state -- which

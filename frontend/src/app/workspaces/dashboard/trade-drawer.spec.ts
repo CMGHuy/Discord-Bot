@@ -16,6 +16,18 @@ import { RowActions } from './row-actions';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { provideMotion } from '../../ui/motion/motion.service';
 import { PAPER_HINT, PAPER_MARKER, TradeDrawer, drawerPnl, tradeDrawerFields } from './trade-drawer';
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
+import { Role } from '../../api/models';
+import { SessionStore } from '../../stores/session.store';
+
+let role: Role = 'admin';
+beforeEach(() => { role = 'admin'; });
+function signInAs(as: Role): void {
+  patchState(unprotected(TestBed.inject(SessionStore)), {
+    status: 'authenticated', username: as === 'admin' ? 'admin' : 'viewer1', role: as,
+  });
+}
 
 const NOW = Date.parse('2026-10-20T12:00:00Z');
 
@@ -120,6 +132,7 @@ describe('sb-trade-drawer (v179 §3.2)', () => {
         { provide: ConnectionStore, useValue: { currency: signal('€') } },
       ],
     });
+    signInAs(role);
   });
 
   function mount(row: TradeRow = tradeRow()): HTMLElement {
@@ -248,6 +261,22 @@ describe('sb-trade-drawer (v179 §3.2)', () => {
     // No workspace media query (spec §4 anti-goal): the drawer's phone,
     // tablet and desktop geometry is sb-drawer's own.
     expect(css).not.toMatch(/@media/);
+  });
+
+  it('keeps the row-actions trigger beside the link for the admin (v207, unchanged)', () => {
+    const el = mount();
+    expect(el.querySelector('.drawer-actions sb-row-actions .trigger')).not.toBeNull();
+    expect(el.querySelector('.drawer-actions a.full-trade')).not.toBeNull();
+  });
+
+  it('gives a viewer the link to the full trade and no command (v207)', () => {
+    signInAs('viewer');
+    const el = mount();
+    const actions = el.querySelector('.drawer-actions')!;
+    expect(actions.querySelector('sb-row-actions')).toBeNull();
+    expect(actions.querySelectorAll('button')).toHaveLength(0);
+    const link = actions.querySelector<HTMLAnchorElement>('a.full-trade')!;
+    expect(link.getAttribute('href')).toBe('/trades/' + tradeRow().id);
   });
 });
 

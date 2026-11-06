@@ -27,8 +27,8 @@ from flask import request
 # between tests, which rebinds ADMIN_USERNAME/ADMIN_PASSWORD and rebuilds
 # _session_authenticated; names bound here at import time would go stale and
 # this decorator would authenticate against the previous test's credentials.
-from swingbot.admin import app as _app
-
+# Imported lazily: app.py registers the v1 blueprints at import time, so a
+# module-level import here is a cycle whenever a v1 module is imported first.
 from swingbot.admin import login_limiter
 
 from . import error
@@ -46,6 +46,7 @@ def require_auth(view):
 
     @wraps(view)
     def wrapped(*args, **kwargs):
+        from swingbot.admin import app as _app
         if _app._session_authenticated():
             return view(*args, **kwargs)
         auth = request.authorization

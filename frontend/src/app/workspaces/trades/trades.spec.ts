@@ -7,7 +7,7 @@ import { patchState } from '@ngrx/signals';
 import { unprotected } from '@ngrx/signals/testing';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   authInterceptor,
@@ -30,6 +30,16 @@ import { numText } from './trades.columns';
 import { partialOpenTitle } from '../../ui/status-cell';
 import { fxMissingText } from '../analytics/scope-bar';
 import { ROW_COUNT_NOTE, EXPORT_HINT, Trades, TRADES_CONTROLS } from './trades';
+import { Role } from '../../api/models';
+import { SessionStore } from '../../stores/session.store';
+
+let role: Role = 'admin';
+beforeEach(() => { role = 'admin'; });
+function signInAs(as: Role): void {
+  patchState(unprotected(TestBed.inject(SessionStore)), {
+    status: 'authenticated', username: as === 'admin' ? 'admin' : 'viewer1', role: as,
+  });
+}
 
 function row(overrides: Partial<TradeRow>): TradeRow {
   return {
@@ -61,6 +71,7 @@ describe('Trades rowKey', () => {
         TradesStore,
       ],
     });
+    signInAs(role);
     const f = TestBed.createComponent(Trades);
     const rowKey = (f.componentInstance as unknown as { rowKey: (r: TradeRow) => string }).rowKey;
     const a = row({ leg_index: 0, leg_total: 2 });
@@ -114,6 +125,7 @@ function render(footer?: FooterFixture): ComponentFixture<Trades> {
       { provide: PreferencesStore, useValue: preferencesStub },
     ],
   });
+  signInAs(role);
   const fixture = TestBed.createComponent(Trades);
   fixture.detectChanges();
   if (footer) {
@@ -460,6 +472,7 @@ function renderPhone(items: TradeRow[]): ComponentFixture<Trades> {
       phoneViewport(),
     ],
   });
+  signInAs(role);
   const fixture = TestBed.createComponent(Trades);
   fixture.detectChanges();
   patchState(unprotected(TestBed.inject(TradesStore)), {
@@ -747,5 +760,73 @@ describe('Trades on sb-page (v195 Phase 4, §5.2)', () => {
     const src = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trades.ts'), 'utf8');
     expect(src).toContain('<sb-page');
     expect(src).not.toMatch(/:host \{[^}]*grid-template-columns/);
+  });
+});
+
+/* -- v207 -- a viewer reads Trades and changes nothing ------------------ */
+
+describe('Trades for a viewer (v207)', () => {
+  const columnKeys = (f: ComponentFixture<Trades>): string[] =>
+    (f.componentInstance as unknown as { allColumns: () => { key: string }[] })
+      .allColumns().map((c) => c.key);
+  const header = (f: ComponentFixture<Trades>) =>
+    (f.nativeElement as HTMLElement).querySelector('sb-page header.bar .actions')!;
+
+  it('gives the admin both clears, Refresh and the row-actions column (unchanged)', () => {
+    const f = render();
+    expect(header(f).querySelector('[data-action="clear-open"]')).not.toBeNull();
+    expect(header(f).querySelector('[data-action="clear-history"]')).not.toBeNull();
+    expect(header(f).querySelector('.prices-meta sb-market-refresh')).not.toBeNull();
+    expect(columnKeys(f)).toContain('actions');
+  });
+
+  it('hides both clears and Refresh from a viewer and keeps the price age', () => {
+    role = 'viewer';
+    const f = render();
+    expect(header(f).querySelector('[data-action="clear-open"]')).toBeNull();
+    expect(header(f).querySelector('[data-action="clear-history"]')).toBeNull();
+    expect(header(f).querySelector('sb-market-refresh')).toBeNull();
+    expect(header(f).querySelector('.prices-meta sb-market-value')).not.toBeNull();
+    expect(header(f).querySelectorAll('button')).toHaveLength(0);
+  });
+
+  it('drops only the actions column for a viewer: every read column stays', () => {
+    const adminKeys = columnKeys(render());
+    role = 'viewer';
+    expect(columnKeys(render())).toEqual(adminKeys.filter((key) => key !== 'actions'));
+  });
+
+  it('follows a role change without a remount', () => {
+    const f = render();
+    signInAs('viewer');
+    f.detectChanges();
+    expect(header(f).querySelector('[data-action="clear-open"]')).toBeNull();
+    expect(columnKeys(f)).not.toContain('actions');
+  });
+
+  it('offers Close in the admin phone drawer and no command in a viewer one', () => {
+    // `actions` is not in the phone baseline: a saved layout that lists it is
+    // what puts the column in the drawer, so seed that.
+    const withActions = (f: ComponentFixture<Trades>): ComponentFixture<Trades> => {
+      (f.componentInstance as unknown as { visible: { update: (fn: (v: string[]) => string[]) => void } })
+        .visible.update((keys) => [...keys, 'actions']);
+      f.detectChanges();
+      return f;
+    };
+    const drawer = (f: ComponentFixture<Trades>) => {
+      openRowDrawer(tradesTable(f));
+      f.detectChanges();
+      const el = (f.nativeElement as HTMLElement).querySelector('sb-drawer.row-drawer')!;
+      return { keys: drawerKeys(tradesTable(f)), labels: [...el.querySelectorAll('button')].map((b) => b.textContent!.trim()) };
+    };
+    const active = row({ status: 'ACTIVE', status_label: 'ACTIVE', exit_price: null, pnl_pct: null });
+    const admin = drawer(withActions(renderPhone([active])));
+    expect(admin.keys).toContain('actions');
+    expect(admin.labels).toContain('Close');
+    role = 'viewer';
+    const viewer = drawer(withActions(renderPhone([active])));
+    expect(viewer.keys).not.toContain('actions');
+    expect(viewer.labels).not.toContain('Close');
+    expect(viewer.labels).not.toContain('Delete');
   });
 });

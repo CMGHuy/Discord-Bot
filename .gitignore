@@ -179,3 +179,6 @@ data/.v190_*
 
 # runtime queue written by the bot; never tracked (v204 deploy reset could not unlink it)
 data/short_interest_queue.json
+
+# v211 screen checkpoints (per-ticker pickles, deleted once the record is committed)
+data/screen_checkpoints/

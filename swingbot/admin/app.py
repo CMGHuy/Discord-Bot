@@ -36,10 +36,11 @@ import gzip
 import hashlib
 import hmac
 import os
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
-from flask import Flask, Response, redirect, request, session, url_for
+from flask import Flask, Response, g, redirect, request, session, url_for
 
 from swingbot import config
 from swingbot.core.scanning import progress_store
@@ -48,6 +49,7 @@ from swingbot.core.scanning.engine import is_scan_running
 # than from helpers, so it is used even though nothing in this file calls it.
 from .helpers import docker_sdk, _load_or_create_secret_key  # noqa: F401
 from . import login_limiter
+from . import principals
 from . import freshness
 from . import request_timing
 
@@ -143,10 +145,58 @@ def _password_hash() -> str:
     ).hexdigest()
 
 
-def _session_authenticated() -> bool:
-    return session.get("admin_authed") is True and hmac.compare_digest(
-        session.get("pw_hash", ""), _password_hash()
+_PRINCIPAL_G = "v207_principal"
+_UNRESOLVED = object()
+
+
+def _admin_principal() -> dict:
+    return {"role": "admin", "username": ADMIN_USERNAME, "user_id": None}
+
+
+def _admin_session_valid(data: Mapping) -> bool:
+    return data.get("admin_authed") is True and hmac.compare_digest(
+        str(data.get("pw_hash", "")), _password_hash()
     )
+
+
+def principal_from_session(data: Mapping) -> dict | None:
+    """Who a session's fields name, re-checked against today's credentials.
+
+    v207. Admin: `admin_authed` + the current `_password_hash()`; a session
+    with no `role` key was issued before v207 and is the admin. Viewer: the
+    `admin_users` row must exist, be enabled and carry the same
+    `credential_version` (principals.viewer_principal), so disable, reset and
+    delete end the session on its next request. A viewer session is never
+    checked as the admin, whatever else it carries. Needs no request context:
+    the SSE stream calls it on a snapshot (events/stream.py)."""
+    role = data.get("role", "admin")
+    if role == "admin":
+        return _admin_principal() if _admin_session_valid(data) else None
+    if role == "viewer":
+        return principals.viewer_principal(data.get("user_id"),
+                                           data.get("credential_version"))
+    return None
+
+
+def resolve_principal() -> dict | None:
+    """The request's principal, or None. The one place every auth path asks:
+    `_session_authenticated`, `/session`, the api_v1 access hook, `/events`.
+    Cached on `flask.g`: a viewer costs one row read per request, not one per
+    caller."""
+    cached = g.get(_PRINCIPAL_G, _UNRESOLVED)
+    if cached is _UNRESOLVED:
+        cached = principal_from_session(session)
+        setattr(g, _PRINCIPAL_G, cached)
+    return cached
+
+
+def forget_principal() -> None:
+    """Drop the cached principal after the session changed in this request."""
+    g.pop(_PRINCIPAL_G, None)
+
+
+def _session_authenticated() -> bool:
+    return resolve_principal() is not None
 
 
 def credentials_match(username: str, password: str) -> bool:
@@ -160,6 +210,22 @@ def credentials_match(username: str, password: str) -> bool:
     user_ok = hmac.compare_digest(username.encode("utf-8"), ADMIN_USERNAME.encode("utf-8"))
     pass_ok = hmac.compare_digest(password.encode("utf-8"), ADMIN_PASSWORD.encode("utf-8"))
     return user_ok and pass_ok
+
+
+def login_session_fields(username: str, password: str) -> dict | None:
+    """The session fields a successful sign-in stores, or None (v207).
+
+    The `.env` admin is tried first with the constant-time `credentials_match`
+    and never touches `admin_users`, so the admin can sign in even before the
+    table exists. Then the table: principals.authenticate_viewer runs exactly
+    one hash check for unknown, disabled and wrong-password cases alike."""
+    if credentials_match(username, password):
+        return {"admin_authed": True, "pw_hash": _password_hash(), "role": "admin"}
+    row = principals.authenticate_viewer(username, password)
+    if row is None:
+        return None
+    return {"role": "viewer", "user_id": row["id"],
+            "credential_version": row["credential_version"], "username": row["username"]}
 
 
 def require_auth(view):

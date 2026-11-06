@@ -301,3 +301,81 @@ def test_the_scan_tick_checks_providers_after_the_scan():
     check = source.index("await ops_watch.check_provider_health()")
     assert (source.index("await asyncio.to_thread(_refresh_snapshot_safely)") < check
             < source.index("f = progress.funnel"))
+
+
+# --- the stale notice explains itself (2026-11-06 morning incident) ------------------
+
+def _snap(**kw):
+    return {"tick_started_at": None, "tick_phase": None, "last_error": None,
+            "last_error_at": None, "consecutive_failures": 0, **kw}
+
+
+def test_moment_text_shows_utc_and_berlin():
+    assert ops_watch.moment_text("2026-11-06T07:04:04+00:00") == "07:04 UTC (08:04 CET)"
+    assert ops_watch.moment_text("2026-07-06T07:04:04+00:00") == "07:04 UTC (09:04 CEST)"
+    assert ops_watch.moment_text("junk") == "junk"
+    assert ops_watch.moment_text(None) == "None"
+
+
+def test_cause_a_running_tick_is_slow_not_hung():
+    started = (NOW - dt.timedelta(minutes=6)).isoformat()
+    text = ops_watch.describe_stale_cause(
+        NOW, _snap(tick_started_at=started, tick_phase="scan"), INTERVAL)
+    assert "has run 6 min without finishing" in text
+    assert "may just be slow" in text and "limit is 10 min" in text
+
+
+def test_cause_a_failed_tick_names_the_error():
+    text = ops_watch.describe_stale_cause(
+        NOW, _snap(last_error="TimeoutError: boom", last_error_at=_ago(2),
+                   consecutive_failures=2), INTERVAL)
+    assert "2 in a row" in text and "`TimeoutError: boom`" in text
+
+
+def test_cause_no_tick_started():
+    text = ops_watch.describe_stale_cause(NOW, _snap(), INTERVAL)
+    assert "No scan tick has started" in text and "stuck before the scan begins" in text
+
+
+def test_the_alert_embed_carries_the_cause_and_falls_back_without_one():
+    assert "custom cause" in notices.stale_scan_embed(14, "x", "custom cause").description
+    assert "scheduled scan has not finished a tick" in notices.stale_scan_embed(14, "x").description
+
+
+def test_the_watchdog_logs_the_alert_and_the_recovery(heartbeat, channel, caplog):
+    heartbeat.update({"last_success": _ago(14), "tick_started_at": _ago(6), "tick_phase": "scan"})
+    with caplog.at_level(logging.INFO, logger=ops_watch.log.name):
+        assert _tick() == "alert"
+        heartbeat["last_success"] = _ago(1)
+        assert _tick() == "recover"
+    assert "STALE alert posted" in caplog.text and "age_min=14" in caplog.text
+    assert "tick_phase=scan" in caplog.text and "limit_min=10" in caplog.text
+    assert "stale alert cleared" in caplog.text
+    body = channel.sent[0]["embed"].description
+    assert "has run 6 min without finishing" in body and "UTC (" in body
+
+
+def test_the_watchdog_logs_when_there_is_no_ops_channel(heartbeat, monkeypatch, caplog):
+    monkeypatch.setattr(loops, "_ops_channel", lambda: None)
+    heartbeat["last_success"] = _ago(30)
+    with caplog.at_level(logging.WARNING, logger=ops_watch.log.name):
+        assert _tick() is None
+    assert "no ops channel configured" in caplog.text
+
+
+def test_tick_start_success_and_failure_keep_the_progress_keys(heartbeat):
+    runstate.record_tick_start("scan")
+    assert heartbeat["tick_phase"] == "scan" and heartbeat["tick_started_at"]
+    runstate.record_tick_failure(ValueError("bad bar"))
+    assert heartbeat["tick_started_at"] is None
+    assert heartbeat["last_error"] == "ValueError: bad bar" and heartbeat["last_error_at"]
+    snap = runstate.tick_snapshot()
+    assert snap["last_error"] == "ValueError: bad bar" and snap["consecutive_failures"] == 1
+    runstate.record_tick_success()
+    assert heartbeat["last_error"] is None and heartbeat["tick_phase"] is None
+
+
+def test_failure_without_an_exception_leaves_the_last_error_alone(heartbeat):
+    heartbeat["last_error"] = "old"
+    runstate.record_tick_failure()
+    assert heartbeat["last_error"] == "old"

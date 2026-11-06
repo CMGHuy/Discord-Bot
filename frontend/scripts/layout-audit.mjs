@@ -51,7 +51,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import {
   CHECKS, DOCK_MIN_WIDTH, DOCK_SELECTORS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, RAIL_MIN_WIDTH, ROUTES, TOUCH_MAX_WIDTH,
-  classify, countByCheck, dedupe, dockVerdict, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs, pickIds, railLabelVerdict,
+  classify, countByCheck, dedupe, dockVerdict, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs, pickIds, probeHintTwice, railLabelVerdict,
   resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
@@ -103,6 +103,8 @@ function auditPage({ touch, minTap, minText, maxBaseline, maxCenter, hiddenSrc, 
   /** The nearest ancestor that scrolls or clips sideways, below <main>. */
   function container(el) {
     for (let p = el.parentElement; p && p !== document.body && p.tagName !== 'MAIN'; p = p.parentElement) {
+      // A declared marquee (the shell tape): its content slides past a faded edge by design.
+      if (p.hasAttribute('data-marquee')) return { kind: 'marquee', box: p };
       const overflowX = getComputedStyle(p).overflowX;
       if (overflowX === 'auto' || overflowX === 'scroll') return { kind: 'scroll', box: p };
       if (overflowX === 'hidden' || overflowX === 'clip') return { kind: 'clip', box: p };
@@ -312,18 +314,25 @@ async function auditHints(page, width) {
   for (let i = 0, n = await triggers.count(); i < n; i += 1) {
     const trigger = triggers.nth(i);
     if (!(await trigger.isVisible())) continue;
-    const label = (await trigger.getAttribute('aria-label')) ?? '';
-    try {
-      await (touch ? trigger.tap({ timeout: 2000 }) : trigger.hover({ timeout: 2000 }));
-    } catch (error) {
-      console.error(`  hint "${label}" @${width}: cannot ${touch ? 'tap' : 'hover'} (${String(error).split('\n')[0]})`);
-      continue;
-    }
-    await page.waitForTimeout(HINT_SETTLE_MS);
-    const geometry = await page.evaluate(measureHint, await trigger.getAttribute('aria-describedby'));
+    const label = (await trigger.getAttribute('aria-label', { timeout: 2000 }).catch(() => null)) ?? '';
+    const geometry = await probeHintTwice({
+      open: () => (touch ? trigger.tap({ timeout: 2000 }) : trigger.hover({ timeout: 2000 })),
+      measure: async () => {
+        await page.waitForTimeout(HINT_SETTLE_MS);
+        const geometry = await page.evaluate(measureHint, await trigger.getAttribute('aria-describedby', { timeout: 2000 }));
+        // A still-loading tab can swap its KPI strip out mid-check: the popover then measures
+        // 0x0 because its trigger is gone, not because it failed to open. Skip that trigger.
+        if (await trigger.getAttribute('aria-label', { timeout: 500 }).catch(() => null) !== label) {
+          throw new Error('trigger replaced by a re-render');
+        }
+        return geometry;
+      },
+      close: () => closeHint(page, trigger, touch),
+      onSkip: (step, reason) => console.error(`  hint "${label}" @${width}: cannot ${step} (${reason})`),
+    }, (measured) => hintVerdict(measured.rect, measured.viewport, measured.hits).reason === 'zero-size');
+    if (!geometry) continue;
     const verdict = hintVerdict(geometry.rect, geometry.viewport, geometry.hits);
     if (!verdict.ok) findings.push(hintFinding(label, verdict.reason, geometry.rect));
-    await closeHint(page, trigger, touch);
   }
   return findings;
 }
@@ -417,7 +426,9 @@ async function openSheet(page, width) {
     console.error(`  live strip @${width}: cannot tap (${String(error).split('\n')[0]})`);
     return null;
   }
-  await page.locator('sb-live-sheet [role=dialog]').waitFor({ state: 'visible', timeout: 2000 }).catch(() => null);
+  // 5 s, not 2: on a slow replica a still-rendering tab delayed a sheet that opens in ~100 ms
+  // once settled, and the run reported sheet-not-opened on a different tab each time.
+  await page.locator('sb-live-sheet [role=dialog]').waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
   await page.waitForTimeout(SHEET_SETTLE_MS);
   const sheet = await page.evaluate(measureSheet);
   await page.keyboard.press('Escape');

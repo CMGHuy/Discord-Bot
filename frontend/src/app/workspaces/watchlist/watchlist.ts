@@ -8,6 +8,8 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { SessionStore } from '../../stores/session.store';
+import { IfAdminDirective } from '../../auth/if-admin.directive';
 import { Router } from '@angular/router';
 
 import { Ticker } from '../../api/models';
@@ -179,7 +181,7 @@ export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answe
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, Page, Async, Icon, Sparkline, MarketValue, Hint],
+  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, Page, Async, Icon, Sparkline, MarketValue, Hint, IfAdminDirective],
   // v54 D1: the whole point of this workspace (spec v14 Decision 9) is the
   // ticker table -- tight rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -343,8 +345,10 @@ export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answe
 
       <!-- Adding is the secondary panel, after the table it feeds. Hidden,
            not removed, on Earnings: the slot stays one stable element
-           (sb-page contract). -->
+           (sb-page contract). v207: absent for a viewer; the slot is then
+           empty and sb-page hides it. -->
       <sb-panel
+        *sbIfAdmin
         page-secondary
         class="add-panel"
         heading="Add tickers"
@@ -591,6 +595,7 @@ export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answe
 export class Watchlist {
   protected readonly fallbackHint = WATCHLIST_FALLBACK_HINT;
   private readonly router = inject(Router);
+  private readonly session = inject(SessionStore);
   protected readonly store = inject(WatchlistStore);
   private readonly preferences = inject(PreferencesStore);
   protected readonly tape = inject(TapeStore);
@@ -810,9 +815,9 @@ export class Watchlist {
       signal: this.signalCell(),
       actions: this.actionsCell(),
     };
-    return WATCHLIST_COLUMNS.map((column) =>
-      cells[column.key] ? { ...column, cell: cells[column.key] } : column,
-    );
+    return WATCHLIST_COLUMNS
+      .filter((column) => column.key !== 'actions' || this.session.isAdmin())
+      .map((column) => (cells[column.key] ? { ...column, cell: cells[column.key] } : column));
   });
 
   /** Guard 1 (v95 §5): the sheet must say when something inside it is

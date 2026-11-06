@@ -31,12 +31,14 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from swingbot.admin.api_v1 import ApiError, iso
 
 from .db_listener import DbEventListener
+from swingbot.core.infra.swallowed import swallowed
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +52,31 @@ def _default_watcher(emit):
     `data/` any more.
     """
     return DbEventListener(emit)
+
+
+#: Swallowed-error tag for a failed progress read on a `scan` event (v206 P1-b).
+SCAN_PROGRESS_TAG = "admin.events.scan_progress"
+
+#: A failing read is counted every time but logged at WARNING at most this often.
+PROGRESS_LOG_INTERVAL_S = 60.0
+
+
+def _default_progress_reader() -> dict:
+    """What the progress strip reads from `/system/scan`: `running` and `progress`.
+
+    Runs on the listener thread, whose `emit` must not block
+    (`db_listener.py`), so it is the narrow read -- the running flag and the
+    progress row, never `scan_status_payload` -- on the fail-fast side
+    connection (`MARKETDATA_PG_TIMEOUT_MS` statement timeout; it backs off
+    after a refused connect). Raises on any failure; `publish` then sends
+    the event thin.
+    """
+    from swingbot.core.db import side_engine
+    from swingbot.core.scanning import progress_store, runstate
+
+    with side_engine.side_connection() as conn:
+        return {"running": runstate.is_scan_running(conn=conn),
+                "progress": progress_store.read_strict(conn=conn)}
 
 
 #: Concurrent event connections. Spec Decision 5: the cap exists so that a
@@ -70,6 +97,8 @@ class Event:
     seq: int
     event: str
     at: str
+    #: v206: `{running, progress}` on a `scan` event whose read succeeded; else None.
+    progress: dict | None = None
 
     def data(self) -> dict:
         """The SSE `data:` body -- what changed is the event *name*.
@@ -77,8 +106,16 @@ class Event:
         Deliberately excludes the name itself: it travels in the `event:`
         field, and repeating it here would invite a client to read it from
         the body instead, which breaks `addEventListener` dispatch.
+
+        v206: a `scan` event carries `progress` when the broker read it, so
+        the progress strip patches without a request. Only when set: every
+        other frame stays `{seq, at}` byte for byte, and a failed read sends
+        the event thin, never `"progress": null`.
         """
-        return {"seq": self.seq, "at": self.at}
+        body = {"seq": self.seq, "at": self.at}
+        if self.progress is not None:
+            body["progress"] = self.progress
+        return body
 
 
 class Subscription:
@@ -168,16 +205,23 @@ class EventBroker:
 
     `watcher_factory` is injectable so tests can drive `publish` by hand
     instead of touching the filesystem; nothing in production passes it.
+    `progress_reader` and `clock` (v206) are injectable for the same reason.
     """
 
     def __init__(
         self,
         *,
         watcher_factory=None,
+        progress_reader=None,
+        clock=time.monotonic,
         max_connections: int = MAX_CONNECTIONS,
         queue_limit: int = QUEUE_LIMIT,
     ):
         self._watcher_factory = watcher_factory or _default_watcher
+        # v206: injectable beside the watcher so tests need no database.
+        self._progress_reader = progress_reader or _default_progress_reader
+        self._clock = clock
+        self._progress_logged_at: float | None = None
         self._max_connections = max_connections
         self._queue_limit = queue_limit
 
@@ -265,21 +309,44 @@ class EventBroker:
         Called from the watcher's thread. It must not raise: the watcher
         survives a subscriber exception, but a raise here would abandon the
         remaining connections mid-fan-out, so each delivery is isolated.
+
+        v206: a `scan` event reads the scan progress once, here -- outside
+        the lock, never per connection, and only when someone is listening.
         """
         with self._lock:
             self._seq += 1
-            stamped = Event(
-                seq=self._seq,
-                event=event,
-                at=iso(datetime.now(timezone.utc)),
-            )
+            seq, at = self._seq, iso(datetime.now(timezone.utc))
             targets = list(self._subscriptions)
 
+        progress = self._scan_progress() if event == "scan" and targets else None
+        stamped = Event(seq=seq, event=event, at=at, progress=progress)
         for subscription in targets:
             try:
                 subscription._offer(stamped)
             except Exception:
                 log.exception("failed to deliver %r to an event connection", event)
+
+    def _scan_progress(self) -> dict | None:
+        """The `scan` payload, or None (a thin event) when the read fails. Never raises."""
+        try:
+            return self._progress_reader()
+        except Exception as exc:  # noqa: BLE001 -- a broken read must never stop events
+            self._note_progress_failure(exc)
+            return None
+
+    def _note_progress_failure(self, exc: Exception) -> None:
+        """Count every failure; log at WARNING at most once per PROGRESS_LOG_INTERVAL_S.
+
+        Only the listener thread publishes, so `_progress_logged_at` needs no lock.
+        """
+        now = self._clock()
+        last = self._progress_logged_at
+        loud = last is None or now - last >= PROGRESS_LOG_INTERVAL_S
+        if loud:
+            self._progress_logged_at = now
+        swallowed(log, SCAN_PROGRESS_TAG, exc,
+                  "scan event sent without progress: the progress read failed",
+                  level=logging.WARNING if loud else logging.DEBUG)
 
 
 _BROKER: EventBroker | None = None

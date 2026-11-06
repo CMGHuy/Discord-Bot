@@ -188,7 +188,7 @@ async def session_scan():
     except Exception as exc:
         log.exception("session_scan tick failed -- will retry on the next scheduled tick "
                        "(every %d min) instead of stopping the loop entirely", config.SCAN_INTERVAL_MINUTES)
-        failures = runstate.record_tick_failure()
+        failures = runstate.record_tick_failure(exc)
         if write_failure.halts_issuance(exc):
             await _halt_on_store_failure(exc)
         try:
@@ -248,6 +248,7 @@ async def _session_scan_tick():
 
     now_str = dt.datetime.now(SESSION_TZ).strftime("%H:%M")
     log.info("Running session scan at %s…", now_str)
+    runstate.record_tick_start("scan")
     progress = scan_engine.ScanProgress()
     alerts = await _run_scan_posting_partial(
         channel, require_confirmation=True, bot=bot, progress=progress)

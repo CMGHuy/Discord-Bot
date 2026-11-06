@@ -21,7 +21,7 @@ export const ROUTES = Object.freeze([
   '/insights/research', '/insights/reports', '/insights/reports?tab=gates',
   '/watchlist', '/watchlist/:symbol',
   '/risk',
-  '/system', '/system?tab=logs', '/system?tab=scan', '/system?tab=providers', '/system/versions',
+  '/system', '/system?tab=logs', '/system?tab=scan', '/system?tab=providers', '/system?tab=users', '/system/versions',
   '/ui',
 ]);
 
@@ -124,6 +124,42 @@ export function vcenterGeometry() {
   };
 }
 
+
+/**
+ * One hint trigger, opened, measured and closed, where any step may throw because a slow page
+ * re-rendered and detached the trigger mid-check. Such a trigger is skipped (onSkip gets the
+ * step and the error's first line) and the run goes on: one vanished element must never abort
+ * a 30-minute audit. Returns measure()'s result, or null when skipped. A close() failure after
+ * a good measurement keeps the measurement.
+ */
+export async function probeHint({ open, measure, close, onSkip }) {
+  let geometry;
+  for (const [step, run] of [['open', open], ['measure', async () => { geometry = await measure(); }]]) {
+    try {
+      await run();
+    } catch (error) {
+      onSkip(step, String(error).split('\n')[0]);
+      return null;
+    }
+  }
+  try {
+    await close();
+  } catch (error) {
+    onSkip('close', String(error).split('\n')[0]);
+  }
+  return geometry;
+}
+
+/**
+ * probeHint, run a second time when the first measurement needs it (a zero-size popover). A
+ * slow tab can re-render as the trigger is tapped, swapping in an identical trigger whose
+ * popover is closed; a genuinely broken popover fails both tries, a re-render only the first.
+ */
+export async function probeHintTwice(steps, needsRetry) {
+  const first = await probeHint(steps);
+  if (first === null || !needsRetry(first)) return first;
+  return probeHint(steps);
+}
 
 /** Sub-pixel slack for the hint check's viewport test: a rect at -0.4px is a rounding artefact, not off-screen. */
 const HINT_EDGE_SLACK_PX = 0.5;

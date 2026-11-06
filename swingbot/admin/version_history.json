@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-05 21:04:27 UTC",
+  "generated_at": "2026-11-06 14:29:08 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.39.1",
-    "bot": "2.16.5"
+    "ui": "1.40.1",
+    "bot": "2.17.1"
   },
   "releases": [
     {
@@ -2387,6 +2387,46 @@
       },
       "changed": [
         "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "last_seen": "2026-11-06",
+      "commit": "2f901493",
+      "subject": "release(ui,bot): ui 1.40.0, bot 2.17.0 -- v207 viewer accounts (read-only logins, Users page)",
+      "versions": {
+        "ui": "1.40.0",
+        "bot": "2.17.0"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "last_seen": "2026-11-06",
+      "commit": "e9f43b2c",
+      "subject": "release(ui): 1.40.1 -- admin under load: the scan strip rides the scan event, no polling on scan (v206)",
+      "versions": {
+        "ui": "1.40.1",
+        "bot": "2.17.0"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "last_seen": "2026-11-06",
+      "commit": "a20bf453",
+      "subject": "release(bot): 2.17.1 -- admin under load: scan events carry progress, /health reports sse_streams (v206)",
+      "versions": {
+        "ui": "1.40.1",
+        "bot": "2.17.1"
+      },
+      "changed": [
         "bot"
       ]
     }

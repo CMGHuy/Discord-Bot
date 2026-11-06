@@ -112,19 +112,41 @@ class Attempt:
     retry_after: int | None = None
 
 
-def attempt(username: str, password: str, match: Callable[[str, str], bool]) -> Attempt:
-    """Gate one credential check through LIMITER (read at call time).
+@dataclass(frozen=True)
+class LoginAttempt:
+    """One gated sign-in that names who signed in (v207). `result` is what the
+    authenticate callable returned; `retry_after` is set only when locked."""
+    result: dict | None = None
+    retry_after: int | None = None
 
-    A locked key is refused before the credentials are compared. Empty
-    username AND password is not an attempt and is never counted."""
+    @property
+    def ok(self) -> bool:
+        return self.result is not None
+
+
+def attempt_login(username: str, password: str,
+                  authenticate: Callable[[str, str], dict | None]) -> LoginAttempt:
+    """Gate one sign-in through LIMITER (read at call time).
+
+    A locked key is refused before the credentials are checked. Empty
+    username AND password is not an attempt and is never counted. Every other
+    outcome -- wrong password, unknown user, disabled user -- is one failure."""
     key = client_key()
     wait = LIMITER.check(key)
     if wait is not None:
-        return Attempt(False, wait)
+        return LoginAttempt(None, wait)
     if not username and not password:
-        return Attempt(False)
-    if match(username, password):
-        LIMITER.succeed(key)
-        return Attempt(True)
-    LIMITER.fail(key)
-    return Attempt(False)
+        return LoginAttempt()
+    result = authenticate(username, password)
+    if result is None:
+        LIMITER.fail(key)
+        return LoginAttempt()
+    LIMITER.succeed(key)
+    return LoginAttempt(result)
+
+
+def attempt(username: str, password: str, match: Callable[[str, str], bool]) -> Attempt:
+    """The bool-shaped gate Basic auth keeps (v207 Decision 7)."""
+    outcome = attempt_login(username, password,
+                            lambda u, p: {} if match(u, p) else None)
+    return Attempt(outcome.ok, outcome.retry_after)

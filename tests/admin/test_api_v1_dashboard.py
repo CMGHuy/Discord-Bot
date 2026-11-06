@@ -573,7 +573,7 @@ def test_health_carries_the_versions_and_the_market_session(logged_in):
     # hardcode "USD" beside three of them.
     assert_shape(
         body,
-        {"ok": bool, "versions": dict, "market_active": bool, "currency": str},
+        {"ok": bool, "versions": dict, "market_active": bool, "currency": str, "sse_streams": int},
     )
     assert_shape(body["versions"], {
         "ui": str, "bot": str, "last_updated": (str, type(None)),

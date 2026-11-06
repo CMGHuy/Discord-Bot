@@ -22,7 +22,7 @@ the plan's worktree branch.
 
 **Interfaces:**
 - Consumes (V209-2/2b/3): `ShockState`, `ShockReading`, `ShockThresholds`, `measure`, `step`, `RULES`, `_EPS`, `_meets`, `_settled`, `_enter_shock`, `_carry`, `NameRow`, `ShockSnapshot`, `VixTape`.
-- Produces: `recovery_condition(state, reading, th=ShockThresholds()) -> bool`; `reentry_condition(state, reading, th=ShockThresholds()) -> bool`; `RULES["SHOCK"] = _from_shock`, `RULES["RECOVERY"] = _from_recovery` (complete). `ShockState.session_date` / `vix_session_high` / `spy_prev_close` / `prev_breadth` carried as V209-3's `_carry` already does. V209-6 calls only `measure` and `step`; V209-10 compares `prior.label` with `new.label`.
+- Produces: `recovery_condition(state, reading, th=ShockThresholds()) -> bool`; `reentry_condition(state, reading, th=ShockThresholds()) -> bool`; `RULES["SHOCK"] = _from_shock`, `RULES["RECOVERY"] = _from_recovery` (complete). `ShockState.session_date` / `vix_session_high` / `spy_prev_close` / `prev_breadth` carried as V209-3's `_carry` already does. V209-6 calls only `measure` and `step`; V210-2 (plan v210) compares `prior.label` with `new.label`.
 
 Rules (spec § State machine; index Global Constraints):
 

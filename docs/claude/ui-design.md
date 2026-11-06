@@ -37,7 +37,8 @@ each width (Playwright, never claude-in-chrome — `skills-tools.md`).
 - Layout responds to its **container** where it can sit in a narrow panel
   (`container-type: inline-size` + `@container`), not only the viewport.
 - No horizontal page scroll. A wide chart or grid scrolls inside its own box
-  with an edge fade; a data table on a phone is **declared, not hand-built**:
+  with an edge fade; a moving marquee (the shell tape) fades both edges and
+  carries `data-marquee`, which the audit's clipped check skips inside; a data table on a phone is **declared, not hand-built**:
   its columns carry a `compact` slot (line 1 or 2, plus an order) and
   `sb-data-table` renders compact rows and the row drawer (v179). Open-position
   tables keep the P&L amount and the stop or risk on the compact row; strategy

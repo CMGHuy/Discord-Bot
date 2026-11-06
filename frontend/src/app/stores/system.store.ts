@@ -30,9 +30,9 @@ import {
 export type LogSource = 'bot' | 'admin';
 
 /** v195 §5.1 and correction 4: the bar reads Scan · Providers · Settings ·
- *  Logs. The order is the bar's; the landing tab is not the first one, see
+ *  Logs; v207 adds Users last (Settings stays the landing tab). The order is the bar's; the landing tab is not the first one, see
  *  `systemTabFrom`. */
-export const SYSTEM_TABS = ['scan', 'providers', 'settings', 'logs'] as const;
+export const SYSTEM_TABS = ['scan', 'providers', 'settings', 'logs', 'users'] as const;
 export type SystemTab = (typeof SYSTEM_TABS)[number];
 
 /**
@@ -568,6 +568,8 @@ export const SystemStore = signalStore(
         providers: resolveProviders,
         settings: resolveSettings,
         logs: resolveLogs,
+        // the Users tab owns its store and loads on mount (V207-17)
+        users: () => of(undefined),
       })[tab]();
 
     const loadSettings = (): void => { resolveSettings().subscribe(); };

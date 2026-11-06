@@ -7,7 +7,7 @@ import { routes } from '../app.routes';
 import { ICON_NAMES } from '../ui/icon';
 import {
   ALIASES, DESTINATION_LABEL_OVERRIDES, NAV_ENTRIES, PHONE_TABS, SECTION_LABEL_OVERRIDES, SECTION_WORDS,
-  breadcrumbFor, destinationFor, detailCrumb, isSectionUrl, navEntryFor, phoneTabPathFor,
+  breadcrumbFor, destinationFor, detailCrumb, isSectionUrl, navEntriesFor, navEntryFor, phoneTabPathFor,
 } from './nav';
 
 const paths = (entries: readonly { path: string }[]) => entries.map((entry) => entry.path);
@@ -232,5 +232,24 @@ describe('v203: the v195 group model is gone', () => {
     const source = readFileSync(join(process.cwd(), 'src/app/shell/nav.ts'), 'utf8');
     expect(source).not.toMatch(/\bNAV_GROUPS\b|\bNavGroup\b/);
     expect(existsSync(join(process.cwd(), 'src/app/shell/nav-indicator.ts'))).toBe(false);
+  });
+});
+
+describe('navEntriesFor (v207)', () => {
+  it('marks System, and only System, admin-only', () => {
+    expect(paths(NAV_ENTRIES.filter((entry) => entry.adminOnly))).toEqual(['/system']);
+  });
+
+  it('keeps every destination for the admin, the same array', () => {
+    expect(navEntriesFor(true)).toBe(NAV_ENTRIES);
+  });
+
+  it('drops System for a viewer and keeps the rest in rail order', () => {
+    expect(paths(navEntriesFor(false))).toEqual(['/dashboard', '/watchlist', '/trades', '/risk', '/insights']);
+  });
+
+  it('filters the entries it is given', () => {
+    expect(navEntriesFor(false, [])).toEqual([]);
+    expect(paths(navEntriesFor(false, NAV_ENTRIES.slice(-1)))).toEqual([]);
   });
 });

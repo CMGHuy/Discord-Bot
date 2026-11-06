@@ -37,7 +37,8 @@ import { CommandPalette, isPaletteShortcut, shortcutLabel } from './palette/comm
 import { PhoneTabBar } from './phone-tab-bar';
 import { RefresherBanner } from './refresher-banner';
 import { AlarmChip } from './alarm-chip';
-import { NAV_ENTRIES, navEntryFor } from './nav';
+import { navEntriesFor, navEntryFor } from './nav';
+import { ReadOnlyBadge } from './read-only-badge';
 import { SectionTabs } from './section-tabs';
 import { ScanProgressStrip } from './scan-progress';
 import { LiveStore } from '../stores/live.store';
@@ -80,7 +81,7 @@ const ZOOM_DEFAULT = 100;
     RouterOutlet, RouterLink, AlarmChip, ToastHost,
     ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, ProfileMenu, Tape,
     Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
-    LiveDock, LiveEdgeTab, LiveStrip, LiveSheet,
+    LiveDock, LiveEdgeTab, LiveStrip, LiveSheet, ReadOnlyBadge,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
@@ -102,8 +103,8 @@ export class Shell {
   /** The rail's five work destinations and its foot (System), from the one
    *  nav model the phone bar, More sheet, palette and breadcrumb read
    *  (v202 §1). The /ui gallery is not on it: a developer surface. */
-  protected readonly railWork = NAV_ENTRIES.filter((entry) => !entry.foot);
-  protected readonly railFoot = NAV_ENTRIES.filter((entry) => entry.foot);
+  protected readonly railWork = computed(() => navEntriesFor(this.session.isAdmin()).filter((entry) => !entry.foot));
+  protected readonly railFoot = computed(() => navEntriesFor(this.session.isAdmin()).filter((entry) => entry.foot));
 
   private readonly router = inject(Router);
   private readonly url = toSignal(

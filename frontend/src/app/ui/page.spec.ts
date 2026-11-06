@@ -100,6 +100,19 @@ describe('sb-page (v195 Phase 4)', () => {
     expect(el.querySelector('.description')!.textContent!.trim()).toBe('Open exposure against the cap');
   });
 
+  it('aligns the h1 and the actions on one baseline, not their top edges', async () => {
+    const { el } = await render(EverySlot);
+    const bar = el.querySelector<HTMLElement>('sb-page header.bar')!;
+    expect(getComputedStyle(bar).alignItems).toBe('baseline');
+  });
+
+  it('keeps the baseline header when there are no actions', async () => {
+    TestBed.inject(RouteTitleService).set('Versions', null);
+    const { el } = await render(RouteTitled);
+    expect(getComputedStyle(el.querySelector<HTMLElement>('header.bar')!).alignItems).toBe('baseline');
+    expect(el.querySelector('header.bar .actions')!.children).toHaveLength(0);
+  });
+
   it('lets the heading and description inputs win over the route', async () => {
     TestBed.inject(RouteTitleService).set('Something else', 'Another line');
     const { el } = await render(PrimaryOnly);

@@ -164,6 +164,59 @@ def _clear_login_limiter():
     login_limiter.LIMITER.reset()
 
 
+@pytest.fixture(autouse=True)
+def _fast_password_hash(monkeypatch):
+    """v207: scrypt costs tens of milliseconds per hash. Viewer tests hash and
+    check passwords constantly, so the suite uses a one-iteration PBKDF2;
+    production keeps principals.HASH_METHOD = "scrypt". A stored hash names its
+    own method, so checks keep working whichever method made it."""
+    from swingbot.admin import principals
+
+    monkeypatch.setattr(principals, "HASH_METHOD", "pbkdf2:sha256:1")
+
+
+@pytest.fixture
+def admin_users_table_missing(monkeypatch):
+    """v207: the deploy window before `alembic upgrade head` -- the admin_users
+    repository points at a table Postgres has never seen, so every lookup
+    raises a real UndefinedTable (the shared test table is left alone)."""
+    import sqlalchemy as sa
+
+    from swingbot.core.db import schema
+    from swingbot.core.db.repositories import admin_users as au
+
+    ghost = sa.Table("admin_users_not_migrated", sa.MetaData(),
+                     *[sa.Column(c.name, c.type, primary_key=c.primary_key)
+                       for c in schema.admin_users.columns])
+    repo = au.AdminUsersRepository()
+    repo.table, repo.key_col = ghost, ghost.c.id
+    monkeypatch.setattr(au, "_repo", repo)
+    monkeypatch.setattr(au, "_warned_missing", False)
+    return repo
+
+
+VIEWER_USERNAME = "viewer1"
+VIEWER_PASSWORD = "viewer-password-1"
+
+
+@pytest.fixture
+def viewer_client(client):
+    """v207: `client` signed in through POST /api/v1/session as a viewer.
+
+    Returns (client, row); `row` is the repository row as created (id,
+    credential_version 1). An admin Basic header (`auth`) still works on the
+    same client for setup calls."""
+    from swingbot.admin import principals
+    from swingbot.core.db.repositories.admin_users import admin_users_repo
+
+    row = admin_users_repo().create_user(VIEWER_USERNAME,
+                                         principals.hash_password(VIEWER_PASSWORD))
+    response = client.post("/api/v1/session",
+                           json={"username": VIEWER_USERNAME, "password": VIEWER_PASSWORD})
+    assert response.status_code == 200, response.get_json()
+    return client, row
+
+
 @pytest.fixture
 def layer_quotes(monkeypatch):
     """v171: MARKETDATA_LAYER=on with data.get_quote_batch answered from

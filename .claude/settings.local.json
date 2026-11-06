@@ -58,7 +58,13 @@
       "Read(//e/Documents/Private/Projects/Discord-Bot/.claude/worktrees/*/.env)",
       "Bash(bash scripts/ops/replicate_prod_db.sh:*)",
       "Read(//e/Documents/Private/Projects/Discord-Bot/**)",
-      "Edit(//e/Documents/Private/Projects/Discord-Bot/.superpowers/sdd/**)"
+      "Edit(//e/Documents/Private/Projects/Discord-Bot/.superpowers/sdd/**)",
+      "Bash(git push origin main)",
+      "Bash(git push origin main:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run watch:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run rerun:*)"
     ],
     "deny": [
       "Bash(cat .env.bak:*)",
@@ -85,5 +91,16 @@
     "version numbers - glob those. Anything destructive or outward-facing should",
     "prompt. Regenerate with /fewer-permission-prompts rather than by hand."
   ],
-  "outputStyle": "default"
+  "outputStyle": "default",
+  "autoMode": {
+    "environment": [
+      "$defaults",
+      "Pushing the local `main` branch to origin is the normal CI flow for this repo, not a production deploy by the agent: the partner has standing-authorised `git push origin main` after a worktree branch has been merged back into main. The push triggers the GitHub Actions pipeline (.github/workflows/deploy.yml), which the agent must then watch with `gh run list/watch/view`. Never force-push, and never push a branch whose name contains 'backup' or starts with 'stable-'."
+    ],
+    "allow": [
+      "$defaults",
+      "`git push origin main` (no force flags) after merging a worktree branch into main, followed by `gh run list|watch|view|rerun --failed` to track the pipeline run.",
+      "Writing or appending files via Bash (python, heredocs, cat >>) strictly inside the git worktree E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v207-viewer-accounts, by task-implementer subagents executing plan v207: the partner explicitly authorised this on 2026-11-05 because the Edit/Write worktree hook blocks main-tree sessions."
+    ]
+  }
 }

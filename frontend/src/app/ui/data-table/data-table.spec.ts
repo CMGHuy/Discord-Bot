@@ -1145,6 +1145,25 @@ describe('DataTable row drawer (v179 §3.1, §6a.4)', () => {
     fixture.detectChanges();
   }
 
+  it('closes the drawer when its row leaves the table (v207)', async () => {
+    open(1);
+    host.rows.set(host.rows().filter((_, index) => index !== 1));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(dialog()?.open ?? false).toBe(false);
+  });
+
+  it('follows its row when the row object is replaced (v207)', async () => {
+    open(1);
+    host.rows.set(host.rows().map((row, index) => (index === 1 ? { ...row, strategy: 'Fibonacci' } : row)));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(dialog()!.open).toBe(true);
+    expect(el().querySelector('sb-drawer.row-drawer [data-col="strategy"] dd')!.textContent!.trim()).toBe('Fibonacci');
+  });
+
   it('opens its own drawer on a tap, without emitting rowActivate', () => {
     open(1);
     expect(dialog()!.open).toBe(true);

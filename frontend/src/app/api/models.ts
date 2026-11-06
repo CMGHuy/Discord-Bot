@@ -91,9 +91,25 @@ export interface TradeCollection extends Collection<TradeRow> { prices_as_of?: s
  *  for humans and may change freely. */
 /* -- session ------------------------------------------------------------ */
 
+export type Role = 'admin' | 'viewer';
+
 export interface Identity {
   authenticated: boolean;
   username: string | null;
+  /** v207: who the session is; null when anonymous, and when an older server omits it, so the SPA shows the viewer layout. */
+  role: Role | null;
+}
+
+/** One viewer account as every `/api/v1/users` endpoint returns it (V207-6).
+ *  The server never sends the password hash or `credential_version`, so
+ *  neither exists here. */
+export interface AdminUser {
+  id: number;
+  username: string;
+  role: 'viewer';
+  disabled: boolean;
+  created_at: string;
+  last_login_at: string | null;
 }
 
 export interface Health {
@@ -1776,6 +1792,15 @@ export interface ScanStatus {
   bot_scan_paused: boolean | null;
   /** Null whenever no scan is publishing. Render that as "no bar", never as
    *  0% -- "a scan has started and achieved nothing" is a different claim. */
+  progress: ScanProgressRecord | null;
+}
+
+/** v206 P1-c: the payload a `scan` SSE frame carries -- the two fields of
+ *  `ScanStatus` the progress strip reads. Absent (never null) on the wire
+ *  when the server's read failed; `parseScanEventProgress` turns absent or
+ *  malformed into `null`. */
+export interface ScanEventProgress {
+  running: boolean;
   progress: ScanProgressRecord | null;
 }
 

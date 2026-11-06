@@ -9,6 +9,7 @@ import {
   TAB_PAGES,
   emptyQueryItems,
   pageItems,
+  pageItemsFor,
   rankPaletteItems,
   tickerItems,
   tradeItems,
@@ -180,5 +181,23 @@ describe('the empty query (v195 §3.1)', () => {
   it('shows the pages alone before the trades have loaded', () => {
     const shown = emptyQueryItems(pageItems());
     expect(labels(shown)).toEqual(RAIL);
+  });
+});
+
+describe('pageItemsFor (v207)', () => {
+  const routesOf = (items: PaletteItem[]) =>
+    items.map((item) => `${item.route}${item.queryParams ? `?tab=${item.queryParams['tab']}` : ''}`);
+
+  it('is every page for the admin', () => {
+    expect(pageItemsFor(true)).toEqual(pageItems());
+  });
+
+  it('offers a viewer no System page, no System tab and no Tuning tab', () => {
+    const routes = routesOf(pageItemsFor(false));
+    expect(routes.filter((route) => route.startsWith('/system'))).toEqual([]);
+    expect(routes).not.toContain('/insights/analytics?tab=tuning');
+    expect(routes).toContain('/insights/analytics?tab=partials');
+    expect(routes).toContain('/watchlist?tab=earnings');
+    expect(routes).toContain('/trades/calendar');
   });
 });

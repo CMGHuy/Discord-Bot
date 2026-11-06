@@ -59,11 +59,6 @@
       "count": 4
     }
   },
-  "src/app/ui/hint.spec.ts": {
-    "no-regex-spaces": {
-      "count": 1
-    }
-  },
   "src/app/ui/histogram.spec.ts": {
     "no-regex-spaces": {
       "count": 1

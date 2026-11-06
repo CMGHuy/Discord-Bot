@@ -69,7 +69,7 @@ Decided choices restated so a task read alone is complete:
 
 **Interfaces:**
 - Consumes: `schema.register(table, promoted)`, `schema.standard_columns()`, `schema.promoted_for`, `schema.contract_violations`, `events.TABLE_CHANNELS` (all existing); Alembic head `v197_001`.
-- Produces (V209-5b's repository and V209-11's admin read rely on these exact names):
+- Produces (V209-5b's repository and plan v210 (V210-2/V210-3) rely on these exact names):
   - `schema.market_shock_readings`: `id` BigInteger PK (identity), `as_of` TIMESTAMPTZ NOT NULL (index `market_shock_readings_as_of_idx`), `session_date` Date NOT NULL, `state_after` Text NOT NULL, `breadth_frac`, `breadth_speed`, `spy_atr_move`, `qqq_atr_move`, `vix_level`, `vix_chg_pct`, `vix_off_high_pct` Float(53) NULL, `sectors_down`, `sectors_total`, `n_names` Integer NOT NULL, `insufficient` Boolean NOT NULL, + `doc`, `updated_at`.
   - `schema.market_shock_state`: `id` SmallInteger PK, no autoincrement, `CHECK (id = 1)`; `label` Text NOT NULL, `since` TIMESTAMPTZ NULL, `session_date` Date NULL, `vix_session_high` Float(53) NULL, `last_reading_id` BigInteger NULL FK → `market_shock_readings.id` ON DELETE SET NULL, `last_notice_at` TIMESTAMPTZ NULL, + `doc`, `updated_at`.
   - `schema.PROMOTION_REASONS["market_shock_readings"]`, `["market_shock_state"]`; Alembic revision `v209_001` (sole head, `down_revision = "v197_001"`).
@@ -366,7 +366,7 @@ git commit -m "feat(v209): market_shock_readings and market_shock_state tables (
 
 **Interfaces:**
 - Consumes: `schema.market_shock_readings`, `schema.market_shock_state` (V209-5); `shock.ShockReading`, `shock.ShockState`, `shock.LABELS` (V209-2/V209-3, tests only); `config.SHOCK_READINGS_KEEP_DAYS` (V209-1); existing `NotifyQueueRepository.enqueue(event, *, conn=None)`, `Repository._tx(conn)`, `codec.sanitise_non_finite`, `lifecycle_events.make_event(...)` (tests).
-- Produces (V209-6, V209-10 and V209-11 call these exactly):
+- Produces (V209-6 and plan v210 (V210-2/V210-3) call these exactly):
   - `market_shock.LABELS = ("NORMAL", "SHOCK", "RECOVERY")` (restated, pinned equal to `shock.LABELS`).
   - `market_shock_repo() -> MarketShockRepository` (module singleton).
   - `record(reading: dict, state: dict, *, state_after: str, notice_event: dict | None = None, conn=None) -> int` — one transaction: insert the reading with its full `as_row()` in `doc`, upsert state row 1 with `last_reading_id` and `doc={"state": state}`, and when `notice_event` is given enqueue it via `NotifyQueueRepository().enqueue(event, conn=)` and set `last_notice_at` from its `queued_at`; returns the reading id. An unknown label, or `state["label"] != state_after`, raises `ValueError` before any write.
@@ -797,7 +797,7 @@ after it, before V209-6b.
 
 **Interfaces:**
 - Consumes: `shock.ShockThresholds`, `NameRow`, `VixTape`, `ShockSnapshot` (V209-2); `config.MARKET_SHOCK_MODE` and the 17 threshold attrs (V209-1); existing `session.is_nyse_regular_session`, `session.market_today`, `session.now_et`, `session.RTH_OPEN`, `indicators.atr(df, 14)`, `asset_class.classify`, `tape.read_tape`, `tape.TapeEntry`, `swallowed(log, tag, exc, msg, *args, ...)`.
-- Produces (V209-6a, V209-6b, V209-8, V209-11 and V209-12 call these exactly):
+- Produces (V209-6a, V209-6b, V209-8, V209-12 and plan v210 (V210-2/V210-3) call these exactly):
   - `MODES = ("off", "shadow", "live")`; `shock_mode() -> str` (anything else → `"off"`).
   - `THRESHOLD_ATTRS: dict[str, str]` (`ShockThresholds` field → config attr); `thresholds_from_config() -> ShockThresholds`.
   - `read_vix(now: datetime, th: ShockThresholds) -> VixTape` — empty `VixTape(None, None, None)` when the `^VIX` row is missing, a proxy, priceless, older than `th.vix_max_age_s`, or the read fails.
@@ -1157,7 +1157,7 @@ git add swingbot/core/scanning/shock_scan.py tests/scanning/test_shock_scan.py
 git commit -m "feat(v209): shock_scan snapshot -- regular-hours gate, live-quote clock, VIX tape"
 ```
 
-### Task V209-6a: `shock_scan.py`: SPY quote, `run_shock_pass`, `current_label`
+### Task V209-6a: `shock_scan.py`: `run_shock_pass`, `current_label`
 
 **Model:** opus — the stepped pass reads the prior reading and state, measures, steps and records in one call, and its failure fallback decides what label every plan of the pass is stamped with.
 
@@ -1166,22 +1166,28 @@ Second half of V209-6 (split at the 20 KB task cap; the id is `6a` because
 same branch and before V209-6b.
 
 **Files:**
-- Modify: `swingbot/core/scanning/shock_scan.py` (two imports; append `_spy_quote`, `_pass_quotes`, `_load_prior`, `_stepped_pass`, `run_shock_pass`, `current_label`)
+- Modify: `swingbot/core/scanning/shock_scan.py` (one import; append `_load_prior`, `_stepped_pass`, `run_shock_pass`, `current_label`)
 - Create: `tests/scanning/test_shock_pass.py`
 
 **Interfaces:**
-- Consumes: from V209-6 `shock_mode()`, `thresholds_from_config()`, `read_vix(now, th)`, `build_snapshot(...)`, `should_step(step_shock, now)`, `_quote`, `_fresh_quotes`; `shock.NORMAL`, `shock.LABELS`, `ShockReading.from_row`, `ShockState.from_row`, `measure`, `step` (V209-2..V209-4); `market_shock_repo()`, `record(...)`, `current_state()`, `latest_reading()` (V209-5b); existing `fetch._fetch_live_prices(tickers, progress=None)`, `config.MARKET_REGIME_TICKER`.
-- Produces (V209-6b, V209-8 and V209-10 call these exactly):
-  - `run_shock_pass(*, step_shock: bool, frames, live_prices, sector_of, quotes_at, spy_df: pd.DataFrame | None = None, now: datetime | None = None, repo=None) -> str | None` — the label planning stamps this pass; `None` under `off`; an unstepped pass returns `current_label(repo=repo)` and never fetches or writes; a stepped pass fetches the SPY quote once when the fresh quotes lack it, then measure → step → `repo.record(...)`; any failure goes through `swallowed(log, "scan.shock.pass", ...)` and returns `current_label(repo=repo)`.
+- Consumes: from V209-6 `shock_mode()`, `thresholds_from_config()`, `read_vix(now, th)`, `build_snapshot(...)` (it filters `live_prices` for freshness against `quotes_at` itself), `should_step(step_shock, now)`; `shock.NORMAL`, `shock.LABELS`, `ShockReading.from_row`, `ShockState.from_row`, `measure`, `step` (V209-2..V209-4); `market_shock_repo()`, `record(...)`, `current_state()`, `latest_reading()` (V209-5b); existing `config.MARKET_REGIME_TICKER`.
+- Produces (V209-6b, V209-8 and plan v210's V210-2/V210-3 call these exactly):
+  - `run_shock_pass(*, step_shock: bool, frames, live_prices, sector_of, quotes_at, spy_df: pd.DataFrame | None = None, now: datetime | None = None, repo=None) -> str | None` — the label planning stamps this pass; `None` under `off`; an unstepped pass returns `current_label(repo=repo)` and never writes; a stepped pass runs measure → step → `repo.record(...)` on the quotes it was handed; **no branch ever fetches a quote**; any failure goes through `swallowed(log, "scan.shock.pass", ...)` and returns `current_label(repo=repo)`.
   - `current_label(*, repo=None) -> str | None` — `None` under `off` or when the store cannot be read; `"NORMAL"` before the first state row; else the stored label.
-  - Private `_load_prior(repo) -> tuple[ShockReading | None, ShockState]` and `_stepped_pass(frames, live_prices, sector_of, quotes_at, spy_df, now, repo) -> str`, which V209-10 extends to build and pass `notice_event`.
+  - Private `_load_prior(repo) -> tuple[ShockReading | None, ShockState]` and `_stepped_pass(frames, live_prices, sector_of, quotes_at, spy_df, now, repo) -> str`, which plan v210's V210-2b extends to build and pass `notice_event`.
 
-**One SPY quote fetch.** `_sync_run_scan`'s `live_prices` may not carry
-`config.MARKET_REGIME_TICKER`. A stepped pass whose fresh quotes lack it
-calls `fetch._fetch_live_prices([spy_ticker])` once; that quote is taken
-now, so it is fresh by construction. `_pass_quotes` returns quotes already
-filtered for freshness, which is why `_stepped_pass` hands `build_snapshot`
-`quotes_at=now`.
+**The pass never fetches (index Global Constraints, "LONG issuing is
+unchanged", (b)).** SPY and QQQ quotes arrive in `live_prices` because
+V209-6b adds them to the scan's one existing batched live-price fetch on
+stepped passes. When SPY (or QQQ) is still absent from the fresh
+`live_prices` (a chunk timed out, the provider skipped it),
+`build_snapshot`'s `_benchmark` row carries `last=None`, so `measure` leaves
+`spy_atr_move`, `spy_last`, `spy_session_low` and `spy_retrace` `None`
+(`qqq_atr_move` likewise), exactly as part 1's "no SPY" case already
+handles. The reading is still recorded from breadth, sectors and VIX; an
+SPY-less reading leaves the RECOVERY SPY-retrace clause unmet (V209-4) and
+does not block entry, which rests on breadth and sectors. `shock_scan.py`
+imports nothing from `swingbot.core.scanning.fetch`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1189,13 +1195,14 @@ filtered for freshness, which is why `_stepped_pass` hands `build_snapshot`
 
 ```python
 """v209: shock_scan.run_shock_pass and current_label -- the stepped pass."""
+import inspect
 from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 import pytest
 
 from swingbot import config
-from swingbot.core.scanning import shock_scan
+from swingbot.core.scanning import fetch, shock_scan
 
 UTC = timezone.utc
 D0 = date(2026, 11, 5)                                  # Thursday, EST (UTC-5)
@@ -1247,13 +1254,15 @@ def _env(monkeypatch):
     monkeypatch.setattr(shock_scan.asset_class, "classify",
                         lambda t: "etf" if t in ("SPY", "QQQ") else "equity")
     monkeypatch.setattr(shock_scan.tape, "read_tape", lambda symbols: {})
-    monkeypatch.setattr(shock_scan.fetch, "_fetch_live_prices",
-                        lambda tickers, progress=None: pytest.fail("unexpected quote fetch"))
+    # The pass never fetches a quote (LONG issuing unchanged, (b)): any call fails the test.
+    monkeypatch.setattr(fetch, "_fetch_live_prices",
+                        lambda tickers, progress=None: pytest.fail("the shock pass fetched quotes"))
 
 
-def _pass(repo, *, step=True, now=NOW, quotes=CRASH_QUOTES):
+def _pass(repo, *, step=True, now=NOW, quotes=CRASH_QUOTES, quotes_at=None):
     return shock_scan.run_shock_pass(step_shock=step, frames=_crash_frames(), live_prices=quotes,
-                                     sector_of=SECTORS, quotes_at=now, now=now, repo=repo)
+                                     sector_of=SECTORS, quotes_at=quotes_at or now, now=now,
+                                     repo=repo)
 
 
 def _without_spy():
@@ -1271,7 +1280,7 @@ def test_off_returns_none_and_never_touches_the_repo(monkeypatch):
 def test_an_unstepped_pass_reads_the_label_and_writes_nothing(step, now):
     repo = _Repo(state={"label": "SHOCK", "doc": {}})
     assert _pass(repo, step=step, now=now, quotes=_without_spy()) == "SHOCK"
-    assert repo.recorded == []                     # and no SPY fetch (the fixture fails on one)
+    assert repo.recorded == []
 
 
 def test_two_stepped_crash_readings_enter_shock_and_record_each():
@@ -1294,41 +1303,27 @@ def test_the_previous_reading_feeds_breadth_speed_within_the_session():
     assert repo.recorded[1][0]["breadth_speed"] == pytest.approx(0.0)
 
 
-def test_stale_quotes_make_an_insufficient_reading_that_holds_the_state(monkeypatch):
-    calls = []
-
-    def fetch_one(tickers, progress=None):
-        calls.append(list(tickers))
-        return {"SPY": 489.0}
-    monkeypatch.setattr(shock_scan.fetch, "_fetch_live_prices", fetch_one)
+def test_stale_quotes_make_an_insufficient_reading_that_holds_the_state():
     repo = _Repo()
-    label = shock_scan.run_shock_pass(step_shock=True, frames=_crash_frames(),
-                                      live_prices=CRASH_QUOTES, sector_of=SECTORS,
-                                      quotes_at=NOW - timedelta(seconds=301), now=NOW, repo=repo)
+    label = _pass(repo, quotes_at=NOW - timedelta(seconds=301))
     reading = repo.recorded[0][0]
     assert label == "NORMAL" and reading["insufficient"] is True and reading["n_names"] == 0
-    assert calls == [["SPY"]] and reading["spy_last"] == 489.0    # SPY re-quoted fresh
+    assert reading["spy_last"] is None                    # stale SPY is absent too, never re-quoted
 
 
-def test_a_missing_spy_quote_is_fetched_once(monkeypatch):
-    calls = []
-
-    def fetch_one(tickers, progress=None):
-        calls.append(list(tickers))
-        return {"SPY": 491.0}
-    monkeypatch.setattr(shock_scan.fetch, "_fetch_live_prices", fetch_one)
-    repo = _Repo()
-    _pass(repo, quotes=_without_spy())
-    assert calls == [["SPY"]] and repo.recorded[0][0]["spy_last"] == 491.0
-
-
-def test_a_failing_spy_fetch_still_records_the_reading(monkeypatch):
-    def boom(tickers, progress=None):
-        raise TimeoutError("quote chunk stalled")
-    monkeypatch.setattr(shock_scan.fetch, "_fetch_live_prices", boom)
+def test_a_missing_spy_quote_records_the_reading_from_breadth_and_vix():
     repo = _Repo()
     assert _pass(repo, quotes=_without_spy()) == "NORMAL"
-    assert repo.recorded[0][0]["spy_last"] is None
+    reading = repo.recorded[0][0]
+    assert reading["n_names"] == 3 and reading["breadth_frac"] == pytest.approx(1.0)
+    assert reading["insufficient"] is False
+    assert (reading["spy_last"], reading["spy_atr_move"], reading["spy_retrace"]) == (None, None, None)
+
+
+def test_a_missing_spy_quote_still_enters_shock_on_breadth():
+    repo = _Repo()
+    _pass(repo, quotes=_without_spy())
+    assert _pass(repo, now=NOW + timedelta(minutes=15), quotes=_without_spy()) == "SHOCK"
 
 
 def test_the_spy_df_argument_wins_over_frames():
@@ -1352,6 +1347,31 @@ def test_a_dead_store_never_fails_the_pass():
     assert _pass(_Repo(fail=True)) is None
 
 
+BRANCHES = {
+    "off": dict(mode="off"),
+    "unstepped": dict(step=False),
+    "pre_market": dict(now=PRE_MARKET),
+    "stepped": dict(),
+    "stale_quotes": dict(quotes_at=NOW - timedelta(seconds=301)),
+    "spy_missing": dict(quotes=_without_spy()),
+    "no_quotes": dict(quotes={}),
+    "dead_store": dict(fail=True),
+}
+
+
+@pytest.mark.parametrize("branch", sorted(BRANCHES))
+def test_no_branch_of_the_pass_fetches_a_quote(monkeypatch, branch):
+    over = dict(BRANCHES[branch])
+    monkeypatch.setattr(config, "MARKET_SHOCK_MODE", over.pop("mode", "shadow"))
+    _pass(_Repo(fail=over.pop("fail", False)), **over)    # the autouse stub fails on any fetch
+
+
+def test_shock_scan_has_no_quote_fetch_in_its_source():
+    src = inspect.getsource(shock_scan)
+    assert "_fetch_live_prices(" not in src and "import fetch" not in src
+    assert not hasattr(shock_scan, "fetch")
+
+
 def test_current_label_defaults_to_normal_and_survives_a_db_failure():
     assert shock_scan.current_label(repo=_Repo()) == "NORMAL"
     assert shock_scan.current_label(repo=_Repo(state={"label": "SHOCK", "doc": {}})) == "SHOCK"
@@ -1359,43 +1379,27 @@ def test_current_label_defaults_to_normal_and_survives_a_db_failure():
     assert shock_scan.current_label(repo=_Repo(fail=True)) is None
 ```
 
+`test_a_missing_spy_quote_still_enters_shock_on_breadth` relies on part 1's
+entry rule resting on breadth and sectors (an SPY move is never required);
+if V209-3's `entry_condition` turns out to need one, stop and report rather
+than changing either side.
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `python scripts/dev/testrun.py file tests/scanning/test_shock_pass.py`
-Expected: FAIL — `AttributeError: module 'swingbot.core.scanning.shock_scan' has no attribute 'run_shock_pass'` (and no `fetch`).
+Expected: FAIL — `AttributeError: module 'swingbot.core.scanning.shock_scan' has no attribute 'run_shock_pass'`.
 
 - [ ] **Step 3: Append the stepped pass to `swingbot/core/scanning/shock_scan.py`**
 
-Add to the imports (alphabetical with the existing ones):
+Add to the imports (alphabetical with the existing ones; no `fetch` import):
 
 ```python
 from swingbot.core.db.repositories.market_shock import market_shock_repo
-from swingbot.core.scanning import fetch
 ```
 
 Append at the end of the module:
 
 ```python
-def _spy_quote(spy_ticker: str) -> dict:
-    """The one SPY quote fetch of a stepped pass; {} on failure."""
-    try:
-        got = fetch._fetch_live_prices([spy_ticker])
-    except Exception as exc:
-        swallowed(log, "scan.shock.spy_quote", exc, "shock: SPY quote fetch failed: %s", exc)
-        return {}
-    price = _quote(got or {}, spy_ticker)
-    return {} if price is None else {spy_ticker: price}
-
-
-def _pass_quotes(live_prices, quotes_at, now, th, spy_ticker) -> dict:
-    """Fresh quotes for this pass, plus SPY fetched once when missing. The result
-    is already filtered, so build_snapshot is handed quotes_at=now."""
-    quotes = dict(_fresh_quotes(live_prices, quotes_at, now, th))
-    if _quote(quotes, spy_ticker) is None:
-        quotes.update(_spy_quote(spy_ticker))
-    return quotes
-
-
 def _load_prior(repo) -> tuple[shock.ShockReading | None, shock.ShockState]:
     row = repo.latest_reading()
     prev = shock.ShockReading.from_row(row) if row else None
@@ -1404,12 +1408,12 @@ def _load_prior(repo) -> tuple[shock.ShockReading | None, shock.ShockState]:
 
 
 def _stepped_pass(frames, live_prices, sector_of, quotes_at, spy_df, now, repo) -> str:
+    """One reading from the quotes the scan already holds. Never fetches: a
+    benchmark absent from live_prices gives a NameRow with last=None."""
     th = thresholds_from_config()
-    spy_ticker = str(config.MARKET_REGIME_TICKER)
-    quotes = _pass_quotes(live_prices, quotes_at, now, th, spy_ticker)
-    snapshot = build_snapshot(frames, quotes, sector_of, now=now, quotes_at=now,
-                              vix=read_vix(now, th), th=th, spy_ticker=spy_ticker,
-                              spy_df=spy_df)
+    snapshot = build_snapshot(frames, live_prices, sector_of, now=now, quotes_at=quotes_at,
+                              vix=read_vix(now, th), th=th,
+                              spy_ticker=str(config.MARKET_REGIME_TICKER), spy_df=spy_df)
     prev, state = _load_prior(repo)
     reading = shock.measure(snapshot, prev, th)
     new_state = shock.step(state, reading, th)
@@ -1452,14 +1456,16 @@ def current_label(*, repo=None) -> str | None:
 
 A dead store makes `current_label()` return `None`, so that pass's plans
 carry no `shock_state` key rather than a guessed `NORMAL`; the
-`scan.shock.label` swallow counter records it.
+`scan.shock.label` swallow counter records it. Keep every docstring and
+comment in this module free of the literals `_fetch_live_prices(` and
+`import fetch`, so the source pin stays meaningful.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run each:
 `python scripts/dev/testrun.py file tests/scanning/test_shock_pass.py`
 `python scripts/dev/testrun.py file tests/scanning/test_shock_scan.py` (V209-6's half is undisturbed)
-Expected: PASS (no database and no network: every test passes a fake repository and stubs the quote fetch).
+Expected: PASS (no database and no network: every test passes a fake repository, and the quote fetch is stubbed to fail).
 
 Run: `python scripts/dev/complexity_gate.py`
 Expected: no violation (every new function below CC 6).
@@ -1468,5 +1474,5 @@ Expected: no violation (every new function below CC 6).
 
 ```bash
 git add swingbot/core/scanning/shock_scan.py tests/scanning/test_shock_pass.py
-git commit -m "feat(v209): run_shock_pass -- stepped measure/step/record with stored-label fallback"
+git commit -m "feat(v209): run_shock_pass -- stepped measure/step/record, no quote fetch, stored-label fallback"
 ```

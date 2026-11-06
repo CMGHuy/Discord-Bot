@@ -24,11 +24,15 @@ def _clear_stop() -> None:
     _flags().clear("stop_scan")
 
 
-def is_scan_running() -> bool:
+def is_scan_running(*, conn=None) -> bool:
     """Whether a scan (manual !check/`/check`, admin-UI-triggered, or the
     automatic session scan) is currently executing. Used by the admin UI
-    to enable/disable its "Stop scan" button."""
-    return _flags().is_set("scan_running")
+    to enable/disable its "Stop scan" button.
+
+    `conn` (v206): read on the caller's connection. The admin's event broker
+    passes its fail-fast side connection; every other caller passes nothing.
+    """
+    return _flags().is_set("scan_running", conn=conn)
 
 
 def _mark_running(running: bool) -> None:

@@ -95,10 +95,22 @@ def publish(progress) -> None:
     _write_row(snapshot(progress))
 
 
+def read_strict(*, conn=None) -> dict | None:
+    """The current record, None when no scan is publishing one -- and RAISES
+    when the read fails.
+
+    For the admin's event broker (v206 P1-b), which must tell "nothing
+    publishing" apart from "could not read": the first sends `progress: null`
+    inside the payload, the second sends the event thin and counts it.
+    `conn` lets it read on its fail-fast side connection.
+    """
+    from swingbot.core.db.repositories.scan_progress import scan_progress_repo
+    return scan_progress_repo().read(conn=conn)
+
+
 def _read_row() -> dict | None:
     try:
-        from swingbot.core.db.repositories.scan_progress import scan_progress_repo
-        return scan_progress_repo().read()
+        return read_strict()
     except Exception as exc:  # noqa: BLE001
         swallowed(log, "scan.progress_store.read", exc,
                   "Could not read scan progress from the database",

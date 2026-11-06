@@ -1,11 +1,12 @@
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, of } from 'rxjs';
+import { Observable, map, of } from 'rxjs';
 
 import { SKIP_ROUTE_REFRESH } from './interceptors';
 import type { TimeWindow } from '../workspaces/dashboard/panels/equity-range.model';
 
 import {
+  AdminUser,
   AnalyticsByDimension,
   AnalyticsCalibration,
   AnalyticsEquityCurve,
@@ -122,6 +123,34 @@ export class ApiClient {
 
   logout(): Observable<Identity> {
     return this.http.delete<Identity>(`${this.base}/session`, this.skipRouteRefresh);
+  }
+
+  /* -- users (v207, admin-only) ---------------------------------------- */
+
+  /** Unwrapped here: the envelope carries nothing but the list, and the
+   *  store should not have to know it exists. */
+  listUsers(): Observable<AdminUser[]> {
+    return this.http.get<{ users: AdminUser[] }>(`${this.base}/users`).pipe(map((body) => body.users));
+  }
+
+  /** 409 `conflict` for a taken name (case-insensitive) or the `.env`
+   *  admin's own; 400 `invalid` names the field. */
+  createUser(body: { username: string; password: string }): Observable<AdminUser> {
+    return this.http.post<AdminUser>(`${this.base}/users`, body, this.skipRouteRefresh);
+  }
+
+  /** Disabling ends the viewer's live sessions server-side (V207-6). */
+  setUserDisabled(id: number, disabled: boolean): Observable<AdminUser> {
+    return this.http.patch<AdminUser>(`${this.base}/users/${id}`, { disabled }, this.skipRouteRefresh);
+  }
+
+  /** 204, no body. Ends the viewer's live sessions. */
+  resetUserPassword(id: number, password: string): Observable<void> {
+    return this.http.post<void>(`${this.base}/users/${id}/password`, { password }, this.skipRouteRefresh);
+  }
+
+  deleteUser(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/users/${id}`, this.skipRouteRefresh);
   }
 
   health(): Observable<Health> {

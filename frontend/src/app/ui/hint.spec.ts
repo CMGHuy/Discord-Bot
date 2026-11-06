@@ -111,11 +111,21 @@ describe('Hint (v80 D4)', () => {
     expect(pop().classList).toContain('elev-overlay');
   });
 
+  /** The component's touch-width style block (closed by a 4-space-indented brace). */
+  const touchBlock = () => SOURCE.match(/@media \(pointer: coarse\), \(max-width: 1023px\) \{([\s\S]*?)\n {4}\}/);
+
   it('gives the trigger a 44px target on phone and tablet', () => {
-    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 1023px\) \{([\s\S]*?)\n    \}/);
+    const block = touchBlock();
     expect(block).not.toBeNull();
-    expect(block![1]).toContain('min-width: var(--control-h)');
-    expect(block![1]).toContain('min-height: var(--control-h)');
+    expect(block![1]).toContain('.trigger::after');
+    expect(block![1]).toContain('position: absolute');
+    expect(block![1]).toContain('width: var(--control-h); height: var(--control-h)');
+  });
+
+  it('keeps the 44px target out of layout, so a hint never makes its row taller', () => {
+    const block = touchBlock();
+    expect(block![1]).not.toContain('min-height');
+    expect(block![1]).not.toContain('min-width');
   });
 
   describe('top layer (v194 A1)', () => {

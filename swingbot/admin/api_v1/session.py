@@ -2,8 +2,10 @@
 
 Spec v11 Decision 5. The SPA authenticates with the EXISTING signed session
 cookie -- no JWT, no token endpoint, no refresh flow. These routes are a
-JSON front door onto the same `session["admin_authed"]` + `pw_hash`
-mechanism `/login` and `/logout` already drive, so a session established
+JSON front door onto the signed session cookie: `admin_authed` + `pw_hash`
+for the `.env` admin, and since v207 `role` / `user_id` /
+`credential_version` for a viewer, all resolved through
+`_app.resolve_principal()`, so a session established
 through either door is valid on the other. That matters for the whole
 migration: both UIs are live at once until cutover.
 
@@ -30,11 +32,13 @@ def _identity() -> dict:
     """The one body all three /session methods return.
 
     Always the same shape, so the SPA's SessionStore has a single reducer
-    for login, logout and the boot check rather than three.
-    """
-    authed = _app._session_authenticated()
-    return {"authenticated": authed,
-            "username": _app.ADMIN_USERNAME if authed else None}
+    for login, logout and the boot check rather than three. v207 adds `role`
+    (`admin` | `viewer`, None when signed out)."""
+    principal = _app.resolve_principal()
+    if principal is None:
+        return {"authenticated": False, "username": None, "role": None}
+    return {"authenticated": True, "username": principal["username"],
+            "role": principal["role"]}
 
 
 @api_v1.route("/session", methods=["GET"])
@@ -54,20 +58,22 @@ def session_create():
     payload = request.get_json(silent=True) or {}
     username = str(payload.get("username") or "")
     password = str(payload.get("password") or "")
-    # v148: constant-time, and gated by the login limiter all three
-    # credential checks share. A locked client is refused before comparing.
-    outcome = login_limiter.attempt(username, password, _app.credentials_match)
+    # v148: gated by the login limiter all three credential checks share; a
+    # locked client is refused before comparing. v207: the session route takes
+    # the principal-returning check (admin first, then admin_users); Basic
+    # keeps the bool one. Every refusal is the same 401 body.
+    outcome = login_limiter.attempt_login(username, password, _app.login_session_fields)
     if outcome.retry_after is not None:
         return rate_limited(outcome.retry_after)
     if not outcome.ok:
         return error("auth", "Invalid username or password.", 401)
-    # Same four lines as login_submit() in app.py: clear first so a partially
-    # populated older session cannot survive, then pin the credential hash so
-    # changing ADMIN_PASSWORD invalidates this session (see _password_hash).
+    # Clear first so a partially populated older session cannot survive; the
+    # stored fields pin the admin's credential hash or the viewer's
+    # credential_version, so a password change ends this session.
     session.clear()
-    session["admin_authed"] = True
-    session["pw_hash"] = _app._password_hash()
+    session.update(outcome.result)
     session.permanent = True
+    _app.forget_principal()
     return jsonify(_identity())
 
 
@@ -76,7 +82,20 @@ def session_delete():
     """Idempotent. The SPA calls this on a 401 to clear local state, and that
     path must not itself fail when there is no session to clear."""
     session.clear()
+    _app.forget_principal()
     return jsonify(_identity())
+
+
+def _sse_streams() -> int:
+    """Open event streams in this process (v206 Measurement rules).
+
+    Each stream holds a gunicorn thread for its whole life, so the count is
+    the thread budget a probe result has to record. The broker module is
+    imported here, not at the top: `broker.py` imports `api_v1`, so a
+    module-level import would be circular.
+    """
+    from swingbot.admin.events import broker as _broker
+    return _broker.get_broker().connection_count
 
 
 @api_v1.route("/health", methods=["GET"])
@@ -101,6 +120,8 @@ def health():
 
     Never raises: an unavailable market check reports False rather than
     failing the probe that monitoring uses to decide the admin is down.
+
+    v206 adds `sse_streams`, the open event-stream count, for the browser probe.
     """
     try:
         from swingbot.core.marketdata.data import is_us_market_active
@@ -125,4 +146,7 @@ def health():
         # genuinely price in different units. Account-level totals have one
         # currency and this is it.
         "currency": config.CURRENCY_SYMBOL,
+        # v206: the open SSE stream count (additive). Each stream holds a
+        # gunicorn thread, so the browser probe records it with every result.
+        "sse_streams": _sse_streams(),
     })

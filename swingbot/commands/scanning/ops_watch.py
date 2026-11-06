@@ -19,7 +19,7 @@ import logging
 from discord.ext import tasks
 
 from swingbot import config
-from swingbot.bot_core import in_session
+from swingbot.bot_core import SESSION_TZ, in_session
 from swingbot.core import presentation as ui
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.scanning import telemetry
@@ -113,11 +113,56 @@ async def _post(embed) -> bool:
     return True
 
 
-def _stale_embed(verdict: str, now: dt.datetime, last_success: str):
+def moment_text(iso: str | None) -> str:
+    """"07:04 UTC (08:04 Berlin)" for an ISO timestamp; the raw text if unreadable."""
+    moment = parse_moment(iso)
+    if moment is None:
+        return str(iso)
+    local = moment.astimezone(SESSION_TZ)
+    return f"{moment:%H:%M} UTC ({local:%H:%M} {local.tzname()})"
+
+
+def describe_stale_cause(now: dt.datetime, snap: dict, interval_min: int) -> str:
+    """What the heartbeat says the scan is doing, in one or two bullet lines.
+
+    Three readings, most specific first: a tick that started and has not
+    finished (slow, not necessarily hung), a tick that failed (with its error),
+    or no tick started at all (the loop itself is stuck before the scan)."""
+    limit = STALE_FACTOR * interval_min
+    started = parse_moment(snap.get("tick_started_at"))
+    if started is not None:
+        run_min = int((now - started).total_seconds() // 60)
+        return (f"• A scan tick started at {moment_text(snap['tick_started_at'])} "
+                f"(phase: {snap.get('tick_phase') or 'scan'}) and has run {run_min} min "
+                f"without finishing. It may just be slow, not hung; the limit is {limit} min "
+                f"between completed ticks (a tick is due every {interval_min} min).")
+    if snap.get("last_error"):
+        return (f"• The last tick failed ({snap.get('consecutive_failures') or 1} in a row) at "
+                f"{moment_text(snap.get('last_error_at'))}: `{snap['last_error']}`")
+    return (f"• No scan tick has started since the last completed one (a tick is due every "
+            f"{interval_min} min). The scan loop itself may be stuck before the scan begins.")
+
+
+def _stale_embed(verdict: str, now: dt.datetime, last_success: str, snap: dict):
+    shown = moment_text(last_success)
     if verdict == "recover":
-        return notices.stale_scan_recovered_embed(last_success)
+        return notices.stale_scan_recovered_embed(shown)
     age_min = int((now - parse_moment(last_success)).total_seconds() // 60)
-    return notices.stale_scan_embed(age_min, last_success)
+    cause = describe_stale_cause(now, snap, int(config.SCAN_INTERVAL_MINUTES))
+    return notices.stale_scan_embed(age_min, shown, cause)
+
+
+def _log_stale_verdict(verdict: str, now: dt.datetime, last: str, snap: dict) -> None:
+    interval = int(config.SCAN_INTERVAL_MINUTES)
+    age_min = int((now - parse_moment(last)).total_seconds() // 60)
+    fields = (f"age_min={age_min} limit_min={STALE_FACTOR * interval} interval_min={interval} "
+              f"last_success={last} tick_started_at={snap.get('tick_started_at')} "
+              f"tick_phase={snap.get('tick_phase')} last_error={snap.get('last_error')} "
+              f"consecutive_failures={snap.get('consecutive_failures')}")
+    if verdict == "alert":
+        log.warning("scan watchdog: STALE alert posted -- %s", fields)
+    else:
+        log.info("scan watchdog: stale alert cleared -- %s", fields)
 
 
 async def watchdog_tick(now: dt.datetime | None = None) -> str | None:
@@ -129,9 +174,14 @@ async def watchdog_tick(now: dt.datetime | None = None) -> str | None:
         in_session=in_session(), paused=runstate.is_scan_paused(),
         failure_alert_active=runstate.get_alert_active(),
         stale_alert_active=runstate.get_stale_alert_active())
-    if verdict is None or not await _post(_stale_embed(verdict, now, last)):
+    if verdict is None:
+        return None
+    snap = runstate.tick_snapshot()
+    if not await _post(_stale_embed(verdict, now, last, snap)):
+        log.warning("scan watchdog: %s verdict but no ops channel configured; not posted", verdict)
         return None
     runstate.set_stale_alert_active(verdict == "alert")
+    _log_stale_verdict(verdict, now, last, snap)
     return verdict
 
 

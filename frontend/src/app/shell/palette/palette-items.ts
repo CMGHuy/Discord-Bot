@@ -1,6 +1,6 @@
 import { Ticker, TradeRow } from '../../api/models';
 import { RowDensity } from '../../ui/density.service';
-import { NAV_ENTRIES, NavEntry, detailCrumb } from '../nav';
+import { NAV_ENTRIES, NavEntry, detailCrumb, navEntriesFor } from '../nav';
 
 /**
  * The command palette's items and ranking -- v195 §3.1.
@@ -88,13 +88,30 @@ function pageItem(label: string, route: string, sub?: string): PaletteItem {
 /** Every page of the nav model, in rail order: each section of a
  *  destination (its `sub` the destination, 'Calendar · Trades') or the
  *  destination itself on a single page; then the workspace tabs. */
-export function pageItems(entries: readonly NavEntry[] = NAV_ENTRIES): PaletteItem[] {
+export function pageItems(
+  entries: readonly NavEntry[] = NAV_ENTRIES,
+  tabs: readonly PaletteItem[] = TAB_PAGES,
+): PaletteItem[] {
   const pages = entries.flatMap((entry) =>
     entry.sections
       ? entry.sections.map((section) => pageItem(section.label, section.path, entry.label))
       : [pageItem(entry.label, entry.path)],
   );
-  return [...pages, ...TAB_PAGES];
+  return [...pages, ...tabs];
+}
+
+/** A page only the admin may open: any /system route, and Analytics' Tuning tab. */
+function isAdminOnlyPage(item: PaletteItem): boolean {
+  const route = item.route ?? '';
+  return route === '/system' || route.startsWith('/system/')
+    || (route === '/insights/analytics' && item.queryParams?.['tab'] === 'tuning');
+}
+
+/** The pages a principal may open (v207): all for the admin, none of the
+ *  admin-only ones for a viewer. */
+export function pageItemsFor(isAdmin: boolean): PaletteItem[] {
+  if (isAdmin) return pageItems();
+  return pageItems(navEntriesFor(false), TAB_PAGES.filter((item) => !isAdminOnlyPage(item)));
 }
 
 /** One item per watchlist symbol, opening its detail page. */

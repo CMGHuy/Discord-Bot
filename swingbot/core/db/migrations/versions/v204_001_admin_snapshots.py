@@ -4,14 +4,14 @@ Additive. Rollback is this revision's downgrade. Leaving the table after a code
 rollback is also safe: only the snapshot worker and the admin door read it.
 
 Revision ID: v204_001
-Revises: v197_001
+Revises: v207_001
 """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "v204_001"
-down_revision = "v197_001"
+down_revision = "v207_001"  # = python -m alembic heads on main when merged (2026-11-06)
 branch_labels = None
 depends_on = None
 

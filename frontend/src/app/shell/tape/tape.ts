@@ -77,11 +77,14 @@ export const TAPE_PROXY_HINT = "Yahoo had no value; an ETF tracking this index s
           <sb-hint [text]="proxyHint" label="About proxy figures" align="left" />
         }
       </div>
-      <div class="viewport">
+      <!-- data-marquee: tiles slide past both edges by design (faded there);
+           the layout audit's clipped check skips text inside it. -->
+      <div class="viewport" data-marquee>
         <div class="track" #track [style.animation-duration.s]="duration()">
           @for (pass of [0, 1]; track pass) {
             @for (tile of tiles(); track tile.key) {
-              <a class="tile" [routerLink]="tile.link" [sbFlash]="tile.change_pct"
+              <!-- sb-hit: the strip stays 32px; touch widths get a 44px hit area. -->
+              <a class="tile sb-hit" [routerLink]="tile.link" [sbFlash]="tile.change_pct"
                  [attr.aria-hidden]="pass === 1 ? 'true' : null"
                  [attr.tabindex]="tile.link && pass !== 1 ? null : -1">
                 <span class="sym">{{ tile.label }}</span>
