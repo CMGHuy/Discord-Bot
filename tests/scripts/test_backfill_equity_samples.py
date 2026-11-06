@@ -448,7 +448,7 @@ def test_open_notional_dry_run_counts_and_writes_nothing(monkeypatch, repo, acco
     out = capsys.readouterr().out
     assert "open_notional: would fill 5 rows (2 backfill, 3 live), 0 unpriced" in out
     assert "Dry run only -- pass --apply to write." in out
-    assert sorted(calls) == [("AAPL", MON, TUE), ("MSFT", TUE, WED)]
+    assert sorted(calls) == [("AAPL", MON, WED), ("MSFT", TUE, WED)]
     assert repo.list_rows() == before
 
 
@@ -465,3 +465,67 @@ def test_open_notional_and_recompute_realized_are_exclusive(monkeypatch, repo, t
         _main(monkeypatch, ["--open-notional", "--recompute-realized"], repo, tmp_path)
     assert exc.value.code == 2
     assert "not allowed with argument" in capsys.readouterr().err
+
+
+
+def test_open_notional_leaves_split_mismatches_unpriced(repo):
+    wed_before_exit = datetime(2026, 10, 7, 17, 0, tzinfo=UTC)
+    for at in (MON_LIVE, TUE_LIVE, wed_before_exit):
+        repo.insert_sample(_live(at, 10000, 0))
+
+    report = bes.fill_open_notional(repo, TRADES, SPLIT_BARS, apply=True)
+
+    assert report == bes.OpenNotionalReport(3, 0, 0, 0, 3)
+    assert set(_notional_by_at(repo).values()) == {(None, None)}
+
+
+def test_open_notional_leaves_a_later_sample_unpriced_without_its_entry_bar(repo):
+    repo.insert_sample(_live(TUE_LIVE, 10000, 0))
+    bars = {**BARS, "AAPL": BARS["AAPL"].iloc[1:]}
+
+    report = bes.fill_open_notional(repo, TRADES, bars, apply=True)
+
+    assert report == bes.OpenNotionalReport(1, 0, 0, 0, 1)
+    assert _notional_by_at(repo) == {(TUE_LIVE, "point"): (None, None)}
+
+
+def test_open_notional_uses_candidates_selected_before_trades_and_bars(repo, tmp_path):
+    inserted_during_fetch = datetime(2026, 10, 5, 15, 0, tzinfo=UTC)
+    repo.insert_sample(_live(MON_LIVE, 10000, 0))
+
+    def load_trades():
+        repo.insert_sample(_live(TUE_LIVE, 10000, 0))
+        return TRADES
+
+    calls = []
+
+    def fetch(ticker, start, end):
+        repo.insert_sample(_live(inserted_during_fetch, 10000, 0))
+        return _bars_fn(BARS, calls)(ticker, start, end)
+
+    summary = bes.main(["--open-notional", "--apply"], repo=repo, trades_fn=load_trades,
+                       plans_fn=lambda: {}, bars_fn=fetch, out_dir=tmp_path)
+
+    assert calls == [("AAPL", MON, WED)]
+    assert summary["open_notional"]["seen"] == summary["open_notional"]["filled"] == 1
+    assert _notional_by_at(repo) == {
+        (MON_LIVE, "point"): (1020.0, True),
+        (TUE_LIVE, "point"): (None, None),
+        (inserted_during_fetch, "point"): (None, None),
+    }
+
+
+def test_open_notional_preserves_a_candidate_filled_during_fetch(repo, tmp_path):
+    repo.insert_sample(_live(MON_LIVE, 10000, 0))
+    sample_id = repo.list_rows()[0]["id"]
+
+    def fetch(ticker, _start, _end):
+        repo.update_open_notional(sample_id, Decimal("999"), False)
+        return BARS[ticker]
+
+    summary = bes.main(["--open-notional", "--apply"], repo=repo, trades_fn=lambda: TRADES,
+                       plans_fn=lambda: {}, bars_fn=fetch, out_dir=tmp_path)
+
+    assert summary["open_notional"] == {"seen": 1, "filled": 0, "backfill_rows": 0,
+                                        "live_rows": 0, "unpriced": 0}
+    assert _notional_by_at(repo) == {(MON_LIVE, "point"): (999.0, False)}

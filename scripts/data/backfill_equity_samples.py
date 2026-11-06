@@ -400,14 +400,33 @@ def _held_at(trades: list[dict], at: datetime) -> list[dict]:
         opened = equity.parse_ts(trade.get("opened_at"))
         if opened is None or opened > at:
             continue
+        entry_day = ny_day(opened)
         for row in expand_trade_legs(trade):
             status = row.get("status")
             if status not in _HELD_STATUSES:
                 continue
             closed = None if status == "open" else equity.parse_ts(row.get("closed_at"))
             if status == "open" or (closed is not None and closed > at):
-                held.append({"ticker": trade["ticker"], "shares": row.get("shares")})
+                held.append({"ticker": trade["ticker"], "shares": row.get("shares"),
+                             "entry_day": entry_day, "entry": trade.get("entry"),
+                             "exit_day": ny_day(closed), "exit_price": row.get("exit_price")})
     return held
+
+
+def _fill_anchors(piece: dict) -> list[tuple[date, float | None]]:
+    anchors = [(piece["entry_day"], piece["entry"])]
+    if piece["exit_day"] is not None:
+        anchors.append((piece["exit_day"], piece["exit_price"]))
+    return anchors
+
+
+def _has_matching_fill_bars(piece: dict, frame: pd.DataFrame | None) -> bool:
+    """Check each raw fill against its own day's bar before using the price history."""
+    for day, price in _fill_anchors(piece):
+        bar = bar_for(frame, day)
+        if price is None or bar is None or _outside(price, bar):
+            return False
+    return True
 
 
 def _row_notional(row: dict, trades: list[dict], bars: dict) -> Decimal | None:
@@ -416,9 +435,10 @@ def _row_notional(row: dict, trades: list[dict], bars: dict) -> Decimal | None:
     use_open = at == session_bounds(day)[0]
     value = ZERO
     for piece in _held_at(trades, at):
-        bar = bar_for(bars.get(piece["ticker"]), day)
+        frame = bars.get(piece["ticker"])
+        bar = bar_for(frame, day)
         shares = equity.to_decimal(piece["shares"])
-        if bar is None or not shares:
+        if bar is None or not shares or not _has_matching_fill_bars(piece, frame):
             return None
         price = bar.open if use_open else bar.close
         value += abs(shares * equity.to_decimal(price))
@@ -427,17 +447,23 @@ def _row_notional(row: dict, trades: list[dict], bars: dict) -> Decimal | None:
 
 def fill_open_notional(repo, trades: list[dict], bars: dict, *, apply: bool) -> OpenNotionalReport:
     """Approximate missing point values from daily bars for the slices held at each sample."""
-    rows = rows_to_fill(repo)
+    return _fill_open_notional_rows(repo, rows_to_fill(repo), trades, bars, apply=apply)
+
+
+def _fill_open_notional_rows(repo, rows: list[dict], trades: list[dict], bars: dict, *,
+                             apply: bool) -> OpenNotionalReport:
     counts = {"backfill": 0, "live": 0}
+    unpriced = 0
     for row in rows:
         value = _row_notional(row, trades, bars)
         if value is None:
+            unpriced += 1
             continue
-        if apply:
-            repo.update_open_notional(row["id"], value, True)
+        if apply and not repo.update_open_notional(row["id"], value, True, only_if_missing=True):
+            continue
         counts[row["source"]] += 1
     filled = counts["backfill"] + counts["live"]
-    return OpenNotionalReport(len(rows), filled, counts["backfill"], counts["live"], len(rows) - filled)
+    return OpenNotionalReport(len(rows), filled, counts["backfill"], counts["live"], unpriced)
 
 
 def _notional_spans(trades: list[dict], rows: list[dict]) -> dict[str, tuple[date, date]]:
@@ -448,14 +474,14 @@ def _notional_spans(trades: list[dict], rows: list[dict]) -> dict[str, tuple[dat
         for piece in _held_at(trades, at):
             ticker = piece["ticker"]
             first, last = spans.get(ticker, (day, day))
-            spans[ticker] = (min(first, day), max(last, day))
+            fill_days = [fill_day for fill_day, _ in _fill_anchors(piece)]
+            spans[ticker] = (min(first, day, *fill_days), max(last, day, *fill_days))
     return spans
 
 
-def _run_open_notional(args, repo, trades, bars_fn, out_dir) -> OpenNotionalReport:
-    rows = rows_to_fill(repo)
+def _run_open_notional(args, repo, rows, trades, bars_fn, out_dir) -> OpenNotionalReport:
     frames = _fetch_all(_notional_spans(trades, rows), bars_fn, out_dir)
-    report = fill_open_notional(repo, trades, frames, apply=args.apply)
+    report = _fill_open_notional_rows(repo, rows, trades, frames, apply=args.apply)
     action = "filled" if args.apply else "would fill"
     print(f"open_notional: {action} {report.filled} rows "
           f"({report.backfill_rows} backfill, {report.live_rows} live), {report.unpriced} unpriced")
@@ -542,15 +568,19 @@ def main(argv: list[str] | None = None, *, bars_fn=None, repo=None, trades_fn=No
     args = _parse(argv)
     repo = repo or equity_samples_repo()
     run_id = new_run_id()
-    trades = (trades_fn or _load_trades)()
+    load_trades = trades_fn or _load_trades
+    load_plans = plans_fn or equity.load_plans_by_id
     if args.recompute_realized:
-        return _run_recompute(args, repo, trades, run_id)
-    filled = filled_trades(trades, (plans_fn or equity.load_plans_by_id)())   # drops PENDING placeholders
+        return _run_recompute(args, repo, load_trades(), run_id)
     bars_fn = bars_fn or fetch_raw_bars
     out_dir = out_dir or ROOT / "data" / "backfill_equity_samples" / run_id
     if args.open_notional:
-        report = _run_open_notional(args, repo, filled, bars_fn, out_dir)
+        candidates = rows_to_fill(repo)
+        filled = filled_trades(load_trades(), load_plans())
+        report = _run_open_notional(args, repo, candidates, filled, bars_fn, out_dir)
         return _summary(run_id, open_notional=report._asdict())
+    trades = load_trades()
+    filled = filled_trades(trades, load_plans())
     days = backfill_days(filled, repo, today or datetime.now(US_MARKET_TZ).date())
     frames = _fetch_all(_spans(filled, days), bars_fn, out_dir)
     bars_asof = _bars_asof(frames)

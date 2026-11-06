@@ -144,14 +144,16 @@ class EquitySampleRepository(Repository):
             connection.execute(statement)
 
     def update_open_notional(self, sample_id: int, open_notional: Decimal | None,
-                             approx: bool | None, conn=None) -> None:
-        """Rewrite one row's open notional and approximation flag for backfill or rollback."""
+                             approx: bool | None, conn=None, *, only_if_missing: bool = False) -> bool:
+        """Update one sample's notional and approximation flag. Return whether it was written."""
         amount = round_money(open_notional) if open_notional is not None else None
         statement = (sa.update(self.table).where(self.table.c.id == sample_id)
                      .values(open_notional=amount, open_notional_approx=approx,
                              updated_at=sa.func.clock_timestamp()))
+        if only_if_missing:
+            statement = statement.where(self.table.c.open_notional.is_(None))
         with self._tx(conn) as connection:
-            connection.execute(statement)
+            return connection.execute(statement).rowcount == 1
 
 
 _repo: EquitySampleRepository | None = None
