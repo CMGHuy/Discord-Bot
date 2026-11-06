@@ -158,7 +158,7 @@ From v146, **specs carry a `Panel:` line** (1–3 expert role skills under
 **"Implement plan vN" with nothing more means: in a worktree.** Reuse the
 plan's existing `.claude/worktrees/` worktree if `git worktree list` shows one
 (resume at its first uncommitted task); otherwise create it, named per
-`document-lifecycle.md`. Implementing on `main` only when told so explicitly. **Standing permission: run `/close-out` yourself once every task is merged**, no waiting for the partner (`document-lifecycle.md`).
+`document-lifecycle.md`. Implementing on `main` only when told so explicitly. **Standing permission: run `/close-out` yourself once every task is merged**, no waiting for the partner (`document-lifecycle.md`). **An implemented plan that changes anything a skill or agent cites (path, symbol, rule, command, trap) aligns that skill before it counts as done** (`/close-out` Step 5b; `document-lifecycle.md` § Implemented plans keep the skills aligned).
 
 ## Keep every function under complexity 15
 

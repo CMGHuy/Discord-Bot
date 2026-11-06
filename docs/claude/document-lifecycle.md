@@ -146,6 +146,24 @@ is merged to `main` (final full-suite task green, results recorded), run
 every other rule (unresolved `BLOCKING` panel finding, backup branches, a
 concurrent session on the branch: `git-safety.md`, `worktree-lifecycle`).
 
+## Implemented plans keep the skills aligned
+
+**Partner rule (2026-11-06):** when an implemented plan changes anything a skill
+or agent definition cites or should cite (a path, symbol, rule, command, trap,
+container or check), the skill is updated to match before the plan counts as
+done. Skills that drift are worse than no skill at all. The 2026-11-06 audit
+found `task-brief` and `senior-engineer` pointing wiring checks at
+`core/scanning/engine.py` and `commands/scanning.py` after the alert loop had
+moved to `scan_run.py`, `staff-engineer` still counting two containers, and
+`gate` still running the full suite locally. Each brief or review built on those
+inherited the error.
+
+How: `/close-out` Step 5b greps `.claude/skills` and `.claude/agents` for
+everything the merged diff changed, fixes each affected skill in its own
+`docs(skills): align <skill> with vN` commit, and ships the Codex mirror
+(`sync_codex.py`, `AGENTS.md`) in that same commit. When no skill is affected, the move
+commit says `skills: none affected`, so a skipped check is visible.
+
 ## Worktrees are named after the plan
 
 **A worktree created to execute a plan takes the plan's file stem**, so the

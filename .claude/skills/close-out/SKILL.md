@@ -45,6 +45,13 @@ If the plan predicted a level or an `Edge:` the work did not deliver, amend
 the header and say why in one clause — fold it into Step 4's commit if that
 ran, otherwise into Step 6's move commit.
 
+## Step 5b — Align every skill the plan affected
+
+`git grep` the skills and agents for each path, symbol, rule and command the
+diff changed; fix stale ones in a `docs(skills): align <skill> with vN` commit
+with its Codex mirror, or write `skills: none affected` in the move commit
+(`document-lifecycle.md` § Implemented plans keep the skills aligned).
+
 ## Step 6 — Move the document
 
 `git mv` the plan — and any spec it was built from, if nothing else live
@@ -67,7 +74,7 @@ not a default step here.
 
 ## The gate
 
-No unresolved `BLOCKING` panel finding; `VERSION.json`, the regenerated
+No unresolved `BLOCKING` panel finding; skills aligned; `VERSION.json`, the regenerated
 history and the moved plan are all in the log; the worktree is gone for an
 `implemented/` close, or deliberately kept for a `no-lift/` one; no full-suite
 run happens after a clean merge.

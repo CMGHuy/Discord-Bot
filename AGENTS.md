@@ -504,6 +504,10 @@ on `main` only when told so explicitly.
 
 Standing permission: once every task of a plan is merged, run `close-out`
 yourself, no waiting for the partner (`docs/claude/document-lifecycle.md`).
+An implemented plan that changes anything a skill or agent cites (path,
+symbol, rule, command, trap) aligns that skill before it counts as done
+(`close-out` Step 5b; `document-lifecycle.md` § Implemented plans keep the
+skills aligned).
 
 A plan's `**Goal:**` is an explanatory paragraph block, not one sentence: why the
 work exists, what changes once shipped, how it works, what it leaves alone, how
