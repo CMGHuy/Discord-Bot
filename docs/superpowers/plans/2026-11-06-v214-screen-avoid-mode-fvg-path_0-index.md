@@ -99,8 +99,12 @@ The verdict, whatever it is, is recorded in the spec's closing commit.
   `_run_screens`) are merged on `main`.** This comes from the spec's
   § Constraints. Plan: `docs/superpowers/plans/2026-11-06-v211-shock-short-screens_*`,
   owned by another session. **Never edit those plan files.**
-  - Before V214-1, run `git log --oneline main | grep -E "V211-(4|6)"`. Both
-    must show; otherwise stop and report `BLOCKED`.
+  - **Before every task**, check for the symbols, not the commit messages:
+    - `git grep -n context_kind main -- swingbot/core/backtesting/screen/ideas/__init__.py`
+    - `git grep -n checkpoint_dir main -- scripts/backtest/screen_idea.py`
+
+    Both must print a match; otherwise stop and report `BLOCKED`. A commit
+    message grep is not enough: v211's docs commits already name V211-4..6.
   - If later v211 tasks (V211-5, 8/9, 11, 11b, 12) have also merged, build on
     their shape. Line numbers in this plan are indicative; symbols are
     authoritative.
