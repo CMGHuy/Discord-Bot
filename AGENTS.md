@@ -239,7 +239,7 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 | Changing the Postgres schema, a store's read/write path or a migration | `schema-change` |
 | About to change anything on the Hetzner VM | `mirror-prod` |
 | Creating, merging or removing a git worktree | `worktree-lifecycle` |
-| Mining the live book for ranked hypotheses: `trade-scout` dispatches the read-only `scout` agent per generator role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
+| Hypotheses from the live book: `trade-scout` dispatches the `scout` agent per role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
 | Using the eToro Public API MCP (portfolio, instruments, real or demo trades) (not paper-only) | `etoro-public-api-operations` |
 
 `task-brief` (fill a plan task's handoff with trap preflight) is not explicit-only: run it right after `task_handoff.py` writes a handoff.
@@ -538,6 +538,6 @@ scan and replay gating differ through OPEX and manual-scan behaviour, so do not
 unify them without a separate behaviour-change decision.
 
 Make focused, isolated changes that preserve module seams and surrounding code
-style. Run proportionate verification and report the actual command and result;
+style. Run proportionate verification and report the command and result;
 do not claim a change works without evidence. For edits, finish with the concise
 file summary your global Codex instructions require.
