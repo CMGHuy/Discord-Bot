@@ -5,8 +5,8 @@
 **Spec:** [v209 — Market-shock detector](../specs/2026-11-05-v209-market-shock-detector-design.md)
 **Index:** [`2026-11-05-v209-market-shock-detector_0-index.md`](2026-11-05-v209-market-shock-detector_0-index.md) — Goal, Global Constraints, Parallelisation and the task ledger live there; every task below implicitly carries the index's Global Constraints.
 
-This part builds **V209-6b, V209-7, V209-8 and V209-8b**: the scheduled scan steps the
-detector through one new line in `_sync_run_scan` and a keyword-only
+This part builds **V209-6b, V209-6c, V209-7 and V209-8** (V209-8b moved to part 3b at the 1500-line cap): the scheduled scan steps the
+detector through a guarded call in `_sync_run_scan` and a keyword-only
 `run_scan(step_shock=)` that only `_session_scan_tick` sets (V209-6b); the
 label returned by that line travels as an argument into every confluence,
 requote and strategy plan, and `params.stamp_entry_context` merges it into
@@ -19,8 +19,9 @@ Decided choices restated so a task read alone is complete:
 - Parts 1, 1b and 2 are merged on the worktree branch first.
   `swingbot/core/scanning/shock_scan.py` (V209-6, V209-6a) exports
   `run_shock_pass(*, step_shock, frames, live_prices, sector_of, quotes_at, spy_df=None, now=None, repo=None) -> str | None`
-  (the label to stamp this pass; `None` under `off`; it never raises: a
-  failure is swallowed and the stored label returned) and
+  (the label to stamp this pass; `None` under `off`; it never fetches a
+  quote and never raises: a failure is swallowed and the stored label
+  returned; V209-6b still wraps the call site, belt and braces) and
   `current_label(*, repo=None) -> str | None` (`"NORMAL"` before the first
   reading, `None` under `off` or when the store is unreadable).
 - `_sync_run_scan` is CC 94 and `_session_scan_tick` CC 15: neither gains a
@@ -38,23 +39,24 @@ Decided choices restated so a task read alone is complete:
 
 # Phase 5 — scan wiring and the plan stamp
 
-### Task V209-6b: Scan wiring: `run_scan(step_shock=)`, `quotes_at`, the scheduled call, read-only callers
+### Task V209-6b: Scan wiring: `run_scan(step_shock=)`, `quotes_at`, the guarded shock call, the scheduled call
 
 **Model:** opus — wiring into a CC-94 legacy function and the scan's async/thread boundary, where a positional slip or a second stepping caller silently corrupts the state machine.
 
 **Files:**
-- Modify: `swingbot/core/scanning/scan_run.py` (`from . import (...)` gains `shock_scan`; `run_scan`, `_run_scan_in_context`, `_sync_run_scan`: one `quotes_at` line and one `shock_state = shock_scan.run_shock_pass(...)` statement)
+- Modify: `swingbot/core/scanning/scan_run.py` (`from . import (...)` gains `shock_scan`; new module helper `_shock_state_for_pass`; `run_scan`, `_run_scan_in_context`, `_sync_run_scan`: one `quotes_at` line and one `shock_state = _shock_state_for_pass(...)` statement; V209-6c then changes the live-price line)
 - Modify: `swingbot/commands/scanning/loops.py` (the scheduled `_run_scan_posting_partial(...)` call inside `_session_scan_tick` adds `step_shock=True`)
 - Modify: `tests/scanning/test_run_scan_scan_id.py` (fakes accept `step_shock`)
 - Modify: `tests/scanning/test_run_scan_publishes_progress.py` (its fixed-arity fake accepts `step_shock` too — the same positional-fake trap, T6)
 - Create: `tests/commands/test_shock_step_gate.py`
 
 **Interfaces:**
-- Consumes: `shock_scan.run_shock_pass(*, step_shock, frames, live_prices, sector_of, quotes_at, spy_df=None, now=None, repo=None) -> str | None` (V209-6a; never raises).
+- Consumes: `shock_scan.run_shock_pass(*, step_shock, frames, live_prices, sector_of, quotes_at, spy_df=None, now=None, repo=None) -> str | None` (V209-6a; never fetches, never raises).
 - Produces:
+  - `scan_run._shock_state_for_pass(**kwargs) -> str | None` — `shock_scan.run_shock_pass(**kwargs)`, or `None` (swallow tag `scan.shock.call`) when it raises, so the scan always proceeds and that pass's plans carry no `shock_state` key. V209-8b pins it.
   - `run_scan(horizon_filter="all", require_confirmation=True, bot=None, progress=None, min_confluence=None, *, step_shock: bool = False) -> list`
   - `_run_scan_in_context(horizon_filter, require_confirmation, bot, progress, min_confluence, step_shock=False)`
-  - `_sync_run_scan(horizon_filter, require_confirmation, progress=None, min_confluence=None, params=None, step_shock: bool = False) -> tuple`, which binds the local `shock_state: str | None` right after the sector-map block, before the market-context stamp and before any plan builder runs. V209-7 threads this local into the plan builders.
+  - `_sync_run_scan(horizon_filter, require_confirmation, progress=None, min_confluence=None, params=None, step_shock: bool = False) -> tuple`, which binds the local `shock_state: str | None` right after the sector-map block, before the market-context stamp and before any plan builder runs. V209-7 threads this local into the plan builders. Until V209-6c it hands the pass the scan's `live_prices` as they are.
   - Only `_session_scan_tick` passes `step_shock=True`; `!check` (`commands.py:_check_live`), the recap (`recap.py`) and the admin-UI scan (`loops.py`, `require_confirmation=False`) pass nothing and therefore only read the stored label.
 
 - [ ] **Step 1: Run `/replicate-prod-db`** (skip if a sibling task in this session already synced the replica). The existing end-to-end `_sync_run_scan` drivers run in Step 7 now read the stored label through `current_label()`, which opens the test database.
@@ -173,15 +175,17 @@ def test_run_scan_hands_the_flag_to_the_worker_thread(isolated, monkeypatch, kwa
     assert seen == [expected]
 
 
-class _Halt(Exception):
-    """Raised by the fake shock pass so the worker stops right after it."""
+class _Halt(BaseException):
+    """Raised by the fake shock pass so the worker stops right after it. A
+    BaseException, so _shock_state_for_pass's `except Exception` lets it through."""
 
 
 @pytest.fixture
 def worker(monkeypatch):
     frames = {"AAA": make_ohlcv([100.0] * 60), "SPY": make_ohlcv([400.0] * 60)}
-    order = []
+    order, asked = [], []
     monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "SPY")
+    monkeypatch.setattr(config, "MARKET_SHOCK_MODE", "shadow")
     monkeypatch.setattr(scan_run, "_reload_config_before_scan", lambda: {})
     monkeypatch.setattr(scan_run, "_scan_tickers", lambda: ["AAA"])
     monkeypatch.setattr(scan_run.opex, "current_tier", lambda: None)
@@ -189,7 +193,8 @@ def worker(monkeypatch):
 
     def live(tickers, progress=None):
         order.append(("live", datetime.now(timezone.utc)))
-        return {"AAA": 97.0}
+        asked.append(list(tickers))
+        return {t: QUOTES[t] for t in tickers}
 
     monkeypatch.setattr(fetch, "_fetch_live_prices", live)
     monkeypatch.setattr(scan_run.rs_factors, "refresh_rs_cache", lambda data, spy: None)
@@ -203,12 +208,15 @@ def worker(monkeypatch):
         raise _Halt
 
     monkeypatch.setattr(shock_scan, "run_shock_pass", shock_pass)
-    return frames, order
+    return frames, order, asked
+
+
+QUOTES = {"AAA": 97.0, "SPY": 400.0, "QQQ": 300.0}
 
 
 @pytest.mark.parametrize("flag", [False, True])
 def test_the_worker_hands_the_pass_its_own_frames_quotes_sectors_and_clock(worker, flag):
-    frames, order = worker
+    frames, order, _asked = worker
     with pytest.raises(_Halt):
         scan_run._sync_run_scan("all", True, None, None, step_shock=flag)
     (first, live_at), (second, kwargs) = order
@@ -222,11 +230,20 @@ def test_the_worker_hands_the_pass_its_own_frames_quotes_sectors_and_clock(worke
     assert quotes_at.tzinfo is not None and quotes_at >= live_at
 
 
+def test_a_raising_shock_pass_yields_no_label_and_the_scan_goes_on(monkeypatch, caplog):
+    def boom(**kwargs):
+        raise RuntimeError("shock pass blew up")
+
+    monkeypatch.setattr(shock_scan, "run_shock_pass", boom)
+    assert scan_run._shock_state_for_pass(step_shock=True) is None
+    assert any(getattr(r, "swallowed_tag", "") == "scan.shock.call" for r in caplog.records)
+
+
 def test_the_label_is_bound_once_before_any_plan_is_built():
     src = inspect.getsource(scan_run._sync_run_scan)
-    assert src.count("shock_scan.run_shock_pass(") == 1
-    assert src.index("shock_state = shock_scan.run_shock_pass(") < src.index("_attach_item_plan(")
-    assert src.index("quotes_at = datetime.now(timezone.utc)") < src.index("shock_scan.run_shock_pass(")
+    assert src.count("_shock_state_for_pass(") == 1 and "run_shock_pass(" not in src
+    assert src.index("shock_state = _shock_state_for_pass(") < src.index("_attach_item_plan(")
+    assert src.index("quotes_at = datetime.now(timezone.utc)") < src.index("_shock_state_for_pass(")
 ```
 
 If a stub in the `worker` fixture misses a call the worker makes before the
@@ -236,7 +253,7 @@ shock pass (the test then fails with a network or database error rather than
 - [ ] **Step 3: Run the test to verify it fails**
 
 Run: `python scripts/dev/testrun.py file tests/commands/test_shock_step_gate.py`
-Expected: FAIL — `test_only_the_scheduled_session_scan_passes_step_shock` (no caller passes the flag), `KeyError: 'step_shock'` from the signature test, `TypeError: _sync_run_scan() got an unexpected keyword argument 'step_shock'`.
+Expected: FAIL — `test_only_the_scheduled_session_scan_passes_step_shock` (no caller passes the flag), `KeyError: 'step_shock'` from the signature test, `TypeError: _sync_run_scan() got an unexpected keyword argument 'step_shock'`, `AttributeError` for `_shock_state_for_pass`.
 
 - [ ] **Step 4: Wire `swingbot/core/scanning/scan_run.py`**
 
@@ -315,14 +332,29 @@ ends `sector_etf_frames = {}`), above the `# Market context (P0):` comment:
     # v209: one market-shock reading per scheduled pass (shock_scan owns the
     # NYSE-regular-hours gate and swallows its own failures); the returned
     # label is stamped on this pass's plans. None under MARKET_SHOCK_MODE=off.
-    shock_state = shock_scan.run_shock_pass(
+    shock_state = _shock_state_for_pass(
         step_shock=step_shock, frames=fresh_data, live_prices=live_prices,
         sector_of=sector_of_ticker, quotes_at=quotes_at, spy_df=spy_df)
 ```
 
 `spy_df` here is the frame the RS block already resolved (`None` when SPY
-could not be fetched, which `run_shock_pass` handles). No `if`, no `try`:
-`_sync_run_scan`'s CC stays 94. `shock_state` is unused until V209-7.
+could not be fetched, which `run_shock_pass` handles). No `if`, no `try` in
+`_sync_run_scan`: its CC stays 94. `shock_state` is unused until V209-7.
+
+4g. Add the wrapper as a module-level function directly above `_sync_run_scan`:
+
+```python
+def _shock_state_for_pass(**kwargs) -> str | None:
+    """v209: the shock pass's label for this scan. run_shock_pass swallows its own
+    failures; this wrapper is belt and braces so a raise can never stop the scan
+    (LONG issuing unchanged): the pass then stamps no shock_state key."""
+    try:
+        return shock_scan.run_shock_pass(**kwargs)
+    except Exception as exc:
+        swallowed(log, "scan.shock.call", exc,
+                  "shock pass raised; scanning without a label: %s", exc, exc_info=True)
+        return None
+```
 
 - [ ] **Step 5: Set the flag on the scheduled call in `swingbot/commands/scanning/loops.py`**
 
@@ -388,7 +420,7 @@ Run each:
 Expected: PASS, and 0 skipped in the last two (a skip means the shared `swing-db` is unreachable; the drivers now read the stored label).
 
 Run: `python scripts/dev/complexity_gate.py`
-Expected: no violation; `_sync_run_scan` still 94 and `_session_scan_tick` still 15.
+Expected: no violation; `_sync_run_scan` still 94, `_session_scan_tick` still 15, `_shock_state_for_pass` CC 2.
 
 - [ ] **Step 8: Commit**
 
@@ -396,7 +428,185 @@ Expected: no violation; `_sync_run_scan` still 94 and `_session_scan_tick` still
 git add swingbot/core/scanning/scan_run.py swingbot/commands/scanning/loops.py \
         tests/commands/test_shock_step_gate.py tests/scanning/test_run_scan_scan_id.py \
         tests/scanning/test_run_scan_publishes_progress.py
-git commit -m "feat(v209): run_scan(step_shock=) -- only the scheduled session scan steps the shock state"
+git commit -m "feat(v209): run_scan(step_shock=) -- guarded shock call; only the session scan steps"
+```
+
+### Task V209-6c: SPY and QQQ ride the scan's one live-price fetch
+
+**Model:** opus — it edits the one batched quote call every long plan prices from, inside a CC-94 function; an order change or a leaked key moves live long plans.
+
+Split from V209-6b at the 20 KB task cap. Runs straight after V209-6b on the
+same branch and before V209-7.
+
+**Files:**
+- Modify: `swingbot/core/scanning/shock_scan.py` (append `QQQ_TICKER`, `_benchmarks`, `quote_tickers`, `scan_quotes`)
+- Modify: `swingbot/core/scanning/scan_run.py` (`_sync_run_scan`: the live-price line at `scan_run.py:548` becomes two lines; the `_shock_state_for_pass(...)` call passes `live_prices=shock_prices`)
+- Modify: `tests/commands/test_shock_step_gate.py` (one assertion changed, four tests appended)
+
+**Interfaces:**
+- Consumes: `shock_scan.shock_mode()` (V209-6); `scan_run._shock_state_for_pass(**kwargs)`, the `worker` fixture, `QUOTES` and `_Halt` in `tests/commands/test_shock_step_gate.py` (V209-6b); existing `fetch._fetch_live_prices(tickers, progress)` (the scan's one batched call), `config.MARKET_REGIME_TICKER`.
+- Produces:
+  - `shock_scan.QQQ_TICKER = "QQQ"` (the default `build_snapshot` already uses for `qqq_ticker`).
+  - `shock_scan.quote_tickers(tickers: list, step_shock: bool) -> list` — `tickers` itself (same object, untouched) unless `step_shock` is true and `shock_mode() != "off"`; then a new list: `tickers` in its own order, followed by `config.MARKET_REGIME_TICKER` and `QQQ_TICKER`, each only when not already in `tickers` (deduped, SPY before QQQ), **and only as many as fit in the free room of the last `BATCH_FETCH_CHUNK_SIZE` chunk** (`(-len(tickers)) % chunk`), so the fetch never gains a chunk; an empty watchlist or a full last chunk gets no extras, and the pass records the reading without SPY/QQQ (V209-6a's None path).
+  - `shock_scan.scan_quotes(prices: dict, tickers: list) -> dict` — `prices` with the benchmark keys that are **not** in `tickers` removed; the same `prices` object when there is nothing to remove. The long scan, the strategy pass and the SHORT lane see exactly the quote dict they saw before v209.
+  - `_sync_run_scan` keeps exactly one `_fetch_live_prices` call; the shock pass gets its full result (`shock_prices`), everything else the `scan_quotes` view (`live_prices`).
+
+**Why the extra quotes ride the existing fetch (index Global Constraints,
+"LONG issuing is unchanged", (b)).** The shock pass must add no network call
+of its own before the plan builders. Every consumer of `live_prices`
+downstream (`analyze.py:1045` `_scan_one`, `analyze.py:1361` the strategy
+context, the SHORT lane) looks quotes up with `.get(ticker)` for its own
+ticker, so extra keys would be inert today; `scan_quotes` still strips them
+so a future `items()` loop cannot pick up a non-watchlist SPY or QQQ.
+Appending at the end keeps every existing ticker in the same chunk
+position; only the last chunk grows, by at most its free room, and only on
+stepped passes. The chunk count — and so the number of network round-trips
+before the plan builders — never changes (partner, 2026-11-06: no added
+call on the long path, not even a bounded one).
+
+- [ ] **Step 1: Write the failing tests**
+
+In `tests/commands/test_shock_step_gate.py`, change the last assertion of
+`test_the_worker_hands_the_pass_its_own_frames_quotes_sectors_and_clock` to:
+
+```python
+    assert kwargs["live_prices"] == (QUOTES if flag else {"AAA": 97.0})
+```
+
+and append:
+
+```python
+@pytest.mark.parametrize("mode,flag,extra", [
+    ("off", True, []), ("shadow", False, []), ("live", False, []),
+    ("shadow", True, ["SPY", "QQQ"]), ("live", True, ["SPY", "QQQ"])])
+def test_the_one_live_price_fetch_carries_spy_and_qqq_only_when_stepping(
+        worker, monkeypatch, mode, flag, extra):
+    _frames, _order, asked = worker
+    monkeypatch.setattr(config, "MARKET_SHOCK_MODE", mode)
+    with pytest.raises(_Halt):
+        scan_run._sync_run_scan("all", True, None, None, step_shock=flag)
+    assert asked == [["AAA", *extra]]       # one fetch, watchlist order first, extras appended
+
+
+def test_quote_tickers_appends_missing_benchmarks_without_reordering(monkeypatch):
+    monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "SPY")
+    monkeypatch.setattr(config, "MARKET_SHOCK_MODE", "shadow")
+    watchlist = ["QQQ", "MSFT", "AAPL"]
+    assert shock_scan.quote_tickers(watchlist, True) == ["QQQ", "MSFT", "AAPL", "SPY"]
+    assert shock_scan.quote_tickers(["SPY", "QQQ"], True) == ["SPY", "QQQ"]
+    assert shock_scan.quote_tickers([], True) == []                  # no chunk to ride
+    assert watchlist == ["QQQ", "MSFT", "AAPL"]                     # never mutated
+    assert shock_scan.quote_tickers(watchlist, False) is watchlist
+    monkeypatch.setattr(config, "MARKET_SHOCK_MODE", "off")
+    assert shock_scan.quote_tickers(watchlist, True) is watchlist
+
+
+@pytest.mark.parametrize("watchlist,expected", [
+    (["A", "B", "C"], ["A", "B", "C"]),                 # last chunk full: no extras, no new chunk
+    (["A", "B"], ["A", "B", "SPY"]),                    # room for one
+    (["A"], ["A", "SPY", "QQQ"]),                       # room for both
+    (["A", "B", "C", "D"], ["A", "B", "C", "D", "SPY", "QQQ"])])
+def test_quote_tickers_never_adds_a_fetch_chunk(monkeypatch, watchlist, expected):
+    monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "SPY")
+    monkeypatch.setattr(config, "MARKET_SHOCK_MODE", "shadow")
+    monkeypatch.setattr(config, "BATCH_FETCH_CHUNK_SIZE", 3)
+    got = shock_scan.quote_tickers(watchlist, True)
+    assert got == expected
+    assert -(-len(got) // 3) == -(-len(watchlist) // 3)   # same chunk count
+
+
+def test_scan_quotes_hides_only_the_benchmarks_the_watchlist_lacks(monkeypatch):
+    monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "SPY")
+    prices = {"MSFT": 1.0, "SPY": 2.0, "QQQ": 3.0}
+    assert shock_scan.scan_quotes(prices, ["MSFT"]) == {"MSFT": 1.0}
+    assert shock_scan.scan_quotes(prices, ["MSFT", "SPY"]) == {"MSFT": 1.0, "SPY": 2.0}
+    plain = {"MSFT": 1.0}
+    assert shock_scan.scan_quotes(plain, ["MSFT"]) is plain          # nothing to strip: same dict
+    assert shock_scan.scan_quotes({}, []) == {}
+    assert prices == {"MSFT": 1.0, "SPY": 2.0, "QQQ": 3.0}          # never mutated
+
+
+def test_the_scan_keeps_one_live_price_fetch_and_hands_the_pass_the_full_result():
+    src = inspect.getsource(scan_run._sync_run_scan)
+    assert src.count("_fetch_live_prices(") == 1
+    assert "fetch._fetch_live_prices(shock_scan.quote_tickers(tickers, step_shock), progress)" in src
+    assert "live_prices = shock_scan.scan_quotes(shock_prices, tickers)" in src
+    assert "live_prices=shock_prices" in src
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `python scripts/dev/testrun.py file tests/commands/test_shock_step_gate.py`
+Expected: FAIL — `AttributeError: module 'swingbot.core.scanning.shock_scan' has no attribute 'quote_tickers'` (and `scan_quotes`), the stepped `worker` cases (`asked == [["AAA"]]`, `live_prices` lacks SPY/QQQ) and the source test.
+
+- [ ] **Step 3: Append the helpers to `swingbot/core/scanning/shock_scan.py`**
+
+```python
+QQQ_TICKER = "QQQ"
+
+
+def _benchmarks() -> tuple[str, str]:
+    return str(config.MARKET_REGIME_TICKER), QQQ_TICKER
+
+
+def quote_tickers(tickers: list, step_shock: bool) -> list:
+    """The scan's one live-price list: the watchlist untouched, plus SPY and QQQ
+    appended (deduped) on a stepped pass, so the shock pass never fetches --
+    only into the last chunk's free room, so the fetch never gains a chunk."""
+    if not step_shock or shock_mode() == "off":
+        return tickers
+    have = set(tickers)
+    room = (-len(tickers)) % max(1, int(getattr(config, "BATCH_FETCH_CHUNK_SIZE", 100)))
+    extra = [t for t in dict.fromkeys(_benchmarks()) if t not in have][:room]
+    return [*tickers, *extra] if extra else tickers
+
+
+def scan_quotes(prices: dict, tickers: list) -> dict:
+    """The quote dict the rest of the scan sees: benchmark extras the watchlist
+    does not hold are removed, so the long and SHORT lanes see what they saw before."""
+    have = set(tickers)
+    drop = [t for t in _benchmarks() if t not in have and t in prices]
+    if not drop:
+        return prices
+    return {t: p for t, p in prices.items() if t not in drop}
+```
+
+- [ ] **Step 4: Route the extra quotes in `swingbot/core/scanning/scan_run.py`**
+
+Replace the scan's one live-price line,
+`live_prices = fetch._fetch_live_prices(tickers, progress)` (above
+`_finish_phase("live_prices")`), with these two lines; the v55 Phase 1b
+comment above it and V209-6b's `quotes_at` line below it stay:
+
+```python
+    shock_prices = fetch._fetch_live_prices(shock_scan.quote_tickers(tickers, step_shock), progress)
+    live_prices = shock_scan.scan_quotes(shock_prices, tickers)   # v209: SPY/QQQ extras feed the shock pass only
+```
+
+In V209-6b's `shock_state = _shock_state_for_pass(...)` call change
+`live_prices=live_prices` to `live_prices=shock_prices`.
+
+`tickers` itself is never modified; under `off` or an unstepped pass both
+helpers hand back the very objects they were given, so the call and the dict
+are what they were before v209.
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+Run each:
+`python scripts/dev/testrun.py file tests/commands/test_shock_step_gate.py`
+`python scripts/dev/testrun.py file tests/scanning/test_short_lane_split.py` (drives `_sync_run_scan` end to end)
+`python scripts/dev/testrun.py file tests/scanning/test_engine_v2_plans.py`
+Expected: PASS, and 0 skipped in the last two.
+
+Run: `python scripts/dev/complexity_gate.py`
+Expected: no violation; `_sync_run_scan` still 94 (two assignments, no branch), `quote_tickers` and `scan_quotes` below 5.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add swingbot/core/scanning/shock_scan.py swingbot/core/scanning/scan_run.py \
+        tests/commands/test_shock_step_gate.py
+git commit -m "feat(v209): SPY/QQQ ride the scan's one live-price fetch; the long lanes never see them"
 ```
 
 ### Task V209-7: Stamp `shock_state` on confluence, requote and strategy plans
@@ -1104,204 +1314,4 @@ Expected: no violation; `_attach_plan`, `_lane_state`, `_qualify_context` and `_
 git add swingbot/core/scanning/qualify.py swingbot/core/scanning/short_run.py \
         tests/scanning/test_shock_short_lane.py
 git commit -m "feat(v209): SHORT lane stamps the stored shock label read once per run"
-```
-
-### Task V209-8b: Byte-identical long/short plan pins under `off` and `shadow`
-
-**Model:** opus — the spec's byte-identical contract for every lane and both rebuild paths, built on real SHORT plans; a pin that is too loose hides a changed plan, one that is too tight fails on clocks.
-
-**Files:**
-- Create: `tests/scanning/test_shock_plans_byte_identical.py`
-
-**Interfaces:**
-- Consumes: V209-7's `params.shock_asof`, `scan_run._attach_item_plan(..., shock_state=None)`, `scan_run._rebuild_item(..., shock_state=None)` and the `stamp_entry_context` merge; V209-8's `QualifyContext.shock_state`, `_qualify_context` reading `lane.get("shock_state")` and `_rebuild_fn` over that context. Existing helpers reused as is: `tests/scanning/test_live_context_stamp.py:_plan`, and from `tests/scanning/test_short_qualify.py` the fixtures `offline`, `sealed`, `_no_notice_queue_write` (autouse) and `CANDIDATE`, `GOLDEN_KEPT`, `_context(**over)`, `_items()`, `_lane()`, `_stock()`.
-- Produces: nothing a later task consumes. Production code is not touched: this task only pins V209-7 and V209-8.
-
-- [ ] **Step 1: Write the pins**
-
-Create `tests/scanning/test_shock_plans_byte_identical.py`:
-
-```python
-"""v209 spec: long and short plans are byte-identical under MARKET_SHOCK_MODE=off
-and shadow, apart from entry_context.shock_state (index Review Focus 3).
-
-Every lane -- confluence, its requote rebuild, strategy, SHORT, the SHORT lane
-dict route and the SHORT requote rebuild -- is built three ways: the pre-v209
-call (no label argument), `off` (label None) and `shadow` (a label). `off`
-must equal pre-v209 byte for byte with no key; `shadow` must equal it once
-its one shock_state key is removed."""
-import dataclasses
-import json
-from types import SimpleNamespace
-
-import pytest
-
-from swingbot import config
-from swingbot.core.edge.context import FEATURE_KEYS
-from swingbot.core.planning import params
-from swingbot.core.planning.rebuild import RebuildOutcome, RebuildPrice
-from swingbot.core.scanning import analyze, qualify, scan_run, short_run, strategy_pass
-from tests.helpers import make_ohlcv
-from tests.scanning.test_live_context_stamp import _plan
-from tests.scanning.test_short_qualify import (  # noqa: F401  (offline, sealed, autouse are fixtures)
-    CANDIDATE, GOLDEN_KEPT, _context, _items, _lane, _no_notice_queue_write, _stock, offline,
-    sealed)
-
-PRICE = RebuildPrice(101.0, "trade", 1.0, "2026-11-05T15:00:00+00:00", 1000.0, True, "regular")
-FRAME = make_ohlcv([100.0 + i * 0.1 for i in range(300)], start="2025-06-02")
-RS = {"rs_pctile": 64.0, "sector_pctile": 55.0, "rs_combined": 61.0}
-ARMS = {"pre_v209": {}, "off": {"shock_state": None}, "shadow": {"shock_state": "SHOCK"}}
-# A fresh uuid per build and the live wall clock: they differ between any two
-# builds, v209 or not, so they are the only fields left out of the comparison.
-VOLATILE = ("plan_id", "issued_at")
-
-
-def _canon(plan) -> str:
-    doc = dataclasses.asdict(plan)
-    for key in VOLATILE:
-        doc.pop(key, None)
-    return json.dumps(doc, sort_keys=True, default=str)
-
-
-def _assert_pinned(build, *, features=True):
-    plans = {arm: build(dict(kwargs)) for arm, kwargs in ARMS.items()}
-    assert all(plan is not None for plan in plans.values()), plans
-    for arm in ("pre_v209", "off"):
-        assert "shock_state" not in plans[arm].entry_context, arm
-    if features:
-        assert set(plans["off"].entry_context) == set(FEATURE_KEYS)
-    assert _canon(plans["off"]) == _canon(plans["pre_v209"])
-    assert plans["shadow"].entry_context.pop("shock_state") == "SHOCK"
-    assert _canon(plans["shadow"]) == _canon(plans["pre_v209"])
-    return plans
-
-
-def _long_plan():
-    return dataclasses.replace(_plan(), stop_loss=98.5)
-
-
-def _long_item():
-    return SimpleNamespace(
-        result=SimpleNamespace(ticker="AAPL", horizon_key="3m", trend="bullish",
-                               state_key="k", state_value="v"),
-        level_map=None, rs_percentile=64.0, breadth=None, htf_info=None, rs_combined=61.0,
-        sector_rs_percentile=55.0, conf=None, htf_bias=None, target_confluence=None,
-        plan_v2=None, plan_v2_rejected=None, plan="scenario")
-
-
-@pytest.fixture
-def long_env(monkeypatch):
-    monkeypatch.setattr(config, "PLAN_ENGINE_V2", "on")
-    monkeypatch.setattr(analyze, "_build_quality_inputs", lambda *a, **k: {})
-    monkeypatch.setattr(analyze, "build_confluence_plan", lambda *a, **k: _long_plan())
-    monkeypatch.setattr(analyze, "primary_strategy_for", lambda scenario: "MACD")
-
-
-def _attach_on_rebuild(monkeypatch, module, scenario_of):
-    def rebuild(item, price, *, rescenario, attach):
-        attach(scenario_of(item))
-        return RebuildOutcome(True, None, price)
-
-    monkeypatch.setattr(module.rebuild, "rebuild_before_post", rebuild)
-
-
-def test_the_confluence_long_plan_is_pinned(long_env):
-    def build(kwargs):
-        item = _long_item()
-        scan_run._attach_item_plan(item, "scenario", FRAME, None, None, **kwargs)
-        return item.plan_v2
-
-    _assert_pinned(build)
-
-
-def test_the_confluence_requote_rebuild_is_pinned(long_env, monkeypatch):
-    _attach_on_rebuild(monkeypatch, scan_run, lambda item: "rebuilt")
-
-    def build(kwargs):
-        item = _long_item()
-        out = scan_run._rebuild_item(item, PRICE, fresh_data={"AAPL": FRAME}, regimes=None,
-                                     regime=None, require_confirmation=True, **kwargs)
-        assert out.kept
-        return item.plan_v2
-
-    _assert_pinned(build)
-
-
-def test_the_strategy_long_plan_is_pinned(monkeypatch):
-    monkeypatch.setattr(strategy_pass, "build_strategy_plan", lambda *a, **k: _long_plan())
-    monkeypatch.setattr(strategy_pass, "stamp_badge", lambda plan: None)
-    monkeypatch.setattr(strategy_pass, "stamp_cohort", lambda plan, state: None)
-
-    def build(kwargs):
-        # what scan_run's asof_of hands the pass (V209-7): RS readings + shock_asof
-        asof = {**RS, **params.shock_asof(kwargs["shock_state"])} if kwargs else dict(RS)
-        return strategy_pass.build_strategy_plan_at(
-            FRAME, ticker="AAPL", strategy="MACD", horizon_key="3m", direction="bullish",
-            regime2_state="bull_quiet", asof=asof)
-
-    _assert_pinned(build)
-
-
-def test_the_short_plan_is_pinned_and_keeps_its_golden_prices(sealed):  # noqa: F811
-    def build(kwargs):
-        verdict = qualify.qualify_short_item(CANDIDATE, _items()[0], _context(**kwargs))
-        assert isinstance(verdict, qualify.Accepted), verdict
-        return verdict.item.plan_v2
-
-    off = _assert_pinned(build, features=False)["off"]
-    assert (round(off.trigger_price, 6), round(off.stop_loss, 6), round(off.tp1, 6)) == GOLDEN_KEPT[0][2]
-
-
-def test_the_short_lane_dict_route_is_pinned(offline):  # noqa: F811
-    def build(kwargs):
-        kept = short_run._qualified_items(_items(), False, {"AAA": _stock()}, {**_lane(), **kwargs})
-        return next(item.plan_v2 for item in kept if item.plan_v2 is not None)
-
-    _assert_pinned(build, features=False)
-
-
-def test_the_short_requote_rebuild_is_pinned(sealed, monkeypatch):  # noqa: F811
-    _attach_on_rebuild(monkeypatch, short_run, lambda item: item.plan)
-
-    def build(kwargs):
-        item = _items()[0]
-        out = short_run._rebuild_fn({"AAA": _stock()}, _context(**kwargs))(item, PRICE)
-        assert out.kept
-        return item.plan_v2
-
-    _assert_pinned(build, features=False)
-```
-
-Notes for the implementer:
-- `features=False` on the SHORT lanes: the v74 AAPL fixture cut at
-  2025-01-10 holds 257 bars, and whether that fills every `FEATURE_KEYS`
-  entry is not what this file pins; the long lanes use the 300-bar frame
-  V209-7's stamp test already proves complete.
-- The `_lane()` dict of `test_short_qualify` has no `shock_state` key, so
-  the `pre_v209` arm of the lane-dict route is the lane shape before this
-  task.
-- If a pin fails on a field other than the two in `VOLATILE` (for example a
-  wall-clock stamp from `_stamp_next_open_live` landing on a different
-  minute), report it with the field name; never widen `VOLATILE` to make a
-  real difference pass.
-
-- [ ] **Step 2: Run the pins**
-
-Run: `python scripts/dev/testrun.py file tests/scanning/test_shock_plans_byte_identical.py`
-Expected: PASS, six tests, `0 failed`, `0 xfailed`. These are regression pins
-over code V209-7 and V209-8 already shipped, so they pass on first run. To
-prove each pin can fail, temporarily make `params._merge_shock_state` write
-the key even when the label is `None`, rerun (expected: all six fail on
-`"shock_state" not in ... entry_context`), then revert that change and rerun
-to green; the revert leaves `git diff swingbot/` empty. A failure on a real field is a changed plan: stop and
-report.
-
-Run: `python scripts/dev/testrun.py file tests/scanning/test_long_gap_sizing_parity.py`
-Expected: PASS.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add tests/scanning/test_shock_plans_byte_identical.py
-git commit -m "test(v209): byte-identical long/short plan pins under off and shadow"
 ```

@@ -592,6 +592,7 @@ Nothing is left to commit. Step 3 committed the doc; Step 5 committed the releas
   - `docs/superpowers/plans/2026-11-05-v209-market-shock-detector_1b-detector-exit.md`
   - `docs/superpowers/plans/2026-11-05-v209-market-shock-detector_2-storage-and-wiring.md`
   - `docs/superpowers/plans/2026-11-05-v209-market-shock-detector_3-scan-wiring-and-stamp.md`
+  - `docs/superpowers/plans/2026-11-05-v209-market-shock-detector_3b-byte-identical-pins.md`
   - `docs/superpowers/plans/2026-11-05-v209-market-shock-detector_5-replay-release-closeout.md`
 - **Not touched:**
   - `..._4-notices-and-admin.md`, which belongs to the follow-on notice/badge plan.
@@ -655,9 +656,10 @@ git mv docs/superpowers/plans/2026-11-05-v209-market-shock-detector_0-index.md \
        docs/superpowers/plans/2026-11-05-v209-market-shock-detector_1b-detector-exit.md \
        docs/superpowers/plans/2026-11-05-v209-market-shock-detector_2-storage-and-wiring.md \
        docs/superpowers/plans/2026-11-05-v209-market-shock-detector_3-scan-wiring-and-stamp.md \
+       docs/superpowers/plans/2026-11-05-v209-market-shock-detector_3b-byte-identical-pins.md \
        docs/superpowers/plans/2026-11-05-v209-market-shock-detector_5-replay-release-closeout.md \
        docs/superpowers/plans/implemented/
-git status --short     # six renames (plus the index header edit, if Step 5 amended it); VERSION.json untouched
+git status --short     # seven renames (plus the index header edit, if Step 5 amended it); VERSION.json untouched
 ```
 
 - **Step 7 (worktree):** run `git rev-list --count main..<v209 branch>`; it must print `0`. Then remove the worktree and its branch per `document-lifecycle.md`. If the branch name contains `backup`, stop and ask instead.
