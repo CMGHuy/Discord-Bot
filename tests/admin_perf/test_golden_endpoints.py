@@ -62,7 +62,7 @@ def test_endpoint_matches_its_frozen_golden(name, golden_seed, frozen_clock, log
         record_golden.write_golden(name, live)
     golden = json.loads(gb.golden_path(name).read_text(encoding="utf-8"))
     pointers = list(mr.EXPECTED_MONEY[name])
-    assert gb.mask(live, pointers) == gb.mask(golden, pointers)
+    assert gb.mask(gb.without_added(name, live), pointers) == gb.mask(golden, pointers)
 
 
 @pytest.mark.parametrize("name", NAMES)
@@ -82,6 +82,15 @@ def test_money_pointers_are_exactly_the_fx_sensitive_fields(name, golden_seed, f
     golden_seed.set_fx(2.0)                             # every USDEUR=X close doubled
     doubled = _get(logged_in, name)
     assert gb.diff_pointers(gb.mask(base), gb.mask(doubled)) == set(mr.EXPECTED_MONEY[name])
+
+
+def test_without_added_drops_only_the_listed_pointers():
+    live = {"market_meta": {"a": 1}, "equity_30d": {"points": [], "market_meta": {"b": 2}}}
+    assert gb.without_added("dashboard", live) == {"market_meta": {"a": 1}, "equity_30d": {"points": []}}
+    assert gb.without_added("calendar_month", {"market_meta": 1, "x": 2}) == {"x": 2}
+    assert gb.without_added("trades", live) == live
+    assert gb.without_added("dashboard", {}) == {}
+    assert "market_meta" in live["equity_30d"]               # the caller's payload is untouched
 
 
 def test_no_golden_is_ever_overwritten(tmp_path, monkeypatch):

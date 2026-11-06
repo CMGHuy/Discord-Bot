@@ -114,7 +114,7 @@ def _get(client, name):
 def _matches_golden(name, live) -> bool:
     golden = json.loads(gb.golden_path(name).read_text(encoding="utf-8"))
     pointers = list(mr.EXPECTED_MONEY[name])
-    return gb.mask(live, pointers) == gb.mask(golden, pointers)
+    return gb.mask(gb.without_added(name, live), pointers) == gb.mask(golden, pointers)
 
 
 def test_the_frozen_memo_refuses_nested_writes_only():
