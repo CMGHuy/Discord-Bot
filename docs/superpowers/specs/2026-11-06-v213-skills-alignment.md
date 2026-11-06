@@ -107,7 +107,7 @@ skipped. Two citations on one line are two tokens.
    `swingbot/`, `scripts/` and `tests/`, read once and joined by the caller.
    Otherwise `reason="unknown name"`.
 3. **Doc sections.** On each paragraph (consecutive non-fenced, non-blank
-   lines joined with single spaces, so a citation wrapped across lines still
+   lines joined with single spaces, a Markdown list item starting a new one, so a citation wrapped across lines still
    reads whole), the pattern `` `?(?P<doc>[\w./-]+\.md)`?\s*§\s*(?P<cite>[^`]+) ``
    finds a cited section. The doc resolves from the repo root when it contains
    `/`, else from `docs/claude/`; a doc not in `tracked` gives
