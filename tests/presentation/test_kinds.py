@@ -124,6 +124,15 @@ def test_manage_content_line_leads_with_the_action_not_the_word_manage():
     assert "MANAGE" not in kinds.content_line(Kind.MOVE_STOP, "NVDA", "bearish")
 
 
+def test_factual_labels_keep_the_follow_channel_free_of_instructions():
+    assert kinds.title(Kind.TP1_HIT, "NVDA", "bullish", factual=True) == "💰 ▲ LONG NVDA · TP1"
+    assert (kinds.content_line(Kind.TP1_HIT, "NVDA", "bullish", factual=True)
+            == "💰 MANAGE · ▲ LONG NVDA · TP1")
+    assert kinds.title(Kind.STOPPED, "NVDA", "bullish", factual=True) == "🏁 ▲ LONG NVDA · STOPPED"
+    assert Kind.WIN.label_for(True) == "WIN" and Kind.RISK_CAP.label_for(True) == "RISK CAP"
+    assert Kind.BE_MOVED.label_for(True) == Kind.BE_MOVED.label    # no factual variant
+
+
 def test_result_kinds_name_the_action():
     assert Kind.WIN.label == "TAKE PROFIT"
     assert Kind.STOPPED.label == "TAKE STOPLOSS"

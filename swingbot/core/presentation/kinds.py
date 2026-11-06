@@ -97,6 +97,9 @@ class KindSpec:
     emoji: str | None = None       # overrides the family badge when set
     colour: int | None = None      # FIXED-rule override of the family colour
     disclaimer: bool = False
+    #: wording for the follow-notify channel, which reports facts and never
+    #: instructs ("take profit", "move stop" are forbidden there).
+    factual_label: str | None = None
 
 
 def _setup(label: str, rule: str = LEVEL_RAMP, colour: int | None = None) -> KindSpec:
@@ -118,18 +121,18 @@ class Kind(Enum):
     RECLAIM_ORDER = KindSpec(Family.ENTRY, "STOP ORDER AT ENTRY")   # v192: DAY stop at E
     # MANAGE
     BE_MOVED = KindSpec(Family.MANAGE, "MOVE STOPLOSS TO BREAKEVEN")
-    TP1_HIT = KindSpec(Family.MANAGE, "TAKE PROFIT (TP1)", emoji="💰")
+    TP1_HIT = KindSpec(Family.MANAGE, "TAKE PROFIT (TP1)", emoji="💰", factual_label="TP1")
     MOVE_STOP = KindSpec(Family.MANAGE, "MOVE STOPLOSS", emoji="✂️")
     CANCEL = KindSpec(Family.MANAGE, "CANCEL ORDER", emoji="🚫")
-    RISK_CAP = KindSpec(Family.MANAGE, "CANCEL ORDER (RISK CAP)", emoji="🚫")
+    RISK_CAP = KindSpec(Family.MANAGE, "CANCEL ORDER (RISK CAP)", emoji="🚫", factual_label="RISK CAP")
     PLAN_UPDATE = KindSpec(Family.MANAGE, "PLAN UPDATE")   # history-only fallback
     # WATCH
     NEAR_STOP = KindSpec(Family.WATCH, "NEARING STOP", colour=WATCH_STOP_ORANGE)
     NEAR_TP = KindSpec(Family.WATCH, "NEARING TP", colour=WATCH_TP_LIME)
     # RESULT -- the outcome mark rides in the detail, via outcome_detail().
     CLOSED_TRADE = KindSpec(Family.RESULT, "CLOSED", R_RAMP)
-    STOPPED = KindSpec(Family.RESULT, "TAKE STOPLOSS", R_RAMP)
-    WIN = KindSpec(Family.RESULT, "TAKE PROFIT", R_RAMP)
+    STOPPED = KindSpec(Family.RESULT, "TAKE STOPLOSS", R_RAMP, factual_label="STOPPED")
+    WIN = KindSpec(Family.RESULT, "TAKE PROFIT", R_RAMP, factual_label="WIN")
     SCRATCHED = KindSpec(Family.RESULT, "SCRATCHED")
     EXITED = KindSpec(Family.RESULT, "EXITED", R_RAMP)
     CLOSE_AT_MARKET = KindSpec(Family.RESULT, "CLOSE AT MARKET", R_RAMP)
@@ -157,6 +160,10 @@ class Kind(Enum):
     @property
     def label(self) -> str:
         return self.value.label
+
+    def label_for(self, factual: bool = False) -> str:
+        """The action label, or the factual one on the follow-notify channel."""
+        return (self.value.factual_label or self.label) if factual else self.label
 
     @property
     def rule(self) -> str:
@@ -191,18 +198,20 @@ def _join(*parts: str) -> str:
     return " · ".join(part for part in parts if part)
 
 
-def title(kind: Kind, ticker: str, direction: str | None = None, detail: str = "") -> str:
+def title(kind: Kind, ticker: str, direction: str | None = None, detail: str = "",
+          *, factual: bool = False) -> str:
     """``🆕 ▲ LONG AAPL · ALERT · Lv4 ⭐`` -- badge, head, kind label, detail."""
-    return f"{badge(kind)} {_join(_head(ticker, direction), kind.label, detail)}"
+    return f"{badge(kind)} {_join(_head(ticker, direction), kind.label_for(factual), detail)}"
 
 
-def content_line(kind: Kind, ticker: str, direction: str | None = None, detail: str = "") -> str:
+def content_line(kind: Kind, ticker: str, direction: str | None = None, detail: str = "",
+                 *, factual: bool = False) -> str:
     """The phone push preview: ``🏁 RESULT · ▲ LONG AAPL · CLOSED · ✅ WIN +1.8R``."""
-    if kind.family is Family.MANAGE:
+    if kind.family is Family.MANAGE and not factual:
         # The action names the event itself ("TAKE PROFIT", "MOVE STOPLOSS ..."),
         # so the generic family word MANAGE would only hide it.
         return f"{badge(kind)} {_join(kind.label, _head(ticker, direction), detail)}"
-    return f"{badge(kind)} {_join(kind.family.label, _head(ticker, direction), kind.label, detail)}"
+    return f"{badge(kind)} {_join(kind.family.label, _head(ticker, direction), kind.label_for(factual), detail)}"
 
 
 def _fixed_stripe(kind: Kind, level: int | None, r: float | None, blocked: bool) -> int:

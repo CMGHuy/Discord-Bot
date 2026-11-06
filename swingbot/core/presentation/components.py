@@ -121,10 +121,11 @@ class PushEmbed(discord.Embed):
 
 
 def push_embed(kind: Kind, ticker: str = "", direction: str | None = None,
-               detail: str = "", *, description: str | None = None) -> PushEmbed:
+               detail: str = "", *, description: str | None = None,
+               factual: bool = False) -> PushEmbed:
     """A PushEmbed whose title and push line both come from the registry."""
-    embed = PushEmbed(title=kinds.title(kind, ticker, direction, detail), description=description)
-    embed.push_text = kinds.content_line(kind, ticker, direction, detail)
+    embed = PushEmbed(title=kinds.title(kind, ticker, direction, detail, factual=factual), description=description)
+    embed.push_text = kinds.content_line(kind, ticker, direction, detail, factual=factual)
     embed.kind = kind
     return embed
 
