@@ -1,9 +1,9 @@
 """v207: viewer accounts (`admin_users`).
 
 The `.env` admin is never stored; every row is a read-only viewer. Lookups
-answer "no such user" while the table does not exist yet: the containers start
-before `alembic upgrade head` runs on a deploy (deploy/deploy.sh), and a viewer
-login in that window must be invalid credentials, not a 500. Writes are not
+answer "no such user" while the table does not exist yet: deploy/deploy.sh
+migrates before it starts the containers, so this only covers a manual or
+out-of-order start, where a viewer login must be invalid credentials, not a 500. Writes are not
 guarded -- only the admin reaches them, and the admin is checked against
 `.env` without touching this table.
 """

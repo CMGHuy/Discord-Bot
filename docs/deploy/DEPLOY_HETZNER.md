@@ -349,51 +349,18 @@ The snap writes a day's row only once the bar behind it is final (its London
 day ended). Expect the row later than 08:00 when the pair file was last
 written before London midnight; it arrives on the cycle after the next refresh.
 
-Rollback, in this order: (1) redeploy the previous image (§ Rolling back). The
-old code never reads the table, so it can stay. (2) Only to remove it, run
-`docker compose exec -T bot alembic downgrade <the revision v205_001 revises>`
-(`v200_001` when v205 was written). Downgrading to that revision also rolls
-back every later revision stacked on top of `v205_001`, so check
-`alembic history` first.
-
-### v207: viewer accounts (`admin_users`)
-
-Read-only sign-ins, for people who may look at the book but change nothing,
-are rows in `admin_users` (revision `v207_001`). The `.env` admin is
-unchanged and never stored, so it cannot be locked out. No `.env` change and
-no flag: an empty table is exactly the behaviour before v207.
-
-1. Deploy as usual. `deploy.sh` runs `alembic upgrade head` after
-   `up --wait`; until it has, a viewer sign-in answers "Invalid username or
-   password.", the admin logs `admin_users table missing; viewer logins are
-   refused until alembic upgrade head` once, the Users tab lists nobody and
-   creating a viewer fails. The `.env` admin signs in normally throughout.
-2. Check the revision:
-   `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot alembic current"`
-   prints `v207_001 (head)` or a later head.
-3. Create the first viewer: sign in at bomeo-capital.com as the `.env`
-   admin, open System → Users (`/system?tab=users`), choose **New viewer**,
-   and enter a username (3-64 characters: letters, digits, `.`, `_`, `-`;
-   never the admin's own name) and a password of at least 12 characters.
-   Hand both over a private channel. Viewers are managed only on this page:
-   there is no CLI and no `.env` list.
-4. Check it in a private browser window: sign in with the new account. The
-   header shows `Read-only · <name>`, the rail has no System entry, no write
-   control is shown, and opening `/system` lands on the Dashboard. Sign out.
-5. To revoke access, use **Disable** (reversible) or **Delete** on the same
-   tab. Either one, like a password reset, ends the viewer's sessions on
-   their next request and their live event stream within one heartbeat
-   (20 s). Re-enabling a disabled viewer does not revive old sessions: they
-   sign in again.
-
-Rollback, in this order: (1) redeploy the previous image (§ Rolling back).
-The old code never reads `admin_users`, so the table can stay and viewer
-accounts survive a later roll-forward; until then only the `.env` admin can
-sign in. (2) Only to remove it, run
-`docker compose exec -T bot alembic downgrade v197_001`
+Rollback: an image-only rollback is **not** safe once `v207_001` is applied:
+the previous image does not know that revision, so `deploy.sh` aborts before
+`up` with bot, admin and refresher stopped (§ Rolling back). In this order:
+(1) with the writers stopped, run the downgrade from the **v207** image:
+`docker compose run --rm --no-deps bot alembic downgrade v197_001`
 (the revision `v207_001` revises). This **drops `admin_users` and every
 viewer account**, and also rolls back every later revision stacked on top of
-`v207_001`, so check `alembic history` first.
+`v207_001`, so check `alembic history` first. (2) Then redeploy the previous
+image (§ Rolling back). Viewer accounts therefore do not survive a rollback;
+re-create them on the Users tab after rolling forward. The other route is
+`scripts/ops/rollback_to.sh` (point-in-time restore), which also discards
+everything written since.
 
 ## Accessing the admin UI
 
