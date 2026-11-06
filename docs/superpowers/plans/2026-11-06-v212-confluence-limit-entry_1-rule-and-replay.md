@@ -771,7 +771,7 @@ If the complexity gate reports `improved build_confluence_plan`, run
 
 **Interfaces:**
 - Consumes: `TradePlanV2.limit_entry_f` (V212-2); `swingbot.core.market.atr_band.tick_size` (exists, `atr_band.py:57`).
-- Produces (consumed by V212-5 `exit_sim_v2`, V212-6 `plan_manager`, V212-11 replay module):
+- Produces (consumed by V212-5 `exit_sim_v2`, v216 V216-1 `plan_manager`, V212-11 replay module):
   - `class BarOutcome(NamedTuple): kind: str; fill: float | None; gap_stopped: bool` — `kind` is `"fill"`, `"cancel"` or `"none"`; `fill` is set only for `"fill"`; `gap_stopped` is True only for a fill at an open at or through the stop
   - `is_arm_limit(plan) -> bool` — `plan.entry_type == "limit" and plan.limit_entry_f is not None`
   - `tp1_reached(plan, high: float, low: float) -> bool` — inclusive: long `high >= level`, short `low <= level`, `level = plan.limit_cancel_level` if set else `plan.tp1`

@@ -1,22 +1,33 @@
-# v212 — Confluence limit entry, part 2: live path
+# v216 — Confluence limit entry: live path (carried over from v212 part 2)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Dispatch `task-implementer` at each task's `**Model:**` tier.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Dispatch `task-implementer` at each task's `**Model:**` tier and escalate per `docs/claude/model-routing.md`.
 
-**Spec:** [v212 — Confluence limit entry partway to the support](../specs/2026-11-06-v212-confluence-limit-entry.md) (rule 6 as corrected in e5dd654f: a gap through the stop fills at the open and exits at that open, about 0R less frictions, outcome `loss`, event `filled_stopped_gap`)
-**Index:** [`2026-11-06-v212-confluence-limit-entry_0-index.md`](2026-11-06-v212-confluence-limit-entry_0-index.md) — Goal, Architecture, **Global Constraints**, Review Focus, Parallelisation and the task ledger live there; every task below implicitly includes the Global Constraints.
+**Bump:** bot patch (arm branch inert while `CONFLUENCE_LIMIT_ENTRY_F = 0`)
+**Edge:** expectancy — the live half of v212's limit entry; no lift of its own.
+**Screen:** exempt (post-signal) — inherited from v212
+**Spec:** [v216 — Confluence limit entry: live path](../specs/2026-11-06-v216-confluence-limit-live-path.md)
+**Gate:** implement **only after v212 records a Stage 3 PASS**; on any other v212 verdict this plan moves to `no-lift/` unimplemented.
+**Depends on:** v212's V212-2 (`limit_entry_f`, `to_limit_plan`) and V212-4 (`limit_entry_rule.bar_outcome`, `is_arm_limit`) on `main`. Global Constraints: v212 index [`2026-11-06-v212-confluence-limit-entry_0-index.md`](2026-11-06-v212-confluence-limit-entry_0-index.md) § Global Constraints apply to every task here.
 **Brief:** `.superpowers/briefs/2026-11-06-v212-confluence-limit-entry.md` (§3e live limit step, §3f heat, §3h alert text)
+**Worktree:** `.claude/worktrees/2026-11-06-v216-confluence-limit-live-path` (create it from `main` before V216-1; `docs/claude/document-lifecycle.md`).
 
-Tasks V212-6 .. V212-10: the live arm branch of the resting limit (shared
+Written as v212 plan part 2 (V212-6..V212-10 with V212-9b) and carried over
+renumbered when v212 was cut at the 20-task cap: V212-6→V216-1, 7→2, 8→3,
+9→4, 9b→5, 10→6. Tasks: the live arm branch of the resting limit (shared
 fill rule, gap-through-stop filled and stopped in one step, planned risk
 cap, marketable at alert), the heat re-check at fill, registration of the
 two new events in every routing table, the alert and follow-up text, and the
-admin Levels mapping. All paths are relative to the worktree
-`.claude/worktrees/2026-11-06-v212-confluence-limit-entry`. Live code reads
-the root `market_data/` cache through `plan_manager`'s existing
-`daily_frame_fn` (`_daily_frame` → `_manager_daily`); nothing here reads
+admin Levels mapping. Live code reads the root `market_data/` cache through
+`plan_manager`'s existing `daily_frame_fn`; nothing here reads
 `data/backtest_cache*`. Tasks that touch the plan store or the trade log run
 `/replicate-prod-db` first (shared `swing-db`, port 56789). Every task's
 verification is the narrow run; no task runs the full suite.
+
+## Parallelisation
+
+| Group | Tasks | Files | Why sequential inside |
+|---|---|---|---|
+| C live | V216-1 → V216-2 → V216-3 → V216-4 → V216-5; V216-6 any time | `plan_manager.py` (1, 2), C `edge/fill_heat.py` (2), event tables (3), `instructions.py`/`session_expiry.py` (4), `plan_table.py`/`lifecycle_embeds.py` (5), `levels-block.ts` (6) | 1 needs v212's V212-4 on `main`; 2 edits `plan_manager.py` after 1; 3 registers the events 1 and 2 emit; 4 writes their text and the tables 3 lists; 6 is frontend-only, no contract |
 
 **Live semantics fixed here (spec rule 6, live column).** A poll is a
 one-print bar (`high = low = price`) handed to `limit_entry_rule.bar_outcome`
@@ -38,7 +49,7 @@ the alert session.
 
 # Phase C — live path
 
-### Task V212-6: Live: arm branch in `_step_limit` (shared rule, `filled_stopped_gap`, planned risk-cap, marketable at alert)
+### Task V216-1: Live: arm branch in `_step_limit` (shared rule, `filled_stopped_gap`, planned risk-cap, marketable at alert)
 
 **Model:** opus — rewires the live resting-order step under the incident-hardened fill/persist path; a slip silently cancels realised losses or double-books a trade.
 
@@ -48,11 +59,11 @@ the alert session.
 
 **Interfaces:**
 - Consumes: V212-4 `limit_entry_rule.is_arm_limit(plan) -> bool`, `bar_outcome(plan, *, open_, high, low, touch=False) -> BarOutcome(kind, fill, gap_stopped)`; V212-2 `TradePlanV2.limit_entry_f`; existing `lifecycle.at_or_beyond_stop`, `PlanManager._persist_fill`, `_persist_terminal`, `_cancel_risk_cap`, `_frame_or_none`, `plan_stop_ceiling`, `session_date`, `is_regular_session`, `US_MARKET_TZ`.
-- Produces (consumed by V212-7, V212-8, V212-9):
-  - event `"filled_stopped_gap"`, detail `{"entry_price": fill, "exit_price": fill, "live_price": price, "stop_loss": plan.stop_loss, "reason": "filled_stopped_gap", "leg": {"fraction": 1.0, "exit_price": fill, "r": 0.0, "reason": "loss"}}` plus `"trade_id"` when a placeholder was moved. (`reason` is one key beyond the ledger's list, additive, so follow_notify's `_stopped_copy` can word it in V212-8.) The plan ends `CLOSED`, history `[..., ACTIVE "limit_fill", CLOSED "loss" with extra {"exit": "filled_stopped_gap"}]`; the trade closes with status `"loss"`.
+- Produces (consumed by V216-2, V216-3, V216-4):
+  - event `"filled_stopped_gap"`, detail `{"entry_price": fill, "exit_price": fill, "live_price": price, "stop_loss": plan.stop_loss, "reason": "filled_stopped_gap", "leg": {"fraction": 1.0, "exit_price": fill, "r": 0.0, "reason": "loss"}}` plus `"trade_id"` when a placeholder was moved. (`reason` is one key beyond the ledger's list, additive, so follow_notify's `_stopped_copy` can word it in V216-3.) The plan ends `CLOSED`, history `[..., ACTIVE "limit_fill", CLOSED "loss" with extra {"exit": "filled_stopped_gap"}]`; the trade closes with status `"loss"`.
   - `"filled"` detail gains `"marketable_at_alert": True` only on the marketable-at-alert fill.
   - `PlanManager._fill_pending(self, plan, fill, price, reason, *, extra: dict | None = None)` — `extra` merges into the `filled` detail; the risk cap reads `_risk_basis(plan, fill)` (`plan.trigger_price` for an arm limit, else `fill`, so every other plan is byte-identical).
-  - `PlanManager._fill_and_stop_gap(self, plan, fill: float, price: float) -> list[PlanEvent]` and `_fill_pending` are the two places V212-7 inserts the heat guard.
+  - `PlanManager._fill_and_stop_gap(self, plan, fill: float, price: float) -> list[PlanEvent]` and `_fill_pending` are the two places V216-2 inserts the heat guard.
   - `PlanManager._session_open_for(self, plan, now) -> float | None`.
 
 - [ ] **Step 0: Sync the replica**
@@ -319,24 +330,24 @@ Expected: all PASS (the v187 file proves out-of-scope limits unchanged); no comp
 
 ```bash
 git add swingbot/core/planning/plan_manager.py tests/planning/test_plan_manager_arm_limit.py
-git commit -m "feat(v212): live arm limit -- shared fill rule, gap-through-stop filled and stopped, planned risk cap (V212-6)"
+git commit -m "feat(v216): live arm limit -- shared fill rule, gap-through-stop filled and stopped, planned risk cap (V216-1)"
 ```
 
-### Task V212-7: Heat at fill: pure check, `fill_guard`, `cancelled_heat_at_fill`
+### Task V216-2: Heat at fill: pure check, `fill_guard`, `cancelled_heat_at_fill`
 
 **Model:** opus — a new risk gate on the live fill path (spec rule 8): wrong book, wrong risk or a guard that fails closed would cancel real fills or let stacked limits breach the caps.
 
 **Files:**
 - Create: `swingbot/core/edge/fill_heat.py`
-- Modify: `swingbot/core/planning/plan_manager.py` (`__init__(..., fill_guard=None)`; `_heat_cap`, `_cancel_heat_at_fill` beside `_cancel_risk_cap` ~line 1275; the guard call in `_fill_pending` and `_fill_and_stop_gap` from V212-6; `_fill_frames` module helper and `_manager()` wiring ~line 2117)
+- Modify: `swingbot/core/planning/plan_manager.py` (`__init__(..., fill_guard=None)`; `_heat_cap`, `_cancel_heat_at_fill` beside `_cancel_risk_cap` ~line 1275; the guard call in `_fill_pending` and `_fill_and_stop_gap` from V216-1; `_fill_frames` module helper and `_manager()` wiring ~line 2117)
 - Create: `tests/edge/test_fill_heat.py`
 - Create: `tests/planning/test_plan_manager_heat_at_fill.py`
 
 **Interfaces:**
-- Consumes: V212-4 `is_arm_limit`; V212-6 `PlanManager._fill_pending(..., *, extra=None)`, `_fill_and_stop_gap(plan, fill, price)`; existing `heat.heat_check(open_trades, balance, candidate_risk_pct, cap_pct=None)`, `heat.sector_check(open_trades, balance, candidate_ticker, candidate_risk_pct, sectors, cap_pct=None)`, `correlation.cluster_exposure(open_trades, candidate_ticker, dfs, balance, *, ...)`, `correlation.cluster_check(exposure, candidate_risk_pct, cap_pct=None)`, `account.compute_position_size(entry, stop_loss, account_cfg, *, ticker=None, ...) -> dict | None` (keys `risk_amount`, `capped`), `account.load_account_config()` (keys `balance`, `risk_pct`, `max_open_positions`), `universe.sector_map(name) -> dict`, `TradeLog.get_trades(status="open", limit=None)`.
+- Consumes: V212-4 `is_arm_limit`; V216-1 `PlanManager._fill_pending(..., *, extra=None)`, `_fill_and_stop_gap(plan, fill, price)`; existing `heat.heat_check(open_trades, balance, candidate_risk_pct, cap_pct=None)`, `heat.sector_check(open_trades, balance, candidate_ticker, candidate_risk_pct, sectors, cap_pct=None)`, `correlation.cluster_exposure(open_trades, candidate_ticker, dfs, balance, *, ...)`, `correlation.cluster_check(exposure, candidate_risk_pct, cap_pct=None)`, `account.compute_position_size(entry, stop_loss, account_cfg, *, ticker=None, ...) -> dict | None` (keys `risk_amount`, `capped`), `account.load_account_config()` (keys `balance`, `risk_pct`, `max_open_positions`), `universe.sector_map(name) -> dict`, `TradeLog.get_trades(status="open", limit=None)`.
 - Produces:
   - `fill_heat.heat_at_fill_reason(*, open_trades: list, balance: float, risk_pct: float, ticker: str, sectors: dict | None, cluster_chk: dict | None, max_open: int | None) -> str | None` — the first breached cap in the order `"heat"`, `"sector"` (only with a non-empty `sectors`), `"cluster"` (only with a `cluster_chk` whose `allowed` is False), `"max_open"` (only with `max_open` not None and `len(open_trades) >= max_open`); None when all clear.
-  - `fill_heat.CAP_WORDS = {"heat": "portfolio heat", "sector": "sector heat", "cluster": "correlated heat", "max_open": "max open positions"}` — the one wording of each reason, read by the V212-8 text rows.
+  - `fill_heat.CAP_WORDS = {"heat": "portfolio heat", "sector": "sector heat", "cluster": "correlated heat", "max_open": "max open positions"}` — the one wording of each reason, read by the V216-3 text rows.
   - `fill_heat.make_fill_guard(trade_log, account_cfg_fn, frames_fn, *, sectors_fn=None) -> Callable[[TradePlanV2, float], str | None]` — `frames_fn(tickers: list[str]) -> dict[str, DataFrame]`; `sectors_fn() -> dict` defaults to the scan universe's `sector_map`.
   - `PlanManager.fill_guard` attribute; event `"cancelled_heat_at_fill"`, detail `{"entry_price": fill, "live_price": price, "cap": <reason>}`; status `CANCELLED`, reason `"heat_at_fill"`, extra `{"entry_price": fill, "cap": <reason>}`.
 
@@ -555,10 +566,10 @@ Expected: all PASS (the ratchet sees two new tagged handlers, no untagged one); 
 
 ```bash
 git add swingbot/core/edge/fill_heat.py swingbot/core/planning/plan_manager.py tests/edge/test_fill_heat.py tests/planning/test_plan_manager_heat_at_fill.py
-git commit -m "feat(v212): heat, sector, cluster and max-open re-checked at an arm limit's fill (V212-7)"
+git commit -m "feat(v216): heat, sector, cluster and max-open re-checked at an arm limit's fill (V216-2)"
 ```
 
-### Task V212-8: Register both new events in every routing table; enforcement test
+### Task V216-3: Register both new events in every routing table; enforcement test
 
 **Model:** sonnet — table registration against an explicit list, pinned by an enforcement test; the judgement (which table holds which event) is fixed below.
 
@@ -568,13 +579,13 @@ git commit -m "feat(v212): heat, sector, cluster and max-open re-checked at an a
 - Modify: `swingbot/core/scanning/execution_embeds.py` (`_EVENT_KINDS` ~29)
 - Modify: `swingbot/core/scanning/lifecycle_embeds.py` (`PLAN_EVENT_KINDS` ~302; `_heat_at_fill_fields` beside `_risk_cap_fields` ~405; `_EVENT_FIELDS` ~460, heat cancel only)
 - Modify: `swingbot/core/planning/session_expiry.py` (codes ~31; `_IN_SESSION_CODES` ~41; two message builders and `_LIMIT_MESSAGES` ~150; module docstring)
-- Modify: `swingbot/core/presentation/instructions.py` (heat cancel only: `_heat_at_fill_why`, `_CANCEL_WHY`, `_CANCEL_LEADS`, `_BUILDERS`) — beyond the ledger's file list, because the existing coverage tests (`tests/presentation/test_trade_deleted_cancel_vocab.py::test_every_pending_cancel_event_has_every_row`, `tests/presentation/test_instructions_limit_cancels.py`, `tests/scanning/test_lifecycle_embeds_limit_cancels.py`) require every `PENDING_CANCEL_EVENTS` member in `_BUILDERS`, `_CANCEL_LEADS` and `_EVENT_FIELDS` the moment it joins the set. V212-9 still owns every `filled_stopped_gap` text row and all arm-limit wording.
+- Modify: `swingbot/core/presentation/instructions.py` (heat cancel only: `_heat_at_fill_why`, `_CANCEL_WHY`, `_CANCEL_LEADS`, `_BUILDERS`) — beyond the ledger's file list, because the existing coverage tests (`tests/presentation/test_trade_deleted_cancel_vocab.py::test_every_pending_cancel_event_has_every_row`, `tests/presentation/test_instructions_limit_cancels.py`, `tests/scanning/test_lifecycle_embeds_limit_cancels.py`) require every `PENDING_CANCEL_EVENTS` member in `_BUILDERS`, `_CANCEL_LEADS` and `_EVENT_FIELDS` the moment it joins the set. V216-4 still owns every `filled_stopped_gap` text row and all arm-limit wording.
 - Modify: `tests/tracking/test_pending_cancel_discard.py` (the exact-set and notice-set assertions gain the new members)
 - Create: `tests/planning/test_v212_event_tables.py`
 
 **Interfaces:**
-- Consumes: V212-6 event `filled_stopped_gap` (detail keys incl. `reason`, `exit_price`, `stop_loss`); V212-7 event `cancelled_heat_at_fill` (detail `entry_price`, `live_price`, `cap`), `fill_heat.CAP_WORDS`.
-- Produces: `tests/planning/test_v212_event_tables.py::ROUTING_TABLES` (`dict[str, Collection]`, name → table), `FEED_EVENTS`, `NEW_EVENTS`; V212-9 adds `TEXT_TABLES` and its test to the same file.
+- Consumes: V216-1 event `filled_stopped_gap` (detail keys incl. `reason`, `exit_price`, `stop_loss`); V216-2 event `cancelled_heat_at_fill` (detail `entry_price`, `live_price`, `cap`), `fill_heat.CAP_WORDS`.
+- Produces: `tests/planning/test_v212_event_tables.py::ROUTING_TABLES` (`dict[str, Collection]`, name → table), `FEED_EVENTS`, `NEW_EVENTS`; V216-4 adds `TEXT_TABLES` and its test to the same file.
 
 **Which table holds which event (fixed here):**
 
@@ -589,10 +600,10 @@ git commit -m "feat(v212): heat, sector, cluster and max-open re-checked at an a
 | `follow_notify._STOP_LABELS` | — | `"filled_stopped_gap": "on a gap through its stop, filled and stopped at"` (keyed by the event's `reason`) |
 | `execution_embeds._EVENT_KINDS` | `Kind.RISK_CAP` | `Kind.STOPPED` |
 | `lifecycle_embeds.PLAN_EVENT_KINDS` | `Kind.RISK_CAP` | `Kind.STOPPED` |
-| `lifecycle_embeds._EVENT_FIELDS` | `_heat_at_fill_fields` | V212-9 |
+| `lifecycle_embeds._EVENT_FIELDS` | `_heat_at_fill_fields` | V216-4 |
 | `session_expiry._IN_SESSION_CODES` | `HEAT_AT_FILL = "heat_at_fill"` | `FILLED_STOPPED_GAP = "filled_stopped_gap"` |
 | `session_expiry._LIMIT_MESSAGES` | `_heat_at_fill_message` | `_filled_stopped_gap_message` |
-| `instructions._BUILDERS` / `_CANCEL_LEADS` / `_CANCEL_WHY` | `_cancelled` / `""` / `_heat_at_fill_why` | V212-9 |
+| `instructions._BUILDERS` / `_CANCEL_LEADS` / `_CANCEL_WHY` | `_cancelled` / `""` / `_heat_at_fill_why` | V216-4 |
 
 - [ ] **Step 1: Write the failing test** `tests/planning/test_v212_event_tables.py`
 
@@ -724,7 +735,7 @@ Expected: FAIL — `cancelled_heat_at_fill` / `filled_stopped_gap` missing from 
 - `lifecycle_embeds._heat_at_fill_fields(embed, plan, d) -> None` — `embed.description = plan_levels_block(plan, plan.trigger_price)`; one "Why" field: `f"The {plan.trigger_price:.2f} limit filled at {d['entry_price']:.2f}, but {CAP_WORDS[d['cap']]} was already at its cap with this fill's risk. Cancelled at the fill; no position, no P&L."`; one `_EVENT_FIELDS` row.
 - `session_expiry.py`: constants `HEAT_AT_FILL`, `FILLED_STOPPED_GAP`; `_heat_at_fill_message(plan, detail)` → `f"The {trigger:.2f} limit filled, but {CAP_WORDS[detail['cap']]} was already at its cap; cancelled at the fill, nothing opened"`; `_filled_stopped_gap_message(plan, detail)` → `f"Opened at {exit:.2f}, at or through the {stop:.2f} stop: the {trigger:.2f} limit filled at that open and was stopped there"`; both in `_LIMIT_MESSAGES`; the docstring's list of in-session transitions names both (v212). Import `CAP_WORDS` from `swingbot.core.edge.fill_heat` (a leaf: `fill_heat` imports nothing from `planning.session_expiry`).
 - `instructions.py`: `_heat_at_fill_why(detail) -> str` → `f"The limit filled at {_price(detail['entry_price'])}, but {CAP_WORDS[detail['cap']]} was already at its cap. The fill is cancelled, nothing was opened."`; rows `_CANCEL_WHY["cancelled_heat_at_fill"]`, `_CANCEL_LEADS["cancelled_heat_at_fill"] = ""`, `_BUILDERS["cancelled_heat_at_fill"] = _cancelled`.
-- `tests/tracking/test_pending_cancel_discard.py`: `test_the_set_holds_exactly_the_eight_pending_cancel_events` → `..._nine_...` with `"cancelled_heat_at_fill",  # v212` added; `test_notice_events_derive_from_the_cancel_set` adds `"filled_stopped_gap"` to the literal. Its parametrized discard test then covers the heat cancel against a real `TradeLog` (the "never left open" check for it; V212-6's placeholder test is the check for the gap stop).
+- `tests/tracking/test_pending_cancel_discard.py`: `test_the_set_holds_exactly_the_eight_pending_cancel_events` → `..._nine_...` with `"cancelled_heat_at_fill",  # v212` added; `test_notice_events_derive_from_the_cancel_set` adds `"filled_stopped_gap"` to the literal. Its parametrized discard test then covers the heat cancel against a real `TradeLog` (the "never left open" check for it; V216-1's placeholder test is the check for the gap stop).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -747,15 +758,15 @@ Expected: all PASS; no complexity violation.
 
 ```bash
 git add swingbot/core/planning/plan_manager.py swingbot/commands/scanning/follow_notify.py swingbot/core/scanning/execution_embeds.py swingbot/core/scanning/lifecycle_embeds.py swingbot/core/planning/session_expiry.py swingbot/core/presentation/instructions.py tests/tracking/test_pending_cancel_discard.py tests/planning/test_v212_event_tables.py
-git commit -m "feat(v212): register cancelled_heat_at_fill and filled_stopped_gap in every event table (V212-8)"
+git commit -m "feat(v216): register cancelled_heat_at_fill and filled_stopped_gap in every event table (V216-3)"
 ```
 
 
-### Task V212-9: Alert and follow-up text: limit ticket, entry line, fill/cancel/gap/heat copy
+### Task V216-4: Alert and follow-up text: limit ticket, entry line, fill/cancel/gap/heat copy
 
 **Model:** sonnet — wording through existing dispatch tables, every string pinned by a test; the only judgement (arm-only, other plans byte-identical) is fixed below.
 
-Split at the 20 KB cap: this task is the execution feed (`presentation/instructions.py`, the alert ticket and every follow-up instruction); V212-9b is the plan table's entry line and the lifecycle embeds.
+Split at the 20 KB cap: this task is the execution feed (`presentation/instructions.py`, the alert ticket and every follow-up instruction); V216-5 is the plan table's entry line and the lifecycle embeds.
 
 **Files:**
 - Modify: `swingbot/core/presentation/instructions.py` (import `is_arm_limit`; `_sides` gains `"entry_limit"`; new `limit_order_lines`, `_entry_order`, `_ticket_tail` used by `ticket_for` ~287; `_arm_fill_lines` used by `_filled` ~537; new `_filled_stopped_gap` + `_BUILDERS` row; `_ARM_CANCEL_WHY`/`_arm_cancel_why` read first in `_cancel_why`; `_cancel_order` arm branch)
@@ -763,8 +774,8 @@ Split at the 20 KB cap: this task is the execution feed (`presentation/instructi
 - Create: `tests/presentation/test_instructions_arm_limit.py`
 
 **Interfaces:**
-- Consumes: V212-4 `limit_entry_rule.is_arm_limit(plan) -> bool`; V212-2 plan shape (`entry_type="limit"`, `trigger_price=L`, `entry_price=None`, `expiry_bars=3`, `limit_cancel_level=tp1`, `limit_entry_f`); V212-6 events `filled` (detail may carry `"marketable_at_alert": True`), `cancelled_limit` (detail `live_price`, `limit_cancel_level`), `filled_stopped_gap` (detail `entry_price`, `exit_price`, `live_price`, `stop_loss`, `reason`, `leg`); V212-8 `FEED_EVENTS` in `tests/planning/test_v212_event_tables.py`; existing `approx_last_trigger_session`, `total_r`, `outcome_key`, `pnl_line`.
-- Produces: `instructions.limit_order_lines(plan) -> list[str]` — exactly `["BUY LIMIT 98.50", "On fill: stop 96.75, TP1 104.00 (TP2 108.00)", "Cancel the order if price trades at 104.00 before it fills", "Valid through the close of Wed 11 Nov"]` for the long fixture below (`"SELL LIMIT"` for shorts; the `(TP2 …)` clause only when `tp2` is set; the date is `approx_last_trigger_session(created_at, expiry_bars)` as `%a %d %b`). `tests/planning/test_v212_event_tables.py::TEXT_TABLES` (name → table), extended by V212-9b.
+- Consumes: V212-4 `limit_entry_rule.is_arm_limit(plan) -> bool`; V212-2 plan shape (`entry_type="limit"`, `trigger_price=L`, `entry_price=None`, `expiry_bars=3`, `limit_cancel_level=tp1`, `limit_entry_f`); V216-1 events `filled` (detail may carry `"marketable_at_alert": True`), `cancelled_limit` (detail `live_price`, `limit_cancel_level`), `filled_stopped_gap` (detail `entry_price`, `exit_price`, `live_price`, `stop_loss`, `reason`, `leg`); V216-3 `FEED_EVENTS` in `tests/planning/test_v212_event_tables.py`; existing `approx_last_trigger_session`, `total_r`, `outcome_key`, `pnl_line`.
+- Produces: `instructions.limit_order_lines(plan) -> list[str]` — exactly `["BUY LIMIT 98.50", "On fill: stop 96.75, TP1 104.00 (TP2 108.00)", "Cancel the order if price trades at 104.00 before it fills", "Valid through the close of Wed 11 Nov"]` for the long fixture below (`"SELL LIMIT"` for shorts; the `(TP2 …)` clause only when `tp2` is set; the date is `approx_last_trigger_session(created_at, expiry_bars)` as `%a %d %b`). `tests/planning/test_v212_event_tables.py::TEXT_TABLES` (name → table), extended by V216-5.
 
 **Scope rule.** Every new wording is gated on `is_arm_limit(plan)`. A v113/v131 limit plan (`limit_entry_f is None`) keeps today's text byte for byte, including its `CANCEL BUY STOP 100.00` cancel headline pinned by `tests/presentation/test_instructions_limit_cancels.py`, which stays green untouched. No test here touches the database.
 
@@ -890,7 +901,7 @@ def test_filled_and_stopped_on_a_gap(levels, gap):
 Append to `tests/planning/test_v212_event_tables.py`:
 
 ```python
-#: V212-9: every feed event has its words in each text table (V212-9b adds the embeds)
+#: V216-4: every feed event has its words in each text table (V216-5 adds the embeds)
 TEXT_TABLES = {
     "instructions._BUILDERS": ins._BUILDERS,
 }
@@ -1012,7 +1023,7 @@ def _arm_cancel_why(plan, transition: str, detail: dict) -> str | None:
     return why(plan, detail) if why is not None else None
 ```
 
-In `_cancel_why`, right after the `reason_message` return: `arm = _arm_cancel_why(plan, transition, detail)` then `if arm is not None: return arm  # v212: arm limit cancels`. In `_cancel_order`, first statement: `if is_arm_limit(plan): return f"{side['entry_limit']} {_price(plan.trigger_price)}"` (V212-8's heat cancel then also heads `CANCEL BUY LIMIT L`; its test asserts only the lines). `_CANCEL_LEADS` needs no row: `filled_stopped_gap` is a close, not a cancel.
+In `_cancel_why`, right after the `reason_message` return: `arm = _arm_cancel_why(plan, transition, detail)` then `if arm is not None: return arm  # v212: arm limit cancels`. In `_cancel_order`, first statement: `if is_arm_limit(plan): return f"{side['entry_limit']} {_price(plan.trigger_price)}"` (V216-3's heat cancel then also heads `CANCEL BUY LIMIT L`; its test asserts only the lines). `_CANCEL_LEADS` needs no row: `filled_stopped_gap` is a close, not a cancel.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -1030,14 +1041,14 @@ Expected: all PASS (the last two test files are untouched: other plans keep thei
 
 ```bash
 git add swingbot/core/presentation/instructions.py tests/planning/test_v212_event_tables.py tests/presentation/test_instructions_arm_limit.py
-git commit -m "feat(v212): limit ticket and follow-up instructions for arm limits (V212-9)"
+git commit -m "feat(v216): limit ticket and follow-up instructions for arm limits (V216-4)"
 ```
 
-### Task V212-9b: Alert and follow-up text, part b: plan-table entry line and lifecycle embeds
+### Task V216-5: Alert and follow-up text, part b: plan-table entry line and lifecycle embeds
 
-**Model:** sonnet — two field-builder tables and one entry line, every string pinned by a test; arm-only gating as in V212-9.
+**Model:** sonnet — two field-builder tables and one entry line, every string pinned by a test; arm-only gating as in V216-4.
 
-Second half of V212-9 (split at the 20 KB cap). Runs after V212-9: it imports `approx_last_trigger_session` alongside V212-9's text and extends V212-9's `TEXT_TABLES`.
+Second half of V216-4 (split at the 20 KB cap). Runs after V216-4: it imports `approx_last_trigger_session` alongside V216-4's text and extends V216-4's `TEXT_TABLES`.
 
 **Files:**
 - Modify: `swingbot/core/scanning/plan_table.py` (`entry_line` ~116 arm branch via `_limit_entry_line`)
@@ -1046,10 +1057,10 @@ Second half of V212-9 (split at the 20 KB cap). Runs after V212-9: it imports `a
 - Create: `tests/scanning/test_plan_table_arm_limit.py`, `tests/scanning/test_lifecycle_embeds_arm_limit.py`
 
 **Interfaces:**
-- Consumes: V212-4 `is_arm_limit`; V212-2 plan shape; V212-6 event details (`filled` with optional `marketable_at_alert`, `cancelled_limit`, `cancelled_expired`, `filled_stopped_gap`); V212-8 `PLAN_EVENT_KINDS["filled_stopped_gap"] = Kind.STOPPED` (the embed's title); V212-9 `TEXT_TABLES`; existing `approx_last_trigger_session`, `total_r`, `plan_levels_block`, `plan_result_block`, `_filled_fields`.
+- Consumes: V212-4 `is_arm_limit`; V212-2 plan shape; V216-1 event details (`filled` with optional `marketable_at_alert`, `cancelled_limit`, `cancelled_expired`, `filled_stopped_gap`); V216-3 `PLAN_EVENT_KINDS["filled_stopped_gap"] = Kind.STOPPED` (the embed's title); V216-4 `TEXT_TABLES`; existing `approx_last_trigger_session`, `total_r`, `plan_levels_block`, `plan_result_block`, `_filled_fields`.
 - Produces: nothing later tasks consume.
 
-**Scope rule.** As V212-9: gated on `is_arm_limit(plan)`; `tests/scanning/test_lifecycle_embeds_limit_cancels.py` and `tests/scanning/test_embeds_badges.py` (today's entry lines) stay green untouched. No test here touches the database.
+**Scope rule.** As V216-4: gated on `is_arm_limit(plan)`; `tests/scanning/test_lifecycle_embeds_limit_cancels.py` and `tests/scanning/test_embeds_badges.py` (today's entry lines) stay green untouched. No test here touches the database.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1268,10 +1279,10 @@ Expected: all PASS; no complexity violation.
 
 ```bash
 git add swingbot/core/scanning/plan_table.py swingbot/core/scanning/lifecycle_embeds.py tests/planning/test_v212_event_tables.py tests/scanning/test_plan_table_arm_limit.py tests/scanning/test_lifecycle_embeds_arm_limit.py
-git commit -m "feat(v212): arm limit entry line and lifecycle embed text (V212-9b)"
+git commit -m "feat(v216): arm limit entry line and lifecycle embed text (V216-5)"
 ```
 
-### Task V212-10: Admin: `levels-block` limit mapping
+### Task V216-6: Admin: `levels-block` limit mapping
 
 **Model:** haiku — one spec file gains a render test; the mapping it pins is a three-word table row.
 
@@ -1335,7 +1346,7 @@ Re-run Step 2's command; expected PASS, including the existing `entryTypeWord` t
 
 ```bash
 git add frontend/src/app/workspaces/trades/why/levels-block.spec.ts
-git commit -m "test(v212): admin Levels block reads a pending limit plan as a resting order (V212-10)"
+git commit -m "test(v216): admin Levels block reads a pending limit plan as a resting order (V216-6)"
 ```
 
 (Add `frontend/src/app/workspaces/trades/why/levels-block.ts` to the `git add` only if Step 3 changed it.)
