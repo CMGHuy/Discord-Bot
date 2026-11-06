@@ -115,9 +115,8 @@ interface SystemSlice {
   scanPending: ScanCommand | null;
   scanMessage: string | null;
   /** v148 — provider rows and swallowed-error counts for the Providers tab's
-   *  two health panels (on the Scan tab until v195). Null until the first answer. A failed refresh keeps the
-   *  last good payload and says so in `healthError`: a stale table that is
-   *  labelled stale beats an empty one. */
+   *  two health panels (on the Scan tab until v195). Null until the first answer.
+   *  Health panels are unknown until a successful answer; a failed refresh clears the old payload and records healthError. */
   health: SystemHealth | null;
   healthError: string | null;
   /** v195 §5.1 — the `GET /risk` payload, read here for its `scan_health`
@@ -534,6 +533,7 @@ export const SystemStore = signalStore(
       start: () => undefined,
       next: (health) => patchState(store, { health, healthError: null }),
       error: (error) => patchState(store, {
+        health: null,
         healthError: error.code === 'unavailable'
           ? 'The admin is not responding.' : error.message,
       }),

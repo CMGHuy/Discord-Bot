@@ -27,17 +27,17 @@ from pathlib import Path
 from flask import jsonify, request
 
 from swingbot.core.analytics import runner_path as rp
-from swingbot.core.db.engine import ADMIN_LOCK_TIMEOUT_MS, LockTimeout, transaction
+from swingbot.core.db.engine import LockTimeout
 from swingbot.core.infra.swallowed import swallowed
-from swingbot.core.tracking.performance import TradeLog, run_after_commit
+from swingbot.core.tracking.performance import TradeLog
 from swingbot.core.tracking.performance import _usable_price
 from swingbot.core.tracking import account_reset
 from swingbot.core.tracking.plan_links import describe_ended
-from swingbot.core.planning.plan_engine import (PlanStatus, plan_from_dict, plan_to_dict,
-                                                record_transition)
+from swingbot.core.planning.plan_engine import PlanStatus
 from swingbot.core.planning.plan_store import PlanStore
 
 from . import api_v1, error
+from . import lifecycle_commands as lifecycle
 from .auth import require_auth
 from .trades import (
     _attach_current_prices,
@@ -50,23 +50,6 @@ from .trades import (
 log = logging.getLogger(__name__)
 
 _CLOSEABLE_PLAN = (PlanStatus.ACTIVE, PlanStatus.PARTIAL)
-_OPEN_LEGACY = "open"
-def _queue_notify(record: dict) -> None:
-    """Append to the bot's manual-close queue. Never raises.
-
-    Bookkeeping must not fail the command: the position is already closed by
-    the time this runs, and turning a successful close into a 500 because a
-    notification could not be queued would be strictly worse.
-    """
-    try:
-        from swingbot.core.db.repositories.notify_queue import notify_queue_repo
-        # A trade record's own `id` is a reserved infrastructure column name in
-        # the table: queued as-is, the insert is rejected and the close is
-        # never announced. drain() hands it back as `id`.
-        notify_queue_repo().enqueue(
-            {("trade_id" if key == "id" else key): value for key, value in record.items()})
-    except Exception as exc:
-        log.warning("could not queue manual-close notification: %s", exc, exc_info=True)
 
 
 def _linked_trade(log_: TradeLog, plan_id: str) -> dict | None:
@@ -147,11 +130,6 @@ def _override_stamp(ticker: str) -> dict | None:
         return None
 
 
-class PlanChanged(Exception):
-    """The plan's status moved between the admin's read and the row lock (the
-    bot closed it, or TP1 filled). Nothing was written; the caller reloads."""
-
-
 def _runner_leg(plan, price, at: str) -> dict | None:
     """v189 A2: a PARTIAL plan's still-open remainder realized at `price`, in
     the shape `_close_runner` writes. None for an ACTIVE plan, a PARTIAL with
@@ -168,111 +146,41 @@ def _runner_leg(plan, price, at: str) -> dict | None:
             "r": (price - plan.entry_price) * sign / risk, "reason": "manual", "closed_at": at}
 
 
-def _close_plan_onto(plan, price, reason: str, stamp, at: str) -> None:
-    """The close on an in-memory plan, no I/O: the A2 runner leg, then the
-    CLOSED transition carrying the v173 override stamp. `at` is explicit --
-    the lifecycle strip's "today" counts read status_history[-1]["at"]."""
-    leg = _runner_leg(plan, price, at)
-    if leg is not None:
-        plan.legs_realized.append(leg)
-    record_transition(plan, PlanStatus.CLOSED, reason=reason, at=at, extra={"override": stamp})
-
-
-def _runner_path_for(plan, price, reason: str, stamp, at: str) -> tuple[bool, dict | None]:
-    """(stamped, path). v142: a manual runner close stamps its path; that
-    reads the daily cache from disk, so it runs on a closed COPY before any
-    row lock. An ACTIVE plan has no runner: (False, None). Never raises.
-    The path is stamped from the pre-lock plan: a stop tightened between the
-    read and the lock is accepted (a narrow window; the leg itself is rebuilt
-    from the locked plan)."""
-    if plan.status != PlanStatus.PARTIAL:
-        return False, None
-    preview = plan_from_dict(plan_to_dict(plan))
-    _close_plan_onto(preview, price, reason, stamp, at)
-    return True, rp.stamp_runner_path(preview, rp.cached_daily_bars, source="live")
-
-
-def _close_linked_trade(tl: TradeLog, linked: dict | None, price, conn, hooks: list) -> None:
-    """Settle the plan's open trade inside the plan's transaction (trade row
-    locked after the plan row), at the stamp's quote; hooks wait for commit."""
-    if linked and linked.get("status") == _OPEN_LEGACY:
-        tl.close_trade_manual(linked["id"], reason="manual (plan close, admin UI)",
-                              exit_price=price, conn=conn, after_commit=hooks)
-
-
 def _close_plan(store: PlanStore, plan, reason: str = "manual") -> None:
-    """Close one ACTIVE/PARTIAL plan: settle its linked legacy trade, record
-    the transition, and queue the bot's notification.
+    """Keep the bulk-close seam while the service owns fresh reads and commit."""
+    lifecycle.close_plan_atomic(plan.plan_id, reason)
 
-    Extracted from close_trade so the bulk endpoint runs exactly this and
-    cannot drift from the single-position path. The caller checks status.
-    `reason` is "manual" for a single close and "manual_bulk" for the bulk
-    endpoint (v173): a bulk clear is not a decision, and the override report
-    must be able to tell the two apart.
 
-    v189 D3: one transaction. The quote (override stamp) and the runner-path
-    stamp are read first, with no lock held. Then the plan row is locked,
-    re-checked (a status that moved raises PlanChanged), closed with its A2
-    runner leg, the linked trade closed at the same quote with its balance
-    point, and the plan written -- all of it commits or none of it does. The
-    journal and snapshot hooks run after commit. One quote serves the stamp,
-    the trade and the plan leg; without a live quote both close unpriced.
-    """
-    stamp = _override_stamp(plan.ticker)
-    price = stamp["exit_price"] if stamp and stamp["price_source"] == "quote" else None
-    at = datetime.now(timezone.utc).isoformat()
-    if plan.status == PlanStatus.PARTIAL and _runner_leg(plan, price, at) is None:
-        price = None  # no runner leg (zero-risk plan): the trade closes unpriced too
-    stamped, runner_path = _runner_path_for(plan, price, reason, stamp, at)
-    tl = TradeLog()
-    linked = _linked_trade(tl, plan.plan_id)
-    hooks: list = []
-    with transaction(lock_timeout_ms=ADMIN_LOCK_TIMEOUT_MS) as tx:
-        current = store.lock_for_update(plan.plan_id, conn=tx)
-        if current is None or current.status != plan.status:
-            raise PlanChanged(plan.plan_id)
-        _close_plan_onto(current, price, reason, stamp, at)
-        if stamped:
-            current.runner_path = runner_path
-        _close_linked_trade(tl, linked, price, tx, hooks)
-        if not store.update(current, conn=tx):
-            raise PlanChanged(plan.plan_id)
-    run_after_commit(hooks)
-    _queue_notify({"kind": "plan_transition", "plan_id": current.plan_id,
-                   "ticker": current.ticker, "status": current.status})
+def _perform_lifecycle(action, identity, projection):
+    try:
+        action(identity)
+    except lifecycle.LifecycleNotFound as exc:
+        return error("not_found", str(exc), 404)
+    except lifecycle.LifecycleConflict as exc:
+        return error("invalid", str(exc), 422)
+    except LockTimeout:
+        return error("conflict",
+                     "This position changed or is being updated by the bot; "
+                     "reload and try again.", 409)
+    except Exception as exc:
+        log.error("admin lifecycle action could not commit type=%s", type(exc).__name__, exc_info=True)
+        return error("unavailable", "The action could not be saved. Try again.", 503)
+    # Projection failure after commit must not be described as an action rollback.
+    return projection(identity)
+
+
+def _reject_legacy_cancel(trade_id):
+    if TradeLog().get_trade_by_id(trade_id) is None:
+        raise lifecycle.LifecycleNotFound("No trade with that ID.")
+    raise lifecycle.LifecycleConflict("Only plans can be cancelled.")
 
 
 @api_v1.route("/trades/<trade_id>/close", methods=["POST"])
 @require_auth
 def close_trade(trade_id: str):
     if _looks_like_a_plan_id(trade_id):
-        store = PlanStore()
-        plan = store.get(trade_id)
-        if plan is None:
-            return error("not_found", f"No trade with id {trade_id!r}", 404)
-        if plan.status not in _CLOSEABLE_PLAN:
-            return error(
-                "invalid",
-                f"Only ACTIVE or PARTIAL plans can be closed; this one is {plan.status}.",
-                422,
-            )
-        try:
-            _close_plan(store, plan)
-        except (PlanChanged, LockTimeout):
-            return error("conflict",
-                         "This position changed or is being updated by the bot; "
-                         "reload and try again.", 409)
-        return _plan_row(trade_id)
-
-    tl = TradeLog()
-    trade = tl.get_trade_by_id(trade_id)
-    if trade is None:
-        return error("not_found", f"No trade with id {trade_id!r}", 404)
-    if trade.get("status") != _OPEN_LEGACY:
-        return error("invalid", "Trade is already closed.", 422)
-    tl.close_trade_manual(trade_id, reason="manual (admin UI)")
-    _queue_notify(tl.get_trade_by_id(trade_id) or {})
-    return _trade_row(trade_id)
+        return _perform_lifecycle(lifecycle.close_plan_atomic, trade_id, _plan_row)
+    return _perform_lifecycle(lifecycle.close_legacy_atomic, trade_id, _trade_row)
 
 
 # --- cancel --------------------------------------------------------------
@@ -280,29 +188,8 @@ def close_trade(trade_id: str):
 @api_v1.route("/trades/<trade_id>/cancel", methods=["POST"])
 @require_auth
 def cancel_trade(trade_id: str):
-    if not _looks_like_a_plan_id(trade_id):
-        # Not merely disallowed -- legacy trades have no PENDING state, so
-        # there is nothing a cancel could mean for one.
-        if TradeLog().get_trade_by_id(trade_id) is None:
-            return error("not_found", f"No trade with id {trade_id!r}", 404)
-        return error("invalid", "Only plans can be cancelled.", 422)
-
-    store = PlanStore()
-    plan = store.get(trade_id)
-    if plan is None:
-        return error("not_found", f"No trade with id {trade_id!r}", 404)
-    if plan.status != PlanStatus.PENDING:
-        return error(
-            "invalid",
-            f"Only PENDING plans can be cancelled; this one is {plan.status}.",
-            422,
-        )
-    record_transition(plan, PlanStatus.CANCELLED, reason="manual",
-                      at=datetime.now(timezone.utc).isoformat())
-    store.update(plan)
-    _queue_notify({"kind": "plan_transition", "plan_id": plan.plan_id,
-                   "ticker": plan.ticker, "status": plan.status})
-    return _plan_row(trade_id)
+    action = lifecycle.cancel_plan_atomic if _looks_like_a_plan_id(trade_id) else _reject_legacy_cancel
+    return _perform_lifecycle(action, trade_id, _plan_row)
 
 
 # --- delete --------------------------------------------------------------
@@ -460,8 +347,8 @@ def close_open():
             _close_plan(store, plan, "manual_bulk")
             closed += 1
             tickers.append(plan.ticker)
-        except Exception:
-            log.exception("bulk close failed for plan %s", plan.plan_id)
+        except Exception as exc:
+            log.error("bulk close failed plan=%s type=%s", plan.plan_id, type(exc).__name__, exc_info=True)
             failed += 1
     return jsonify({"closed": closed, "failed": failed, "tickers": tickers})
 

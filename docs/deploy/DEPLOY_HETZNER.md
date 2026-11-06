@@ -206,7 +206,7 @@ own secret and pass it as a build arg.
 ## Rolling back
 
 Every build is published under an immutable `sha-<12>` tag, so a rollback is
-a pull of an older tag — no rebuild, no revert commit, seconds not minutes:
+a pull of an older tag — no rebuild, no revert commit, seconds not minutes. **From v197 this is only safe when the older image knows the database's current Alembic revision**; otherwise `deploy.sh` aborts before `up` with bot, admin and refresher stopped (recover with `unset SWING_BOT_IMAGE; docker compose up -d --no-build --wait bot admin refresher`, or use `scripts/ops/rollback_to.sh`):
 
 ```bash
 ssh deploy@167.233.26.185
@@ -441,6 +441,10 @@ no per-store stage and no import step. Only `analytics_snapshot.json`,
 - **Editing `.env`.** `python3 scripts/ops/env_set.py KEY value` edits it in
   place and snapshots it; `sed -i` leaves the containers reading the old inode
   (`docs/claude/known-traps.md`, "Editing production `.env` with `sed -i`").
+
+### Lifecycle notification queue (v197)
+
+`deploy.sh` stops bot and admin, migrates with the new image, then starts them. Legacy queue rows, if any, stay blocked for the audited retarget. Never roll back by image alone: see `LIFECYCLE_NOTIFICATIONS.md` (Rollout prerequisites, Rollback).
 
 ### Point-in-time rollback
 

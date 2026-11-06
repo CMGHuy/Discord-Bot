@@ -70,9 +70,17 @@ paths = ["tests/analytics/"]
 description = "Postgres stores, migrations, and the paper trade log"
 paths = ["tests/db/", "tests/tracking/"]
 
+# tests/admin/ is split by feature: the api_v1 endpoint files (test_api*) vs the rest
+# (atomic lifecycle commands, jobs, listeners, settings, SPA serving). The globs are
+# exhaustive over test_*.py, so a new file lands in a leg without a manifest edit.
 [suites.admin]
-description = "Flask admin API"
-paths = ["tests/admin/"]
+description = "Flask admin API endpoints (tests/admin/test_api*)"
+paths = ["tests/admin/test_api*.py"]
+# NOTE: a future tests/admin/test_ap<not i>*.py file would be unowned and fail test_suites.
+
+[suites.admin-core]
+description = "Flask admin internals: lifecycle commands, jobs, listeners, settings, SPA serving"
+paths = ["tests/admin/test_[b-z]*.py", "tests/admin/test_a[!p]*.py"]
 
 [suites.admin-perf]
 description = "v205 admin read performance: SQL tally, Server-Timing, goldens and budgets of the profiled endpoints"

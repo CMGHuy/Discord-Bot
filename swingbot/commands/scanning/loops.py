@@ -380,32 +380,9 @@ async def _post_config_notices(changed: dict) -> None:
                                        what=f"config-change notice for {key}")
 
 
-def _with_trade_id_as_id(record: dict) -> dict:
-    """The table keeps a trade's `id` as `trade_id` (`id` is a reserved
-    column); the embeds read the trade as `id`."""
-    if "trade_id" not in record:
-        return record
-    restored = dict(record)
-    restored["id"] = restored.pop("trade_id")
-    return restored
-
-
-def _take_manual_close_queue() -> list:
-    """Remove and return the queued manual-close records (the table is the queue)."""
-    from swingbot.core.db.repositories.notify_queue import notify_queue_repo
-    return [_with_trade_id_as_id(record) for record in notify_queue_repo().drain()]
-
-
 async def _post_manual_close_queue() -> None:
-    queued = _take_manual_close_queue()
-    if not queued:
-        return
-    from swingbot.core.scanning.embeds import notify_closed_trades
-    try:
-        await notify_closed_trades(bot, queued)
-        log.info("Posted %d manually-closed trade notification(s) to Discord.", len(queued))
-    except Exception as exc:
-        log.warning("Failed to post manual-close notifications: %s", exc, exc_info=True)
+    from swingbot.commands.scanning.lifecycle_delivery import deliver_lifecycle_tick
+    await deliver_lifecycle_tick(bot)
 
 
 @tasks.loop(seconds=30)

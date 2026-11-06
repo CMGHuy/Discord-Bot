@@ -59,7 +59,7 @@ CASES = {
     "ui_preferences": (PreferencesRepository, {"owner": "admin"}),
     "settings_audit": (SettingsAuditRepository, {"ts": TS}),
     "killswitch": (KillswitchRepository, {"key": "global", "engaged": False}),
-    "manual_close_notify": (NotifyQueueRepository, {"queued_at": TS}),
+    "manual_close_notify": (NotifyQueueRepository, {"queued_at": TS, "event_id": "round-trip", "next_attempt_at": TS}),
     "ticker_directory": (TickerDirectoryRepository, {"symbol": "AAPL", "name": "Apple"}),
     "tuning_results": (TuningRepository, {"job_id": "J-probe", "created_at": TS}),
     "tuning_proposals": (ProposalRepository, {"filename": "p.json", "created_at": TS}),

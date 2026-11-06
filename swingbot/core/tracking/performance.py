@@ -1638,6 +1638,38 @@ class TradeLog:
                     return True
         return False
 
+    def close_trade_manual_in_transaction(self, trade_id: str, reason: str, *, exit_price,
+                                          closed_at: str, transition_id: str,
+                                          conn) -> dict | None:
+        """v197: close a trade inside the caller's transaction and return the
+        closed record, or None when the trade is missing or not open.
+
+        The caller owns the advisory lock, the commit and the post-commit
+        effects (`after_manual_close_commit`). Every read and write goes
+        through `conn`: the trade row is locked (`SELECT ... FOR UPDATE`),
+        the balance point is written in the same transaction and a
+        settlement failure raises. No process-local `_LOCK`, no price fetch
+        (a missing `exit_price` settles nothing), no journal/snapshot hook.
+        The leg and label rules are `close_trade_manual`'s own; `closed_at`
+        and `transition_id` are the caller's, so the record carries the
+        transition that closed it."""
+        if conn is None:
+            raise ValueError("caller_connection_required")
+        trade = self._open_trade_by_id(trade_id, conn=conn)
+        if trade is None:
+            return None
+        _close_manually_onto(trade, exit_price, reason)
+        trade.update(closed_at=closed_at, manual_transition_id=transition_id)
+        self._settle_account_balance(trade, conn=conn)
+        self._db_upsert(trade, conn=conn)
+        return dict(trade)
+
+    def after_manual_close_commit(self, trade: dict) -> None:
+        """v197: the derived effects of a transactional manual close (journal,
+        snapshot), run by the caller only after its commit succeeded."""
+        _after_close(trade)
+        _refresh_snapshot_safely()
+
     def close_trade_manual(self, trade_id: str, reason: str = "manual", *,
                            exit_price: float | None = None, conn=None,
                            after_commit: list | None = None) -> bool:

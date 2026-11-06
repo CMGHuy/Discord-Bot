@@ -243,9 +243,10 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 | Mining the live book for ranked hypotheses: `trade-scout` dispatches the read-only `scout` agent once per generator role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
 | Using the eToro Public API MCP (portfolio, instruments, real or demo trades) -- outside swingbot's paper-only scope | `etoro-public-api-operations` |
 
+`task-brief` (fill a plan task's handoff with trap preflight) is not explicit-only: run it right after `task_handoff.py` writes a handoff.
+
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
-whenever Claude would run `/<name>`: `gate` (pre-commit gate), `task-brief`
-(extract one plan task with its trap preflight), `deploy` (Hetzner deploy
+whenever Claude would run `/<name>`: `gate` (pre-commit gate), `deploy` (Hetzner deploy
 sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM
 backup pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
 output returned verbatim, never judged),

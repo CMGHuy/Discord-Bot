@@ -167,6 +167,37 @@ docker pull "$DB_IMAGE"
 echo "==> Pulling cloudflared (Cloudflare Tunnel image)"
 docker compose pull cloudflared || echo "WARNING: could not pull cloudflared -- continuing deploy anyway" >&2
 
+# v197: the lifecycle queue migration must run while NO consumer or writer is
+# up. The previous image's watcher drains the queue with DELETE ... RETURNING,
+# and the new one polls the new schema, so a migration applied after `up` races
+# both. Stop bot and admin first, migrate with the new image, then start. Legacy
+# queue rows (normally none: the old watcher drained them every 30 s) stay
+# blocked for the audited retarget (docs/deploy/LIFECYCLE_NOTIFICATIONS.md).
+echo "==> Ensuring the database is up for the schema migration"
+docker compose up -d --no-build --wait db
+echo "==> Stopping writers for the schema migration"
+docker compose stop bot admin refresher
+echo "==> Applying database migrations before start (alembic upgrade head)"
+# A rollback by image alone (SWING_BOT_IMAGE=<older sha>) runs an image that does
+# not know the database's revision: alembic fails "Can't locate revision". That
+# rollback is unsupported from v197 (the old image would start the DELETE-drain
+# consumer against the v197 queue), so fail with the recovery steps instead of
+# a bare traceback. bot/admin/refresher are stopped at this point.
+MIGRATE_LOG="$(mktemp)"
+if ! docker compose run --rm --no-deps -T bot alembic upgrade head >"$MIGRATE_LOG" 2>&1; then
+  cat "$MIGRATE_LOG" >&2
+  if grep -q "Can't locate revision" "$MIGRATE_LOG"; then
+    echo "ERROR: the database is ahead of image $IMAGE -- an image-only rollback is unsupported." >&2
+    echo "  bot, admin and refresher are STOPPED. To restore service on the current pin:" >&2
+    echo "    unset SWING_BOT_IMAGE; docker compose up -d --no-build --wait bot admin refresher" >&2
+    echo "  To roll back for real: scripts/ops/rollback_to.sh (docs/deploy/DB_RESTORE.md)." >&2
+  fi
+  rm -f "$MIGRATE_LOG"
+  exit 1
+fi
+cat "$MIGRATE_LOG"
+rm -f "$MIGRATE_LOG"
+
 echo "==> Starting services"
 # --no-build is the assertion, not an optimisation: if anything ever makes
 # this server build its own image again, the artifact that was tested in CI

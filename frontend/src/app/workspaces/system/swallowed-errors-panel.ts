@@ -78,7 +78,11 @@ export function swallowedLines(health: SystemHealth | null, now = Date.now()): S
           </table>
         </div>
       } @else {
-        <p class="explain">None since the processes started.</p>
+        @if (current() === null) {
+          <p class="explain">Swallowed-error counts unavailable.</p>
+        } @else {
+          <p class="explain">None since the processes started.</p>
+        }
       }
     </sb-panel>
   `,
@@ -113,10 +117,13 @@ export function swallowedLines(health: SystemHealth | null, now = Date.now()): S
 })
 export class SwallowedErrorsPanel {
   readonly health = input<SystemHealth | null>(null);
+  /** True after a failed refresh: show unavailable, never an empty list as current. */
+  readonly stale = input(false);
 
-  protected readonly lines = computed(() => swallowedLines(this.health()));
+  protected readonly current = computed(() => this.stale() ? null : this.health());
+  protected readonly lines = computed(() => swallowedLines(this.current()));
   protected readonly sinceText = computed(() => {
-    const since = this.health()?.bot_counts_since;
+    const since = this.current()?.bot_counts_since;
     return since
       ? `Bot counts since ${dateTime(since)}.`
       : 'The bot has not reported its counts yet.';
