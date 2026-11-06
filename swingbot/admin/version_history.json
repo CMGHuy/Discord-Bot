@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-06 16:01:59 UTC",
+  "generated_at": "2026-11-06 16:35:58 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.40.2",
-    "bot": "2.17.2"
+    "ui": "1.40.3",
+    "bot": "2.17.3"
   },
   "releases": [
     {
@@ -2453,6 +2453,46 @@
         "bot": "2.17.2"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "last_seen": "2026-11-06",
+      "commit": "cdcdd52d",
+      "subject": "release(ui): 1.40.2 -- the Dashboard lands today from its scoped answer, the day page takes its neighbours from the server (v217)",
+      "versions": {
+        "ui": "1.40.2",
+        "bot": "2.17.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "last_seen": "2026-11-06",
+      "commit": "3cfd3c3a",
+      "subject": "release(bot): 2.17.2 -- /dashboard carries today for all/range, /calendar/pnl/day carries prev_day/next_day (v217)",
+      "versions": {
+        "ui": "1.40.2",
+        "bot": "2.17.2"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "last_seen": "2026-11-06",
+      "commit": "8bf3e79c",
+      "subject": "merge: main into v217 -- versions 1.40.3 / 2.17.3 (main took 1.40.2 / 2.17.2 for v204)",
+      "versions": {
+        "ui": "1.40.3",
+        "bot": "2.17.3"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }
