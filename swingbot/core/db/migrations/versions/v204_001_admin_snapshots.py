@@ -1,7 +1,9 @@
 """v204: admin_snapshots -- stored Risk/Analytics/Calendar/sparkline payloads.
 
-Additive. Rollback is this revision's downgrade. Leaving the table after a code
-rollback is also safe: only the snapshot worker and the admin door read it.
+Additive. Rollback is this revision's downgrade (`alembic downgrade v207_001`,
+run from the v204 image before redeploying an older one): a pre-v204 image does
+not know this revision stamp, so deploy.sh aborts on it (DEPLOY_HETZNER.md
+§ v204). The table itself is harmless to leave; the stamp is not.
 
 Revision ID: v204_001
 Revises: v207_001

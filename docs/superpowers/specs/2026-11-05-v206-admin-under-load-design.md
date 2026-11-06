@@ -511,7 +511,7 @@ quiet.
 
 ### Plan 1 baseline (committed probe)
 
-**Not evidence yet.** One run so far, and it is labelled `quiet`, so it does
+**Superseded by `### Plan 1 after` below: the scan baseline was never taken and is no longer owed.** One run so far, and it is labelled `quiet`, so it does
 not count toward the Goal (only `scan` runs do). The `scan` baseline is still
 owed: rerun the probe during a US-session scan (`--date 2026-11-03`, same
 flags) before V206-13 pushes, then replace this note with that run's table.
@@ -581,3 +581,42 @@ could not share the Open tab's call: `status=open` is ACTIVE plus PARTIAL at
 runner lands in one and not the other. Deleting the unmounted panel
 (`panels/exposure-by-horizon.ts`, its spec and its `PANEL_HELP` entry) is a
 follow-up outside plan v217.
+
+### Plan 1 after (committed probe)
+
+**Not evidence for the Goal.** The scan baseline (V206-3) was never taken: Plan 1
+deployed before it, so production no longer runs the code it had to measure.
+Scans also run back to back every ~5 minutes (about 4 min each), so a strict
+`scan`-labelled run is not reachable. Partner decision 2026-11-06: record the
+`mixed` after-run and compare it with the old-image `mixed` run above.
+
+| Run | Label | When | Image | Pages |
+|---|---|---|---|---|
+| `v206-after-mixed-1` | mixed (not evidence) | 2026-11-06 17:17 Berlin | `ghcr.io/cmghuy/discord-bot:sha-2365278852ec` | 36 |
+
+Old-image mixed run → after-run (same probe, same flags):
+
+| Measure | Before | After |
+|---|---|---|
+| `/dashboard` p90 | 23.9 s | 14.8 s |
+| `/cancel-precision` max | 43.0 s | 11.7 s |
+| `/analytics/performance` max | 35.6 s | 0.33 s |
+| `/market/tape` calls / max | 169 / 51.8 s | 73 / 9.2 s |
+| Idle tab | 39.5 req/min | 22.5 req/min |
+
+Confound: the after image also carries v204 (Risk/Analytics/Calendar read stored snapshots), so `/analytics/performance` and part of `/cancel-precision` are v204's effect, not Plan 1's. Indicative improvement, but the idle rate still sits above the under-10/min
+target and ten endpoints still exceed 5 s p90. The heavy calls (`/dashboard`,
+`/trades`, `/live`, `/market/tape`) are owned by the later v206 plans.
+
+## Panel review (pre-close-out, Plan 1)
+
+staff-engineer, senior-engineer, quant-engineer over `bfde298c^1...bfde298c`: 0 blocking, 16 advisory.
+
+- staff: after-table credits Plan 1 with v204's effect -- applied (confound named)
+- staff: baseline note contradicts the after section -- applied (marked superseded)
+- staff: probe keeps results in memory until the end -- carried to the later plans (probe checkpointing)
+- staff/senior: scan-event progress read runs on the listener thread, side pool budget undocumented -- carried (bounded by 250 ms statement timeout)
+- staff: lint was red after the merge -- rejected: fixed on main by 472da417/13920002 before this close-out
+- staff: `sse_streams` counts one process -- rejected: spec pins one gunicorn worker
+- senior: `summarise` complexity 13, `payload(_name)` comment -- rejected: under the limit, cosmetic
+- quant: hung/failed calls and page-with-no-calls bias the probe low; scan label ignores the idle window; meta lacks probe dirtiness/host; raw probe.json not committed -- carried to the later plans' probe work

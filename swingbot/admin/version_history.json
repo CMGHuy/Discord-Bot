@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-06 16:34:52 UTC",
+  "generated_at": "2026-11-06 16:01:59 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -2433,8 +2433,8 @@
     {
       "date": "2026-11-06",
       "last_seen": "2026-11-06",
-      "commit": "cdcdd52d",
-      "subject": "release(ui): 1.40.2 -- the Dashboard lands today from its scoped answer, the day page takes its neighbours from the server (v217)",
+      "commit": "55d8fa22",
+      "subject": "release(ui): 1.40.2 -- admin snapshot pages: Risk/Analytics/Calendar/sparkline read stored snapshots, two clocks, lower bounds, P&L basis (v204)",
       "versions": {
         "ui": "1.40.2",
         "bot": "2.17.1"
@@ -2446,8 +2446,8 @@
     {
       "date": "2026-11-06",
       "last_seen": "2026-11-06",
-      "commit": "3cfd3c3a",
-      "subject": "release(bot): 2.17.2 -- /dashboard carries today for all/range, /calendar/pnl/day carries prev_day/next_day (v217)",
+      "commit": "aca25660",
+      "subject": "release(bot): 2.17.2 -- admin snapshot pages: refresher snapshot worker, admin_snapshots table, Risk/Analytics/Calendar never compute on the request (v204)",
       "versions": {
         "ui": "1.40.2",
         "bot": "2.17.2"
