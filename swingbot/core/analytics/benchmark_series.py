@@ -131,7 +131,7 @@ def align(
                 pending.append(own)
             continue
         span_days = pending + [own]
-        bot_ret = None if previous_close is None else close / previous_close - 1
+        bot_ret = None if previous_close in (None, 0.0) else close / previous_close - 1
         days.append(AlignedDay(
             session, close, bot_ret, len(span_days), _compound(span_days),
             _any_proxy(span_days), False, base_break,

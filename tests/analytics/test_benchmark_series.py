@@ -69,6 +69,29 @@ def test_one_session_days_pair_with_the_index_day():
     assert tue.index_ret == {"SPY": 0.01} and tue.index_proxy == {"SPY": False}
 
 
+def test_a_zero_previous_close_keeps_the_session_and_index_data():
+    closes = {MON: 100.0, TUE: 0.0, WED: 100.0, THU: 101.0}
+    days = bs.align(WEEK, closes, {"SPY": SPY}, set())
+    tue, wed, thu = days[1:4]
+
+    assert tue.bot_ret == -1.0
+    assert (wed.session, wed.bot_close, wed.bot_ret, wed.span) == (WED, 100.0, None, 1)
+    assert not wed.missing and not wed.one_session
+    assert wed.index_ret == {"SPY": 0.02} and wed.index_proxy == {"SPY": True}
+    assert thu.bot_ret == pytest.approx(0.01) and thu.one_session
+
+
+def test_a_zero_previous_close_still_compounds_the_index_across_a_gap():
+    closes = {TUE: 0.0, THU: 100.0, FRI: 101.0}
+    days = bs.align(WEEK, closes, {"SPY": SPY}, set())
+    thu, fri = days[3:]
+
+    assert (thu.bot_close, thu.bot_ret, thu.span) == (100.0, None, 2)
+    assert thu.index_ret["SPY"] == pytest.approx(1.02 * 0.99 - 1)
+    assert thu.index_proxy == {"SPY": True}
+    assert fri.bot_ret == pytest.approx(0.01) and fri.one_session
+
+
 def test_a_missing_bot_session_is_a_gap_and_the_index_compounds_over_the_span():
     days = bs.align(WEEK, {MON: 100.0, TUE: 101.0, THU: 103.02, FRI: 104.0}, {"SPY": SPY}, set())
     wed, thu = days[2], days[3]
