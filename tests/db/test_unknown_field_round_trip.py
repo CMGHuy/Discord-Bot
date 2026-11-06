@@ -8,6 +8,8 @@ from swingbot.core.db import schema
 from swingbot.core.db.repositories.account import AccountRepository
 from swingbot.core.db.repositories.admin_users import AdminUsersRepository
 from swingbot.core.db.repositories.base import Repository
+from swingbot.core.db.repositories.benchmark_bars import (
+    BenchmarkBarRepository, BenchmarkRefreshRepository)
 from swingbot.core.db.repositories.equity_samples import EquitySampleRepository
 from swingbot.core.db.repositories.flags import FlagRepository
 from swingbot.core.db.repositories.gate_rejections import GateRejectionRepository
@@ -99,6 +101,12 @@ CASES = {
     "refresher_heartbeat": (RefresherHeartbeatRepository,
                             {"key": "refresher", "beat_at": TS, "cadence_s": 60.0,
                              "session": "regular"}),
+    # v208: the Benchmark tab's tables.
+    "benchmark_bars": (BenchmarkBarRepository,
+                       {"symbol": "SPY", "session": "2026-11-04", "source_symbol": "SPY",
+                        "final": True, "as_of": TS}),
+    "benchmark_refresh": (BenchmarkRefreshRepository,
+                          {"symbol": "SPY", "full_refreshed_on": "2026-11-04"}),
     # v207: viewer accounts.
     "admin_users": (AdminUsersRepository, {"username": "probe-user", "password_hash": "h"}),
 }
@@ -110,8 +118,6 @@ NOT_REPOSITORY_BACKED = {
                                 "round trip is tests/db/test_preregistration_verdicts_repository.py",
     "fx_daily_rates": "composite key (base, account, day), written insert_if_absent only and "
                       "read as promoted columns; its round trip is tests/db/test_v205_fx_daily_rates.py",
-    "benchmark_bars": "v208: repository lands in V208-2, which moves this entry to CASES",
-    "benchmark_refresh": "v208: repository lands in V208-2, which moves this entry to CASES",
 }
 
 #: Tables whose rows need the probe plan first (a foreign key into plans).
