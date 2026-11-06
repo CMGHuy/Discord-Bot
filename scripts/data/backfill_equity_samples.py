@@ -413,20 +413,18 @@ def _held_at(trades: list[dict], at: datetime) -> list[dict]:
     return held
 
 
-def _fill_anchors(piece: dict) -> list[tuple[date, float | None]]:
-    anchors = [(piece["entry_day"], piece["entry"])]
-    if piece["exit_day"] is not None:
-        anchors.append((piece["exit_day"], piece["exit_price"]))
-    return anchors
-
-
 def _has_matching_fill_bars(piece: dict, frame: pd.DataFrame | None) -> bool:
-    """Check each raw fill against its own day's bar before using the price history."""
-    for day, price in _fill_anchors(piece):
-        bar = bar_for(frame, day)
-        if price is None or bar is None or _outside(price, bar):
-            return False
-    return True
+    """Require a matching entry bar and check the exit when it can be corroborated."""
+    entry = piece["entry"]
+    entry_bar = bar_for(frame, piece["entry_day"])
+    if entry is None or entry_bar is None or _outside(entry, entry_bar):
+        return False
+
+    exit_day, exit_price = piece["exit_day"], piece["exit_price"]
+    if exit_day is None or exit_price is None:
+        return True
+    exit_bar = bar_for(frame, exit_day)
+    return exit_bar is None or not _outside(exit_price, exit_bar)
 
 
 def _row_notional(row: dict, trades: list[dict], bars: dict) -> Decimal | None:
@@ -474,8 +472,9 @@ def _notional_spans(trades: list[dict], rows: list[dict]) -> dict[str, tuple[dat
         for piece in _held_at(trades, at):
             ticker = piece["ticker"]
             first, last = spans.get(ticker, (day, day))
-            fill_days = [fill_day for fill_day, _ in _fill_anchors(piece)]
-            spans[ticker] = (min(first, day, *fill_days), max(last, day, *fill_days))
+            first = min(first, piece["entry_day"])
+            exit_day = piece["exit_day"] if piece["exit_price"] is not None else None
+            spans[ticker] = (first, max(last, day, exit_day or day))
     return spans
 
 

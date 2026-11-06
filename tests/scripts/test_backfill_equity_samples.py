@@ -489,6 +489,21 @@ def test_open_notional_leaves_a_later_sample_unpriced_without_its_entry_bar(repo
     assert _notional_by_at(repo) == {(TUE_LIVE, "point"): (None, None)}
 
 
+@pytest.mark.parametrize(("closed_at", "exit_price"), [
+    (AAPL["closed_at"], None),
+    ("2026-10-10T18:00:00+00:00", AAPL["exit_price"]),  # Saturday, no daily bar
+])
+def test_open_notional_prices_earlier_samples_without_manual_exit_evidence(
+        repo, closed_at, exit_price):
+    repo.insert_sample(_live(TUE_LIVE, 10000, 0))
+    trades = [{**AAPL, "status": "closed", "closed_at": closed_at, "exit_price": exit_price}]
+
+    report = bes.fill_open_notional(repo, trades, BARS, apply=True)
+
+    assert report == bes.OpenNotionalReport(1, 1, 0, 1, 0)
+    assert _notional_by_at(repo) == {(TUE_LIVE, "point"): (1050.0, True)}
+
+
 def test_open_notional_uses_candidates_selected_before_trades_and_bars(repo, tmp_path):
     inserted_during_fetch = datetime(2026, 10, 5, 15, 0, tzinfo=UTC)
     repo.insert_sample(_live(MON_LIVE, 10000, 0))
