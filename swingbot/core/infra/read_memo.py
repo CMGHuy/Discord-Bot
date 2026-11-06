@@ -29,6 +29,7 @@ from typing import Callable, Iterator
 TRADE_ROWS = "trade_rows"   # account._sum_realized_pnl: normalised trades rows
 TRADES = "trades"           # TradeLog._all: trades in TradeLog's JSON shape
 PLANS = "plans"             # PlanStore._all: plan_id -> plan record
+NOTED_IDS = "noted_ids"     # admin trades._noted_ids: journal entries that carry a note
 
 _MEMO: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
     "swingbot_read_memo", default=None)
