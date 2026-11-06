@@ -97,3 +97,21 @@ renumbered, dependent on v212's V212-2 and V212-4 being on `main`.
   knob.
 - **Any other v212 verdict:** move this spec and its plan to `no-lift/`
   unimplemented.
+
+## Panel review
+
+*In progress (2026-11-06). The findings below are recorded but **not yet applied**. senior-engineer has not run yet. Resume: apply or reject each finding, run senior-engineer, then mark each line `-- applied` / `-- rejected: <why>`.*
+
+BLOCKING
+- veteran-trader 1: plan V216-3 L735/737 heat-at-fill cancel text "no position, no P&L" is false, because the broker's resting limit has already filled. The follow-up must tell the user to close at market or keep the position and place the stop, or the spec must make heat-at-fill a bot-book-only rule and disclose it up front. -- pending
+- veteran-trader 2 + risk-manager 2: `filled_stopped_gap` (plan L38-41, L733 reuses `_stopped_copy`) gives no "exit at the open" instruction and no note on how a bracket stop fills on a gap. `_fill_and_stop_gap` (plan L549) runs the heat guard first, so a breach books `cancelled_heat_at_fill` instead of the gap loss and biases ExpR upward. Skip the guard on that path. -- pending
+- risk-manager 1: spec G2 (L38-44) pending limits reserve no heat. State whether the alert-time gate counts pending limits, the maximum simultaneous fill risk, and that the cancel follow-up tells the partner to cancel or flatten at the broker. -- pending
+
+ADVISORY
+- veteran-trader 3: one-print polls (plan L31-41) miss intraday wick fills and TP1 trades between polls, and live uses `touch=False` where replay fills on touch. Name the divergence, and consider reconciling with today's daily Low/High. -- pending
+- veteran-trader 4: alert text (spec G4 L51-57) never says GTC, and a DAY order lapses before the 3-session validity ends. -- pending
+- veteran-trader 5: the manual T1 cancel (spec G4 L53-54) should recommend OCO/bracket, and the cancel follow-up should be urgent. -- pending
+- veteran-trader 6: RTH-only stepping means "first tick stands in for the open". Disclose it in the shadow report. -- pending
+- risk-manager 3: a gap-stop's realised loss can exceed the 2% dollar cap. Report the gap-loss distribution in R and dollars, plus a worst case. -- pending
+- risk-manager 4: `make_fill_guard` (plan L431-453) re-sizes at fill instead of using the alert's stored size/risk_pct. Pin it to the alert's size or disclose the divergence. -- pending
+- risk-manager 5: spec Constraints (L79-86) do not cover `edge/throttle.py`/`risk_limits.py` on the limit-alert and fill paths, and name no "plan rejected (...)" log for `heat_at_fill`. -- pending
