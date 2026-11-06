@@ -448,7 +448,7 @@ describe('Trades — the Plan cell for runners (v177)', () => {
 
   it('shows the closed runner\'s exit in the target slot', () => {
     const closed = renderRows(RUNNER_ROWS).querySelectorAll('sb-plan-cell')[2];
-    expect(cellText(closed)).toBe('60.67 → 52.44 / 61.85 (+13.6% - 1.9%)');
+    expect(cellText(closed)).toBe('60.67 → 52.44 / 61.85 (+13.6% - 1.9%) · 52.44');
     expect(closed.querySelector('[title]')!.getAttribute('title'))
       .toContain('Runner exit (trailing stop): 52.44');
   });
@@ -545,8 +545,11 @@ describe('Trades row click vs the # link', () => {
     const el = desktopRows();
     const link = el.querySelector('sb-row-link a') as HTMLAnchorElement;
     expect(link.getAttribute('href')).toBe('/trades/plan-aaa111');
-    link.addEventListener('click', (event) => event.preventDefault());
+    // RouterLink navigates asynchronously on click; stub it so nothing runs
+    // after the TestBed is torn down (NG0205 in CI).
+    const go = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
     link.click();
+    expect(go).toHaveBeenCalledTimes(1);
     TestBed.tick();
     expect(el.querySelector('sb-trade-drawer')).toBeNull();
   });
