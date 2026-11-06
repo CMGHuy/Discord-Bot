@@ -724,3 +724,277 @@ git add scripts/backtest/screen_idea.py tests/backtest_scripts/test_screen_shock
 git commit -m "feat(v211): results doc shock blocks, level context section, short-family BH q (V211-11b)"
 ```
 
+
+### Task V211-12: `--count-only` for context ideas, with the outcome-blind preflight block
+
+**Model:** sonnet — one CLI mode learns to pass context through code paths that already exist, plus a printed table, fenced by a golden captured from the base so every existing count stays byte-identical.
+
+**Files:**
+- Modify: `scripts/backtest/screen_idea.py` (module docstring `--count-only` paragraph; `count_ticker`, `_COUNT_LISTS`, `count_universe`, `count_refusal`, `render_counts`, `run_count`; new `PREFLIGHT_HEADER`, `_preflight_block`, `_count_preflight`)
+- Create: `tests/backtest_scripts/golden/count_only_range_breakdown_close.md` (captured in Step 2 from the **unedited** base, committed alone)
+- Create: `tests/backtest_scripts/test_screen_preflight.py`
+
+**Interfaces:**
+- Consumes: V211-4 `_mode_runner(args)` (already routes `--count-only` to `run_count`; `main` is **not** edited), `load_context(..., kind=)`, `_context_step(args, idea)` (calls `load_context(..., kind=idea.context_kind)`), `Idea.context_kind`; test helpers `_level_cache`, `_fake_level_idea`, `_level_argv` and the `level_registered` fixture in `tests/backtest_scripts/test_screen_level_context.py`. V211-7 `sb.BREADTH`, `sb.VIX`, `sb.CONTEXT`, `sb.shock_state(breadth, vix)`. V211-10 `shock_readouts.preflight_years(state, event_dates, years=verdict.YEARS) -> {year: {"shock_days", "shock_weeks", "events"}}`. V211-11 already imports `shock_readouts` and `_shock_breakdown as sb` into `screen_idea.py`.
+- Produces (final; V211-13 copies the printout into the preflight doc):
+  - `count_ticker(idea, ticker, df, spans, context: Mapping | None = None) -> dict` — the existing dict plus `"event_dates": list[str]` (ISO `YYYY-MM-DD` signal dates of the counted events, one per event, ascending).
+  - `count_universe(idea, universe, cache_dir, *, start=WINDOW_START, end=WINDOW_END, out=print, context: Mapping | None = None) -> dict` — the total gains `"event_dates"`.
+  - `render_counts(idea, counts, args, *, preflight: dict | None = None) -> str` — `preflight is None` gives today's text byte for byte.
+  - `PREFLIGHT_HEADER = "| year | shock days | shock weeks | events |"`; `_preflight_block(table: dict[int, dict]) -> list[str]` (the totals row is the last line); `_count_preflight(idea, data, counts) -> dict | None` (`None` unless `idea.context_kind == "level"`, before reading anything).
+  - `--count-only` on a `context_kind == "level"` idea loads and checks context through `_context_step` exactly as the real run (missing file, contiguity or pin mismatch → `refused: …`, exit 2), writes nothing (no pin, no ledger, no doc), races nothing, and the printout **ends** with the per-year table 2011–2019 and a totals row. A `z` context idea keeps today's refusal, message unchanged.
+
+- [ ] **Step 1: Write the tests** — `tests/backtest_scripts/test_screen_preflight.py`
+
+```python
+"""v211 --count-only for level-context ideas (spec § Track 2, Outcome-blind
+preflight): context loads and is checked like the real run, the count ends
+with shock days, ISO weeks and events per year, nothing is raced, nothing is
+written, and every existing idea's count is byte-identical (golden from the
+base commit)."""
+import contextlib
+import io
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+import pandas as pd
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts" / "backtest"))
+
+import screen_idea  # noqa: E402
+
+from swingbot.core.backtesting.screen import null, race, shock_readouts, trail, verdict  # noqa: E402
+from swingbot.core.backtesting.screen.ideas import IDEAS  # noqa: E402
+from swingbot.core.backtesting.screen.ideas import _shock_breakdown as sb  # noqa: E402
+from tests.backtest_scripts.test_screen_level_context import (  # noqa: E402,F401
+    _fake_level_idea, _level_argv, _level_cache, level_registered)
+
+GOLDEN = Path(__file__).with_name("golden") / "count_only_range_breakdown_close.md"
+ALWAYS = [("2000-01-01", "9999-12-31")]
+HEADER = "| year | shock days | shock weeks | events |"
+
+
+def _count_out(tmp_path, cache, idea):
+    """(exit code, stdout, stderr) of `--count-only` on the level fixture."""
+    argv = _level_argv(tmp_path, cache, "--count-only")
+    argv[1] = idea
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = screen_idea.main(argv)
+    return code, out.getvalue(), err.getvalue()
+
+
+def capture_golden() -> None:
+    """V211-12 Step 2 only: run once on the base commit, before
+    screen_idea.py is edited. Never re-run to make a test pass."""
+    with tempfile.TemporaryDirectory() as tmp:
+        code, out, err = _count_out(Path(tmp), _level_cache(Path(tmp)),
+                                    "range_breakdown_close")
+    assert code == 0, err
+    GOLDEN.write_text(out, encoding="utf-8", newline="\n")
+
+
+def _count_n(lines) -> int:
+    return int(next(x for x in lines if x.startswith("| **count N** |")).split("**")[3])
+
+
+def _cells(line) -> list[str]:
+    return [cell.strip(" *") for cell in line.strip("|").split("|")]
+
+
+def _boom(*args, **kwargs):
+    raise AssertionError("--count-only must never race")
+
+
+# --- byte-identical for every existing idea ------------------------------------
+
+def test_a_context_free_idea_counts_byte_identical_to_the_base_golden(tmp_path):
+    code, out, err = _count_out(tmp_path, _level_cache(tmp_path), "range_breakdown_close")
+    assert code == 0, err
+    assert out == GOLDEN.read_text(encoding="utf-8")
+    assert HEADER not in out and "## Check 5" in out          # non-vacuous golden
+
+
+def test_a_z_context_idea_is_still_refused_before_any_data_is_read(tmp_path, monkeypatch):
+    monkeypatch.setattr(screen_idea, "_context_step", _boom)
+    code, out, err = _count_out(tmp_path, _level_cache(tmp_path), "dollar_drop")
+    assert code == 2 and HEADER not in out
+    assert "--count-only counts ideas without context series; dollar_drop reads UUP" in err
+
+
+def test_count_ticker_lists_one_date_per_counted_event(tmp_path):
+    cache = _level_cache(tmp_path)
+    df = screen_idea.load_frame(cache / "AAA.csv", screen_idea.WINDOW_START,
+                                screen_idea.WINDOW_END)
+    context = screen_idea.load_context(cache, sb.CONTEXT, kind="level").frames
+    for idea, ctx in ((_fake_level_idea(), context), (IDEAS["range_breakdown_close"], None)):
+        out = screen_idea.count_ticker(idea, "AAA", df, ALWAYS, context=ctx)
+        assert out["events"] > 0, idea.name                      # non-vacuous
+        assert len(out["event_dates"]) == out["events"]
+        assert out["event_dates"] == sorted(out["event_dates"])
+        assert out["event_dates"][0] >= screen_idea.EVENT_START
+
+
+# --- a level idea counts with its context ----------------------------------------
+
+def test_a_level_idea_counts_and_ends_with_the_preflight_table(tmp_path, level_registered):
+    code, out, err = _count_out(tmp_path, _level_cache(tmp_path), "fake_level")
+    assert code == 0, err
+    lines = out.rstrip("\n").splitlines()
+    assert "# v182 count: `fake_level` (outcome-blind: no race, no R)" in lines
+    start = lines.index(HEADER)
+    rows = [[int(c) for c in _cells(x)] for x in lines[start + 2:-1]]
+    assert [r[0] for r in rows] == list(verdict.YEARS)
+    total = _cells(lines[-1])
+    assert total[0] == "total"
+    assert [int(c) for c in total[1:]] == [sum(col) for col in zip(*rows)][1:]
+    assert int(total[3]) == _count_n(lines) > 0
+    assert int(total[1]) > 0                                     # shock days exist
+    for written in ("hashes.json", "ledger.jsonl", "results"):
+        assert not (tmp_path / written).exists(), written        # writes nothing
+
+
+def test_the_preflight_reads_the_market_state_and_the_counted_dates(tmp_path, monkeypatch,
+                                                                     level_registered):
+    seen, real = {}, shock_readouts.preflight_years
+
+    def spy(state, event_dates, *args, **kwargs):
+        seen["state"], seen["dates"] = state, list(event_dates)
+        return real(state, event_dates, *args, **kwargs)
+
+    monkeypatch.setattr(shock_readouts, "preflight_years", spy)
+    cache = _level_cache(tmp_path)
+    code, out, err = _count_out(tmp_path, cache, "fake_level")
+    assert code == 0, err
+    context = screen_idea.load_context(cache, sb.CONTEXT, kind="level").frames
+    pd.testing.assert_frame_equal(
+        seen["state"], sb.shock_state(context[sb.BREADTH]["Close"], context[sb.VIX]["Close"]))
+    assert len(seen["dates"]) == _count_n(out.splitlines())
+    years = pd.to_datetime(seen["dates"]).year
+    assert years.min() >= 2011 and years.max() <= 2019
+
+
+def test_a_level_count_races_nothing(tmp_path, monkeypatch, level_registered):
+    for owner, name in ((race, "race"), (race, "run_book"), (trail, "race_trail"),
+                        (null, "matched_null"), (screen_idea, "_books"),
+                        (shock_readouts, "shock_null")):
+        monkeypatch.setattr(owner, name, _boom)
+    code, out, err = _count_out(tmp_path, _level_cache(tmp_path), "fake_level")
+    assert code == 0, err
+    assert HEADER in out
+
+
+def test_a_level_count_refuses_a_missing_context_file(tmp_path, level_registered):
+    cache = _level_cache(tmp_path)
+    (cache / "^VIX.csv").unlink()
+    code, out, err = _count_out(tmp_path, cache, "fake_level")
+    assert code == 2 and "refused:" in err and "^VIX" in err and "is missing" in err
+    assert HEADER not in out
+
+
+def test_a_level_count_refuses_a_differing_pin_and_never_rewrites_it(tmp_path,
+                                                                     level_registered):
+    cache = _level_cache(tmp_path)
+    pins = {t: r["sha256"] for t, r in screen_idea._hash_records(cache).items()}
+    pins["^VIX"] = "0" * 64
+    path = tmp_path / "hashes.json"
+    path.write_text(json.dumps(pins), encoding="utf-8")
+    code, out, err = _count_out(tmp_path, cache, "fake_level")
+    assert code == 2 and "differs" in err and HEADER not in out
+    assert json.loads(path.read_text(encoding="utf-8")) == pins
+
+
+# --- the printed block ----------------------------------------------------------
+
+def test_preflight_block_prints_every_year_and_the_totals_last():
+    table = {y: {"shock_days": 0, "shock_weeks": 0, "events": 0} for y in verdict.YEARS}
+    table[2011] = {"shock_days": 3, "shock_weeks": 2, "events": 5}
+    table[2015] = {"shock_days": 1, "shock_weeks": 1, "events": 0}
+    lines = screen_idea._preflight_block(table)
+    assert lines[-1] == "| **total** | **4** | **3** | **5** |"
+    assert "| 2011 | 3 | 2 | 5 |" in lines and "| 2019 | 0 | 0 | 0 |" in lines
+    assert lines.index(screen_idea.PREFLIGHT_HEADER) == len(lines) - len(table) - 3
+    assert "Years without a shock day: 7 of 9." in lines
+    assert any("never decides whether the shot runs" in x for x in lines)
+
+
+def test_count_preflight_is_none_for_every_non_level_idea():
+    for name in ("range_breakdown_close", "turn_of_month", "dollar_drop"):
+        assert screen_idea._count_preflight(IDEAS[name], None, {"event_dates": []}) is None
+```
+
+- [ ] **Step 2: Capture the golden from the unedited base and commit it alone**
+
+Run: `git diff --quiet -- scripts/backtest/screen_idea.py && echo base-clean`
+Expected: `base-clean`. If not, stop: the golden must come from the base, never from edited code.
+
+Write the one-line capture to a file and run it (the repo's screen hook refuses inline `python -c` lines that name the script module): put `from tests.backtest_scripts.test_screen_preflight import capture_golden; capture_golden()` into `<scratchpad>/capture_golden.py`, then run `python <scratchpad>/capture_golden.py` from the worktree root with `PYTHONPATH=.`.
+Then: `grep -n "^\[range_breakdown_close\]\|^# v182 count\|^## Check 5\|^| year" tests/backtest_scripts/golden/count_only_range_breakdown_close.md`
+Expected: the progress line `[range_breakdown_close] 2/2 tickers (100%)`, the `# v182 count:` title and `## Check 5` are listed; no `| year` line.
+
+```bash
+git add tests/backtest_scripts/golden/count_only_range_breakdown_close.md
+git commit -m "test(v211): pin today's --count-only output for range_breakdown_close (V211-12 golden, from the base)"
+```
+
+- [ ] **Step 3: Run the tests to verify the right ones fail**
+
+Run: `python scripts/dev/testrun.py file tests/backtest_scripts/test_screen_preflight.py`
+Expected: `test_a_context_free_idea_counts_byte_identical_to_the_base_golden` and `test_a_z_context_idea_is_still_refused_before_any_data_is_read` PASS; every other test FAILS — `count_ticker() got an unexpected keyword argument 'context'`; the level runs exit 2 with `refused: --count-only counts ideas without context series; fake_level reads BREADTH_ATR1, ^VIX` (so the two refusal tests fail on their `is missing` / `differs` needles, not on the exit code); `module 'screen_idea' has no attribute '_preflight_block'` / `'_count_preflight'`.
+
+- [ ] **Step 4: Implement in `scripts/backtest/screen_idea.py`**
+
+- **`count_ticker`**: add `context: Mapping | None = None` as the last parameter; `ctx = ticker_context(idea, df, spans, context)`; add `"event_dates": [d.strftime("%Y-%m-%d") for d in df.index[booked[matched]]]` to the returned dict. Nothing else changes (draw, seed and counters are the same calls).
+- **`_COUNT_LISTS`** = `("event_dates", "event_depths", "null_depths")`.
+- **`count_universe`**: add `context: Mapping | None = None` (keyword, after `out`); the total dict gains `"event_dates": []`; pass `context=context` to `count_ticker`. Docstring adds *"``context`` (v211) is handed unchanged to every count_ticker call."*
+- **`count_refusal`**: the context clause becomes `if idea.context and idea.context_kind == "z":` with its message **unchanged**. Docstring adds *"v211: a level-context idea is counted (its context loads in run_count); a z idea is still refused."*
+- **New, after `_check5_block`:**
+
+```python
+#: v211: the outcome-blind preflight's table header (spec § Track 2).
+PREFLIGHT_HEADER = "| year | shock days | shock weeks | events |"
+```
+
+  `def _preflight_block(table: dict[int, dict]) -> list[str]` — docstring *"v211 (spec § Track 2, Outcome-blind preflight): shock days, ISO shock weeks (the bootstrap's clusters) and counted events per year, then the totals. Printed only."* Returns, in order:
+  `""`, `"## Preflight — shock days, weeks and events per year (outcome-blind)"`, `""`,
+  `"Printed before the shot from the context and the counted events only; it never decides whether the shot runs (the shot runs as registered). A shock week is an ISO week; a week spanning New Year counts once in each year."`,
+  `f"Years without a shock day: {empty} of {len(table)}."` (`empty` = years with `shock_days == 0`), `""`,
+  `PREFLIGHT_HEADER`, `"|---:|---:|---:|---:|"`,
+  one `f"| {year} | {row['shock_days']} | {row['shock_weeks']} | {row['events']} |"` per year in `table` order,
+  `f"| **total** | **{days}** | **{weeks}** | **{events}** |"` (column sums) — **last**.
+
+  `def _count_preflight(idea: Idea, data, counts: dict) -> dict | None` — docstring *"v211: the per-year preflight table for a level-context idea, from the market-wide SHOCK state on the context calendar (not any ticker's) and the counted events' signal dates; None for every other idea, before reading anything."* Body: `if idea.context_kind != "level": return None`; `frames = data.frames`; `state = sb.shock_state(frames[sb.BREADTH]["Close"], frames[sb.VIX]["Close"])`; `return shock_readouts.preflight_years(state, counts["event_dates"])` (through the module attribute — the test patches it there).
+- **`render_counts`**: signature `render_counts(idea, counts, args, *, preflight: dict | None = None)`; after the `if idea.entry == "level": lines += _check5_block(...)` block add `if preflight is not None: lines += _preflight_block(preflight)`, so the table ends the printout. Docstring adds *"and (v211 level-context ideas) the preflight table"*.
+- **`run_count`**: initialise `data = None`; after the universe step, while `reason is None`, `data, reason = _context_step(args, idea)`; after the refusal print, `context = None if data is None else data.frames`; `counts = count_universe(idea, universe, args.cache_dir, start=args.start, end=args.end, context=context)`; `print(render_counts(idea, counts, args, preflight=_count_preflight(idea, data, counts)))`. Docstring adds *"v211: a context idea's series load and are checked (SHA pin included) exactly as the real run; nothing is pinned or written."* `_context_step` returns `(None, None)` for an idea without context before reading any file, so a context-free count reads exactly what it reads today.
+- **Module docstring**, the `--count-only (v182)` paragraph: append *"v211: a level-context idea counts with its context loaded and checked like the real run, and the report ends with the outcome-blind preflight (shock days, ISO shock weeks and events per year)."*
+- `main` and `_mode_runner` are **not** edited.
+
+- [ ] **Step 5: Run the new tests**
+
+Run: `python scripts/dev/testrun.py file tests/backtest_scripts/test_screen_preflight.py`
+Expected: PASS, `0 failed`; `git diff --quiet -- tests/backtest_scripts/golden/` exits 0. A golden mismatch is a stop: fix the code, never the golden.
+
+- [ ] **Step 6: Prove the existing paths are untouched (files unedited)**
+
+Run each:
+`python scripts/dev/testrun.py file tests/backtest_scripts/test_screen_idea.py`
+`python scripts/dev/testrun.py file tests/backtest_scripts/test_screen_level_context.py`
+`python scripts/dev/testrun.py file tests/backtest_scripts/test_screen_context_runner.py`
+`python scripts/dev/testrun.py file tests/backtest_scripts/test_screen_shock_blocks.py`
+`python scripts/dev/testrun.py file tests/backtest_scripts/test_screen_checkpoint.py`
+`python scripts/dev/testrun.py file tests/backtesting/screen/test_long_byte_identical.py`
+Expected: every file `0 failed`, `0 xfailed` (`test_count_only_refusals[dollar_drop]` still refuses with `without context series`); `git diff --stat` lists only `scripts/backtest/screen_idea.py` and `tests/backtest_scripts/test_screen_preflight.py` — `PARITY_DIGESTS`, the hypothesis golden and the count golden unchanged.
+
+- [ ] **Step 7: Complexity gate**
+
+Run: `python scripts/dev/complexity_gate.py`
+Expected: exit 0; `run_count`, `render_counts`, `count_refusal`, `count_ticker`, `count_universe`, `_preflight_block`, `_count_preflight` each < 15; `main` unchanged.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add scripts/backtest/screen_idea.py tests/backtest_scripts/test_screen_preflight.py
+git commit -m "feat(v211): --count-only counts level-context ideas and prints the outcome-blind preflight (V211-12)"
+```
