@@ -161,12 +161,44 @@ def test_no_intraday_row_outside_the_regular_session(env, state):
 def test_a_failure_is_swallowed_and_leaves_the_cycle_error_alone(env, monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError('relation "benchmark_bars" does not exist')
-    monkeypatch.setattr(step.mb, "history_with_fallback", boom)
+    monkeypatch.setattr(step, "live_since", boom)
     before = sw.snapshot().get("ops.refresher.benchmarks", {}).get("count", 0)
     ctx = _ctx(AFTER_CLOSE)
     step.benchmarks_step(ctx)
     assert ctx.report.error is None
     assert sw.snapshot()["ops.refresher.benchmarks"]["count"] == before + 1
+
+
+
+def test_one_failed_history_fetch_leaves_other_symbols_and_intraday_running(env, monkeypatch):
+    fetch_history = step.mb.history_with_fallback
+    attempts = []
+
+    def history(symbol, *args, **kwargs):
+        attempts.append(symbol)
+        if attempts == ["SPY"]:
+            raise RuntimeError("SPY download failed")
+        return fetch_history(symbol, *args, **kwargs)
+
+    monkeypatch.setattr(step.mb, "history_with_fallback", history)
+    before = sw.snapshot().get("ops.refresher.benchmarks", {}).get("count", 0)
+    ctx = _ctx(IN_SESSION, "regular")
+    step.benchmarks_step(ctx)
+
+    previous = date(2026, 11, 3)
+    today = date(2026, 11, 4)
+    assert ctx.report.error is None
+    assert sw.snapshot()["ops.refresher.benchmarks"]["count"] == before + 1
+    assert attempts == list(SYMBOLS)
+    assert env["refresh"].done == {s: previous for s in SYMBOLS if s != "SPY"}
+    assert env["bars"].rows[("QQQ", today)]["final"] is False
+
+    step.benchmarks_step(_ctx(IN_SESSION + timedelta(seconds=60), "regular"))
+    assert attempts == list(SYMBOLS)
+    step.benchmarks_step(_ctx(IN_SESSION + timedelta(seconds=step.FULL_RETRY_S), "regular"))
+    assert attempts == [*SYMBOLS, "SPY"]
+    assert env["refresh"].done["SPY"] == previous
+    assert env["bars"].rows[("SPY", today)]["final"] is False
 
 
 class FakeEquity:
