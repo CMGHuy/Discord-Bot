@@ -15,7 +15,7 @@ def test_registry_holds_the_first_batch_in_spec_order_then_later_ideas():
                                   "turn_of_month", "turtle_soup", "quiet_pullback",
                                   "bond_spike_rebound", "dollar_drop",
                                   "sweep_reclaim_bos", "range_breakdown_close",
-                                  "range_breakdown_stop")
+                                  "range_breakdown_stop", "vix_curve_calm")
     assert list(IDEAS) == list(ideas.IDEA_MODULES)
     assert all(IDEAS[name].name == name for name in IDEAS)
 
@@ -25,7 +25,7 @@ def test_time_caps_are_the_spec_values():
         "high52w": 60, "uptrend_pullback": 10, "gap_volume": 20, "turn_of_month": 4,
         "turtle_soup": 10, "quiet_pullback": 10, "bond_spike_rebound": 10,
         "dollar_drop": 10, "sweep_reclaim_bos": 20, "range_breakdown_close": 20,
-        "range_breakdown_stop": 20}
+        "range_breakdown_stop": 20, "vix_curve_calm": 10}
 
 
 def test_frozen_parameter_sets():
@@ -55,6 +55,9 @@ def test_frozen_parameter_sets():
     assert dict(IDEAS["range_breakdown_stop"].params) == {
         "window": 30, "height_atr": 5.0, "touch_atr": 0.25, "touch_span": 5,
         "sma": 50, "sma_lag": 10, "warmup": 61, "trigger": "low[t] < S", "level": "S"}
+    assert dict(IDEAS["vix_curve_calm"].params) == {
+        "near": "^VIX", "far": "^VIX3M", "stress_on_above": 1.0,
+        "stress_off_below": 0.95, "events": "calm (not stressed)", "side": "long"}
 
 
 def test_every_idea_cites_its_source():
@@ -73,13 +76,15 @@ def test_every_registered_idea_pins_its_direction_and_entry():
         "high52w": "long", "uptrend_pullback": "long", "gap_volume": "long",
         "turn_of_month": "long", "turtle_soup": "long", "quiet_pullback": "long",
         "bond_spike_rebound": "long", "dollar_drop": "long", "sweep_reclaim_bos": "long",
-        "range_breakdown_close": "short", "range_breakdown_stop": "short"}
+        "range_breakdown_close": "short", "range_breakdown_stop": "short",
+        "vix_curve_calm": "long"}
     assert {n: i.entry for n, i in IDEAS.items()} == {
         "high52w": "next_open", "uptrend_pullback": "next_open", "gap_volume": "next_open",
         "turn_of_month": "next_open", "turtle_soup": "next_open",
         "quiet_pullback": "next_open", "bond_spike_rebound": "next_open",
         "dollar_drop": "next_open", "sweep_reclaim_bos": "next_open",
-        "range_breakdown_close": "next_open", "range_breakdown_stop": "level"}
+        "range_breakdown_close": "next_open", "range_breakdown_stop": "level",
+        "vix_curve_calm": "next_open"}
     breakdown = ("range_breakdown_close", "range_breakdown_stop")
     older = {n: i for n, i in IDEAS.items() if n not in breakdown}
     assert {n: (i.levels, i.control, i.family) for n, i in older.items()} == {
@@ -126,7 +131,7 @@ def test_every_registered_idea_is_raced_under_one_pinned_shape():
         "turn_of_month": "fixed", "turtle_soup": "fixed", "quiet_pullback": "fixed",
         "bond_spike_rebound": "fixed", "dollar_drop": "fixed",
         "sweep_reclaim_bos": "fixed", "range_breakdown_close": "fixed",
-        "range_breakdown_stop": "fixed"}
+        "range_breakdown_stop": "fixed", "vix_curve_calm": "fixed"}
 
 
 MURPHY = ("Murphy (2004), Intermarket Analysis — shock proxy, "
@@ -140,7 +145,8 @@ def test_only_the_two_intermarket_ideas_read_context_series():
         "high52w": (), "uptrend_pullback": (), "gap_volume": (), "turn_of_month": (),
         "turtle_soup": (), "quiet_pullback": (),
         "bond_spike_rebound": ("TLT",), "dollar_drop": ("UUP",),
-        "sweep_reclaim_bos": (), "range_breakdown_close": (), "range_breakdown_stop": ()}
+        "sweep_reclaim_bos": (), "range_breakdown_close": (), "range_breakdown_stop": (),
+        "vix_curve_calm": ("^VIX", "^VIX3M")}
     assert IDEAS["bond_spike_rebound"].source == MURPHY
     assert IDEAS["dollar_drop"].source == MURPHY
 
