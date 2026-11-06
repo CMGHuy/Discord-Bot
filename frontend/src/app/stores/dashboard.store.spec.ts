@@ -534,9 +534,9 @@ describe('DashboardStore', () => {
   /* -- v181: presets, Range, stale -------------------------------------- */
 
   describe('the v181 scope selection', () => {
-    // Wed 21 Oct 2026, 10:00 New York. Presets snap to New York midnights.
+    // Wed 21 Oct 2026, 16:00 Berlin. Presets snap to Berlin midnights.
     const NOW = new Date('2026-10-21T14:00:00Z');
-    const TO = '2026-10-22T04:00:00.000Z';
+    const TO = '2026-10-21T22:00:00.000Z';
     const W1 = { from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
     const W2 = { from: '2026-09-10T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
     // The today-only fetch (mode=today, the Realised today card) is, since v217, only a fallback
@@ -580,7 +580,7 @@ describe('DashboardStore', () => {
       respond();
       store.setPreset('5D');
       const request = one();
-      expect(request.request.params.get('from')).toBe('2026-10-15T04:00:00.000Z');
+      expect(request.request.params.get('from')).toBe('2026-10-14T22:00:00.000Z');
       expect(request.request.params.get('to')).toBe(TO);
       expect(store.chartTarget().seq).toBe(1);
     });
@@ -654,16 +654,16 @@ describe('DashboardStore', () => {
       expect(store.balance()).toBe(2);
     });
 
-    it('recomputes a rolling preset on every refresh, so it follows the New York day', () => {
+    it('recomputes a rolling preset on every refresh, so it follows the Berlin day', () => {
       tick();
       respond();
       store.setPreset('1M');
       one().flush(RESPONSE);
-      vi.setSystemTime(new Date('2026-10-22T05:00:00Z'));   // 01:00 New York, 22 Oct
+      vi.setSystemTime(new Date('2026-10-22T05:00:00Z'));   // 07:00 Berlin, 22 Oct
       store.load();
       const request = one();
-      expect(request.request.params.get('from')).toBe('2026-09-22T04:00:00.000Z');
-      expect(request.request.params.get('to')).toBe('2026-10-23T04:00:00.000Z');
+      expect(request.request.params.get('from')).toBe('2026-09-21T22:00:00.000Z');
+      expect(request.request.params.get('to')).toBe('2026-10-22T22:00:00.000Z');
     });
 
     it('keeps the last figures, marked stale, when a range refetch fails; a success clears it', () => {
