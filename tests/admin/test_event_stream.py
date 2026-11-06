@@ -17,6 +17,8 @@ import json
 
 import pytest
 
+from tests.admin.api_v1_contract import assert_error
+
 from swingbot.admin.events import broker as b
 
 # stream.py is an endpoint module: it imports api_v1.auth, which imports
@@ -322,3 +324,103 @@ def test_last_event_id_is_accepted_but_not_replayed(client, auth, broker, caplog
 
     assert opening["name"] == "resync"
     assert opening["data"]["seq"] == broker.seq, "replayed from the given id"
+
+
+# --------------------------------------------------------------------------
+# v207: the principal is re-checked on every loop pass
+# --------------------------------------------------------------------------
+
+class OneEventSubscription(SilentSubscription):
+    """A subscription that always has an event waiting."""
+
+    def get(self, timeout=None):
+        self.timeouts.append(timeout)
+        return b.Event(seq=7, event="trades", at="2026-11-05T00:00:00+00:00")
+
+
+def test_the_stream_ends_when_still_valid_turns_false(broker):
+    subscription = SilentSubscription()
+    valid = {"ok": True}
+    generator = s.event_stream(subscription, broker, ping_interval=0.01,
+                               still_valid=lambda: valid["ok"])
+    assert next(generator).startswith("event: resync")
+    assert next(generator).startswith("event: ping")
+    valid["ok"] = False
+    with pytest.raises(StopIteration):
+        next(generator)
+    assert subscription.closed
+
+
+def test_a_revoked_principal_is_not_sent_the_waiting_event(broker):
+    subscription = OneEventSubscription()
+    generator = s.event_stream(subscription, broker, ping_interval=0.01,
+                               still_valid=lambda: False)
+    assert next(generator).startswith("event: resync")
+    with pytest.raises(StopIteration):
+        next(generator)
+    assert subscription.closed
+
+
+def test_session_snapshot_copies_only_the_principal_fields(admin_app):
+    from flask import session
+
+    with admin_app.test_request_context("/api/v1/events"):
+        session.update({"role": "viewer", "user_id": 4, "credential_version": 2,
+                        "username": "viewer1", "unrelated": "x"})
+        snapshot = s.session_snapshot()
+    assert snapshot == {"role": "viewer", "user_id": 4, "credential_version": 2,
+                        "username": "viewer1"}
+
+
+def test_a_viewer_disabled_mid_stream_is_cut_off(viewer_client, broker, monkeypatch):
+    from swingbot.core.db.repositories.admin_users import admin_users_repo
+
+    monkeypatch.setattr(s, "PING_INTERVAL", 0.01)
+    client, row = viewer_client
+    response = client.get("/api/v1/events")
+    assert response.status_code == 200
+    iterator = iter(response.response)
+    assert next(iterator).decode("utf-8").startswith("event: resync")
+    assert next(iterator).decode("utf-8").startswith("event: ping")
+    admin_users_repo().set_disabled(row["id"], True)
+    with pytest.raises(StopIteration):
+        next(iterator)
+    response.response.close()
+    assert_error(client.get("/api/v1/events"), "auth", 401)
+
+
+def test_an_admin_session_stream_ends_when_the_admin_password_changes(client, broker,
+                                                                      monkeypatch):
+    from swingbot.admin import app as admin_module
+
+    monkeypatch.setattr(s, "PING_INTERVAL", 0.01)
+    client.post("/api/v1/session", json={"username": "admin", "password": "admin"})
+    response = client.get("/api/v1/events")
+    iterator = iter(response.response)
+    assert next(iterator).decode("utf-8").startswith("event: resync")
+    monkeypatch.setattr(admin_module, "ADMIN_PASSWORD", "changed-password")
+    with pytest.raises(StopIteration):
+        next(iterator)
+    response.response.close()
+
+
+def test_a_basic_admin_stream_is_not_rechecked(client, auth, broker, monkeypatch):
+    """Basic carries no session principal: nothing to revoke mid-stream."""
+    from swingbot.admin import app as admin_module
+
+    monkeypatch.setattr(s, "PING_INTERVAL", 0.01)
+    response = client.get("/api/v1/events", headers=auth)
+    monkeypatch.setattr(admin_module, "principal_from_session",
+                        lambda data: pytest.fail("Basic stream re-checked a session"))
+    names = [frame["name"] for frame in take(response, 3)]
+    assert names == ["resync", "ping", "ping"]
+
+
+def test_a_viewer_stream_carries_only_seq_and_at(viewer_client, broker):
+    client, _row = viewer_client
+    response = client.get("/api/v1/events")
+    broker.publish("settings")
+    resync, event = take(response, 2)
+    assert event["name"] == "settings"
+    assert set(event["data"]) == {"seq", "at"}
+    assert set(resync["data"]) == {"seq", "at"}

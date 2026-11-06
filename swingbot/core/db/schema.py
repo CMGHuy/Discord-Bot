@@ -173,8 +173,21 @@ killswitch = register(sa.Table("killswitch", METADATA,
     sa.Column("engaged", sa.Boolean, nullable=False), sa.Column("engaged_at", sa.TIMESTAMP(timezone=True)),
     *standard_columns()), ("key", "engaged", "engaged_at"))
 manual_close_notify = register(sa.Table("manual_close_notify", METADATA,
-    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("queued_at", sa.TIMESTAMP(timezone=True), nullable=False),
-    *standard_columns(), sa.Index("manual_close_notify_queued_idx", "queued_at")), ("queued_at",))
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("queued_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("event_id", sa.Text, nullable=False),
+    sa.Column("next_attempt_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("lease_token", sa.Text),
+    sa.Column("lease_until", sa.TIMESTAMP(timezone=True)),
+    sa.Column("delivered_at", sa.TIMESTAMP(timezone=True)),
+    *standard_columns(),
+    sa.Index("manual_close_notify_queued_idx", "queued_at"),
+    sa.Index("manual_close_notify_event_uidx", "event_id", unique=True),
+    sa.Index("manual_close_notify_due_idx", "next_attempt_at", "queued_at",
+             postgresql_where=sa.text("delivered_at IS NULL")),
+    sa.Index("manual_close_notify_delivered_idx", "delivered_at",
+             postgresql_where=sa.text("delivered_at IS NOT NULL"))),
+    ("queued_at", "event_id", "next_attempt_at", "lease_token", "lease_until", "delivered_at"))
 ticker_directory = register(sa.Table("ticker_directory", METADATA,
     sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("symbol", sa.Text, nullable=False, unique=True),
     sa.Column("name", sa.Text), *standard_columns(), sa.Index("ticker_directory_name_idx", "name")), ("symbol", "name"))
@@ -331,6 +344,24 @@ fx_daily_rates = register(sa.Table("fx_daily_rates", METADATA,
     *standard_columns()),
     ("base", "account", "day", "rate", "bar_date", "snapped_at", "source"))
 
+# v207: viewer accounts. The `.env` admin is never stored here; every row is a
+# read-only viewer. `id` is the surrogate key (reserved, so not promoted).
+admin_users = register(sa.Table("admin_users", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("username", sa.Text, nullable=False),
+    sa.Column("password_hash", sa.Text, nullable=False),
+    sa.Column("role", sa.Text, nullable=False, server_default=sa.text("'viewer'")),
+    sa.Column("disabled", sa.Boolean, nullable=False, server_default=sa.false()),
+    sa.Column("credential_version", sa.Integer, nullable=False, server_default=sa.text("1")),
+    sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False,
+              server_default=sa.func.now()),
+    sa.Column("last_login_at", sa.TIMESTAMP(timezone=True)),
+    *standard_columns(),
+    sa.CheckConstraint("role IN ('viewer')", name="admin_users_role_ck")),
+    ("username", "password_hash", "role", "disabled", "credential_version",
+     "created_at", "last_login_at"))
+sa.Index("admin_users_username_lower_uq", sa.func.lower(admin_users.c.username), unique=True)
+
 market_refresh_queue = register(sa.Table("market_refresh_queue", METADATA,
     sa.Column("id", sa.BigInteger, primary_key=True),
     sa.Column("kind", sa.Text, nullable=False),
@@ -467,7 +498,14 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "engaged": "NOT NULL on/off that every issuance checks",
         "engaged_at": "when it engaged; shown to the partner",
     },
-    "manual_close_notify": {"queued_at": "manual_close_notify_queued_idx; drain order"},
+    "manual_close_notify": {
+        "queued_at": "manual_close_notify_queued_idx; oldest pending age and ordering",
+        "event_id": "manual_close_notify_event_uidx; immutable event deduplication and lookup",
+        "next_attempt_at": "manual_close_notify_due_idx; due event selection",
+        "lease_token": "fenced completion ownership comparison",
+        "lease_until": "expired lease selection and fenced completion expiry",
+        "delivered_at": "pending partial index and acknowledged retention index",
+    },
     "ticker_directory": {"symbol": "natural key", "name": "ticker_directory_name_idx; name search"},
     "tuning_results": {"job_id": "natural key; one result per job", "created_at": "NOT NULL creation time"},
     "tuning_proposals": {
@@ -562,6 +600,15 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "bar_date": "NOT NULL date of the frame bar the rate came from; the FALLBACK_DAYS test",
         "snapped_at": "NOT NULL write time; max(snapped_at) is half of the memo's version key",
         "source": "NOT NULL snap/backfill provenance, checked after the deploy backfill",
+    },
+    "admin_users": {
+        "username": "admin_users_username_lower_uq: one viewer per name, case-insensitive",
+        "password_hash": "NOT NULL werkzeug hash the login compares against",
+        "role": "admin_users_role_ck: only 'viewer' today; a column so a role needs no data move",
+        "disabled": "NOT NULL flag the per-request principal check reads",
+        "credential_version": "NOT NULL; a session is valid only while it matches",
+        "created_at": "NOT NULL creation time shown on the Users page",
+        "last_login_at": "last successful login shown on the Users page; NULL until then",
     },
     "market_refresh_queue": {
         "kind": "market_refresh_queue_pending_uq: one pending request per (kind, key)",

@@ -8,8 +8,82 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   CHECKS, DOCK_MIN_WIDTH, DOCK_SELECTORS, FULL_WIDTHS, RAIL_MIN_WIDTH, ROUTES, classify, countByCheck, dedupe, formatFinding, dockVerdict, hintVerdict, inScope, isVisuallyHidden,
-  parseArgs, pickIds, railLabelVerdict, resolveRoute, slug, validateAllow, vcenterGeometry,
+  parseArgs, pickIds, probeHint, probeHintTwice, railLabelVerdict, resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
+
+function hintSteps(overrides = {}) {
+  const calls = [];
+  const skips = [];
+  const step = (name, result) => async () => { calls.push(name); return result; };
+  return {
+    calls, skips,
+    args: {
+      open: step('open'), measure: step('measure', { rect: 'r' }), close: step('close'),
+      onSkip: (where, reason) => skips.push([where, reason]),
+      ...overrides,
+    },
+  };
+}
+const detached = async () => { throw new Error('locator.getAttribute: Timeout 30000ms exceeded.\nCall log: ...'); };
+
+test('probeHint returns the measurement after open, measure, close', async () => {
+  const { calls, skips, args } = hintSteps();
+  assert.deepEqual(await probeHint(args), { rect: 'r' });
+  assert.deepEqual(calls, ['open', 'measure', 'close']);
+  assert.deepEqual(skips, []);
+});
+
+test('probeHint skips a trigger detached before it opens, without measuring', async () => {
+  const { calls, skips, args } = hintSteps({ open: detached });
+  assert.equal(await probeHint(args), null);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(skips, [['open', 'Error: locator.getAttribute: Timeout 30000ms exceeded.']]);
+});
+
+test('probeHint skips a trigger detached after it opened (the crash that aborted a run)', async () => {
+  const { calls, skips, args } = hintSteps({ measure: detached });
+  assert.equal(await probeHint(args), null);
+  assert.deepEqual(calls, ['open']);
+  assert.equal(skips[0][0], 'measure');
+});
+
+function measuring(...results) {
+  let call = 0;
+  const { calls, args } = hintSteps({ measure: async () => results[Math.min(call++, results.length - 1)] });
+  return { calls, args, count: () => call };
+}
+const zero = (m) => m.w === 0;
+
+test('probeHintTwice keeps a good first measurement without retrying', async () => {
+  const { args, count } = measuring({ w: 10 });
+  assert.deepEqual(await probeHintTwice(args, zero), { w: 10 });
+  assert.equal(count(), 1);
+});
+
+test('probeHintTwice re-opens once when the first popover measured zero (a re-render)', async () => {
+  const { args, count } = measuring({ w: 0 }, { w: 246 });
+  assert.deepEqual(await probeHintTwice(args, zero), { w: 246 });
+  assert.equal(count(), 2);
+});
+
+test('probeHintTwice reports a popover that is zero-size on both tries', async () => {
+  const { args, count } = measuring({ w: 0 }, { w: 0 });
+  assert.deepEqual(await probeHintTwice(args, zero), { w: 0 });
+  assert.equal(count(), 2);
+});
+
+test('probeHintTwice does not retry a skipped trigger', async () => {
+  const { args } = hintSteps({ open: detached });
+  let asked = false;
+  assert.equal(await probeHintTwice(args, () => { asked = true; return true; }), null);
+  assert.equal(asked, false);
+});
+
+test('probeHint keeps a good measurement when only close fails', async () => {
+  const { skips, args } = hintSteps({ close: detached });
+  assert.deepEqual(await probeHint(args), { rect: 'r' });
+  assert.equal(skips[0][0], 'close');
+});
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TODAY = '2026-10-19';
@@ -23,8 +97,8 @@ const entry = (over = {}) => ({
   reason: 'canvas internals of a third-party chart', date: '2026-10-19', ...over,
 });
 
-test('ROUTES visits every destination, section and tab once, on the v202 paths only (29)', () => {
-  assert.equal(ROUTES.length, 29);
+test('ROUTES visits every destination, section and tab once, on the v202 paths only (30)', () => {
+  assert.equal(ROUTES.length, 30);
   assert.equal(new Set(ROUTES).size, ROUTES.length);
   assert.ok(ROUTES.every((route) => route.startsWith('/')));
   for (const tab of ['attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials']) {

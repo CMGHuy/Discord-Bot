@@ -209,18 +209,24 @@ def _value(value) -> str:
     return "—" if value is None else str(value)
 
 
-def stale_scan_embed(age_min: int, last_success: str):
+_STALE_DEFAULT_CAUSE = "• The bot is up, but its scheduled scan has not finished a tick."
+
+
+def stale_scan_embed(age_min: int, last_success: str, cause: str | None = None):
     """v148 O3: the bot is up but no scan tick has completed -- a wedged tick.
-    A dead bot cannot post this; the VM's heartbeat_watch cron reports that."""
+    A dead bot cannot post this; the VM's heartbeat_watch cron reports that.
+    `cause` is the watchdog's reading of the heartbeat (a long tick still
+    running, a failed tick, or no tick started); absent, the generic line."""
     return system_embed(Kind.HEALTH_ALERT, f"no completed scan tick for {age_min} min", (
         f"• Last successful tick: {last_success}\n"
-        "• The bot is up, but its scheduled scan has not finished a tick.\n"
-        "No alerts are being produced until this clears."))
+        f"{cause or _STALE_DEFAULT_CAUSE}\n"
+        "No new alerts are produced until a tick completes."))
 
 
-def stale_scan_recovered_embed(last_success: str):
+def stale_scan_recovered_embed(last_success: str, detail: str | None = None):
+    lines = f"• Last successful tick: {last_success}"
     return system_embed(Kind.HEALTH_RECOVERED, "scan ticks completing again",
-                        f"• Last successful tick: {last_success}")
+                        f"{lines}\n{detail}" if detail else lines)
 
 
 def _provider_lines(row: dict) -> tuple[str, str]:

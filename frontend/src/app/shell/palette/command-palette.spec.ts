@@ -6,8 +6,11 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { SessionStore } from '../../stores/session.store';
 import { DENSITY_STORAGE } from '../../ui/density.service';
 import { stripComments } from '../../ui/testing/all-sources';
 import { CommandPalette, isPaletteShortcut, isTypingTarget, shortcutLabel } from './command-palette';
@@ -56,6 +59,7 @@ describe('CommandPalette (v195 §3.1)', () => {
         { provide: DENSITY_STORAGE, useValue: { get: (k: string) => stored.get(k) ?? null, set: (k: string, v: string) => stored.set(k, v) } },
       ],
     });
+    patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: 'admin', role: 'admin' });
   });
 
   afterEach(() => {
@@ -186,6 +190,19 @@ describe('CommandPalette (v195 §3.1)', () => {
     TestBed.inject(HttpTestingController).expectNone(() => true);
   });
 
+  it('offers a viewer no System or Tuning page (v207)', async () => {
+    patchState(unprotected(TestBed.inject(SessionStore)), { role: 'viewer' });
+    const { fixture, el } = await mount();
+    for (const query of ['system', 'health', 'versions', 'scan', 'providers', 'logs', 'tuning']) {
+      await type(fixture, el, query);
+      for (const option of options(el)) {
+        expect(option.querySelector('.label')!.textContent!.trim()).not.toMatch(/^(Health|Versions|Scan|Providers|Logs|Tuning)$/);
+      }
+    }
+    await type(fixture, el, 'partials');
+    expect(optionLabels(el)).toContain('Partials');
+  });
+
   it('applies a density preference in place, without navigating', async () => {
     const { fixture, el, host } = await mount();
     const router = TestBed.inject(Router);
@@ -251,7 +268,7 @@ describe('CommandPalette (v195 §3.1)', () => {
   it('can only navigate and set density: it injects nothing that acts', () => {
     const source = stripComments(readFileSync(join(process.cwd(), 'src/app/shell/palette/command-palette.ts'), 'utf8'));
     const injected = [...source.matchAll(/inject\((\w+)\)/g)].map(([, name]) => name).sort();
-    expect(injected).toEqual(['DensityService', 'Router', 'SearchIndexStore']);
+    expect(injected).toEqual(['DensityService', 'Router', 'SearchIndexStore', 'SessionStore']);
     expect(source).not.toMatch(/ApiClient|EventStream|killswitch|restart|triggerScan|HttpClient/i);
   });
 });

@@ -63,4 +63,13 @@ describe('PlanCard', () => {
     f.componentRef.setInput('figures', { ...base, riskReward: null, trigger: 100, workingStop: 95 }); f.detectChanges();
     expect(el.querySelector('.resting-stop, .gap-line, .rr-line')).toBeNull();
   });
+  it('centres every level cell vertically, header and noted rows included', () => {
+    const f = TestBed.createComponent(PlanCard);
+    f.componentRef.setInput('figures', base); f.detectChanges();
+    const el: HTMLElement = f.nativeElement;
+    const cells = [...el.querySelectorAll<HTMLElement>('table.levels th, table.levels td')];
+    expect(cells.length).toBeGreaterThan(3);
+    expect(cells.every(cell => getComputedStyle(cell).verticalAlign === 'middle')).toBe(true);
+    expect(getComputedStyle(el.querySelector<HTMLElement>('[data-level="Working stop"] td.price')!).verticalAlign).toBe('middle');
+  });
 });

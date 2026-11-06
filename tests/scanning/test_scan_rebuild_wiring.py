@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 import swingbot.config as config
+from swingbot.core.marketdata import data_store
 from swingbot.core.marketdata.shared.kinds import QuoteDetail
 from swingbot.core.planning.rebuild import RebuildOutcome, RebuildPrice
 from swingbot.core.scanning import analyze, engine, fetch, requote as requote_mod, runstate, scan_run
@@ -97,6 +98,10 @@ def _scan_env(monkeypatch, *, rebuild_on: bool):
     monkeypatch.setattr(runstate, "is_stop_requested", lambda: False)
     monkeypatch.setattr(scan_run, "earnings_within_window", lambda t, d: None)
     monkeypatch.setattr(scan_run, "get_market_events", lambda d: [])
+    # No network: the intraday-VWAP annotation fetched 700d of hourly bars for the
+    # fake T0 from Yahoo (404, retries), which took long enough that the second
+    # T0 item passed QUOTE_MAX_AGE_REQUOTE_S and re-quoted -- [['T0'], ['T0']].
+    monkeypatch.setattr(data_store, "get_intraday", lambda *a, **k: None)
     monkeypatch.setattr(scan_run, "notify_secondary", lambda *a, **k: None)
     monkeypatch.setattr(scan_run, "log_plan_armed", lambda p: None)
     monkeypatch.setattr(scan_run, "build_simple_alert", lambda item: "simple")

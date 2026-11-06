@@ -17,6 +17,7 @@ import { LogsTab } from './logs-tab';
 import { ProvidersTab } from './providers-tab';
 import { ScanTab } from './scan-tab';
 import { SettingsTab } from './settings-tab';
+import { UsersTab } from './users-tab';
 
 /** Scan · Providers · Settings · Logs — v195 §5.1, the order of
  *  `SYSTEM_TABS`. Settings stays the landing tab (correction 4). */
@@ -25,6 +26,7 @@ const TABS: Tab[] = [
   { id: 'providers', label: 'Providers' },
   { id: 'settings', label: 'Settings' },
   { id: 'logs', label: 'Logs' },
+  { id: 'users', label: 'Users' },
 ];
 
 /** The destructive commands the System tabs offer, each in the page header. */
@@ -37,6 +39,7 @@ export const TAB_ACTION: Readonly<Record<SystemTab, SystemAction | null>> = {
   providers: null,
   settings: 'discard',
   logs: 'clear-log',
+  users: null, // its commands are per row
 };
 
 /** Names the file, because "are you sure?" is answered yes reflexively and
@@ -76,7 +79,7 @@ export function clearLogConsequence(path: string | null | undefined, source: Log
 @Component({
   selector: 'sb-system',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Page, TabBar, Button, ConfirmDialog, SettingsTab, LogsTab, ScanTab, ProvidersTab],
+  imports: [Page, TabBar, Button, ConfirmDialog, SettingsTab, LogsTab, ScanTab, ProvidersTab, UsersTab],
   // v54 D1: the tabs behind this shell are dense operational surfaces --
   // tight rows, more per screen -- so it defaults to the instrument
   // register. On the host (a static class, not a template wrapper) because
@@ -142,6 +145,9 @@ export function clearLogConsequence(path: string | null | undefined, source: Log
           }
           @case ('logs') {
             <sb-logs-tab />
+          }
+          @case ('users') {
+            <sb-users-tab />
           }
           @default {
             <sb-settings-tab />

@@ -324,7 +324,7 @@ export interface Tab {
   `,
 })
 export class TabBar {
-  readonly tabs = input.required<Tab[]>();
+  readonly tabs = input.required<readonly Tab[]>();
   readonly active = input.required<string>();
   readonly activeChange = output<string>();
   private readonly tabList = viewChild.required<ElementRef<HTMLElement>>('tabList');

@@ -1,6 +1,9 @@
 {
   "permissions": {
     "allow": [
+      "Read(.env)",
+      "Read(**/.env)",
+      "Bash(bash scripts/ops/ssh-hetzner.sh:*)",
       "Bash(python -m pytest:*)",
       "Bash(python -m py_compile:*)",
       "Bash(python scripts/dev/testrun.py:*)",
@@ -140,5 +143,11 @@
     "inspection + the test/lint/backtest loop. Destructive or outward-facing",
     "operations (git push, reset --hard, clean, rm -rf, docker down, deploy, ssh)",
     "are intentionally left OUT so they still prompt."
-  ]
+  ],
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Read-only inspection of the Hetzner production VM through `bash scripts/ops/ssh-hetzner.sh` (logs, docker compose ps/logs, is_scan_running, image tag, SELECT-only queries) is pre-approved by the partner whenever work happens in a worktree or a plan task needs it. Anything that changes the VM (restart, edit .env, write, deploy) is NOT covered and still needs explicit approval and the mirror-prod skill."
+    ]
+  }
 }

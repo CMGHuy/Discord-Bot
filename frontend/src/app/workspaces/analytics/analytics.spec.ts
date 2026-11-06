@@ -6,7 +6,7 @@ import {
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { Router, provideRouter } from '@angular/router';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   authInterceptor,
@@ -15,10 +15,24 @@ import {
 } from '../../api/interceptors';
 import { AnalyticsStore } from '../../stores/analytics.store';
 import { ConnectionStore } from '../../stores/connection.store';
-import { Analytics } from './analytics';
+import { ANALYTICS_TAB_LIST, Analytics, visibleAnalyticsTabs } from './analytics';
+import { analyticsTabFor } from './analytics.routes';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RouteTitleService } from '../../routing/route-title.service';
+
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
+import { Role } from '../../api/models';
+import { SessionStore } from '../../stores/session.store';
+
+let role: Role = 'admin';
+beforeEach(() => { role = 'admin'; });
+function signInAs(as: Role): void {
+  patchState(unprotected(TestBed.inject(SessionStore)), {
+    status: 'authenticated', username: as === 'admin' ? 'admin' : 'viewer1', role: as,
+  });
+}
 
 /* v94 — the Analytics shell.
  *
@@ -43,6 +57,7 @@ function create(): { fixture: ComponentFixture<Analytics>; backend: HttpTestingC
       AnalyticsStore,
     ],
   });
+  signInAs(role);
   const fixture = TestBed.createComponent(Analytics);
   return {
     fixture,
@@ -132,5 +147,63 @@ describe('Analytics on sb-page (v195 Phase 4)', () => {
     const src = readFileSync(join(process.cwd(), 'src/app/workspaces/analytics/analytics.ts'), 'utf8');
     expect(src).toContain('<sb-page');
     expect(src).toMatch(/import \{ Page \} from '\.\.\/\.\.\/ui\/page';/);
+  });
+});
+
+/* -- v207 -- Tuning is an admin tool (spec Decision 3) ------------------- */
+
+describe('Analytics for a viewer (v207)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('lists Tuning for the admin and not for a viewer, order otherwise kept', () => {
+    expect(visibleAnalyticsTabs(true).map((t) => t.id)).toEqual(ANALYTICS_TAB_LIST.map((t) => t.id));
+    expect(visibleAnalyticsTabs(false).map((t) => t.id)).toEqual(
+      ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'partials']);
+  });
+
+  it('renders six tabs for a viewer and seven for the admin', () => {
+    const asAdmin = create().fixture;
+    asAdmin.detectChanges();
+    expect(tabLabels(asAdmin.nativeElement as HTMLElement)).toContain('Tuning');
+    role = 'viewer';
+    const asViewer = create().fixture;
+    asViewer.detectChanges();
+    expect(tabLabels(asViewer.nativeElement as HTMLElement)).toEqual(
+      ['Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Partials']);
+  });
+
+  it('resolves Overview for a viewer asking for tuning, and nothing else changes', () => {
+    expect(analyticsTabFor('tuning', false)).toBe('overview');
+    expect(analyticsTabFor('tuning', true)).toBe('tuning');
+    for (const tab of ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'partials'] as const) {
+      expect(analyticsTabFor(tab, false)).toBe(tab);
+    }
+  });
+
+  it('rewrites ?tab=tuning away for a viewer, and leaves it for the admin', async () => {
+    const arrive = async () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          provideZonelessChangeDetection(),
+          provideRouter([]),
+          provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+          provideHttpClientTesting(),
+          { provide: ConnectionStore, useValue: connectionStub },
+          AnalyticsStore,
+        ],
+      });
+      signInAs(role);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/?tab=tuning');
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      TestBed.createComponent(Analytics).detectChanges();
+      return navigate;
+    };
+    expect(await arrive()).not.toHaveBeenCalled();
+    role = 'viewer';
+    expect(await arrive()).toHaveBeenCalledWith([], {
+      queryParams: { tab: null }, queryParamsHandling: 'merge', replaceUrl: true,
+    });
   });
 });

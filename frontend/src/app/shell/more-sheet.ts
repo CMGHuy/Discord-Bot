@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { FocusTrap } from '../ui/focus-trap';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
-import { NAV_ENTRIES, NavEntry, PHONE_TABS } from './nav';
+import { SessionStore } from '../stores/session.store';
+import { NAV_ENTRIES, NavEntry, PHONE_TABS, navEntriesFor } from './nav';
 
 /** One group of the More sheet: a destination, and the pages it links to. */
 export interface MoreGroup {
@@ -16,8 +17,8 @@ export interface MoreGroup {
 /**
  * The destinations the phone's tab bar does not hold, in rail order (v202
  * §3), each with its sections as links; a single page links to itself.
- * Today: Insights (Analytics, Research, Reports) and System (Health,
- * Versions). Trades' sections are reached from its section tabs.
+ * Today: Insights (Analytics, Research, Reports) and, for the admin only,
+ * System (Health, Versions). Trades' sections are reached from its section tabs.
  */
 export function morePageGroups(
   entries: readonly NavEntry[] = NAV_ENTRIES,
@@ -60,7 +61,7 @@ export function morePageGroups(
           <span class="glyph" aria-hidden="true"><sb-icon name="search" /></span>
           <span>Search or jump…</span>
         </button>
-        @for (group of groups; track group.id) {
+        @for (group of groups(); track group.id) {
           <p class="group-label" [id]="group.id">{{ group.label }}</p>
           <ul class="pages" [attr.aria-labelledby]="group.id">
             @for (link of group.links; track link.path) {
@@ -137,7 +138,8 @@ export class MoreSheet {
   readonly closed = output<void>();
   readonly searchRequested = output<void>();
 
-  protected readonly groups = morePageGroups();
+  private readonly session = inject(SessionStore);
+  protected readonly groups = computed(() => morePageGroups(navEntriesFor(this.session.isAdmin())));
 
   protected onEscape(): void {
     if (this.open()) this.closed.emit();

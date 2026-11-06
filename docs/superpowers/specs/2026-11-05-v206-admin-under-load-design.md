@@ -375,6 +375,55 @@ display-only. A test asserts that no fill, sizing, risk or P&L path reads
 the cache. This plan's task list stays open in this spec until the profiles
 exist.
 
+**Added 2026-11-06 (site audit): profile `/risk` too.** Production's
+slow-request log (2026-11-05 15:51 to 11-06 09:47 UTC) has it at 16 calls,
+avg 23.1 s, max 40.2 s, db 1.9 s, so nearly all of it is Python. An
+in-process cProfile on the local replica (refresher off, so not
+production-exact) put the warm call at 22.8 s: `collect_portfolio_state`
+15.6 s (per-ticker `_observed` daily bars, `_clusters_state`), trade-record
+loading 5.9 s (`codec.normalise`, 643k calls). The same log shows
+`/versions` at avg 88 s, db 0; that was `release_windows.telemetry_for`
+re-parsing `scan_telemetry.jsonl` once per release, fixed outside this spec
+(f425fc9f).
+
+### Production re-check (2026-11-06, Plan 1 still unmerged)
+
+The partner reported the Dashboard still loads slowly. This is a
+read-only check, taken during a scan with Plan 1 built in its worktree
+but not on `main` or production. It found the same cause as `## Why`,
+now worse:
+
+- The `admin` container is `unhealthy` at ~97 % CPU. Load average is 6.7
+  on 2 vCPUs.
+- Scans take ~335 s and start every ~6 min, so the `scan` SSE event
+  fires about once a second **~95 % of the time**. Scan time is the
+  normal state, not the edge case.
+- One Dashboard tab over ~12 min made 797 `/health`, 677
+  `/system/scan`, 348 `/live` and 35 `/dashboard` calls.
+- Average server time per request (`request_timing` slow log): `/live`
+  13.2 s (1.75 s on 11-05), `/dashboard` 18.0 s, `/equity/candles`
+  10.1 s, `/market/tape` 7.8 s, `/system/scan` 2.5 s.
+
+Two causes this spec does not name yet. Both are follow-ups for a later
+plan, not Plan 1 scope:
+
+1. **Cancelled requests keep running on the server.**
+   `LiveStore.load()` unsubscribes the previous `/live` before sending
+   the next one. That aborts the XHR only, and the server finishes the
+   work anyway. A request every 2 s that takes ~13 s leaves ~7 in
+   flight in the one worker. P1-d removes the `scan` trigger, which
+   removes the 2 s cadence. The pattern (cancel in the browser,
+   re-request while the server is still busy) remains for any slow
+   endpoint.
+2. **`/live` reads whole tables for 8 rows.** `live_events._load_plans`
+   and `_closed_newest` take every plan (842) and every trade (1,164),
+   then sort in Python and slice. `open_heat_state` and
+   `PlanStore().records()` do full reads too. Timed in-container, in
+   its own process (no GIL contention from the worker):
+   `collect_events(8)` 1.7 s, `_sections` 1.2 s, `TradeLog()._all()`
+   0.5 s warm. That is ~3 s per call before any contention. An
+   `ORDER BY … LIMIT` read would drop this to near zero.
+
 ## Error handling
 
 - `scan` event without `progress`, or a malformed one: the client falls

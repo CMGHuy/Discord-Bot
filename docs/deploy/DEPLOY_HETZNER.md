@@ -206,7 +206,7 @@ own secret and pass it as a build arg.
 ## Rolling back
 
 Every build is published under an immutable `sha-<12>` tag, so a rollback is
-a pull of an older tag — no rebuild, no revert commit, seconds not minutes:
+a pull of an older tag — no rebuild, no revert commit, seconds not minutes. **From v197 this is only safe when the older image knows the database's current Alembic revision**; otherwise `deploy.sh` aborts before `up` with bot, admin and refresher stopped (recover with `unset SWING_BOT_IMAGE; docker compose up -d --no-build --wait bot admin refresher`, or use `scripts/ops/rollback_to.sh`):
 
 ```bash
 ssh deploy@167.233.26.185
@@ -349,12 +349,18 @@ The snap writes a day's row only once the bar behind it is final (its London
 day ended). Expect the row later than 08:00 when the pair file was last
 written before London midnight; it arrives on the cycle after the next refresh.
 
-Rollback, in this order: (1) redeploy the previous image (§ Rolling back). The
-old code never reads the table, so it can stay. (2) Only to remove it, run
-`docker compose exec -T bot alembic downgrade <the revision v205_001 revises>`
-(`v200_001` when v205 was written). Downgrading to that revision also rolls
-back every later revision stacked on top of `v205_001`, so check
-`alembic history` first.
+Rollback: an image-only rollback is **not** safe once `v207_001` is applied:
+the previous image does not know that revision, so `deploy.sh` aborts before
+`up` with bot, admin and refresher stopped (§ Rolling back). In this order:
+(1) with the writers stopped, run the downgrade from the **v207** image:
+`docker compose run --rm --no-deps bot alembic downgrade v197_001`
+(the revision `v207_001` revises). This **drops `admin_users` and every
+viewer account**, and also rolls back every later revision stacked on top of
+`v207_001`, so check `alembic history` first. (2) Then redeploy the previous
+image (§ Rolling back). Viewer accounts therefore do not survive a rollback;
+re-create them on the Users tab after rolling forward. The other route is
+`scripts/ops/rollback_to.sh` (point-in-time restore), which also discards
+everything written since.
 
 ## Accessing the admin UI
 
@@ -402,6 +408,10 @@ no per-store stage and no import step. Only `analytics_snapshot.json`,
 - **Editing `.env`.** `python3 scripts/ops/env_set.py KEY value` edits it in
   place and snapshots it; `sed -i` leaves the containers reading the old inode
   (`docs/claude/known-traps.md`, "Editing production `.env` with `sed -i`").
+
+### Lifecycle notification queue (v197)
+
+`deploy.sh` stops bot and admin, migrates with the new image, then starts them. Legacy queue rows, if any, stay blocked for the audited retarget. Never roll back by image alone: see `LIFECYCLE_NOTIFICATIONS.md` (Rollout prerequisites, Rollback).
 
 ### Point-in-time rollback
 

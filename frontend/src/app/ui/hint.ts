@@ -223,9 +223,14 @@ export function placeBeside(
        centred (or right-aligned for align="left") and clamped inside the
        viewport by clampPopover() -- see reposition() below. */
     /* A fingertip needs 44px around a 14px glyph (v80 D4; phone and tablet
-       since v179). */
+       since v179). A centred ::after, not min-height: a laid-out 44px box
+       made every label row holding a hint 44px tall, so its label sat ~5px
+       below a hint-less neighbour's in the same KPI row (layout audit,
+       2026-11-06). The sb-hit pattern, scoped here. */
     @media (pointer: coarse), (max-width: 1023px) {
-      .trigger { min-width: var(--control-h); min-height: var(--control-h); }
+      .trigger { position: relative; }
+      .trigger::after { content: ''; position: absolute; top: 50%; left: 50%;
+        width: var(--control-h); height: var(--control-h); transform: translate(-50%, -50%); }
     }
   `,
 })

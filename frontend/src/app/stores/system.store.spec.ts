@@ -128,6 +128,7 @@ const HEALTH = {
     },
   ],
   thresholds: { fallback_pct: 20, empty_pct: 5 },
+  notifications: null,
   swallowed: [
     {
       process: 'bot' as const,
@@ -798,6 +799,33 @@ describe('SystemStore', () => {
     expect(finished).toBe(1);
   });
 
+  it('clears old notification health after a failed refresh and recovers on success', () => {
+    const first = {
+      ...HEALTH,
+      notifications: { pending_count: 0, oldest_pending_age_seconds: null, blocked_count: 0 },
+    };
+    store.resolveHealth().subscribe();
+    backend.expectOne('/api/v1/system/health').flush(first);
+    expect(store.health()?.notifications?.pending_count).toBe(0);
+
+    store.resolveHealth().subscribe();
+    backend.expectOne('/api/v1/system/health').flush(
+      { error: { code: 'unavailable', message: 'down' } },
+      { status: 503, statusText: 'Service Unavailable' },
+    );
+    expect(store.health()).toBeNull();
+    expect(store.healthError()).toBe('The admin is not responding.');
+
+    const recovered = {
+      ...HEALTH,
+      notifications: { pending_count: 2, oldest_pending_age_seconds: 901, blocked_count: 1 },
+    };
+    store.resolveHealth().subscribe();
+    backend.expectOne('/api/v1/system/health').flush(recovered);
+    expect(store.health()?.notifications).toEqual(recovered.notifications);
+    expect(store.healthError()).toBeNull();
+  });
+
   it('shows the server message for a health error that is not unavailability', () => {
     store.resolveHealth().subscribe();
     backend.expectOne('/api/v1/system/health').flush(
@@ -834,8 +862,8 @@ const routeFor = (tab: string | null) =>
   ({ queryParamMap: convertToParamMap(tab === null ? {} : { tab }) }) as ActivatedRouteSnapshot;
 
 describe('System tabs (v195 §5.1, correction 4)', () => {
-  it('orders the bar Scan, Providers, Settings, Logs', () => {
-    expect([...SYSTEM_TABS]).toEqual(['scan', 'providers', 'settings', 'logs']);
+  it('orders the bar Scan, Providers, Settings, Logs, Users', () => {
+    expect([...SYSTEM_TABS]).toEqual(['scan', 'providers', 'settings', 'logs', 'users']);
   });
 
   it('opens every known tab by its query value', () => {

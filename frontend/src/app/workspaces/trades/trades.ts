@@ -18,6 +18,8 @@ import { ApiClient } from '../../api/api-client';
 import { TradeQuery, TradeRow } from '../../api/models';
 import { Async, asyncInputs } from '../../ui/async';
 import { ConnectionStore } from '../../stores/connection.store';
+import { SessionStore } from '../../stores/session.store';
+import { IfAdminDirective } from '../../auth/if-admin.directive';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { Density } from '../../ui/data-table/data-table.types';
 import { tablePerPage } from '../../ui/table-per-page';
@@ -182,6 +184,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
     MarketValue,
     MarketRefresh,
     IncompleteNote,
+    IfAdminDirective,
   ],
   template: `
     <sb-page>
@@ -195,7 +198,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
         <span class="prices-meta">
           <sb-market-value [asOf]="store.meta()?.as_of ?? null" [refreshing]="store.meta()?.refreshing ?? false" [error]="store.meta()?.error ?? null">Prices</sb-market-value>
           <sb-incomplete-note [missing]="store.meta()?.missing_count ?? 0" />
-          <sb-market-refresh [symbols]="liveSymbols()" />
+          <sb-market-refresh *sbIfAdmin [symbols]="liveSymbols()" />
         </span>
         @if (store.clearResult(); as message) {
           <!-- The count, not just "done": "cleared 0" and "cleared 40" are
@@ -212,13 +215,14 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
                step, never a retry the page makes on its own. -->
           <div class="clear-refusal" role="alert" data-testid="clear-refusal">
             <p>{{ refusal }}</p>
-            <button sb-button variant="danger-quiet" type="button" (click)="forceOpen.set(true)">Reset anyway…</button>
+            <button *sbIfAdmin sb-button variant="danger-quiet" type="button" (click)="forceOpen.set(true)">Reset anyway…</button>
           </div>
         }
         @if (store.clearError(); as message) {
           <p class="command-error" role="alert">{{ message }}</p>
         }
         <button
+          *sbIfAdmin
           sb-button
           variant="danger-quiet"
           type="button"
@@ -228,6 +232,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
           Clear open
         </button>
         <button
+          *sbIfAdmin
           sb-button
           variant="danger-quiet"
           type="button"
@@ -738,6 +743,7 @@ export class Trades {
   protected readonly liveSymbols = computed(() => liveTickers(this.store.rows()));
   /** For the currency symbol alone, same as the Dashboard's own use of it. */
   protected readonly connection = inject(ConnectionStore);
+  private readonly session = inject(SessionStore);
 
   /* Query parameters, arriving as inputs through withComponentInputBinding.
    * All strings, because that is what a URL carries. */
@@ -953,9 +959,9 @@ export class Trades {
       actions: this.actionsCell(),
     } as Record<string, TemplateRef<{ $implicit: TradeRow }>>;
 
-    return tradeColumns(this.now).map((column) =>
-      cells[column.key] ? { ...column, cell: cells[column.key] } : column,
-    );
+    return tradeColumns(this.now)
+      .filter((column) => column.key !== 'actions' || this.session.isAdmin())
+      .map((column) => (cells[column.key] ? { ...column, cell: cells[column.key] } : column));
   });
 
   /**

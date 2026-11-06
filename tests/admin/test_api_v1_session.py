@@ -17,6 +17,8 @@ from tests.admin.api_v1_contract import assert_error, assert_shape
 from swingbot.admin import api_v1 as v1  # noqa: F401  (reload-safe import idiom)
 
 _LOGIN = {"username": "admin", "password": "admin"}
+_SESSION_SHAPE = {"authenticated": bool, "username": (str, type(None)),
+                  "role": (str, type(None))}
 
 
 # --- GET /api/v1/session -------------------------------------------------
@@ -24,8 +26,8 @@ _LOGIN = {"username": "admin", "password": "admin"}
 def test_session_get_reports_unauthenticated_without_a_cookie(client):
     r = client.get("/api/v1/session")
     assert r.status_code == 200
-    assert_shape(r.get_json(), {"authenticated": bool, "username": (str, type(None))})
-    assert r.get_json() == {"authenticated": False, "username": None}
+    assert_shape(r.get_json(), _SESSION_SHAPE)
+    assert r.get_json() == {"authenticated": False, "username": None, "role": None}
 
 
 def test_session_get_is_not_auth_guarded(client):
@@ -38,7 +40,7 @@ def test_session_get_is_not_auth_guarded(client):
 def test_session_get_reports_authenticated_after_login(client):
     client.post("/api/v1/session", json=_LOGIN)
     body = client.get("/api/v1/session").get_json()
-    assert body == {"authenticated": True, "username": "admin"}
+    assert body == {"authenticated": True, "username": "admin", "role": "admin"}
 
 
 # --- POST /api/v1/session ------------------------------------------------
@@ -46,8 +48,8 @@ def test_session_get_reports_authenticated_after_login(client):
 def test_login_sets_the_session_and_returns_identity(client):
     r = client.post("/api/v1/session", json=_LOGIN)
     assert r.status_code == 200
-    assert_shape(r.get_json(), {"authenticated": bool, "username": (str, type(None))})
-    assert r.get_json() == {"authenticated": True, "username": "admin"}
+    assert_shape(r.get_json(), _SESSION_SHAPE)
+    assert r.get_json() == {"authenticated": True, "username": "admin", "role": "admin"}
 
 
 def test_login_with_bad_password_is_401_json(client):
@@ -70,7 +72,7 @@ def test_logout_clears_the_session(client):
     client.post("/api/v1/session", json=_LOGIN)
     r = client.delete("/api/v1/session")
     assert r.status_code == 200
-    assert r.get_json() == {"authenticated": False, "username": None}
+    assert r.get_json() == {"authenticated": False, "username": None, "role": None}
     assert client.get("/api/v1/session").get_json()["authenticated"] is False
 
 
@@ -78,6 +80,23 @@ def test_logout_when_not_logged_in_is_not_an_error(client):
     """Idempotent: the SPA calls it on a 401 to clear local state, and that
     path must not itself fail."""
     assert client.delete("/api/v1/session").status_code == 200
+
+
+def test_an_admin_session_issued_before_v207_has_no_role_and_is_still_admin(client):
+    """Sessions minted before the deploy carry admin_authed + pw_hash only."""
+    import swingbot.admin.app as app_module
+
+    with client.session_transaction() as s:
+        s["admin_authed"] = True
+        s["pw_hash"] = app_module._password_hash()
+    assert client.get("/api/v1/session").get_json() == {
+        "authenticated": True, "username": "admin", "role": "admin"}
+
+
+def test_an_admin_login_stores_the_role(client):
+    client.post("/api/v1/session", json=_LOGIN)
+    with client.session_transaction() as s:
+        assert s["role"] == "admin" and s["admin_authed"] is True
 
 
 # --- GET /api/v1/health --------------------------------------------------

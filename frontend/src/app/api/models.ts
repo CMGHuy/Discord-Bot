@@ -81,9 +81,25 @@ export interface TradeCollection extends Collection<TradeRow> { prices_as_of?: s
  *  for humans and may change freely. */
 /* -- session ------------------------------------------------------------ */
 
+export type Role = 'admin' | 'viewer';
+
 export interface Identity {
   authenticated: boolean;
   username: string | null;
+  /** v207: who the session is; null when anonymous, and when an older server omits it, so the SPA shows the viewer layout. */
+  role: Role | null;
+}
+
+/** One viewer account as every `/api/v1/users` endpoint returns it (V207-6).
+ *  The server never sends the password hash or `credential_version`, so
+ *  neither exists here. */
+export interface AdminUser {
+  id: number;
+  username: string;
+  role: 'viewer';
+  disabled: boolean;
+  created_at: string;
+  last_login_at: string | null;
 }
 
 export interface Health {
@@ -1782,6 +1798,12 @@ export interface SwallowedRow {
   last_error: string | null;
 }
 
+export interface NotificationHealth {
+  pending_count: number;
+  oldest_pending_age_seconds: number | null;
+  blocked_count: number;
+}
+
 export interface SystemHealth {
   /** Newest first, at most 20. */
   providers: ProviderHealthRow[];
@@ -1792,6 +1814,9 @@ export interface SystemHealth {
   /** When the bot's counts began (its process start); null when the bot has
    *  not yet written them. */
   bot_counts_since: string | null;
+  /** Lifecycle notification backlog; null when the queue could not be read
+   *  (unknown, never a healthy zero). */
+  notifications: NotificationHealth | null;
 }
 
 /* -- market: the interactive chart (SR33, v25) -------------------------- */

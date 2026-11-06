@@ -7,6 +7,7 @@ import { ApiClient } from '../../api/api-client';
 import { TradeRow } from '../../api/models';
 import { Button } from '../../ui/button';
 import { Icon } from '../../ui/icon';
+import { IfAdminDirective } from '../../auth/if-admin.directive';
 
 const CLOSEABLE = new Set(['ACTIVE', 'PARTIAL']);
 
@@ -17,16 +18,18 @@ const CLOSEABLE = new Set(['ACTIVE', 'PARTIAL']);
  * command the server will refuse: close is ACTIVE/PARTIAL only, cancel is
  * PENDING only. Delete is absent entirely — `delete_trade` rejects plan-backed
  * rows with a 422, and every row on this page is plan-backed.
+ * v207: renders nothing for a viewer, so every mount site is gated by default.
  */
 @Component({
   selector: 'sb-row-actions',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, Icon],
+  imports: [Button, Icon, IfAdminDirective],
   host: {
     '(document:click)': 'onDocumentClick($event)',
     '(document:keydown.escape)': 'close()',
   },
   template: `
+    <ng-container *sbIfAdmin>
     <button sb-button variant="icon" type="button" class="trigger"
             [attr.aria-expanded]="open()" aria-haspopup="menu"
             aria-label="Row actions" (click)="toggle($event)">
@@ -47,6 +50,7 @@ const CLOSEABLE = new Set(['ACTIVE', 'PARTIAL']);
                 (click)="run('note')">Add note</button>
       </div>
     }
+    </ng-container>
   `,
   styles: `
     :host { position: relative; display: inline-flex; }

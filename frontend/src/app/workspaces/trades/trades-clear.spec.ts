@@ -14,6 +14,16 @@ import { TradesStore } from '../../stores/trades.store';
 import { REFUSED, RESET } from '../../stores/trades-clear.fixture';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { FORCE_RESET_CONSEQUENCE, Trades } from './trades';
+import { Role } from '../../api/models';
+import { SessionStore } from '../../stores/session.store';
+
+let role: Role = 'admin';
+beforeEach(() => { role = 'admin'; });
+function signInAs(as: Role): void {
+  patchState(unprotected(TestBed.inject(SessionStore)), {
+    status: 'authenticated', username: as === 'admin' ? 'admin' : 'viewer1', role: as,
+  });
+}
 
 /* v189 A6/A7 on the Trades page: the notice after a clear, the refusal with
  * an explicitly confirmed force, and the bulk-dialog wording. */
@@ -39,6 +49,7 @@ describe('Trades bulk-clear replies (v189)', () => {
         { provide: PreferencesStore, useValue: { values: signal({}), isLoaded: signal(true), update: () => undefined } },
       ],
     });
+    signInAs(role);
     fixture = TestBed.createComponent(Trades);
     fixture.detectChanges();
     backend = TestBed.inject(HttpTestingController);
@@ -101,5 +112,14 @@ describe('Trades bulk-clear replies (v189)', () => {
     patch({ clearError: 'Nothing was cleared: the archive could not be written (disk full).' });
     expect(el().querySelector('.command-error')!.textContent).toContain('the archive could not be written');
     expect(el().querySelector('[data-testid="clear-refusal"]')).toBeNull();
+  });
+
+
+  it('shows a viewer the refusal text but never the force button', () => {
+    signInAs('viewer');
+    patch({ clearRefusal: REFUSED });
+    const refusal = el().querySelector('[data-testid="clear-refusal"]')!;
+    expect(refusal.textContent).toContain('Reset refused: the kill switch is tripped.');
+    expect(refusal.querySelector('button')).toBeNull();
   });
 });

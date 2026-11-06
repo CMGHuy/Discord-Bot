@@ -51,6 +51,41 @@ describe('sb-market-value (v201)', () => {
     expect(el.querySelector('.mv-age')?.textContent?.trim()).toBe('12 s ago');
   });
 
+  it('puts the age on the price baseline: meta baseline-aligned, spinner centred out of it', () => {
+    const el = render({ r: true });
+    expect(getComputedStyle(el.querySelector('.mv-meta') as HTMLElement).alignItems).toBe('baseline');
+    expect(getComputedStyle(el.querySelector('.mv-meta sb-spinner') as HTMLElement).alignSelf).toBe('center');
+  });
+
+  it('keeps the meta baseline-aligned with no spinner and no age', () => {
+    const el = render({ a: null, r: false });
+    expect(el.querySelector('.mv-age')).toBeNull();
+    expect(getComputedStyle(el.querySelector('.mv-meta') as HTMLElement).alignItems).toBe('baseline');
+  });
+
+  it('takes no space when there is nothing to show (no as-of, spinner or error)', () => {
+    const el = render({ a: null, r: false, e: null });
+    const host = el.querySelector('sb-market-value') as HTMLElement;
+    expect(host.classList).toContain('mv-empty');
+    expect(getComputedStyle(host).display).toBe('none');
+  });
+
+  it('stays visible with no as-of while refreshing or failed', () => {
+    for (const init of [{ a: null, r: true }, { a: null, e: 'timeout' }]) {
+      const host = render(init).querySelector('sb-market-value') as HTMLElement;
+      expect(host.classList).not.toContain('mv-empty');
+      expect(getComputedStyle(host).display).not.toBe('none');
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(),
+        { provide: CLOCK, useValue: clock }, { provide: LiveValuesStore, useValue: { status: signal(regular) } }] });
+    }
+  });
+
+  it('stays visible with a value', () => {
+    const host = render().querySelector('sb-market-value') as HTMLElement;
+    expect(host.classList).not.toContain('mv-empty');
+  });
+
   it('spinner beside the value while refreshing', () => {
     const el = render({ r: true });
     expect(el.querySelector('sb-spinner')).not.toBeNull();

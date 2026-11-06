@@ -1,10 +1,13 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { MoreSheet, morePageGroups } from './more-sheet';
 import { NAV_ENTRIES } from './nav';
+import { SessionStore } from '../stores/session.store';
 
 @Component({ template: '' })
 class Blank {}
@@ -49,6 +52,7 @@ describe('MoreSheet (v195 Phase 3)', () => {
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), provideRouter([{ path: '**', component: Blank }])],
     });
+    patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: 'admin', role: 'admin' });
     fixture = TestBed.createComponent(MoreSheet);
     el = fixture.nativeElement as HTMLElement;
     closed = 0;
@@ -64,6 +68,14 @@ describe('MoreSheet (v195 Phase 3)', () => {
   }
 
   const dialog = () => el.querySelector<HTMLElement>('[role=dialog]');
+
+  it('lists only Risk and Insights for a viewer (v207)', () => {
+    patchState(unprotected(TestBed.inject(SessionStore)), { role: 'viewer' });
+    open();
+    expect([...el.querySelectorAll('.group-label')].map((n) => n.textContent!.trim())).toEqual(['Risk', 'Insights']);
+    expect([...el.querySelectorAll('a.page')].map((a) => a.getAttribute('href')))
+      .toEqual(['/risk', '/insights/analytics', '/insights/research', '/insights/reports']);
+  });
 
   it('renders nothing while closed, and ignores Escape then', () => {
     expect(dialog()).toBeNull();

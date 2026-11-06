@@ -28,13 +28,15 @@ const HEALTH: SystemHealth = {
       stale_symbols: null, empty_symbols: null, empty_rate: null },
   ],
   thresholds: { fallback_pct: 20, empty_pct: 5 },
+  notifications: null,
   swallowed: [],
   bot_counts_since: null,
 };
 
-function render(health: SystemHealth | null): HTMLElement {
+function render(health: SystemHealth | null, stale = false): HTMLElement {
   const fixture = TestBed.createComponent(ProviderHealthPanel);
   fixture.componentRef.setInput('health', health);
+  fixture.componentRef.setInput('stale', stale);
   fixture.detectChanges();
   return fixture.nativeElement as HTMLElement;
 }
@@ -101,4 +103,18 @@ describe('ProviderHealthPanel', () => {
     expect(el.querySelector('table')).toBeNull();
     expect(el.textContent).toContain('No scan recorded yet');
   });
+});
+
+describe('ProviderHealthPanel unavailable state', () => {
+  beforeEach(() => TestBed.configureTestingModule({
+    providers: [provideZonelessChangeDetection()],
+  }));
+
+  it.each([[null, false], [HEALTH, true]] as const)(
+    'says unavailable, not empty, when health is missing or stale', (health, stale) => {
+      const el = render(health, stale);
+      expect(el.textContent).toContain('Provider health unavailable');
+      expect(el.textContent).not.toContain('No scan recorded yet');
+    },
+  );
 });

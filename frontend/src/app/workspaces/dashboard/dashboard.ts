@@ -68,6 +68,8 @@ import {
 } from './dashboard.helpers';
 import { PositionsTable } from './positions-table';
 import { RowActions } from './row-actions';
+import { SessionStore } from '../../stores/session.store';
+import { IfAdminDirective } from '../../auth/if-admin.directive';
 import { Location } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
@@ -172,7 +174,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
 @Component({
   selector: 'sb-dashboard',
   imports: [
-    Magnitude, Panel, PositionsTable, RowActions, ConfirmDialog,
+    Magnitude, Panel, PositionsTable, RowActions, IfAdminDirective, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, Flash,
     Hint, MarketValue, MarketRefresh, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
     RecentActivity, MarketMovers, TradeDrawer, Page,
@@ -211,7 +213,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
            keeps the two apart. A dropdown, not one button: ACTIVE and PARTIAL
            are different enough states that closing only one of them is a
            real, distinct action. -->
-      <div page-actions class="close-all-menu" #closeAllMenu>
+      <div *sbIfAdmin page-actions class="close-all-menu" #closeAllMenu>
             <button sb-button variant="danger-quiet" type="button"
                     data-action="close-all"
                     [attr.aria-expanded]="closeAllMenuOpen()"
@@ -305,7 +307,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
            per-trade sizing mode belongs on the detail view, where its source
            data is available. -->
       <!-- v201: Refresh asks the refresher for the live rows' prices. -->
-      <sb-market-refresh panel-actions [symbols]="liveSymbols()" />
+      <sb-market-refresh *sbIfAdmin panel-actions [symbols]="liveSymbols()" />
       <sb-hint panel-actions class="lifecycle-hint" [xl]="true" align="left" glyph="?"
                label="About open positions">
         <span class="hint-heading">Plan lifecycle</span>
@@ -655,6 +657,7 @@ export class Dashboard {
   protected readonly positionsAbout = PANEL_HELP.openPositions;
   private readonly now = inject(CLOCK);
   private readonly router = inject(Router);
+  private readonly session = inject(SessionStore);
   private readonly api = inject(ApiClient);
   private readonly toast = inject(ToastService);
   protected readonly store = inject(DashboardStore);
@@ -960,9 +963,9 @@ export class Dashboard {
       closed_at: this.closedCell(),
       actions: this.actionsCell(),
     };
-    return tradeColumns(this.now).map((column) =>
-      cells[column.key] ? { ...column, cell: cells[column.key] } : column,
-    );
+    return tradeColumns(this.now)
+      .filter((column) => column.key !== 'actions' || this.session.isAdmin())
+      .map((column) => (cells[column.key] ? { ...column, cell: cells[column.key] } : column));
   });
 
   /* -- SR59: the copy ------------------------------------------------- */

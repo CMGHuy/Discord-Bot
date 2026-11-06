@@ -86,9 +86,21 @@ class PlanStore:
         today's direct read."""
         return read_memo.mapping(read_memo.PLANS, _load_plan_records)
 
-    def get_record(self, plan_id: str) -> dict | None:
-        """The raw plan dict for a plan id, or None."""
-        return self._all().get(plan_id)
+    def get_record(self, plan_id: str, *, conn=None, for_update=False) -> dict | None:
+        """The raw plan dict for a plan id, or None.
+
+        v197: with `conn` the row is read on the caller's connection (fresh,
+        inside its transaction); `for_update` also row-locks it and needs a
+        connection. Without either, the standalone read is unchanged."""
+        if conn is None and not for_update:
+            return self._all().get(plan_id)
+        if conn is None:
+            raise ValueError("locking_read_requires_connection")
+        from swingbot.core.db.repositories.plans import plans_repo
+        repo = plans_repo()
+        record = (repo.get_for_update(plan_id, conn=conn) if for_update
+                  else repo.get(plan_id, conn=conn))
+        return None if record is None else _normalised(record)
 
     def records(self) -> list[dict]:
         """Every raw plan dict."""
@@ -98,8 +110,8 @@ class PlanStore:
         with _LOCK:
             self._persist(plan_to_dict(plan))
 
-    def get(self, plan_id: str) -> TradePlanV2 | None:
-        d = self._all().get(plan_id)
+    def get(self, plan_id: str, *, conn=None, for_update=False) -> TradePlanV2 | None:
+        d = self.get_record(plan_id, conn=conn, for_update=for_update)
         return plan_from_dict(d) if d else None
 
     def lock_for_update(self, plan_id: str, *, conn) -> TradePlanV2 | None:

@@ -8,6 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 
+import { IfAdminDirective } from '../../auth/if-admin.directive';
 import { RiskAvailability, RiskPosition, SectorHeat } from '../../api/models';
 import { ConnectionStore } from '../../stores/connection.store';
 import { PreferencesStore } from '../../stores/preferences.store';
@@ -189,7 +190,7 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
 @Component({
   selector: 'sb-risk',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Hint, Matrix, Page, Panel, RowLink, StatStrip, StatTile],
+  imports: [Async, Button, ConfirmDialog, DataTable, Flash, Freshness, Hint, Matrix, Page, Panel, RowLink, StatStrip, StatTile, IfAdminDirective],
   // v54 D1: exposure-by-position is a table and the rest of this workspace
   // (heat, sectors, clusters) is the same operational reading
   // that table's numbers roll up into -- tight rows, more per screen -- so
@@ -214,7 +215,7 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
              consequential as engaging -- it puts money back at risk -- and a
              one-click release beside a guarded engage is an invitation to
              undo a deliberate stop by accident. -->
-        <div class="kill-actions">
+        <div *sbIfAdmin class="kill-actions">
           @if (store.killswitchOn() !== true) {
             <button sb-button data-action="killswitch" variant="danger" type="button" class="sb-hit"
               [loading]="store.toggling()" [disabled]="store.toggling()" (click)="ask(true)">
@@ -403,7 +404,7 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
           </span>
           <p class="kill-explain">
             @if (store.killswitchOn() === null) {
-              Current killswitch state is unavailable. Choose an explicit action if needed.
+              Current killswitch state is unavailable.<ng-container *sbIfAdmin> Choose an explicit action if needed.</ng-container>
             } @else if (store.killswitchOn() === true) {
               The bot is not opening new positions. Open trades are still
               monitored and can still close.
@@ -414,7 +415,7 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
           @if (killswitchDetail(); as detail) {
             <p class="kill-detail">{{ detail }}</p>
           }
-          <p class="kill-where">The control is at the top of this page.</p>
+          <p *sbIfAdmin class="kill-where">The control is at the top of this page.</p>
         </div>
 
       </div>

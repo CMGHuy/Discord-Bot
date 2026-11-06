@@ -6,6 +6,7 @@ import pytest
 
 from swingbot.core.db import schema
 from swingbot.core.db.repositories.account import AccountRepository
+from swingbot.core.db.repositories.admin_users import AdminUsersRepository
 from swingbot.core.db.repositories.base import Repository
 from swingbot.core.db.repositories.equity_samples import EquitySampleRepository
 from swingbot.core.db.repositories.flags import FlagRepository
@@ -58,7 +59,7 @@ CASES = {
     "ui_preferences": (PreferencesRepository, {"owner": "admin"}),
     "settings_audit": (SettingsAuditRepository, {"ts": TS}),
     "killswitch": (KillswitchRepository, {"key": "global", "engaged": False}),
-    "manual_close_notify": (NotifyQueueRepository, {"queued_at": TS}),
+    "manual_close_notify": (NotifyQueueRepository, {"queued_at": TS, "event_id": "round-trip", "next_attempt_at": TS}),
     "ticker_directory": (TickerDirectoryRepository, {"symbol": "AAPL", "name": "Apple"}),
     "tuning_results": (TuningRepository, {"job_id": "J-probe", "created_at": TS}),
     "tuning_proposals": (ProposalRepository, {"filename": "p.json", "created_at": TS}),
@@ -98,6 +99,8 @@ CASES = {
     "refresher_heartbeat": (RefresherHeartbeatRepository,
                             {"key": "refresher", "beat_at": TS, "cadence_s": 60.0,
                              "session": "regular"}),
+    # v207: viewer accounts.
+    "admin_users": (AdminUsersRepository, {"username": "probe-user", "password_hash": "h"}),
 }
 
 #: Tables with no repository, and why. Anything else must be in CASES.

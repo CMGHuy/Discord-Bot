@@ -39,9 +39,13 @@ describe('SessionStore', () => {
     backend = TestBed.inject(HttpTestingController);
   });
 
-  const boot = (authenticated: boolean, username: string | null = 'admin') => {
+  const boot = (
+    authenticated: boolean,
+    username: string | null = 'admin',
+    role: 'admin' | 'viewer' | null = authenticated ? 'admin' : null,
+  ) => {
     const done = store.boot();
-    backend.expectOne('/api/v1/session').flush({ authenticated, username });
+    backend.expectOne('/api/v1/session').flush({ authenticated, username, role });
     return done;
   };
 
@@ -91,7 +95,7 @@ describe('SessionStore', () => {
     const done = store.login('admin', 'admin');
     backend
       .expectOne('/api/v1/session')
-      .flush({ authenticated: true, username: 'admin' });
+      .flush({ authenticated: true, username: 'admin', role: 'admin' });
     await done;
 
     expect(store.isAuthenticated()).toBe(true);
@@ -161,7 +165,7 @@ describe('SessionStore', () => {
     expect(store.error()).toBeNull(); // cleared as the attempt starts
     backend
       .expectOne('/api/v1/session')
-      .flush({ authenticated: true, username: 'admin' });
+      .flush({ authenticated: true, username: 'admin', role: 'admin' });
     await retried;
   });
 
@@ -219,7 +223,7 @@ describe('SessionStore', () => {
     const done = store.logout();
     backend
       .expectOne('/api/v1/session')
-      .flush({ authenticated: false, username: null });
+      .flush({ authenticated: false, username: null, role: null });
     await done;
 
     expect(store.isAuthenticated()).toBe(false);
@@ -254,7 +258,7 @@ describe('SessionStore', () => {
      *  the wrong reason. */
     const bootFrom = (url: string, authenticated = false) => {
       const done = store.boot(url);
-      backend.expectOne('/api/v1/session').flush({ authenticated, username: 'admin' });
+      backend.expectOne('/api/v1/session').flush({ authenticated, username: 'admin', role: 'admin' });
       return done;
     };
 
@@ -285,6 +289,77 @@ describe('SessionStore', () => {
       await bootFrom('/risk', true);
 
       expect(store.takeRedirect()).toBe('/risk');
+    });
+  });
+
+  /* -- v207: role ------------------------------------------------------- */
+
+  describe('role (v207)', () => {
+    const postSession = (req: { method: string; url: string }) =>
+      req.method === 'POST' && req.url === '/api/v1/session';
+
+    it('is admin for the .env account', async () => {
+      await boot(true, 'admin', 'admin');
+      expect(store.role()).toBe('admin');
+      expect(store.isAdmin()).toBe(true);
+      expect(store.isViewer()).toBe(false);
+    });
+
+    it('is viewer for a database account', async () => {
+      await boot(true, 'viewer1', 'viewer');
+      expect(store.role()).toBe('viewer');
+      expect(store.isAdmin()).toBe(false);
+      expect(store.isViewer()).toBe(true);
+      expect(store.displayName()).toBe('viewer1');
+    });
+
+    it('fails closed when the body carries no role', async () => {
+      const done = store.boot();
+      backend.expectOne('/api/v1/session').flush({ authenticated: true, username: 'admin' });
+      await done;
+      expect(store.isAuthenticated()).toBe(true);
+      expect(store.role()).toBeNull();
+      expect(store.isAdmin()).toBe(false);
+      expect(store.isViewer()).toBe(false);
+    });
+
+    it('ignores a role on an anonymous answer', async () => {
+      await boot(false, null, 'admin');
+      expect(store.role()).toBeNull();
+      expect(store.isAdmin()).toBe(false);
+    });
+
+    it('has no role before boot or when the admin is unreachable', async () => {
+      expect(store.role()).toBeNull();
+      const done = store.boot();
+      backend.expectOne('/api/v1/session').error(new ProgressEvent('error'), { status: 0 });
+      await done;
+      expect(store.role()).toBeNull();
+    });
+
+    it('takes the role from a successful login', async () => {
+      const done = store.login('viewer1', 'viewer-password-1');
+      backend.expectOne(postSession).flush({ authenticated: true, username: 'viewer1', role: 'viewer' });
+      await done;
+      expect(store.isViewer()).toBe(true);
+    });
+
+    it('clears the role on a rejected login', async () => {
+      await boot(true, 'admin', 'admin');
+      const done = store.login('admin', 'wrong');
+      backend.expectOne(postSession).flush(
+        { error: { code: 'auth', message: 'Invalid username or password.' } },
+        { status: 401, statusText: 'Unauthorized' },
+      );
+      await done;
+      expect(store.role()).toBeNull();
+    });
+
+    it('clears the role when the session expires', async () => {
+      await boot(true, 'viewer1', 'viewer');
+      store.expire('/trades');
+      expect(store.role()).toBeNull();
+      expect(store.isViewer()).toBe(false);
     });
   });
 });

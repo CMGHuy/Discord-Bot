@@ -47,6 +47,18 @@ import { EquityCandles } from './panels/equity-candles';
 import { PositionsTable } from './positions-table';
 import { isInline } from '../../ui/priority';
 import { NEVER_COLLAPSED_COLUMNS } from '../trades/trades.columns';
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
+import { Role } from '../../api/models';
+import { SessionStore } from '../../stores/session.store';
+
+let role: Role = 'admin';
+beforeEach(() => { role = 'admin'; });
+function signInAs(as: Role): void {
+  patchState(unprotected(TestBed.inject(SessionStore)), {
+    status: 'authenticated', username: as === 'admin' ? 'admin' : 'viewer1', role: as,
+  });
+}
 
 installMatchMediaPolyfill();
 
@@ -129,6 +141,7 @@ function seed(): { fixture: ComponentFixture<Dashboard>; backend: HttpTestingCon
       { provide: EquityCandlesStore, useValue: equityCandlesStoreStub(CANDLES) },
     ],
   });
+  signInAs(role);
   const fixture = TestBed.createComponent(Dashboard);
   const backend = TestBed.inject(HttpTestingController);
   return { fixture, backend };
@@ -781,6 +794,7 @@ async function routed(url: string) {
       { provide: EquityCandlesStore, useValue: equityCandlesStoreStub(CANDLES) },
     ],
   });
+  signInAs(role);
   const harness = await RouterTestingHarness.create(url);
   // The app's bootstrap listener (initialNavigation) is what subscribes the
   // Router to popstate; the harness never runs it, so Back would be ignored.
@@ -1182,5 +1196,49 @@ describe('Dashboard headline figures, merged into Trading performance', () => {
     expect(byLabel.get('Realised today')!.value()).toBe(-40);
     expect(byLabel.get('Realised today')!.sub()).toContain('3 closed · 1W 2L');
     expect(byLabel.get('Open trades')!.value()).toBe(2);
+  });
+});
+
+/* -- v207 -- a viewer reads the Dashboard and changes nothing ------------ */
+
+describe('Dashboard for a viewer (v207)', () => {
+  const columnKeys = (f: ComponentFixture<Dashboard>): string[] =>
+    (f.componentInstance as unknown as { columns: () => { key: string }[] })
+      .columns().map((c) => c.key);
+  const header = (el: HTMLElement) => el.querySelector('sb-page header.bar .actions')!;
+
+  it('gives the admin Close all, Refresh and the row-actions column (unchanged)', async () => {
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(header(el).querySelector('[data-action="close-all"]')).not.toBeNull();
+    expect(el.querySelector('.positions-panel sb-market-refresh')).not.toBeNull();
+    expect(columnKeys(fixture)).toContain('actions');
+  });
+
+  it('leaves a viewer an empty header slot: no Close all, no menu', async () => {
+    role = 'viewer';
+    const fixture = await loaded({ lifecycle: { ACTIVE: 2, PARTIAL: 1 } as never });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(header(el).children).toHaveLength(0);
+    expect(el.querySelector('[data-action="close-all"]')).toBeNull();
+  });
+
+  it('keeps the positions help for a viewer and drops only Refresh', async () => {
+    role = 'viewer';
+    const el = (await loaded()).nativeElement as HTMLElement;
+    expect(el.querySelector('.positions-panel sb-market-refresh')).toBeNull();
+    expect(el.querySelector('.positions-panel sb-hint.lifecycle-hint')).not.toBeNull();
+  });
+
+  it('drops only the actions column for a viewer: every read column stays', async () => {
+    const adminKeys = columnKeys(await loaded());
+    role = 'viewer';
+    expect(columnKeys(await loaded())).toEqual(adminKeys.filter((key) => key !== 'actions'));
+  });
+
+  it('keeps the header and the dialogs out of the scope bar for a viewer too', async () => {
+    role = 'viewer';
+    const el = (await loaded()).nativeElement as HTMLElement;
+    expect(el.querySelector('sb-page div.scope.slot')!.children).toHaveLength(0);
   });
 });

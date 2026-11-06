@@ -12,6 +12,8 @@ import {
 } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, Routes, provideRouter } from '@angular/router';
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,6 +29,7 @@ import { DENSITY_STORAGE } from '../ui/density.service';
 import { provideMotion } from '../ui/motion/motion.service';
 import { NAV_ENTRIES } from './nav';
 import { Shell } from './shell';
+import { SessionStore } from '../stores/session.store';
 
 /** Same fake as `chart.store.spec.ts`/`connection.store.spec.ts` -- a counter
  *  per event name, bumped by name rather than replayed as an object, matching
@@ -78,6 +81,14 @@ const fakeLiveValues = () => ({ stalled: signal(false), status: signal(null) });
 @Component({ template: '' })
 class Blank {}
 
+/** The shell as the admin sees it, unless a test already gave the session a
+ *  role (v207). Called late so a test can still override providers first. */
+function createShell() {
+  const session = unprotected(TestBed.inject(SessionStore));
+  if (!session.role()) patchState(session, { status: 'authenticated', username: 'admin', role: 'admin' });
+  return TestBed.createComponent(Shell);
+}
+
 /** The providers every v195 shell describe uses: the same fakes as the
  *  `shell navigation` block, with a route table the breadcrumb can read. */
 function shellProviders(routes: Routes = []) {
@@ -125,7 +136,7 @@ describe('shell navigation', () => {
   });
 
   it('runs the tape as a strip under the top bar, not inside it (v195 Phase 3)', () => {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -142,7 +153,7 @@ describe('shell navigation', () => {
 
   it('keeps no clock in the bar: times live in the dock and the strip', () => {
     // v203 Retired 'shows the date and time from the ambient clock' (spec v202 D5).
-    const f = TestBed.createComponent(Shell);
+    const f = createShell();
     f.detectChanges();
     expect((f.nativeElement as HTMLElement).querySelector('header.topbar .clock')).toBeNull();
     expect(readSource('src/app/shell/shell.css').replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/\.clock\b/);
@@ -151,7 +162,7 @@ describe('shell navigation', () => {
   });
 
   it('renders the killswitch as a full-width strip below the bar, only when engaged', () => {
-    const f = TestBed.createComponent(Shell);
+    const f = createShell();
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
     expect(el.querySelector('.killswitch-strip')).toBeNull();
@@ -170,7 +181,7 @@ describe('shell navigation', () => {
   });
 
   it('shows unknown shell state after a fresh failed read, with a stale observation', () => {
-    const f = TestBed.createComponent(Shell);
+    const f = createShell();
     f.detectChanges();
     const http = TestBed.inject(HttpTestingController);
     const ok = { state: 'ok', checked_at: '2026-10-28T00:00:00+00:00', reason: null };
@@ -191,7 +202,7 @@ describe('shell navigation', () => {
   });
 
   it('hangs the scan progress from the top bar, out of the flow (v195 Phase 3)', () => {
-    const f = TestBed.createComponent(Shell);
+    const f = createShell();
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
 
@@ -212,7 +223,7 @@ describe('shell navigation', () => {
    * glow layer (v168 §3 #10) is gone, and the routed host is a plain div:
    * the route-entrance directive and its .sb-entering class are retired. */
   it('paints no ambient layer and routes into a plain host (v195 §1.2)', () => {
-    const f = TestBed.createComponent(Shell);
+    const f = createShell();
     f.detectChanges();
     const shell = (f.nativeElement as HTMLElement).querySelector('.shell') as HTMLElement;
 
@@ -240,7 +251,7 @@ describe('shell navigation', () => {
     // regression-tested in `tape.store.spec.ts`, where the effect actually
     // lives. Asserting an `events.emit('scan')` here would be tautological:
     // `tapeStub.load` is already satisfied by construction before any emit.
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     fixture.detectChanges();
     expect(tapeStub.load).toHaveBeenCalledTimes(1);
   });
@@ -248,7 +259,7 @@ describe('shell navigation', () => {
   it('shows an accessible, non-interactive overlay inside the pending workspace', () => {
     const routeLoading = { visible: signal(false), label: signal('Loading Trades') };
     TestBed.overrideProvider(RouteLoadingService, { useValue: routeLoading });
-    const f = TestBed.createComponent(Shell);
+    const f = createShell();
     f.detectChanges();
     routeLoading.visible.set(true);
     f.detectChanges();
@@ -258,14 +269,14 @@ describe('shell navigation', () => {
     expect(workspace.querySelector('.route-loading-overlay')).not.toBeNull();
   });
   it('keeps the work destinations and System as two named lists', () => {
-    const f = TestBed.createComponent(Shell);
+    const f = createShell();
     f.detectChanges();
     const lists = (f.nativeElement as HTMLElement).querySelectorAll('nav.rail ul.nav[aria-label]');
     expect([...lists].map((ul) => ul.getAttribute('aria-label'))).toEqual(['Destinations', 'System']);
   });
 
   it('cycles the text-size control in the profile menu through 90/100/110/125 and wraps back to 90', () => {
-    const f = TestBed.createComponent(Shell);
+    const f = createShell();
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
     // Scoped to sb-profile-menu -- the sidebar mark has its own `.avatar` image.
@@ -307,7 +318,7 @@ describe('shell navigation', () => {
   });
 
   it('keeps the ui and bot versions in a hint at the foot of the rail', async () => {
-    const f = TestBed.createComponent(Shell);
+    const f = createShell();
     f.detectChanges();
     await f.whenStable();
     const el = f.nativeElement as HTMLElement;
@@ -341,7 +352,7 @@ describe('shell navigation', () => {
   });
 
   it('renders the brand as the mark alone, named for assistive tech and labelled on focus', () => {
-    const f = TestBed.createComponent(Shell);
+    const f = createShell();
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
     const brand = el.querySelector('nav.rail > a.rail-brand') as HTMLAnchorElement;
@@ -352,7 +363,7 @@ describe('shell navigation', () => {
   });
 
   it('the brand mark links back to the Dashboard', () => {
-    const f = TestBed.createComponent(Shell);
+    const f = createShell();
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
     const brand = el.querySelector('a.rail-brand') as HTMLAnchorElement;
@@ -420,13 +431,13 @@ describe('shell motion preference (v168 §1)', () => {
   });
 
   it('keeps <html data-motion> pending until preferences load', async () => {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     await settle(fixture);
     expect(html.dataset['motion']).toBe('pending');
   });
 
   it('defaults to on once preferences load without a stored mode', async () => {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     await settle(fixture);
     flushPreferences({});
     await settle(fixture);
@@ -434,7 +445,7 @@ describe('shell motion preference (v168 §1)', () => {
   });
 
   it('restores a stored mode onto <html>', async () => {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     await settle(fixture);
     flushPreferences({ 'shell.motion': 'reduced' });
     await settle(fixture);
@@ -442,7 +453,7 @@ describe('shell motion preference (v168 §1)', () => {
   });
 
   it('falls back to on for an unknown stored value', async () => {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     await settle(fixture);
     flushPreferences({ 'shell.motion': 'sparkly' });
     await settle(fixture);
@@ -450,7 +461,7 @@ describe('shell motion preference (v168 §1)', () => {
   });
 
   it('writes shell.motion and data-motion when the control is used', async () => {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     await settle(fixture);
     flushPreferences({});
     await settle(fixture);
@@ -530,7 +541,7 @@ describe('shell labelled rail (v202 §3)', () => {
   });
 
   async function mount() {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -551,6 +562,37 @@ describe('shell labelled rail (v202 §3)', () => {
     expect(labels(lists[1])).toEqual(['System']);
     expect(lists[1].nextElementSibling!.matches('.rail-version')).toBe(true);
     expect(rail.querySelector('.rail-divider, sb-nav-indicator, .nav-group-label')).toBeNull();
+  });
+
+  const asViewer = (name = 'viewer1') =>
+    patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: name, role: 'viewer' });
+
+  it('drops the System foot list for a viewer and keeps the version hint at the foot (v207)', async () => {
+    asViewer();
+    const { el } = await mount();
+    const rail = el.querySelector('nav.rail')!;
+    const lists = [...rail.querySelectorAll(':scope > ul.nav')];
+    expect(lists.map((ul) => ul.className)).toEqual(['nav rail-work']);
+    expect([...lists[0].querySelectorAll('a.rail-link')].map(labelOf))
+      .toEqual(['Dashboard', 'Watchlist', 'Trades', 'Risk', 'Insights']);
+    expect(rail.querySelector('a[href="/system"]')).toBeNull();
+    const version = lists[0].nextElementSibling as HTMLElement;
+    expect(version.matches('.rail-version')).toBe(true);
+    expect(version.style.marginTop).toBe('auto');
+  });
+
+  it('shows the read-only badge first in the status cluster for a viewer only (v207)', async () => {
+    asViewer('viewer1');
+    const { el } = await mount();
+    const cluster = el.querySelector('.status-cluster')!;
+    expect(cluster.firstElementChild!.tagName.toLowerCase()).toBe('sb-read-only-badge');
+    expect(cluster.querySelector('sb-read-only-badge')!.textContent).toContain('Read-only · viewer1');
+    expect(cluster.querySelector('sb-killswitch-chip')).not.toBeNull();
+  });
+
+  it('shows no badge to the admin (v207)', async () => {
+    const { el } = await mount();
+    expect(el.querySelector('sb-read-only-badge')).toBeNull();
   });
 
   it('draws each entry as its icon over its visible label, with no hint and no title', async () => {
@@ -620,7 +662,7 @@ describe('shell top bar (v195 Phase 3, correction 9)', () => {
   });
 
   it('leads the bar with the wordmark, the divider and the breadcrumb, and renders no heading of its own', async () => {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     fixture.detectChanges();
     await TestBed.inject(Router).navigateByUrl('/trades');
     fixture.detectChanges();
@@ -671,7 +713,7 @@ describe('shell top-bar cluster (v195 Phase 3)', () => {
   });
 
   async function mount() {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     fixture.detectChanges();
     await fixture.whenStable();
     return { fixture, el: fixture.nativeElement as HTMLElement, backend: TestBed.inject(HttpTestingController) };
@@ -776,7 +818,7 @@ describe('shell on a phone (v195 Phase 3)', () => {
   });
 
   async function mount() {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -878,7 +920,7 @@ describe('shell above phone width (v195 Phase 3)', () => {
   });
 
   it('renders no tab bar, no More sheet and no phone search icon', () => {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('sb-phone-tab-bar')).toBeNull();
@@ -904,7 +946,7 @@ describe('shell command palette (v195 §3.1)', () => {
   });
 
   async function mount() {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -1031,7 +1073,7 @@ describe('section tabs in the shell (v202 §1)', () => {
   }
 
   async function at(url: string): Promise<HTMLElement> {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     fixture.detectChanges();
     await go(fixture, url);
     return fixture.nativeElement as HTMLElement;
@@ -1058,7 +1100,7 @@ describe('section tabs in the shell (v202 §1)', () => {
   });
 
   it('moves the current tab when the URL moves to another section, and drops the tabs off it', async () => {
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     await go(fixture, '/trades');
@@ -1104,7 +1146,7 @@ describe('shell live dock (v203)', () => {
 
   async function mount(url: string) {
     await TestBed.inject(Router).navigateByUrl(url);
-    const fixture = TestBed.createComponent(Shell);
+    const fixture = createShell();
     await settle(fixture);
     const backend = TestBed.inject(HttpTestingController);
     for (const request of backend.match((r) => r.url.endsWith('/system/preferences'))) request.flush({ preferences: {} });
@@ -1247,7 +1289,7 @@ describe('shell top bar (v203, spec v202 §3)', () => {
   });
 
   function render(): HTMLElement {
-    const f = TestBed.createComponent(Shell);
+    const f = createShell();
     f.detectChanges();
     return f.nativeElement as HTMLElement;
   }

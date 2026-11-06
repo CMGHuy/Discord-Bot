@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Preferences } from '../../api/models';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { ViewportService } from '../../ui/breakpoints';
-import { DockState } from './dock-state';
+import { DockState, pathOf } from './dock-state';
 import { DOCK_PREF_KEY } from './live-state';
 
 @Component({ template: '' })
@@ -119,5 +119,29 @@ describe('DockState (v203)', () => {
     narrow.set(false);
     TestBed.tick();
     expect(dock.sheetOpen()).toBe(false);
+  });
+
+  it('keeps the sheet open through a background same-URL refresh', async () => {
+    narrow.set(true);
+    await go('/insights/analytics?tab=tuning');
+    dock.openSheet();
+    // RouteRefreshService's background refresh: the same URL, reloaded.
+    await TestBed.inject(Router).navigateByUrl('/insights/analytics?tab=tuning', { onSameUrlNavigation: 'reload', replaceUrl: true });
+    expect(dock.sheetOpen()).toBe(true);
+  });
+
+  it('keeps the sheet open when only query params or the fragment change', async () => {
+    narrow.set(true);
+    await go('/trades/calendar');
+    dock.openSheet();
+    await go('/trades/calendar?month=2026-11');
+    await go('/trades/calendar?month=2026-11#day');
+    expect(dock.sheetOpen()).toBe(true);
+    await go('/trades');            // a different page still closes it
+    expect(dock.sheetOpen()).toBe(false);
+  });
+
+  it.each([['/a?b=1#c', '/a'], ['/a#c', '/a'], ['/a', '/a'], ['', '']])('pathOf(%s) is %s', (url, path) => {
+    expect(pathOf(url)).toBe(path);
   });
 });

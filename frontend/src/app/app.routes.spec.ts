@@ -9,6 +9,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { routes } from './app.routes';
+import { adminGuard } from './auth/admin.guard';
 import { RESOLVER_ROUTE_DATA } from './routing/route-metadata';
 import { authGuard } from './shell/auth.guard';
 import { SessionStore } from './stores/session.store';
@@ -26,13 +27,13 @@ installMatchMediaPolyfill();
  * these tests want to set directly.
  */
 
-function configure(authenticated: boolean) {
+function configure(authenticated: boolean, isAdmin = authenticated) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       provideRouter(routes, withComponentInputBinding()),
       provideLocationMocks(),
-      { provide: SessionStore, useValue: { isAuthenticated: () => authenticated } },
+      { provide: SessionStore, useValue: { isAuthenticated: () => authenticated, isAdmin: () => isAdmin } },
     ],
   });
 }
@@ -135,7 +136,7 @@ describe('route data readiness contract', () => {
   it('keeps every authenticated workspace lazy, scoped, and resolver-backed', async () => {
     for (const path of expected) {
       const topLevel = routes.find((route) => route.path === path);
-      expect(topLevel?.canMatch).toEqual([authGuard]);
+      expect(topLevel?.canMatch).toEqual(path.startsWith('system') ? [authGuard, adminGuard] : [authGuard]);
       expect(topLevel?.loadChildren).toBeTypeOf('function');
 
       const children = await topLevel!.loadChildren!() as Routes;
@@ -212,7 +213,7 @@ function configureStubbed() {
       provideZonelessChangeDetection(),
       provideRouter(stubbed()),
       provideLocationMocks(),
-      { provide: SessionStore, useValue: { isAuthenticated: () => true } },
+      { provide: SessionStore, useValue: { isAuthenticated: () => true, isAdmin: () => true } },
     ],
   });
 }
@@ -277,7 +278,8 @@ describe('v202 section routes and redirects', () => {
     const route = routes.find((r) => r.path === path);
     expect(route?.title).toBe(title);
     expect(route?.data?.['subtitle']).toBe(subtitle);
-    expect(route?.canMatch).toEqual([authGuard]);
+    // v207: the System routes are admin-only; every other section is authGuard alone.
+    expect(route?.canMatch).toEqual(path.startsWith('system') ? [authGuard, adminGuard] : [authGuard]);
   });
 
   it('declares every section before the route that would swallow it', () => {
@@ -293,5 +295,33 @@ describe('v202 section routes and redirects', () => {
       expect(route?.redirectTo, old).toBeTruthy();
       expect(route?.loadChildren, old).toBeUndefined();
     }
+  });
+});
+
+describe('routing, viewer (v207)', () => {
+  beforeEach(() => configure(true, false));
+
+  it.each(['/system', '/system?tab=users', '/system?tab=settings', '/system/versions', '/system/anything'])(
+    'sends %s to the dashboard', async (url) => {
+      await RouterTestingHarness.create(url);
+      expect(TestBed.inject(Router).url).toBe('/dashboard');
+    },
+  );
+
+  it.each(['/dashboard', '/trades', '/trades/calendar', '/watchlist', '/risk', '/insights/analytics'])(
+    'still mounts %s', async (url) => {
+      const harness = await RouterTestingHarness.create(url);
+      expect(TestBed.inject(Router).url).toBe(url);
+      expect(harness.routeNativeElement).not.toBeNull();
+    },
+  );
+});
+
+describe('route guards (v207)', () => {
+  it('puts adminGuard after authGuard on every system route, and on nothing else', () => {
+    const system = routes.filter((route) => route.path?.startsWith('system'));
+    expect(system.map((route) => route.path)).toEqual(['system/versions', 'system']);
+    expect(routes.filter((route) => route.canMatch?.includes(adminGuard))).toEqual(system);
+    for (const route of system) expect(route.canMatch).toEqual([authGuard, adminGuard]);
   });
 });
