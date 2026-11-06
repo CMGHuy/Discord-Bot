@@ -33,7 +33,8 @@ import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { runnerCellInputs } from '../../ui/runner-cell';
 import { StatusCell, partialOpenTitle } from '../../ui/status-cell';
 import { fxMissingText } from '../analytics/scope-bar';
-import { LEG_HINT_TEXT, legLabel } from '../trades/leg-label';
+import { legExplanation, legLabel } from '../trades/leg-label';
+import { LegName } from '../trades/leg-name';
 import {
   readTableColumns,
   readTableDensity,
@@ -177,7 +178,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     Magnitude, Panel, PositionsTable, RowActions, IfAdminDirective, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, Flash,
     Hint, MarketValue, MarketRefresh, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
-    RecentActivity, MarketMovers, TradeDrawer, Page,
+    RecentActivity, MarketMovers, TradeDrawer, Page, LegName,
   ],
   // TradesStore, not DashboardStore -- that one is provided at the route
   // level (dashboard.routes.ts). This instance is this page's own, for the
@@ -444,7 +445,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
       <!-- v194 B3: every leg says which part of the plan it is; the hint
            sits outside the link (a button cannot nest in an anchor). -->
       @if (legLabel(row); as leg) {
-        <span class="leg">{{ leg }}<sb-hint [text]="legHint" [label]="'About ' + leg" align="left" /></span>
+        <span class="leg"><sb-leg-name [label]="leg" [help]="legHelp(row)" /></span>
       }
     </ng-template>
 
@@ -1033,7 +1034,8 @@ export class Dashboard {
   /** v194 B3: "Leg N of M[ · reason]" for a leg row, null otherwise. */
   protected readonly legLabel = legLabel;
   /** v194 A4: the chips count each realised leg (`dashboard.py` `_realized_parts`). */
-  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
+  protected readonly legNote = 'On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
+  protected readonly legHelp = (row: TradeRow): string => legExplanation(row, this.legNote);
 
   /** v194 B7: the main ledger's rows left out of the money figures. */
   protected readonly fxMissing = computed(() => this.store.data()?.fx_missing_count ?? 0);

@@ -126,7 +126,7 @@ describe('DayTradeCard', () => {
     expect(text(el, '.stats')).toBe('Held 2d 5h 30m · Shares 10 · MFE +2.40R · MAE −0.30R');
     const leg = await render({ ...TRADE, shares: 3.3333, leg_index: 1, leg_total: 3 });
     expect(text(leg, '.stats')).toContain('Shares 3.33');
-    expect(text(leg, '.leg')).toBe('Leg 2 of 3');
+    expect(text(leg, '.leg .name')).toBe('Leg 2 of 3');
   });
 
   it('renders every missing figure as a dash, never 0', async () => {
@@ -189,20 +189,21 @@ describe('DayTradeCard leg label (v194 B3)', () => {
 
   it('names the leg once, leaving the reason to the chip beside it', () => {
     const el = card({ ...TRADE, leg_index: 1, leg_total: 2 });
-    expect(el.querySelector('.leg')!.textContent!.trim()).toBe('Leg 2 of 2');
+    expect(el.querySelector('.leg .name')!.textContent!.trim()).toBe('Leg 2 of 2');
   });
 
-  it('explains leg rows with a hint that says how this page counts them (A4 audit)', () => {
+  it('explains the leg in a tooltip on its name, saying how this page counts legs (A4 audit)', () => {
     const el = card({ ...TRADE, leg_index: 0, leg_total: 2 });
-    const hint = el.querySelector('.leg + sb-hint')!;
-    expect(hint.querySelector('button')!.getAttribute('aria-label')).toBe('About leg rows');
-    expect(hint.querySelector('[role="tooltip"]')!.textContent).toContain(LEG_HINT_TEXT);
-    expect(hint.querySelector('[role="tooltip"]')!.textContent).toContain('count each realised leg as its own trade');
+    expect(el.querySelector('.leg button')).toBeNull();   // no separate info icon
+    const tip = el.querySelector('.leg [role="tooltip"]')!.textContent!;
+    expect(tip).toContain('Leg 1 of 2 is the first part of the plan to close');
+    expect(tip).toContain(LEG_HINT_TEXT);
+    expect(tip).toContain('count each realised leg as its own trade');
   });
 
-  it('shows neither label nor leg hint for a trade that never scaled out', () => {
+  it('shows neither label nor leg tooltip for a trade that never scaled out', () => {
     const el = card(TRADE);
     expect(el.querySelector('.leg')).toBeNull();
-    expect(el.querySelector('.leg + sb-hint')).toBeNull();
+    expect(el.querySelector('sb-leg-name')).toBeNull();
   });
 });

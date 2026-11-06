@@ -412,8 +412,9 @@ describe('Calendar day drawer', () => {
 
     const rows = el(fixture).querySelectorAll('.day-row');
     expect(rows).toHaveLength(2);
-    expect(rows[0].querySelector('.leg')?.textContent).toContain('Leg 1 of 2');
-    expect(rows[1].querySelector('.leg')?.textContent).toContain('Leg 2 of 2');
+    expect(rows[0].querySelector('.leg .name')?.textContent).toContain('Leg 1 of 2');
+    expect(rows[1].querySelector('.leg .name')?.textContent).toContain('Leg 2 of 2');
+    expect(rows[0].querySelector('.leg button')).toBeNull();   // no info icon beside the label
     // A4 audit: the Calendar counts each realised leg as a trade, and says so.
     expect(rows[0].querySelector('sb-hint [role="tooltip"]')?.textContent).toContain('count each realised leg as its own trade');
   });

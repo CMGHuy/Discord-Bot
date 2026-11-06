@@ -1038,10 +1038,13 @@ describe('Dashboard — leg rows and missing FX rates (v194 B3, B7)', () => {
       tradeRow({ id: 'p1', leg_index: 1, leg_total: 2, leg_exit_reason: null }),
     ]);
     const legs = [...el.querySelectorAll('sb-positions-table .leg')];
-    expect(legs.map((n) => n.firstChild!.textContent!.trim())).toEqual([
+    expect(legs.map((n) => n.querySelector('.name')!.textContent!.trim())).toEqual([
       expect.stringMatching(/^Leg 1 of 2 · /),
       'Leg 2 of 2',
     ]);
+    // The explanation rides on the label itself: no info-icon button beside it.
+    expect(legs[0].querySelector('button')).toBeNull();
+    expect(legs[0].querySelector('sb-hint')!.textContent).toContain('Leg 1 of 2 is the first part of the plan to close');
     expect(legs[0].querySelector('sb-hint')!.textContent).toContain(LEG_HINT_TEXT);
     expect(legs[0].querySelector('sb-hint')!.textContent).toContain('count each realised leg as its own trade');   // A4 audit
     expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();

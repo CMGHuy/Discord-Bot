@@ -8,7 +8,6 @@ import { CalendarMetric, CalendarStore } from '../../stores/calendar.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
-import { Hint } from '../../ui/hint';
 import { IncompleteNote } from '../../ui/incomplete-note';
 import { MarketValue } from '../../ui/market-value';
 import { PnlBasis } from '../../ui/pnl-basis';
@@ -24,7 +23,8 @@ import { StatStrip } from '../../ui/stat-strip';
 import { cellValue, GridCell, localIsoDate, monthLabel, monthMatrix } from './calendar.helpers';
 import { fxMissingText } from '../analytics/scope-bar';
 import { PAPER_CAPTION, legsSampleNote } from './day/day-copy';
-import { LEG_HINT_TEXT, legLabel } from '../trades/leg-label';
+import { legExplanation, legLabel } from '../trades/leg-label';
+import { LegName } from '../trades/leg-name';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
 const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -36,7 +36,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Button, ControlRow, Drawer, Hint, Panel, Page, RouterLink, Select, StatStrip, StatTile, Async,
+    Button, ControlRow, Drawer, LegName, Panel, Page, RouterLink, Select, StatStrip, StatTile, Async,
     IncompleteNote, MarketValue, NgTemplateOutlet, PnlBasis, Spinner,
   ],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
@@ -361,7 +361,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
             <p class="meta">Opened {{ dateTime(trade.opened_at) }} · Closed {{ dateTime(trade.closed_at) }}</p>
             <p class="meta">
               @if (legLabel(trade); as leg) {
-                <span class="leg">{{ leg }}</span> <sb-hint [text]="legHint" label="About leg rows" /> ·
+                <span class="leg"><sb-leg-name [label]="leg" [help]="legHelp(trade)" /></span> ·
               }
               {{ trade.outcome }} · {{ rLabel(trade.r_multiple) }}
               @if (trade.mfe_r !== null) { · MFE {{ rLabel(trade.mfe_r) }} }
@@ -565,7 +565,8 @@ export class Calendar {
   /** v194 B3 -- the one leg name (shared with Trades and the Dashboard). */
   protected readonly legLabel = legLabel;
   /** v194 A4: the calendar counts each realised leg (`pnl_calendar` rows). */
-  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
+  protected readonly legHelp = (trade: CalendarTrade): string => legExplanation(trade,
+    'On this page win rate and N count each realised leg as its own trade; Analytics counts plans.');
 
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.totals.trade_count === 0 }),

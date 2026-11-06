@@ -1,6 +1,40 @@
 import { describe, expect, it } from 'vitest';
 
-import { LEG_HINT_TEXT, legLabel } from './leg-label';
+import { LEG_HINT_TEXT, legExplanation, legLabel } from './leg-label';
+
+describe('legExplanation', () => {
+  it('is empty for a trade that never scaled out', () => {
+    expect(legExplanation({ leg_index: 0, leg_total: 1, leg_exit_reason: 'tp1' }, 'note')).toBe('');
+  });
+
+  it('says which part closed, what its reason means, how P&L splits, then the page note', () => {
+    const text = legExplanation({ leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }, 'Page note.');
+    expect(text).toMatch(/^Leg 1 of 2 is the first part of the plan to close\. /);
+    expect(text).toContain('first target was reached');
+    expect(text).toContain(LEG_HINT_TEXT);
+    expect(text.endsWith('Page note.')).toBe(true);
+  });
+
+  it('explains the runner reasons, including that a T2 fill can equal the TP1 fill', () => {
+    const at = (reason: string) => legExplanation({ leg_index: 1, leg_total: 2, leg_exit_reason: reason });
+    expect(at('tp1_runner_tp2')).toContain('Leg 2 of 2 is the last part of the plan to close');
+    expect(at('tp1_runner_tp2')).toContain('can equal the TP1 fill');
+    expect(at('tp1_runner_be')).toContain('stop moved up to the entry price');
+    expect(at('giveback')).toContain('gave back too much of its best price');
+    expect(at('stop')).toContain('fell to the stop-loss');
+  });
+
+  it('names a middle leg by position and skips the reason sentence when none was recorded', () => {
+    const text = legExplanation({ leg_index: 1, leg_total: 3 });
+    expect(text).toContain('Leg 2 of 3 is part 2 of the plan to close.');
+    expect(text).toBe(`Leg 2 of 3 is part 2 of the plan to close. ${LEG_HINT_TEXT}`);
+  });
+
+  it('adds no reason sentence for an unmapped reason', () => {
+    expect(legExplanation({ leg_index: 1, leg_total: 2, leg_exit_reason: 'mystery' }))
+      .toBe(`Leg 2 of 2 is the last part of the plan to close. ${LEG_HINT_TEXT}`);
+  });
+});
 
 describe('legLabel (v194 B3)', () => {
   it('labels nothing for a trade that never scaled out', () => {

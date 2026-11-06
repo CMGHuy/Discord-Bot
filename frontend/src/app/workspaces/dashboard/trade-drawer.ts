@@ -7,7 +7,8 @@ import { CLOCK } from '../../ui/clock';
 import { ABSENT, dateTime, elapsedHours, held, money, num, pct, text } from '../../ui/format';
 import { Hint } from '../../ui/hint';
 import { Drawer } from '../../ui/layout';
-import { LEG_HINT_TEXT, legLabel } from '../trades/leg-label';
+import { legExplanation, legLabel } from '../trades/leg-label';
+import { LegName } from '../trades/leg-name';
 import { sideLabel } from '../trades/trade-figures';
 import { livePnlPct, liveUnrealizedAmount } from './dashboard.helpers';
 import { RowActions } from './row-actions';
@@ -117,7 +118,7 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
 @Component({
   selector: 'sb-trade-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Drawer, Hint, RowActions, RouterLink, IfAdminDirective],
+  imports: [Drawer, Hint, LegName, RowActions, RouterLink, IfAdminDirective],
   template: `
     <sb-drawer [open]="true" [heading]="row().ticker" (closed)="closed.emit()">
       <span drawer-header class="paper-marker-row">
@@ -127,10 +128,14 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
       <dl class="fields">
         @for (item of fields(); track item.key) {
           <div class="field" [attr.data-field]="item.key">
-            <dt>{{ item.label }}@if (item.key === 'leg') { <sb-hint [text]="legHint" label="About leg rows" align="left" /> }</dt>
+            <dt>{{ item.label }}</dt>
             <dd [class.num]="item.numeric" [class.pos]="item.tone === 'pos'" [class.neg]="item.tone === 'neg'"
                 [class.long]="item.key === 'direction' && item.value.toLowerCase() === 'long'"
-                [class.short]="item.key === 'direction' && item.value.toLowerCase() === 'short'">{{ item.value }}</dd>
+                [class.short]="item.key === 'direction' && item.value.toLowerCase() === 'short'">@if (item.key === 'leg') {
+                <sb-leg-name [label]="item.value" [help]="legHelp()" />
+              } @else {
+                {{ item.value }}
+              }</dd>
           </div>
         }
       </dl>
@@ -210,7 +215,8 @@ export class TradeDrawer {
   protected readonly paperMarker = PAPER_MARKER;
   protected readonly paperHint = PAPER_HINT;
   /** v194 A4: the Dashboard chips count each realised leg. */
-  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
+  protected readonly legHelp = computed(() => legExplanation(this.row(),
+    'On this page win rate and N count each realised leg as its own trade; Analytics counts plans.'));
   protected readonly fields = computed(() =>
     tradeDrawerFields(this.row(), this.connection.currency(), this.now()));
 }
