@@ -16,6 +16,11 @@ import { dockDefaultOpen, readDockOpen, writeDockOpen } from './live-state';
  * after a failed one, the per-page default applies. Below 1024 px the dock
  * never docks; it opens as a sheet.
  */
+/** A router URL without its query string and fragment. */
+export function pathOf(url: string): string {
+  return url.split(/[?#]/, 1)[0];
+}
+
 @Injectable({ providedIn: 'root' })
 export class DockState {
   private readonly router = inject(Router);
@@ -38,9 +43,18 @@ export class DockState {
   readonly sheetOpen = this.sheet.asReadonly();
 
   constructor() {
+    // Close on leaving the page, not on every NavigationEnd: RouteRefreshService
+    // re-navigates to the same URL on each background data refresh, and a
+    // store may merge query params, which shut a sheet the user had just
+    // opened (layout audit, 2026-11-06: sheet-not-opened on slow tabs).
+    let path = pathOf(this.router.url);
     this.router.events
       .pipe(filter((event) => event instanceof NavigationEnd), takeUntilDestroyed())
-      .subscribe(() => this.sheet.set(false));
+      .subscribe((event) => {
+        const next = pathOf(event.urlAfterRedirects);
+        if (next !== path) this.sheet.set(false);
+        path = next;
+      });
     effect(() => {
       if (this.docked()) untracked(() => this.sheet.set(false));
     });
