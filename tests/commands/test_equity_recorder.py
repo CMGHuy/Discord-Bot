@@ -220,3 +220,23 @@ def test_no_open_positions_and_no_prices_still_writes_a_row(monkeypatch, repo, a
     assert equity_recorder.record_sample({}, now=IN_SESSION, repo=repo) is True
     (row,) = repo.list_rows()
     assert row["open_n"] == 0
+
+
+def test_the_recorder_writes_open_notional_with_shorts_counted_positively(
+        monkeypatch, repo, account):
+    _patch_book(monkeypatch, [_trade("t1", "AAPL"),
+                              _trade("t2", "MSFT", shares=5.0, entry=200.0, direction="bearish"),
+                              _trade("t3", "NVDA")])                      # unpriced
+    assert equity_recorder.record_sample({"AAPL": 110.0, "MSFT": 190.0},
+                                         now=IN_SESSION, repo=repo) is True
+    (row,) = repo.list_rows()
+    assert (row["unrealized_pnl"], row["open_n"], row["skipped_n"]) == (150.0, 2, 1)
+    assert (row["open_notional"], row["open_notional_approx"]) == (2050.0, False)   # 1100 + 950
+
+
+def test_a_flat_book_records_zero_open_notional(monkeypatch, repo, account):
+    _patch_book(monkeypatch, [])
+    assert equity_recorder.record_sample({}, now=IN_SESSION, repo=repo) is True
+    (row,) = repo.list_rows()
+    assert (row["open_notional"], row["open_notional_approx"]) == (0.0, False)
+    assert row["equity"] == BASE

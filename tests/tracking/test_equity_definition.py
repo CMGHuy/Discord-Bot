@@ -181,7 +181,8 @@ def test_snapshot_realizes_the_tp1_leg_and_prices_only_the_runner():
                               Decimal("1000"))
     assert snap == equity.EquitySnapshot(realized_balance=Decimal("1050.0"),
                                          unrealized_pnl=Decimal("60.00"),
-                                         equity=Decimal("1110.00"), open_n=1, skipped_n=0)
+                                         equity=Decimal("1110.00"), open_n=1, skipped_n=0,
+                                         open_notional=Decimal("560.0"))
 
 
 def test_mark_to_market_does_not_dip_at_tp1():
@@ -230,3 +231,53 @@ def test_plans_are_keyed_by_plan_id(monkeypatch):
 
     monkeypatch.setattr(PlanStore, "records", lambda self: [{"plan_id": "P1", "status": "ACTIVE"}])
     assert equity.load_plans_by_id() == {"P1": {"plan_id": "P1", "status": "ACTIVE"}}
+
+
+# --- v208: open notional and the session's trade P&L -------------------------
+
+def _pos(ticker, direction, shares, entry):
+    return {"ticker": ticker, "direction": direction, "shares": shares, "entry": entry}
+
+
+def test_open_notional_counts_shorts_positively_and_skips_what_is_not_priced():
+    positions = [_pos("AAPL", "bullish", 10, 100.0), _pos("MSFT", "bearish", 5, 200.0),
+                 _pos("NVDA", "bullish", 3, 50.0),          # no valid price
+                 _pos("TSLA", "bullish", None, 10.0),       # unsized
+                 _pos("AMD", "bullish", 4, None)]           # no entry
+    prices = {"AAPL": 110.0, "MSFT": 195.0, "TSLA": 12.0, "AMD": 150.0, "NVDA": 0.0}
+    assert equity.open_notional_of(positions, prices) == Decimal("2075")    # 1100 + 975
+
+
+def test_open_notional_of_nothing_is_zero():
+    assert equity.open_notional_of([], {"AAPL": 1.0}) == Decimal("0")
+
+
+def test_snapshot_carries_the_open_notional_of_a_short():
+    trade = _trade("s1", direction="bearish", shares=5, entry=200.0)
+    snap = equity.snapshot_at([trade], {}, {"AAPL": 190.0}, _at("2026-08-03T16:00:00+00:00"),
+                              Decimal("1000"))
+    assert (snap.unrealized_pnl, snap.open_notional, snap.open_n) == (
+        Decimal("50"), Decimal("950"), 1)
+
+
+def test_the_snapshot_default_open_notional_is_zero():
+    snap = equity.EquitySnapshot(realized_balance=Decimal("1"), unrealized_pnl=Decimal("0"),
+                                 equity=Decimal("1"), open_n=0, skipped_n=0)
+    assert snap.open_notional == Decimal("0")
+
+
+T0, T1 = _at("2026-10-14T20:00:00+00:00"), _at("2026-10-15T20:00:00+00:00")
+
+
+def _leg(at, amount):
+    return equity.RealizedLeg(at=at, amount=Decimal(str(amount)), trade_id="t")
+
+
+def test_session_trade_pnl_is_legs_in_the_half_open_window_plus_the_unrealized_change():
+    legs = [_leg(T0, 100), _leg(_at("2026-10-15T15:00:00+00:00"), 50), _leg(T1, -20),
+            _leg(_at("2026-10-15T20:01:00+00:00"), 999)]
+    assert equity.session_trade_pnl(legs, T0, T1, Decimal("30"), Decimal("45")) == Decimal("45")
+
+
+def test_session_trade_pnl_with_no_trading_is_zero_whatever_the_balance():
+    assert equity.session_trade_pnl([], T0, T1, Decimal("12.5"), Decimal("12.5")) == Decimal("0")

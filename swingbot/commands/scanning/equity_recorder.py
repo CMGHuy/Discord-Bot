@@ -16,6 +16,8 @@ Rules (spec v172 § 2, Corrections 3 and 6):
   (feed outage), and the throttle does not advance;
 - no market-data call of its own; an unpriced or unsized position is
   counted in `skipped_n`, never priced at 0;
+- v208: live rows measure open_notional at this tick's prices and mark
+  open_notional_approx False. Backfill rows with re-derived notional mark it True.
 - never raises: a failure is logged once per process per exception type
   (later ones at DEBUG) and the sample skipped. A missed sample is a gap,
   never an invented value.
@@ -74,7 +76,8 @@ def _row(snapshot: equity.EquitySnapshot, now: datetime) -> dict:
     return {"at": now, "realized_balance": snapshot.realized_balance,
             "unrealized_pnl": snapshot.unrealized_pnl, "equity": snapshot.equity,
             "open_n": snapshot.open_n, "skipped_n": snapshot.skipped_n,
-            "source": "live", "kind": "point", "backfill_run": None}
+            "source": "live", "kind": "point", "backfill_run": None,
+            "open_notional": snapshot.open_notional, "open_notional_approx": False}
 
 
 def _record(live_prices: dict, now: datetime, repo: EquitySampleRepository) -> bool:

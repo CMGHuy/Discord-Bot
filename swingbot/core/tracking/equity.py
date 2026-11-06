@@ -15,6 +15,8 @@ chart and the Trades page cannot disagree.
 - **Unrealized:** `open_shares x (price - entry) x sign` per held position;
   a position with no size or no price is skipped and counted, never priced
   at 0.
+- **Open notional (v208):** Σ |open shares × price| over the priced positions.
+  This measures the capital at work across longs and shorts.
 - **Money:** `Decimal` throughout (`Decimal(str(x))`). Rounding to 2 dp
   happens once, in the repository write.
 """
@@ -146,6 +148,16 @@ def realized_balance_at(start: Decimal, legs: Sequence[RealizedLeg], at: datetim
     return start + sum((leg.amount for leg in legs if leg.at <= at), _ZERO)
 
 
+def session_trade_pnl(legs: list[RealizedLeg], prev_at: datetime, at: datetime,
+                      prev_unrealized: Decimal, unrealized: Decimal) -> Decimal:
+    """Bot · deployed numerator: legs in (prev_at, at] plus the unrealized change.
+
+    The calculation uses trade P&L alone, so base balance edits have no effect.
+    """
+    realized = sum((leg.amount for leg in legs if prev_at < leg.at <= at), _ZERO)
+    return realized + (unrealized - prev_unrealized)
+
+
 def starting_balance() -> Decimal:
     """The account's `base_balance` -- `balance` is derived from it."""
     from swingbot.core.planning.account import load_account_config
@@ -219,6 +231,7 @@ class EquitySnapshot:
     equity: Decimal
     open_n: int
     skipped_n: int
+    open_notional: Decimal = Decimal("0")
 
 
 def _price_of(prices: dict[str, float], ticker) -> float | None:
@@ -241,12 +254,28 @@ def _unrealized_total(positions: list[dict], prices: dict[str, float]) -> tuple[
     return total, counted, skipped
 
 
+def open_notional_of(positions: list[dict], prices: dict[str, float]) -> Decimal:
+    """Absolute notional of priced positions, with shorts counted positively.
+
+    Like unrealized P&L, amounts are unrounded and in the quote currency.
+    """
+    total = _ZERO
+    for position in positions:
+        shares = position.get("shares")
+        price = _price_of(prices, position.get("ticker"))
+        if unrealized_decimal(position.get("entry"), position.get("direction"), shares, price) is None:
+            continue
+        total += abs(to_decimal(shares) * to_decimal(price))
+    return total
+
+
 def snapshot_at(trades: list[dict], plans_by_id: dict, prices: dict[str, float],
                 at: datetime, start: Decimal) -> EquitySnapshot:
     """Equity at `at`: the realized walk to `at` plus every held position
     priced at `prices` (ticker -> price). Unrounded."""
     realized = realized_balance_at(start, realized_legs(trades), at)
-    unrealized, counted, skipped = _unrealized_total(
-        live_open_positions(trades, plans_by_id), prices)
+    positions = live_open_positions(trades, plans_by_id)
+    unrealized, counted, skipped = _unrealized_total(positions, prices)
     return EquitySnapshot(realized_balance=realized, unrealized_pnl=unrealized,
-                          equity=realized + unrealized, open_n=counted, skipped_n=skipped)
+                          equity=realized + unrealized, open_n=counted, skipped_n=skipped,
+                          open_notional=open_notional_of(positions, prices))
