@@ -164,20 +164,20 @@ class SnapshotWorker:
                                   timeout_s=admin_refresh.snapshot_mark_timeout_s(),
                                   now=self._clock())
         except Exception as exc:  # noqa: BLE001 - a lost spinner never stops a build
-            swallowed(log, "refresher.snapshot.mark", exc)
+            swallowed(log, "ops.refresher.snapshot.mark_set", exc)
 
     def _clear(self, key: str, error: str | None = None) -> None:
         try:
             self._marks_fn().clear([admin_refresh.snapshot_mark_key(key)], error=error,
                                    now=self._clock())
         except Exception as exc:  # noqa: BLE001
-            swallowed(log, "refresher.snapshot.mark", exc)
+            swallowed(log, "ops.refresher.snapshot.mark_clear", exc)
 
     def _announce(self) -> None:
         try:
             self._publish("market")
         except Exception as exc:  # noqa: BLE001 - a missed NOTIFY costs one stale screen
-            swallowed(log, "refresher.notify", exc)
+            swallowed(log, "ops.refresher.snapshot.notify", exc)
 
     def _take(self) -> list[str]:
         with self._lock:
@@ -205,7 +205,7 @@ class SnapshotWorker:
         if "exc" in box:
             exc = box["exc"]
             self._clear(key, error=_describe(exc))
-            swallowed(log, "refresher.snapshot", exc, level=logging.WARNING)
+            swallowed(log, "ops.refresher.snapshot.build", exc, level=logging.WARNING)
             return "error"
         self._clear(key)
         return "landed" if box.get("written") else "kept"
@@ -235,7 +235,7 @@ class SnapshotWorker:
             try:
                 self.run_batch(batch)
             except Exception as exc:  # noqa: BLE001 - the worker thread never dies
-                swallowed(log, "refresher.snapshot.worker", exc)
+                swallowed(log, "ops.refresher.snapshot.worker", exc)
                 with self._lock:  # never leave a key stuck as active
                     self._active.difference_update(batch)
 
@@ -285,7 +285,7 @@ def _trades_fingerprint() -> tuple | None:
             row = conn.execute(sa.text("SELECT count(*), max(updated_at) FROM trades")).one()
         return (row[0], row[1])
     except Exception as exc:  # noqa: BLE001 - an unknown fingerprint is never a change
-        swallowed(log, "refresher.snapshot.trades_fp", exc, level=logging.DEBUG)
+        swallowed(log, "ops.refresher.snapshot.trades_fp", exc, level=logging.DEBUG)
         return None
 
 
@@ -310,7 +310,7 @@ def _prune_months(now: datetime) -> None:
     try:
         admin_snapshot_repo().prune("calendar.pnl:", [admin_refresh.calendar_key(m) for m in months])
     except Exception as exc:  # noqa: BLE001 - retried next cycle
-        swallowed(log, "refresher.snapshot.prune", exc)
+        swallowed(log, "ops.refresher.snapshot.prune", exc)
         return
     _pruned_for = months
 
