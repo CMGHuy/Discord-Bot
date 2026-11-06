@@ -7,14 +7,15 @@ account close comes from the same daily candles as the Dashboard.
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from swingbot.core.market.session import US_MARKET_TZ
-from swingbot.core.tracking.equity import RealizedLeg, to_decimal
+from swingbot.core.market.session import US_MARKET_TZ, session_close
+from swingbot.core.tracking.equity import RealizedLeg, session_trade_pnl, to_decimal
 from swingbot.core.tracking.equity_candles import mtm_candles
 
 BREAK_TOLERANCE = Decimal("0.01")
+DEPLOYED_MIN_SHARE = 0.05
 _IndexDay = dict[str, tuple[float | None, bool]]
 
 
@@ -34,6 +35,24 @@ class AlignedDay:
         return self.span == 1 and not self.missing and not self.base_break and self.bot_ret is not None
 
 
+@dataclass(frozen=True)
+class Exposure:
+    pct: float | None
+    open_n: int
+    approx: bool
+
+
+@dataclass(frozen=True)
+class Deployed:
+    ret: float | None
+    clipped: bool
+    approx: bool
+    reason: str | None
+
+
+_MISSING_DEPLOYED = Deployed(None, False, False, "missing")
+
+
 def _ny_day(at: datetime) -> date:
     return at.astimezone(US_MARKET_TZ).date()
 
@@ -50,6 +69,97 @@ def _session_points(rows: list[dict], sessions: Sequence[date]) -> dict[date, li
     for group in points.values():
         group.sort(key=lambda row: (row["at"], row.get("id") or 0))
     return dict(points)
+
+
+def rows_by_session(rows: list[dict], sessions: Sequence[date]) -> dict[date, list[dict]]:
+    """Group point rows by New York session in timestamp and ID order."""
+    return _session_points(rows, sessions)
+
+
+def _close_at(day: date) -> datetime:
+    """Return the official session close as a UTC instant, including half days."""
+    return datetime.combine(day, session_close(day), US_MARKET_TZ).astimezone(timezone.utc)
+
+
+def _weights(points: list[dict], day: date) -> list[float]:
+    """Weight usable samples until the next sample or the official close."""
+    stamps = [row["at"] for row in points]
+    stamps.append(_close_at(day))
+    return [max(0.0, (end - start).total_seconds()) for start, end in zip(stamps, stamps[1:])]
+
+
+def _usable(points: list[dict]) -> list[dict]:
+    """Use only samples with recorded notional and positive equity."""
+    return [row for row in points if row.get("open_notional") is not None and row["equity"] > 0]
+
+
+def _approx(rows: list[dict]) -> bool:
+    """Carry the approximation flag from any contributing row."""
+    return any(row.get("open_notional_approx") for row in rows)
+
+
+def _exposure_day(day: date, points: list[dict]) -> Exposure:
+    samples = _usable(points)
+    open_n = max((row["open_n"] for row in points), default=0)
+    if not samples:
+        return Exposure(None, open_n, False)
+
+    shares = [row["open_notional"] / row["equity"] for row in samples]
+    weights = _weights(samples, day)
+    total = sum(weights)
+    weighted_sum = sum(share * weight for share, weight in zip(shares, weights))
+    pct = weighted_sum / total if total else sum(shares) / len(shares)
+    return Exposure(pct, open_n, _approx(samples))
+
+
+def exposure_by_session(by_day: dict[date, list[dict]]) -> dict[date, Exposure]:
+    """Measure time-weighted exposure, using the plain mean at zero duration."""
+    return {day: _exposure_day(day, points) for day, points in by_day.items()}
+
+
+def _peak_notional(rows: list[dict]) -> float | None:
+    """Use peak notional so brief intraday positions receive their full denominator."""
+    notionals = (row.get("open_notional") for row in rows)
+    return max((notional for notional in notionals if notional is not None), default=None)
+
+
+def _deployed_day(points: list[dict], prev: dict, legs: list[RealizedLeg]) -> Deployed:
+    """Divide trade P&L by peak notional. Base balance and cash are excluded from P&L."""
+    rows = [prev, *points]
+    approx = _approx(rows)
+    peak = _peak_notional(rows)
+    close = points[-1]
+    if peak is None:
+        return Deployed(None, False, approx, "missing")
+    if peak <= 0:
+        return Deployed(None, False, approx, "no_exposure")
+    if peak < DEPLOYED_MIN_SHARE * close["equity"]:
+        return Deployed(None, False, approx, "below_min")
+
+    pnl = session_trade_pnl(
+        legs, prev["at"], close["at"],
+        to_decimal(prev["unrealized_pnl"]), to_decimal(close["unrealized_pnl"]),
+    )
+    ret = float(pnl) / peak
+    if ret < -1.0:
+        return Deployed(-1.0, True, approx, None)
+    return Deployed(ret, False, approx, None)
+
+
+def deployed_returns(
+    by_day: dict[date, list[dict]], legs: list[RealizedLeg], sessions: Sequence[date],
+) -> dict[date, Deployed]:
+    """Measure each requested session against the last earlier session with rows."""
+    requested = set(sessions)
+    out = {}
+    prev = None
+    for day in sorted(requested | by_day.keys()):
+        points = by_day.get(day)
+        if day in requested:
+            out[day] = _deployed_day(points, prev, legs) if points and prev is not None else _MISSING_DEPLOYED
+        if points:
+            prev = points[-1]
+    return out
 
 
 def bot_session_closes(rows: list[dict], sessions: Sequence[date]) -> dict[date, float]:
