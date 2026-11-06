@@ -114,10 +114,14 @@ already sits on structure) are untouched.
      tick under L (`limit_strict_fill`). A bar that only touches L counts
      as a fill only in a disclosed sensitivity.
    - **Gap through L.** An open at or under L fills **at the open**.
-   - **Gap through the stop.** An open at or under the stop fills at the
-     open and is stopped at the open in the same bar, a realised loss of
-     more than 1R. It is **never** cancelled as a 0R scratch, because a
-     resting broker order would have filled. Today's live
+   - **Gap through the stop.** An open at or under the stop fills **at the
+     open**, and the stop sells at that same open. The realised result is
+     about 0R less frictions, not a loss of more than 1R. The original
+     wording said "more than 1R"; it was corrected 2026-11-06 because a
+     resting limit fills at the open, not at L. A sensitivity scores these
+     trades from L (pessimistic), disclosed and never gating. A gap through
+     the stop is **never** silently cancelled, because a resting broker
+     order would have filled; it carries `filled_stopped_gap`. Today's live
      `at_or_beyond_stop` cancel and fill-at-`trigger_price`
      (`plan_manager.py:1232-1249`) are changed **for this arm only**, so
      live, replay and the measurement agree. Out-of-scope plans keep
