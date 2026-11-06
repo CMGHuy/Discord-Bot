@@ -93,7 +93,7 @@ whether to set the knob live. A fail closes the rule for good.
 
 ## Review Focus
 
-1. **Gap open through the stop on a pending arm limit.** Replay books a loss below −1R at the open (`filled_stopped_gap`), live fills, persists the fill and closes it at the price in one step and posts `filled_stopped_gap` — never `cancelled_gap_through_stop`, never a 0R scratch. Owners: V212-4 (rule), V212-5 (replay), V212-6 (live).
+1. **Gap open through the stop on a pending arm limit.** Replay books a fill **at the open** and an exit at that same open: about 0R less frictions, with `outcome="loss"` because the stop fired, and `filled_stopped_gap`. The from-L reading lives only in the disclosed `gap_stop_r_from_limit` (spec rule 6, corrected 2026-11-06). Live fills, persists the fill, closes it at the price in one step and posts `filled_stopped_gap`. It is never `cancelled_gap_through_stop` and never silently dropped. Owners: V212-4 (rule), V212-5 (replay), V212-6 (live).
 2. **A bar that trades both L and TP1, and TP1 printed exactly at the level.** Both cancel (inclusive, conservative); a v131/v113 limit plan with the same bar still uses the strict `limit_cancelled`. Owners: V212-4, V212-5.
 3. **A level at exactly 2% from M, and a missing level (`acceptance_level is None`).** Exactly 2% is out of scope (`clamped_distance` returns None) and the plan is today's; a missing level is out of scope, never a crash. Owners: V212-2, V212-11.
 4. **A heat-at-fill cancel on a plan with a placeholder trade.** `cancelled_heat_at_fill` is in `PENDING_CANCEL_EVENTS`, so the placeholder is discarded and the follow-up posts; the enforcement test fails if any routing table misses either new event. Owners: V212-7, V212-8.
