@@ -124,7 +124,7 @@ failure. Baseline, and why counts/timings swing with machine load:
 **A failed test is fixed and re-run alone** (`testrun.py file …` or `pytest
 path::test`), never by re-running the whole suite. **No plan or merge runs the
 full suite locally; CI does. After pushing, watch the run and fix failing tests until green** (`working-conventions.md` § Pipeline watch). **Commit in several
-scoped commits, never one big one** (`working-conventions.md`). **Every feature, fix or change you implement ships its own unit tests in the same work** (backend and frontend alike, edge and empty cases included), run green before you call it done; the partner never has to ask (`working-conventions.md` § How the human partner wants work done).
+scoped commits, never one big one** (`working-conventions.md`). **Every feature, fix or change you implement updates the existing unit tests it affects and creates new ones for what is new, in the same work** (backend and frontend alike, edge and empty cases included), run green before you call it done; the partner never has to ask (`working-conventions.md` § How the human partner wants work done).
 
 **Tests live in suites** (`tests/suites.toml`; `testrun.py suite <name>`, `suites`
 lists). A new `tests/` directory joins exactly one suite in the same commit; a
