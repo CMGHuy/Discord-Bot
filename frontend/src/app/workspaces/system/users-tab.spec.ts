@@ -220,6 +220,7 @@ describe('System → Users dialogs (v207)', () => {
     expect(openDialog()).toBeNull();
     await press('[data-action="new-viewer"]');
     expect(openDialog()!.querySelector<HTMLInputElement>('input[name="username"]')!.value).toBe('');
+    expect(openDialog()!.querySelector<HTMLInputElement>('input[name="password"]')!.value).toBe('');
     expect(openDialog()!.querySelector('[role="alert"]')).toBeNull();
   });
 
