@@ -136,7 +136,7 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
       </dl>
       <div class="drawer-actions">
         <a class="full-trade sb-hit" [routerLink]="['/trades', row().id]">Open full trade →</a>
-        <sb-row-actions *ifAdmin [row]="row()" placement="up" (done)="actionDone.emit()" />
+        <sb-row-actions *sbIfAdmin [row]="row()" placement="up" (done)="actionDone.emit()" />
       </div>
     </sb-drawer>
   `,

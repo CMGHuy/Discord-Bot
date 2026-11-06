@@ -29,7 +29,7 @@ const CLOSEABLE = new Set(['ACTIVE', 'PARTIAL']);
     '(document:keydown.escape)': 'close()',
   },
   template: `
-    <ng-container *ifAdmin>
+    <ng-container *sbIfAdmin>
     <button sb-button variant="icon" type="button" class="trigger"
             [attr.aria-expanded]="open()" aria-haspopup="menu"
             aria-label="Row actions" (click)="toggle($event)">

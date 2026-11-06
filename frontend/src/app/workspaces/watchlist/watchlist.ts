@@ -348,7 +348,7 @@ export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answe
            (sb-page contract). v207: absent for a viewer; the slot is then
            empty and sb-page hides it. -->
       <sb-panel
-        *ifAdmin
+        *sbIfAdmin
         page-secondary
         class="add-panel"
         heading="Add tickers"

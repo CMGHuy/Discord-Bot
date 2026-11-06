@@ -12,7 +12,7 @@ import { IfAdminDirective } from './if-admin.directive';
 
 @Component({
   imports: [IfAdminDirective],
-  template: `<button *ifAdmin type="button" class="write">Close</button><p class="read">Book</p>`,
+  template: `<button *sbIfAdmin type="button" class="write">Close</button><p class="read">Book</p>`,
 })
 class Host {}
 

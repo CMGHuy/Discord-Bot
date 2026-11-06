@@ -76,7 +76,7 @@ export function visibleAnalyticsTabs(isAdmin: boolean): readonly Tab[] {
           @case ('execution') { <sb-execution-tab /> }
           @case ('edge') { <sb-edge-tab /> }
           @case ('pipeline') { <sb-pipeline-tab /> }
-          @case ('tuning') { <sb-tuning-tab *ifAdmin /> }
+          @case ('tuning') { <sb-tuning-tab *sbIfAdmin /> }
           @case ('partials') { <sb-partials-tab /> }
         }
       </div>

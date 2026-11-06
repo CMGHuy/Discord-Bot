@@ -7,7 +7,7 @@
  *
  * - `public` — sign-in/out; every principal may call it.
  * - `admin-route` — called only from System (route-guarded by `adminGuard`) and its stores.
- * - `if-admin` — its control renders inside `*ifAdmin`.
+ * - `if-admin` — its control renders inside `*sbIfAdmin`.
  * - `hidden-tab` — its only UI is the Analytics Tuning tab, which viewers never see.
  * - `store-no-save` — the store skips the call for viewers.
  */

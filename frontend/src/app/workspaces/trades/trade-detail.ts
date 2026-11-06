@@ -160,7 +160,7 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
       <!-- The trade's commands, at the header's right: Delete last, as
            danger-quiet, each behind the confirm below (Global Constraints:
            any delete lives here). None until the trade has loaded. -->
-      <div *ifAdmin page-actions class="page-actions">
+      <div *sbIfAdmin page-actions class="page-actions">
         @if (store.trade(); as trade) {
           <!-- v201: only while the price still moves (not on a closed trade). -->
           @if (refreshSymbols().length > 0) {

@@ -213,7 +213,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
            keeps the two apart. A dropdown, not one button: ACTIVE and PARTIAL
            are different enough states that closing only one of them is a
            real, distinct action. -->
-      <div *ifAdmin page-actions class="close-all-menu" #closeAllMenu>
+      <div *sbIfAdmin page-actions class="close-all-menu" #closeAllMenu>
             <button sb-button variant="danger-quiet" type="button"
                     data-action="close-all"
                     [attr.aria-expanded]="closeAllMenuOpen()"
@@ -307,7 +307,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
            per-trade sizing mode belongs on the detail view, where its source
            data is available. -->
       <!-- v201: Refresh asks the refresher for the live rows' prices. -->
-      <sb-market-refresh *ifAdmin panel-actions [symbols]="liveSymbols()" />
+      <sb-market-refresh *sbIfAdmin panel-actions [symbols]="liveSymbols()" />
       <sb-hint panel-actions class="lifecycle-hint" [xl]="true" align="left" glyph="?"
                label="About open positions">
         <span class="hint-heading">Plan lifecycle</span>

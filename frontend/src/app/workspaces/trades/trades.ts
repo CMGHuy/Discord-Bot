@@ -198,7 +198,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
         <span class="prices-meta">
           <sb-market-value [asOf]="store.meta()?.as_of ?? null" [refreshing]="store.meta()?.refreshing ?? false" [error]="store.meta()?.error ?? null">Prices</sb-market-value>
           <sb-incomplete-note [missing]="store.meta()?.missing_count ?? 0" />
-          <sb-market-refresh *ifAdmin [symbols]="liveSymbols()" />
+          <sb-market-refresh *sbIfAdmin [symbols]="liveSymbols()" />
         </span>
         @if (store.clearResult(); as message) {
           <!-- The count, not just "done": "cleared 0" and "cleared 40" are
@@ -215,14 +215,14 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
                step, never a retry the page makes on its own. -->
           <div class="clear-refusal" role="alert" data-testid="clear-refusal">
             <p>{{ refusal }}</p>
-            <button *ifAdmin sb-button variant="danger-quiet" type="button" (click)="forceOpen.set(true)">Reset anyway…</button>
+            <button *sbIfAdmin sb-button variant="danger-quiet" type="button" (click)="forceOpen.set(true)">Reset anyway…</button>
           </div>
         }
         @if (store.clearError(); as message) {
           <p class="command-error" role="alert">{{ message }}</p>
         }
         <button
-          *ifAdmin
+          *sbIfAdmin
           sb-button
           variant="danger-quiet"
           type="button"
@@ -232,7 +232,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
           Clear open
         </button>
         <button
-          *ifAdmin
+          *sbIfAdmin
           sb-button
           variant="danger-quiet"
           type="button"
