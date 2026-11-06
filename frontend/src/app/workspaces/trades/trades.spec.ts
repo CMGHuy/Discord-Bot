@@ -446,11 +446,12 @@ describe('Trades — the Plan cell for runners (v177)', () => {
     expect(cellText(runner.querySelector('.l2')!)).toBe('Trail 49.94 → 52.44 (+17.7% / +13.6%)');
   });
 
-  it('shows the closed runner\'s exit in the target slot', () => {
+  it('keeps the closed runner leg\'s own target and shows its exit after the icon', () => {
     const closed = renderRows(RUNNER_ROWS).querySelectorAll('sb-plan-cell')[2];
-    expect(cellText(closed)).toBe('60.67 → 52.44 / 61.85 (+13.6% - 1.9%) · 52.44');
-    expect(closed.querySelector('[title]')!.getAttribute('title'))
-      .toContain('Runner exit (trailing stop): 52.44');
+    // Target 58.33 is the leg's own; 52.44 is where it actually closed.
+    expect(cellText(closed)).toBe('60.67 → 58.33 / 61.85 (3.9% - 1.9%) · 52.44');
+    expect(closed.querySelector('.closed-icon')).not.toBeNull();
+    expect(closed.querySelector('[title]')!.getAttribute('title')).toContain('Target 58.33');
   });
 });
 

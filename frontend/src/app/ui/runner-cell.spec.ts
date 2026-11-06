@@ -87,6 +87,14 @@ describe('runnerCellInputs', () => {
     expect(rc.runnerExitPct!).toBeCloseTo(-3, 6);
   });
 
+  it('leaves each leg row of a scaled-out plan its own target, not the runner exit', () => {
+    // Leg 1 (TP1) and leg 2 (runner) must not both show the runner's exit.
+    for (const leg_index of [0, 1]) {
+      expect(runnerCellInputs(row({ runner_exit_price: 52.44, runner_exit_reason: 'tp1_runner_tp2',
+        leg_index, leg_total: 2 }))).toEqual(NO_RUNNER_CELL);
+    }
+  });
+
   it('carries a missing reason as null', () => {
     expect(runnerCellInputs(row({ runner_exit_price: 52.44 })).runnerExitReason).toBeNull();
   });
