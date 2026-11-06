@@ -5,7 +5,7 @@
 **Population:** `row_kind = trade`, `opened_at >= 2026-09-01`, `r_realized`
 not null. N = 392 (200 loss, 90 win, 76 scratch, 26 closed).
 
-These are live-book, in-sample, exploratory numbers. They motivated v211 and
+These are live-book, in-sample, exploratory numbers. They motivated v214 (first numbered v211, renumbered after a collision) and
 v212 and do not license any gate. The split at 2026-09-01 is the partner's
 window, chosen before the analysis. The pre-September rows are shown for
 contrast only.

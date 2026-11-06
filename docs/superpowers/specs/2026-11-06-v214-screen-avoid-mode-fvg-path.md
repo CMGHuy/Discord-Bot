@@ -1,4 +1,4 @@
-# v211 — Avoid mode for the idea check, and the overhead bearish-gap idea
+# v214 — Avoid mode for the idea check, and the overhead bearish-gap idea
 
 **Version:** ui 1.39.1 · bot 2.16.5
 **Bump:** none (a measurement instrument and one screen run; nothing live changes)
