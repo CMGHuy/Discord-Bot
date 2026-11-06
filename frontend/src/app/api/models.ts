@@ -558,6 +558,18 @@ export interface Dashboard {
    *  projected from the server's own DEFAULT_EXPIRY_BARS constant rather
    *  than the SPA hardcoding a second copy that could drift from it. */
   default_expiry_bars: number;
+  /** v217 (v205 P3-a): today's figures inside a wider-scope response (modes
+   *  `all` and `range` only), so the SPA needs no second `mode=today` call.
+   *  Missing on modes `active`/`today` and on a backend older than v217. */
+  today?: DashboardToday;
+}
+
+/** v217: `Dashboard.today` -- the same two blocks `GET /dashboard?mode=today`
+ *  answers, computed from the same trades. A day with no closes is a
+ *  measured zero (`n: 0`, amounts null), never a missing block. */
+export interface DashboardToday {
+  realized: Dashboard['realized'];
+  lifecycle: Dashboard['lifecycle'];
 }
 
 /** Date scopes: active is today plus open positions, today is the Berlin
