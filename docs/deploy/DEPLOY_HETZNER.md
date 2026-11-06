@@ -307,6 +307,17 @@ pages only read what it stored.
   until the `alembic upgrade head` step runs; it retries on the next cadence and
   recovers by itself.
 - Logs: `docker compose logs -f refresher`.
+- The refresher runs quotes, FX pairs, the v205 FX snap, then the v208
+  `benchmarks` step. It writes SPY, QQQ, ^IXIC and ^DJI daily bars to
+  `benchmark_bars` for the Analytics Benchmark tab. During regular trading,
+  it writes today's row every 5 minutes (`final = false`). After the close,
+  it rewrites adjusted history since the first equity sample (`final = true`).
+  The `benchmark_refresh` guard allows one completed refresh per session day,
+  and a refresher that was down catches up in one cycle. The step skips while
+  a scan runs, falls back to the `BENCHMARK_PROXY_SYMBOLS` ETFs when Yahoo is
+  blank, and logs `benchmarks step failed` (swallowed) until `v208_001` is
+  applied. With the refresher off, benchmark writes stop and the tab says
+  "Benchmarks not updating".
 - Health: the admin's `/system` page `refresher` line (`ok` / `stalled` / `off`).
 - Kill switch: `python3 scripts/ops/env_set.py ADMIN_REFRESHER off`, then
   `docker compose restart admin refresher`. The admin pages go back to
