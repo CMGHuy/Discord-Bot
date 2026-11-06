@@ -77,7 +77,9 @@ export function rrLine(f: PlanFigures): string | null {
     :host { display: block; min-width: 0; overflow-wrap: anywhere; }
     .table-scroll { max-width: 100%; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: var(--text-table); }
-    th, td { padding: var(--space-6); text-align: right; vertical-align: top; }
+    /* middle (ui-design.md): a row whose price note wraps at tablet width
+       kept its level and % cells pinned 10px high under vertical-align: top. */
+    th, td { padding: var(--space-6); text-align: right; vertical-align: middle; }
     th:first-child { text-align: left; color: var(--text-secondary); font-weight: 400; }
     p { margin-top: var(--space-10); font-size: var(--text-table); line-height: 1.6; }
     .resting-stop { color: var(--text); font-weight: 600; }
