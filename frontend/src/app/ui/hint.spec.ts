@@ -114,8 +114,15 @@ describe('Hint (v80 D4)', () => {
   it('gives the trigger a 44px target on phone and tablet', () => {
     const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 1023px\) \{([\s\S]*?)\n    \}/);
     expect(block).not.toBeNull();
-    expect(block![1]).toContain('min-width: var(--control-h)');
-    expect(block![1]).toContain('min-height: var(--control-h)');
+    expect(block![1]).toContain('.trigger::after');
+    expect(block![1]).toContain('position: absolute');
+    expect(block![1]).toContain('width: var(--control-h); height: var(--control-h)');
+  });
+
+  it('keeps the 44px target out of layout, so a hint never makes its row taller', () => {
+    const block = SOURCE.match(/@media \(pointer: coarse\), \(max-width: 1023px\) \{([\s\S]*?)\n    \}/);
+    expect(block![1]).not.toContain('min-height');
+    expect(block![1]).not.toContain('min-width');
   });
 
   describe('top layer (v194 A1)', () => {
