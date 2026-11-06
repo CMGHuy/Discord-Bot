@@ -96,11 +96,30 @@ already sits on structure) are untouched.
    `MIN_RISK_REWARD_RATIO` from L is dropped. That should not happen,
    because the entry only moves away from the target's opposite side. The
    drop count is reported.
-5. **Expiry.** 3 bars, frozen. The plan also cancels if TP1 trades before
-   the fill.
-6. **Fill.** The existing limit fill model: `exit_sim_v2._limit_entry_v2`
-   in replay, `plan_manager` limit handling (v187 D3) live. An open through
-   L fills at the open.
+5. **Expiry.** The limit is valid through the close of the 3rd full
+   session after the alert session, frozen. In replay that is bars t+1 to
+   t+3. The plan also cancels if TP1 trades before the fill.
+6. **Fill: one rule that mirrors a broker's resting order,** shared by
+   replay (`exit_sim_v2._limit_entry_v2`), live (`plan_manager` limit
+   handling, v187 D3) and the measurement.
+   - **Primary rule: trade-through.** The bar's low must trade at least one
+     tick under L (`limit_strict_fill`). A bar that only touches L counts
+     as a fill only in a disclosed sensitivity.
+   - **Gap through L.** An open at or under L fills **at the open**.
+   - **Gap through the stop.** An open at or under the stop fills at the
+     open and is stopped at the open in the same bar, a realised loss of
+     more than 1R. It is **never** cancelled as a 0R scratch, because a
+     resting broker order would have filled. Today's live
+     `at_or_beyond_stop` cancel and fill-at-`trigger_price`
+     (`plan_manager.py:1232-1249`) are changed **for this arm only**, so
+     live, replay and the measurement agree. Out-of-scope plans keep
+     today's live path.
+   - **Price already at or under L when the alert is sent.** The order is
+     marketable and fills at the quoted price. Replay starts at t+1 and
+     cannot see this case, so live counts it and the shadow report
+     discloses it.
+   - **Frictions.** `swingbot/core/edge/frictions.py` applies, non-zero,
+     to both arms on every trade.
 7. **Sizing.** Fixed dollar risk on `|L − stop|`. The share count follows,
    with no change to the risk-per-trade setting.
 
@@ -159,7 +178,15 @@ gate, § Funnel stages):
 - the effective stop distance from M on fills;
 - fills stopped within 3 bars, and how often the expiry cap or the TP1
   cancel binds (v131's adverse-selection diagnostics);
-- the scope and drop counts.
+- the scope and drop counts;
+- the touch-fill sensitivity, scored with the same clauses;
+- the count of gap-through-stop fills, and their mean R;
+- the share of stops that were wick-throughs closing back above the stop
+  (stop-run diagnostic; never grounds to widen the buffer);
+- fills and ExpR by ATR14% bucket;
+- fills and ExpR on SPY down days (close < prior close − 1%) against
+  other days, and the number of distinct fill days;
+- the share of fills with an earnings date inside the 3-bar window.
 
 ## Goals
 
@@ -176,10 +203,24 @@ gate, § Funnel stages):
 - **G3.** Run Stages −1..3 through `backtest-runner`, chunked and
   checkpointed per unit, with a flushed percent print. Record the result
   and one ledger row per look.
-- **G4. Live path, inert.** A limit plan's Discord alert and the admin plan
-  view say "Buy limit at L (stop S′), valid 3 sessions". Shorts say "sell".
-  Expiry and the TP1-before-fill cancel reuse the existing pending-plan
-  lifecycle. Nothing is switched on: `.env.example` documents the knob at 0.
+- **G4. Live path, inert.** The alert and the admin plan view must work
+  for someone resting orders before the open. Each limit alert states all
+  of these, as prices rounded to the tick:
+  - "Buy limit L" ("sell" for shorts);
+  - "on fill: stop S′, TP1 T1 (TP2 T2)" (bracket/OCO wording);
+  - "cancel the order if price trades at T1 before it fills";
+  - "valid through the close of <date>".
+
+  The bot then posts a **follow-up for every state change**:
+  - filled, with "place the stop at S′ now";
+  - expired;
+  - cancelled because TP1 traded first;
+  - filled-and-stopped on a gap.
+
+  The existing `cancelled_limit` event (`plan_manager.py:1254`) is confirmed
+  to reach the channel, or is wired to. The extra alert volume is reported:
+  limit alerts plus follow-ups per day, estimated from replay. Nothing is
+  switched on: `.env.example` documents the knob at 0.
 
 ## Non-goals
 
@@ -258,4 +299,27 @@ before compute):
 10. R re-priced at the limit -- applied: dollar P&L per alert disclosed.
 11. Stop survival is out of scope (risk-manager) -- deferred to that seat.
 
-**veteran-trader**, **risk-manager**: pending (run on the revised spec).
+**veteran-trader** (on a31e8a45):
+
+1. BLOCKING: the alert gives no way to place the stop or the TP1 cancel as
+   orders before the open -- applied: G4 order wording and a follow-up on
+   every state change.
+2. BLOCKING: live and replay disagree on a gap through the limit, and the
+   live cancel on a gap beyond the stop flatters the arm -- applied: rule
+   6, resting-order semantics in all three paths, gap-through-stop scored
+   as realised.
+3. BLOCKING: frictions not stated; touch versus trade-through -- applied:
+   frictions on both arms, trade-through as the primary rule, touch as a
+   disclosure.
+4. A 0.25% buffer is about 0.05 ATR (stop-run risk) -- applied: a
+   wick-through disclosure, and the buffer stays frozen.
+5. Fills at high f are dominated by high-ATR names -- applied: ATR-bucket
+   disclosure.
+6. Earnings inside the 3-bar window -- applied: disclosure.
+7. Sell-off days carry the fills -- applied: SPY down-day and distinct-day
+   disclosures.
+8. Alert timing, a marketable limit at alert, alert volume -- applied:
+   rule 6 and G4.
+9. Bigger share counts on a tighter stop -- deferred to risk-manager.
+
+**risk-manager**: pending (rerun on the revised spec).
