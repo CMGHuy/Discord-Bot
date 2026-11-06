@@ -939,6 +939,10 @@ FIELDS: list[Field] = [
           default="^GSPC=SPY,^NDX=QQQ,^DJI=DIA,^VIX=VIXY,SI=F=SLV",
           help="v171 D7. Shown as change % only, labelled as a proxy, when Yahoo is blank for "
                "the index. The last '=' separates the ETF (so 'SI=F=SLV' maps SI=F to SLV)."),
+    Field("BENCHMARK_PROXY_SYMBOLS", "BENCHMARK_PROXY_SYMBOLS", "Data Sources",
+          "Benchmark ETF proxies (index=ETF,...)", default="^IXIC=ONEQ,^DJI=DIA",
+          help="v208. Analytics Benchmark tab uses the ETF's daily change when Yahoo has no "
+               "daily bars for the index. The row is flagged as a proxy. The last '=' separates the ETF."),
     # v201: admin market refresher (compose service "refresher").
     Field("ADMIN_REFRESHER", "ADMIN_REFRESHER", "Data Sources",
           "Admin market refresher", type="select", default="on", options=["on", "off"],
