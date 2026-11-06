@@ -52,7 +52,7 @@ def _create_problem(username, password):
     message = principals.validate_username(username) or principals.validate_password(password)
     if message:
         return error("invalid", message, 400)
-    if username.lower() == _app.ADMIN_USERNAME.lower():
+    if _app.ADMIN_USERNAME.lower() == username.lower():
         return error("conflict", TAKEN, 409)
     return None
 
