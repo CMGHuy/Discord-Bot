@@ -1,7 +1,7 @@
 """v172 § 4: equity candles from raw samples and realized legs.
 
-New York wall clock throughout. 2026 DST: spring forward Sun 8 March (02:00
-EST -> 03:00 EDT), fall back Sun 1 November (02:00 EDT -> 01:00 EST).
+Berlin wall clock, weekdays 08:00-22:00. 2026 DST: CEST until Sun 25 October,
+CET after.
 """
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -11,7 +11,7 @@ import pytest
 from swingbot.core.tracking.equity import RealizedLeg
 from swingbot.core.tracking.equity_candles import (
     TIMEFRAMES, add_change, bucket_label, bucket_start, mtm_candles, parse_bucket_label,
-    realized_candles)
+    fill_flat, realized_candles)
 
 UTC = timezone.utc
 
@@ -38,39 +38,33 @@ def test_an_unknown_timeframe_is_refused():
         bucket_start(_utc(2026, 10, 16, 14), "15m")
 
 
-def test_the_day_turns_at_new_york_midnight_not_utc():
-    assert _label(_utc(2026, 10, 17, 3, 59), "1D") == "2026-10-16"     # 23:59 New York
-    assert _label(_utc(2026, 10, 17, 4, 1), "1D") == "2026-10-17"      # 00:01 New York
+def test_the_day_turns_at_berlin_midnight_not_utc():
+    assert _label(_utc(2026, 10, 15, 21, 59), "1D") == "2026-10-15"    # 23:59 Berlin
+    assert _label(_utc(2026, 10, 15, 22, 1), "1D") == "2026-10-16"     # 00:01 Berlin
 
 
-def test_hour_labels_carry_the_new_york_offset():
-    assert _label(_utc(2026, 10, 16, 14, 35), "1H") == "2026-10-16T10:00:00-04:00"
-    assert _label(_utc(2026, 10, 16, 14, 35), "4H") == "2026-10-16T08:00:00-04:00"
+def test_hour_labels_carry_the_berlin_offset():
+    assert _label(_utc(2026, 10, 16, 14, 35), "1H") == "2026-10-16T16:00:00+02:00"
+    assert _label(_utc(2026, 10, 16, 14, 35), "4H") == "2026-10-16T16:00:00+02:00"
+    assert _label(_utc(2026, 11, 2, 14, 35), "1H") == "2026-11-02T15:00:00+01:00"   # CET
+
+
+def test_a_sample_outside_the_08_to_22_window_folds_into_its_own_day():
+    assert _label(_utc(2026, 10, 16, 4, 30), "1H") == "2026-10-16T08:00:00+02:00"   # 06:30
+    assert _label(_utc(2026, 10, 16, 21, 30), "1H") == "2026-10-16T21:00:00+02:00"  # 23:30
+    assert _label(_utc(2026, 10, 16, 21, 30), "4H") == "2026-10-16T20:00:00+02:00"
+    assert _label(_utc(2026, 10, 16, 4, 30), "1D") == "2026-10-16"
+
+
+def test_a_weekend_sample_folds_into_monday_except_for_the_week_bucket():
+    assert _label(_utc(2026, 10, 17, 10), "1H") == "2026-10-19T08:00:00+02:00"      # Saturday
+    assert _label(_utc(2026, 10, 18, 10), "1D") == "2026-10-19"                      # Sunday
+    assert _label(_utc(2026, 10, 18, 10), "1W") == "2026-10-12"                      # its own week
 
 
 def test_the_week_starts_on_monday():
     assert _label(_utc(2026, 10, 18, 15), "1W") == "2026-10-12"        # Sunday
     assert _label(_utc(2026, 10, 19, 15), "1W") == "2026-10-19"        # Monday
-
-
-def test_4h_bucket_is_three_real_hours_on_spring_forward_day():
-    first = bucket_start(_utc(2026, 3, 8, 7, 30), "4H")                # 03:30 EDT
-    assert first == bucket_start(_utc(2026, 3, 8, 5, 30), "4H")        # 00:30 EST, same bucket
-    assert first.astimezone(UTC) == _utc(2026, 3, 8, 5)                # 00:00 EST
-    second = bucket_start(_utc(2026, 3, 8, 8, 0), "4H")                # 04:00 EDT
-    assert (second.astimezone(UTC) - first.astimezone(UTC)).total_seconds() == 3 * 3600   # same-zone subtraction is wall-clock
-
-
-def test_4h_bucket_is_five_real_hours_on_fall_back_day():
-    first = bucket_start(_utc(2026, 11, 1, 8, 30), "4H")               # 03:30 EST
-    assert first.astimezone(UTC) == _utc(2026, 11, 1, 4)               # 00:00 EDT
-    second = bucket_start(_utc(2026, 11, 1, 9, 0), "4H")               # 04:00 EST
-    assert (second.astimezone(UTC) - first.astimezone(UTC)).total_seconds() == 5 * 3600   # same-zone subtraction is wall-clock
-
-
-def test_the_repeated_hour_on_fall_back_day_is_two_1h_buckets():
-    assert _label(_utc(2026, 11, 1, 5, 30), "1H") == "2026-11-01T01:00:00-04:00"
-    assert _label(_utc(2026, 11, 1, 6, 30), "1H") == "2026-11-01T01:00:00-05:00"
 
 
 # --- mark-to-market -----------------------------------------------------------
@@ -113,8 +107,8 @@ def test_empty_buckets_are_omitted():
 
 def test_intraday_mtm_never_reads_backfill_rows():
     candles = mtm_candles(BACKFILL_DAY + LIVE_DAY, "1H")
-    assert [c["t"] for c in candles] == ["2026-10-16T10:00:00-04:00", "2026-10-16T11:00:00-04:00",
-                                         "2026-10-16T15:00:00-04:00"]
+    assert [c["t"] for c in candles] == ["2026-10-16T16:00:00+02:00", "2026-10-16T17:00:00+02:00",
+                                         "2026-10-16T21:00:00+02:00"]
     assert not any(c["approx"] for c in candles)
     assert candles[0]["change"] == 0.0                                 # first: c - its own o
 
@@ -200,9 +194,9 @@ def test_the_two_repeated_fall_back_hours_parse_to_different_instants():
     assert second.timestamp() - first.timestamp() == 3600
 
 
-def test_a_daily_label_is_the_new_york_midnight_instant():
+def test_a_daily_label_is_the_berlin_midnight_instant():
     parsed = parse_bucket_label("2026-10-16", "1D")
-    assert parsed.astimezone(UTC) == _utc(2026, 10, 16, 4)   # 00:00 EDT
+    assert parsed.astimezone(UTC) == _utc(2026, 10, 15, 22)   # 00:00 CEST
 
 
 @pytest.mark.parametrize("label, tf", [
@@ -224,3 +218,59 @@ def test_any_other_label_shape_is_refused(label, tf):
 def test_parse_refuses_an_unknown_timeframe():
     with pytest.raises(ValueError):
         parse_bucket_label("2026-10-16", "15m")
+
+
+# --- fill_flat: no holes between the first candle and now -----------------------
+
+def _live(at, equity, row_id=0):
+    return _row(at, equity, row_id=row_id)
+
+
+def test_a_quiet_hour_gets_a_flat_candle_at_the_previous_close():
+    rows = [_live(_utc(2026, 10, 16, 6, 10), 10000.0, 1), _live(_utc(2026, 10, 16, 9, 5), 10100.0, 2)]
+    candles = fill_flat(mtm_candles(rows, "1H"), "1H", _utc(2026, 10, 16, 9, 30))
+    assert [c["t"][11:16] for c in candles] == ["08:00", "09:00", "10:00", "11:00"]
+    flat = candles[1]
+    assert (flat["o"], flat["h"], flat["l"], flat["c"], flat["change"]) == (10000.0,) * 4 + (0.0,)
+    assert flat["change_pct"] == 0.0 and flat["samples"] == 0 and not flat["approx"]
+    assert candles[3]["change"] == 100.0                                # real candle vs the same close
+
+
+def test_the_series_runs_on_flat_to_the_slot_holding_now_but_never_beyond():
+    rows = [_live(_utc(2026, 10, 16, 6, 10), 10000.0, 1)]
+    candles = fill_flat(mtm_candles(rows, "1H"), "1H", _utc(2026, 10, 16, 10, 30))   # 12:30 Berlin
+    assert candles[-1]["t"] == "2026-10-16T12:00:00+02:00"
+
+
+def test_nights_and_weekends_have_no_candles_for_any_timeframe():
+    rows = [_live(_utc(2026, 10, 16, 19, 0), 10000.0, 1)]                  # Fri 21:00 Berlin
+    hourly = fill_flat(mtm_candles(rows, "1H"), "1H", _utc(2026, 10, 19, 6, 30))  # Mon 08:30
+    assert [c["t"] for c in hourly] == ["2026-10-16T21:00:00+02:00", "2026-10-19T08:00:00+02:00"]
+    four = fill_flat(mtm_candles(rows, "4H"), "4H", _utc(2026, 10, 19, 11))
+    assert [c["t"][5:16] for c in four] == ["10-16T20:00", "10-19T08:00", "10-19T12:00"]
+    daily = fill_flat(mtm_candles(rows, "1D"), "1D", _utc(2026, 10, 21, 12))
+    assert [c["t"] for c in daily] == ["2026-10-16", "2026-10-19", "2026-10-20", "2026-10-21"]
+    weekly = fill_flat(mtm_candles(rows, "1W"), "1W", _utc(2026, 10, 28, 12))
+    assert [c["t"] for c in weekly] == ["2026-10-12", "2026-10-19", "2026-10-26"]
+
+
+def test_now_on_a_weekend_or_at_night_adds_no_future_slot():
+    rows = [_live(_utc(2026, 10, 16, 10, 0), 10000.0, 1)]                  # Fri 12:00 Berlin
+    sat = fill_flat(mtm_candles(rows, "1H"), "1H", _utc(2026, 10, 17, 12))
+    assert sat[-1]["t"] == "2026-10-16T21:00:00+02:00"
+    daily = fill_flat(mtm_candles(rows, "1D"), "1D", _utc(2026, 10, 17, 12))
+    assert [c["t"] for c in daily] == ["2026-10-16"]
+
+
+def test_fill_flat_of_nothing_is_nothing_and_realized_candles_fill_too():
+    assert fill_flat([], "1D", _utc(2026, 10, 16, 10)) == []
+    legs = [RealizedLeg(at=_utc(2026, 10, 14, 10), amount=Decimal("50"), trade_id="1")]
+    daily = fill_flat(realized_candles(legs, Decimal("10000"), "1D"), "1D", _utc(2026, 10, 16, 10))
+    assert [(c["t"], c["c"], c["change"]) for c in daily] == [
+        ("2026-10-14", 10050.0, 50.0), ("2026-10-15", 10050.0, 0.0), ("2026-10-16", 10050.0, 0.0)]
+
+
+def test_a_zero_balance_flat_candle_has_no_percentage():
+    assert fill_flat([{"t": "2026-10-14", "o": 0.0, "h": 0.0, "l": 0.0, "c": 0.0, "change": 0.0,
+                       "change_pct": None, "samples": 1, "skipped": 0, "approx": False}],
+                     "1D", _utc(2026, 10, 15, 10))[1]["change_pct"] is None

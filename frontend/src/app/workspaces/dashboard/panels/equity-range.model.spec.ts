@@ -59,47 +59,47 @@ describe('inWindowCandles', () => {
   });
 });
 
-describe('nyMidnight', () => {
-  it('is 04:00Z in summer and 05:00Z in winter', () => {
-    expect(iso(nyMidnight('2026-10-16'))).toBe('2026-10-16T04:00:00.000Z');
-    expect(iso(nyMidnight('2026-01-01'))).toBe('2026-01-01T05:00:00.000Z');
+describe('nyMidnight (00:00 Berlin)', () => {
+  it('is 22:00Z the evening before in summer and 23:00Z in winter', () => {
+    expect(iso(nyMidnight('2026-10-16'))).toBe('2026-10-15T22:00:00.000Z');
+    expect(iso(nyMidnight('2026-01-01'))).toBe('2025-12-31T23:00:00.000Z');
   });
 
   it('reads the offset of the night itself on both changeover days', () => {
-    expect(iso(nyMidnight('2026-03-08'))).toBe('2026-03-08T05:00:00.000Z');   // still EST
-    expect(iso(nyMidnight('2026-03-09'))).toBe('2026-03-09T04:00:00.000Z');   // now EDT
-    expect(iso(nyMidnight('2026-11-01'))).toBe('2026-11-01T04:00:00.000Z');   // still EDT
-    expect(iso(nyMidnight('2026-11-02'))).toBe('2026-11-02T05:00:00.000Z');   // now EST
+    expect(iso(nyMidnight('2026-03-29'))).toBe('2026-03-28T23:00:00.000Z');   // still CET
+    expect(iso(nyMidnight('2026-03-30'))).toBe('2026-03-29T22:00:00.000Z');   // now CEST
+    expect(iso(nyMidnight('2026-10-25'))).toBe('2026-10-24T22:00:00.000Z');   // still CEST
+    expect(iso(nyMidnight('2026-10-26'))).toBe('2026-10-25T23:00:00.000Z');   // now CET
   });
 });
 
 describe('bucket instants', () => {
-  it('reads an intraday start from its offset and a daily start as New York midnight', () => {
-    expect(iso(bucketStartInstant('2026-10-16T08:00:00-04:00', '4H'))).toBe('2026-10-16T12:00:00.000Z');
-    expect(iso(bucketStartInstant('2026-10-16', '1D'))).toBe('2026-10-16T04:00:00.000Z');
+  it('reads an intraday start from its offset and a daily start as Berlin midnight', () => {
+    expect(iso(bucketStartInstant('2026-10-16T08:00:00+02:00', '4H'))).toBe('2026-10-16T06:00:00.000Z');
+    expect(iso(bucketStartInstant('2026-10-16', '1D'))).toBe('2026-10-15T22:00:00.000Z');
   });
 
   it('ends a 1H bucket one real hour later, the repeated fall-back hour included', () => {
-    expect(iso(bucketEndInstant('2026-11-01T01:00:00-04:00', '1H'))).toBe('2026-11-01T06:00:00.000Z');
-    expect(iso(bucketEndInstant('2026-11-01T01:00:00-05:00', '1H'))).toBe('2026-11-01T07:00:00.000Z');
-    expect(iso(bucketEndInstant('2026-03-08T01:00:00-05:00', '1H'))).toBe('2026-03-08T07:00:00.000Z');
+    expect(iso(bucketEndInstant('2026-10-25T02:00:00+02:00', '1H'))).toBe('2026-10-25T01:00:00.000Z');
+    expect(iso(bucketEndInstant('2026-10-25T02:00:00+01:00', '1H'))).toBe('2026-10-25T02:00:00.000Z');
+    expect(iso(bucketEndInstant('2026-03-29T08:00:00+02:00', '1H'))).toBe('2026-03-29T07:00:00.000Z');
   });
 
   it('ends a 4H bucket on the wall clock: 3 real hours at spring forward, 5 at fall back', () => {
-    expect(iso(bucketEndInstant('2026-03-08T00:00:00-05:00', '4H'))).toBe('2026-03-08T08:00:00.000Z');
-    expect(iso(bucketEndInstant('2026-11-01T00:00:00-04:00', '4H'))).toBe('2026-11-01T09:00:00.000Z');
+    expect(iso(bucketEndInstant('2026-03-29T00:00:00+01:00', '4H'))).toBe('2026-03-29T02:00:00.000Z');
+    expect(iso(bucketEndInstant('2026-10-25T00:00:00+02:00', '4H'))).toBe('2026-10-25T03:00:00.000Z');
   });
 
-  it('ends the 20:00 4H bucket at the next New York midnight', () => {
-    expect(iso(bucketEndInstant('2026-10-16T20:00:00-04:00', '4H'))).toBe('2026-10-17T04:00:00.000Z');
+  it('ends the 20:00 4H bucket at the next Berlin midnight', () => {
+    expect(iso(bucketEndInstant('2026-10-16T20:00:00+02:00', '4H'))).toBe('2026-10-16T22:00:00.000Z');
   });
 
-  it('ends a day at the next New York midnight and a week seven days on', () => {
-    expect(iso(bucketEndInstant('2026-10-16', '1D'))).toBe('2026-10-17T04:00:00.000Z');
-    expect(iso(bucketEndInstant('2026-10-31', '1D'))).toBe('2026-11-01T04:00:00.000Z');
-    expect(iso(bucketEndInstant('2026-11-01', '1D'))).toBe('2026-11-02T05:00:00.000Z');
-    expect(iso(bucketEndInstant('2026-10-26', '1W'))).toBe('2026-11-02T05:00:00.000Z');
-    expect(iso(bucketEndInstant('2026-12-28', '1W'))).toBe('2027-01-04T05:00:00.000Z');
+  it('ends a day at the next Berlin midnight and a week seven days on', () => {
+    expect(iso(bucketEndInstant('2026-10-16', '1D'))).toBe('2026-10-16T22:00:00.000Z');
+    expect(iso(bucketEndInstant('2026-10-24', '1D'))).toBe('2026-10-24T22:00:00.000Z');
+    expect(iso(bucketEndInstant('2026-10-25', '1D'))).toBe('2026-10-25T23:00:00.000Z');
+    expect(iso(bucketEndInstant('2026-10-19', '1W'))).toBe('2026-10-25T23:00:00.000Z');
+    expect(iso(bucketEndInstant('2026-12-28', '1W'))).toBe('2027-01-03T23:00:00.000Z');
   });
 });
 
@@ -107,19 +107,19 @@ describe('windowBounds', () => {
   it('runs from the first bucket start to the last bucket end', () => {
     const days = [candle({ t: '2026-10-14' }), candle({ t: '2026-10-15' })];
     expect(windowBounds(days, '1D'))
-      .toEqual({ from: '2026-10-14T04:00:00.000Z', to: '2026-10-16T04:00:00.000Z' });
+      .toEqual({ from: '2026-10-13T22:00:00.000Z', to: '2026-10-15T22:00:00.000Z' });
   });
 
   it('sits on bucket edges for intraday candles', () => {
-    const hours = [candle({ t: '2026-10-16T10:00:00-04:00' }), candle({ t: '2026-10-16T15:00:00-04:00' })];
+    const hours = [candle({ t: '2026-10-16T10:00:00+02:00' }), candle({ t: '2026-10-16T15:00:00+02:00' })];
     expect(windowBounds(hours, '1H'))
-      .toEqual({ from: '2026-10-16T14:00:00.000Z', to: '2026-10-16T20:00:00.000Z' });
+      .toEqual({ from: '2026-10-16T08:00:00.000Z', to: '2026-10-16T14:00:00.000Z' });
   });
 
   it('agrees with inWindowCandles: a partly visible edge candle widens the bounds by its whole bucket', () => {
     const visible = inWindowCandles({ from: 2.3, to: 5.4 }, TEN);
     expect(windowBounds(visible, '1D'))
-      .toEqual({ from: '2026-10-03T04:00:00.000Z', to: '2026-10-07T04:00:00.000Z' });
+      .toEqual({ from: '2026-10-02T22:00:00.000Z', to: '2026-10-06T22:00:00.000Z' });
   });
 
   it('is null with no candles', () => {
@@ -240,9 +240,9 @@ describe('history paging', () => {
       ['2026-10-13', 100], ['2026-10-14', 100], ['2026-10-15', 100], ['2026-10-16', 100]]);
   });
 
-  it('keeps the two fall-back 01:00 hours apart: their t differs by offset', () => {
-    const loaded = [day('2026-11-01T01:00:00-05:00')];
-    const page = [day('2026-11-01T01:00:00-04:00')];
+  it('keeps the two fall-back 02:00 hours apart: their t differs by offset', () => {
+    const loaded = [day('2026-10-25T02:00:00+01:00')];
+    const page = [day('2026-10-25T02:00:00+02:00')];
     expect(prependPage(loaded, page)).toHaveLength(2);
   });
 
@@ -301,31 +301,31 @@ describe('profit/loss tones', () => {
 
 describe('scope presets (§ 1, § 6)', () => {
   const at = (s: string) => new Date(s);
-  /** New York wall clock of an ISO instant, `YYYY-MM-DD HH:mm`. */
+  /** Berlin wall clock of an ISO instant, `YYYY-MM-DD HH:mm`. */
   const nyWall = (s: string) => new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/New_York', hourCycle: 'h23', year: 'numeric', month: '2-digit',
+    timeZone: 'Europe/Berlin', hourCycle: 'h23', year: 'numeric', month: '2-digit',
     day: '2-digit', hour: '2-digit', minute: '2-digit',
   }).format(new Date(s)).replace(',', '');
 
-  // Wed 21 Oct 2026, 10:00 in New York.
+  // Wed 21 Oct 2026, 16:00 in Berlin.
   const NOW = at('2026-10-21T14:00:00Z');
 
   it('re-exports the presets from the prefs module', () => {
     expect(SCOPE_PRESETS).toHaveLength(8);
   });
 
-  it('reaches back per preset, to 00:00 New York, and ends at the next New York midnight', () => {
-    const to = '2026-10-22T04:00:00.000Z';
-    expect(presetBounds('5D', NOW)).toEqual({ from: '2026-10-15T04:00:00.000Z', to });
-    expect(presetBounds('1M', NOW)).toEqual({ from: '2026-09-21T04:00:00.000Z', to });
-    expect(presetBounds('3M', NOW)).toEqual({ from: '2026-07-21T04:00:00.000Z', to });
-    expect(presetBounds('6M', NOW)).toEqual({ from: '2026-04-21T04:00:00.000Z', to });
-    expect(presetBounds('YTD', NOW)).toEqual({ from: '2026-01-01T05:00:00.000Z', to });
-    expect(presetBounds('1Y', NOW)).toEqual({ from: '2025-10-21T04:00:00.000Z', to });
+  it('reaches back per preset, to 00:00 Berlin, and ends at the next Berlin midnight', () => {
+    const to = '2026-10-21T22:00:00.000Z';
+    expect(presetBounds('5D', NOW)).toEqual({ from: '2026-10-14T22:00:00.000Z', to });
+    expect(presetBounds('1M', NOW)).toEqual({ from: '2026-09-20T22:00:00.000Z', to });
+    expect(presetBounds('3M', NOW)).toEqual({ from: '2026-07-20T22:00:00.000Z', to });
+    expect(presetBounds('6M', NOW)).toEqual({ from: '2026-04-20T22:00:00.000Z', to });
+    expect(presetBounds('YTD', NOW)).toEqual({ from: '2025-12-31T23:00:00.000Z', to });
+    expect(presetBounds('1Y', NOW)).toEqual({ from: '2025-10-20T22:00:00.000Z', to });
   });
 
-  it('puts every bound on a New York midnight, across both DST changeovers', () => {
-    const nows = ['2026-03-09T15:00:00Z', '2026-11-02T15:00:00Z', '2026-01-01T12:00:00Z', NOW.toISOString()];
+  it('puts every bound on a Berlin midnight, across both DST changeovers', () => {
+    const nows = ['2026-03-30T15:00:00Z', '2026-10-26T15:00:00Z', '2026-01-01T12:00:00Z', NOW.toISOString()];
     for (const now of nows) {
       for (const preset of ['5D', '1M', '3M', '6M', 'YTD', '1Y'] as const) {
         const { from, to } = presetBounds(preset, at(now));
@@ -333,66 +333,66 @@ describe('scope presets (§ 1, § 6)', () => {
         expect(nyWall(to).endsWith('00:00')).toBe(true);
       }
     }
-    // Monday after the November fall-back: from is EDT, to is EST.
-    expect(presetBounds('5D', at('2026-11-02T15:00:00Z')))
-      .toEqual({ from: '2026-10-27T04:00:00.000Z', to: '2026-11-03T05:00:00.000Z' });
-    // Monday after the March spring-forward: from is EST, to is EDT.
-    expect(presetBounds('1M', at('2026-03-09T15:00:00Z')))
-      .toEqual({ from: '2026-02-09T05:00:00.000Z', to: '2026-03-10T04:00:00.000Z' });
+    // Monday after the October fall-back: from is CEST, to is CET.
+    expect(presetBounds('5D', at('2026-10-26T15:00:00Z')))
+      .toEqual({ from: '2026-10-19T22:00:00.000Z', to: '2026-10-26T23:00:00.000Z' });
+    // Monday after the March spring-forward: from is CET, to is CEST.
+    expect(presetBounds('5D', at('2026-03-30T15:00:00Z')))
+      .toEqual({ from: '2026-03-23T23:00:00.000Z', to: '2026-03-30T22:00:00.000Z' });
   });
 
   it('skips the weekend for 5D', () => {
     // Sun 25 Oct: the five weekdays are Fri 23 back to Mon 19.
-    expect(presetBounds('5D', at('2026-10-25T15:00:00Z')).from).toBe('2026-10-19T04:00:00.000Z');
+    expect(presetBounds('5D', at('2026-10-25T15:00:00Z')).from).toBe('2026-10-18T22:00:00.000Z');
   });
 
   it('clamps a month back to the shorter month', () => {
-    expect(presetBounds('1M', at('2026-03-31T15:00:00Z')).from).toBe('2026-02-28T05:00:00.000Z');
+    expect(presetBounds('1M', at('2026-03-31T15:00:00Z')).from).toBe('2026-02-27T23:00:00.000Z');
   });
 
-  it('reads YTD on the New York calendar, 1 Jan included', () => {
-    // 07:00 New York on 1 Jan: the year just began.
-    expect(presetBounds('YTD', at('2026-01-01T12:00:00Z')))
-      .toEqual({ from: '2026-01-01T05:00:00.000Z', to: '2026-01-02T05:00:00.000Z' });
-    // 22:00 New York on 31 Dec (already 1 Jan in Berlin): still last year.
-    expect(presetBounds('YTD', at('2026-01-01T03:00:00Z')))
-      .toEqual({ from: '2025-01-01T05:00:00.000Z', to: '2026-01-01T05:00:00.000Z' });
+  it('reads YTD on the Berlin calendar, 1 Jan included', () => {
+    // 01:00 Berlin on 1 Jan: the year just began.
+    expect(presetBounds('YTD', at('2026-01-01T00:00:00Z')))
+      .toEqual({ from: '2025-12-31T23:00:00.000Z', to: '2026-01-01T23:00:00.000Z' });
+    // 23:30 Berlin on 31 Dec (22:30Z): still last year.
+    expect(presetBounds('YTD', at('2025-12-31T22:30:00Z')))
+      .toEqual({ from: '2024-12-31T23:00:00.000Z', to: '2025-12-31T23:00:00.000Z' });
   });
 
-  it('keeps `to` stable within a New York day and moves it when the next one opens', () => {
+  it('keeps `to` stable within a Berlin day and moves it when the next one opens', () => {
     const to = (s: string) => presetBounds('3M', at(s)).to;
-    expect(to('2026-10-21T04:00:00Z')).toBe('2026-10-22T04:00:00.000Z');
-    expect(to('2026-10-22T03:59:59Z')).toBe('2026-10-22T04:00:00.000Z');
-    expect(to('2026-10-22T04:00:00Z')).toBe('2026-10-23T04:00:00.000Z');
+    expect(to('2026-10-20T22:00:00Z')).toBe('2026-10-21T22:00:00.000Z');
+    expect(to('2026-10-21T21:59:59Z')).toBe('2026-10-21T22:00:00.000Z');
+    expect(to('2026-10-21T22:00:00Z')).toBe('2026-10-22T22:00:00.000Z');
   });
 
-  it('gives the chart today’s New York day for 1D, all history for All, the bounds otherwise', () => {
+  it('gives the chart today’s Berlin day for 1D, all history for All, the bounds otherwise', () => {
     expect(chartWindowFor('1D', NOW))
-      .toEqual({ from: '2026-10-21T04:00:00.000Z', to: '2026-10-22T04:00:00.000Z' });
+      .toEqual({ from: '2026-10-20T22:00:00.000Z', to: '2026-10-21T22:00:00.000Z' });
     expect(chartWindowFor('All', NOW)).toBeNull();
     expect(chartWindowFor('6M', NOW)).toEqual(presetBounds('6M', NOW));
   });
 
   it('maps a scope to its request: 1D stays the Berlin today, All is all, the rest are ranges', () => {
     const preset = (p: '1D' | 'All' | '3M'): ScopeSelection => ({ kind: 'preset', preset: p });
-    const window = { from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
+    const window = { from: '2026-09-02T22:00:00.000Z', to: '2026-10-18T22:00:00.000Z' };
     expect(scopeToRequest(preset('1D'), NOW)).toEqual({ mode: 'today', window: null });
     expect(scopeToRequest(preset('All'), NOW)).toEqual({ mode: 'all', window: null });
     expect(scopeToRequest(preset('3M'), NOW)).toEqual({ mode: 'range', window: presetBounds('3M', NOW) });
     expect(scopeToRequest({ kind: 'range', window }, NOW)).toEqual({ mode: 'range', window });
   });
 
-  it('labels a Range chip with its New York dates, `to` exclusive', () => {
-    expect(rangeChipLabel({ from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' }))
+  it('labels a Range chip with its Berlin dates, `to` exclusive', () => {
+    expect(rangeChipLabel({ from: '2026-09-02T22:00:00.000Z', to: '2026-10-18T22:00:00.000Z' }))
       .toBe('3 Sep – 18 Oct');
-    expect(rangeChipLabel({ from: '2025-12-29T05:00:00.000Z', to: '2026-01-03T05:00:00.000Z' }))
+    expect(rangeChipLabel({ from: '2025-12-28T23:00:00.000Z', to: '2026-01-02T23:00:00.000Z' }))
       .toBe('29 Dec 2025 – 2 Jan 2026');
-    expect(rangeChipLabel({ from: '2026-10-16T04:00:00.000Z', to: '2026-10-17T04:00:00.000Z' }))
+    expect(rangeChipLabel({ from: '2026-10-15T22:00:00.000Z', to: '2026-10-16T22:00:00.000Z' }))
       .toBe('16 Oct');
     // Four 1H candles inside one day, and an empty window.
-    expect(rangeChipLabel({ from: '2026-10-16T14:00:00.000Z', to: '2026-10-16T18:00:00.000Z' }))
+    expect(rangeChipLabel({ from: '2026-10-16T08:00:00.000Z', to: '2026-10-16T12:00:00.000Z' }))
       .toBe('16 Oct');
-    expect(rangeChipLabel({ from: '2026-10-16T14:00:00.000Z', to: '2026-10-16T14:00:00.000Z' }))
+    expect(rangeChipLabel({ from: '2026-10-16T08:00:00.000Z', to: '2026-10-16T08:00:00.000Z' }))
       .toBe('16 Oct');
   });
 

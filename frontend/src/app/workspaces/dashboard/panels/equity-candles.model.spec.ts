@@ -33,21 +33,29 @@ describe('equity candles model', () => {
     expect(toChartTime('2026-10-12', '1W')).toBe('2026-10-12');
   });
 
-  it('reads intraday times as New York wall clock', () => {
-    // 09:00 New York, whatever the offset, is 09:00 on the axis.
-    expect(toChartTime('2026-10-16T09:00:00-04:00', '1H')).toBe(Date.UTC(2026, 9, 16, 9) / 1000);
-    expect(toChartTime('2026-12-01T12:00:00-05:00', '4H')).toBe(Date.UTC(2026, 11, 1, 12) / 1000);
+  it('reads intraday times as Berlin wall clock', () => {
+    // 09:00 Berlin, whatever the offset, is 09:00 on the axis.
+    expect(toChartTime('2026-10-16T09:00:00+02:00', '1H')).toBe(Date.UTC(2026, 9, 16, 9) / 1000);
+    expect(toChartTime('2026-12-01T12:00:00+01:00', '4H')).toBe(Date.UTC(2026, 11, 1, 12) / 1000);
   });
 
-  it('keeps the series strictly ascending across the fall-back hour', () => {
+  it('keeps the series strictly ascending across the fall-back hour (Berlin 02:00 twice)', () => {
     const data = toSeriesData([
-      candle({ t: '2026-11-01T01:00:00-04:00' }),
-      candle({ t: '2026-11-01T01:00:00-05:00' }),
-      candle({ t: '2026-11-01T02:00:00-05:00' }),
+      candle({ t: '2026-10-25T02:00:00+02:00' }),
+      candle({ t: '2026-10-25T02:00:00+01:00' }),
+      candle({ t: '2026-10-25T03:00:00+01:00' }),
     ], '1H', COLORS);
     const times = data.map((p) => p.time as number);
     expect(times[1]).toBe(times[0] + 1);
     expect(times[2]).toBeGreaterThan(times[1]);
+  });
+
+  it('maps a flat candle (o = h = l = c, change 0) to a flat candlestick point', () => {
+    const [point] = toSeriesData([
+      candle({ o: 10000, h: 10000, l: 10000, c: 10000, change: 0, change_pct: 0 }),
+    ], '1D', COLORS);
+    expect(point).toMatchObject({ time: '2026-10-16', open: 10000, high: 10000, low: 10000, close: 10000 });
+    expect(point.color).toBeUndefined();
   });
 
   it('draws an approx candle hollow and a measured one with the series colours', () => {
@@ -65,7 +73,7 @@ describe('equity candles model', () => {
   it('labels candles by timeframe', () => {
     expect(candleLabel('2026-10-16', '1D')).toBe('Oct 16, 2026');
     expect(candleLabel('2026-10-12', '1W')).toBe('Week of Oct 12, 2026');
-    expect(candleLabel('2026-10-16T13:00:00-04:00', '4H')).toBe('Oct 16, 2026 13:00 ET');
+    expect(candleLabel('2026-10-16T13:00:00+02:00', '4H')).toBe('Oct 16, 2026 13:00 Berlin');
   });
 
   it('builds the readout: when, O H L C, change, % vs prev close, basis', () => {
@@ -98,10 +106,10 @@ describe('equity candles model', () => {
     expect(emptyMessage('1D', null)).toBe('No equity samples yet');
   });
 
-  it('dates the approx caption in New York', () => {
-    // 02:00 UTC on the 21st is still the 20th in New York.
-    expect(approxCaption('2026-10-21T02:00:00Z'))
-      .toBe('Before Oct 20, 2026: rebuilt from daily bars — ranges are outer bounds');
+  it('dates the approx caption in Berlin', () => {
+    // 22:30 UTC on the 20th is already the 21st in Berlin (00:30 CEST).
+    expect(approxCaption('2026-10-20T22:30:00Z'))
+      .toBe('Before Oct 21, 2026: rebuilt from daily bars — ranges are outer bounds');
     expect(approxCaption(null))
       .toBe('Before recording started: rebuilt from daily bars — ranges are outer bounds');
   });
@@ -171,9 +179,9 @@ describe('v181 readout parts', () => {
 });
 
 describe('v181 timeframe step helpers', () => {
-  const hourly = (iso: string) => candle({ t: `${iso}-04:00` });
+  const hourly = (iso: string) => candle({ t: `${iso}+02:00` });
 
-  it('spans whole buckets on the New York wall clock', () => {
+  it('spans whole buckets on the Berlin wall clock', () => {
     const span = wallSpan([hourly('2026-10-20T09:00:00'), hourly('2026-10-20T15:00:00')], '1H');
     expect(span).toEqual({ from: Date.UTC(2026, 9, 20, 9) / 1000, to: Date.UTC(2026, 9, 20, 16) / 1000 });
     expect(wallSpan([candle({ t: '2026-10-19' }), candle({ t: '2026-10-20' })], '1D'))
@@ -194,7 +202,7 @@ describe('v181 timeframe step helpers', () => {
     expect(stepDownBlocked('1D', candle({ t: '2026-10-20' }), since)).toBe(false);
     expect(stepDownBlocked('1D', candle({ t: '2026-10-20' }), null)).toBe(true);
     expect(stepDownBlocked('1D', undefined, since)).toBe(true);
-    expect(stepDownBlocked('4H', candle({ t: '2026-01-02T09:00:00-05:00' }), since)).toBe(false);
+    expect(stepDownBlocked('4H', candle({ t: '2026-01-02T09:00:00+01:00' }), since)).toBe(false);
     expect(stepDownBlocked('1W', candle({ t: '2025-01-06' }), since)).toBe(false);
   });
 });

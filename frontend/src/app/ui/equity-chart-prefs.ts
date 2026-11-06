@@ -22,9 +22,9 @@ export interface EquityChartPrefs {
   basis: EquityBasis;
 }
 
-/** 1D and mark-to-market: this is a swing system, and the daily candle is
- *  the one that answers "how did the account do". */
-export const DEFAULT_EQUITY_CHART_PREFS: EquityChartPrefs = { tf: '1D', basis: 'mtm' };
+/** 1H and mark-to-market: the trading day (Berlin 08:00-22:00) hour by hour; the
+ *  longer views are one tap away. */
+export const DEFAULT_EQUITY_CHART_PREFS: EquityChartPrefs = { tf: '1H', basis: 'mtm' };
 
 function pick<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === 'string' && (allowed as readonly string[]).includes(value)

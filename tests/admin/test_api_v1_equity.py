@@ -30,6 +30,13 @@ def logged_in(client):
     return client
 
 
+@pytest.fixture(autouse=True)
+def frozen_now(monkeypatch):
+    """The flat fill runs up to now: pin it to the end of Thu 15 Oct (Berlin)."""
+    from swingbot.admin.api_v1 import equity
+    monkeypatch.setattr(equity, "_now", lambda: _at(15, 20, 30))
+
+
 @pytest.fixture
 def account(admin_app):
     # base_balance stated outright: the conftest seeds only `balance`, and
@@ -141,7 +148,7 @@ def test_hourly_mtm_never_reads_backfill_rows(logged_in, account):
     _two_live_days()
     body = logged_in.get(URL + "?tf=1H").get_json()
     assert body["tf"] == "1H"
-    assert body["candles"][0]["t"] == "2026-10-14T09:00:00-04:00"
+    assert body["candles"][0]["t"] == "2026-10-14T15:00:00+02:00"
     assert not any(c["t"].startswith("2026-10-13") for c in body["candles"])
     assert not any(c["approx"] for c in body["candles"])
     four = logged_in.get(URL + "?tf=4H").get_json()["candles"]
@@ -153,10 +160,13 @@ def test_realized_basis_steps_through_closed_legs_not_samples(logged_in, account
                           _closed("t2", -20.0, "2026-10-14T18:00:00+00:00")])
     body = logged_in.get(URL + "?basis=realized").get_json()
     assert body["basis"] == "realized"
-    (day,) = body["candles"]
+    day, quiet = body["candles"]
     assert (day["t"], day["o"], day["h"], day["l"], day["c"]) == (
         "2026-10-14", 10000.0, 10050.0, 10000.0, 10030.0)
     assert (day["samples"], day["skipped"], day["approx"]) == (2, 0, False)
+    # Thu 15 Oct had no closed trade: a flat candle, not a hole.
+    assert (quiet["t"], quiet["o"], quiet["c"], quiet["change"], quiet["samples"]) == (
+        "2026-10-15", 10030.0, 10030.0, 0.0, 0)
     assert body["recording_since"] is None                  # no live rows yet
 
 
@@ -253,37 +263,36 @@ def test_paging_works_on_the_realized_basis_and_carries_the_prior_close(logged_i
         URL + "?basis=realized").get_json()["candles"]
 
 
-def _fall_back_night():
-    """Sun 1 Nov 2026: 00:30 EDT, 01:30 EDT, 01:30 EST (repeated hour), 02:30 EST."""
+def _across_berlin_dst():
+    """Fri 23 Oct 2026 (CEST) and Mon 26 Oct (CET): the clocks went back on the Sunday."""
     EquitySampleRepository().upsert_many([
-        _row(_utc(2026, 11, 1, 4, 30), 10000), _row(_utc(2026, 11, 1, 5, 30), 10010),
-        _row(_utc(2026, 11, 1, 6, 30), 10020), _row(_utc(2026, 11, 1, 7, 30), 10030),
+        _row(_utc(2026, 10, 23, 19, 30), 10000), _row(_utc(2026, 10, 26, 7, 30), 10020),
+        _row(_utc(2026, 10, 26, 10, 30), 10030),
     ])
 
 
-def _spring_forward_night():
-    """Sun 8 Mar 2026: 00:30 EST, 01:30 EST, 03:30 EDT (02:00-03:00 skipped), 04:30 EDT."""
-    EquitySampleRepository().upsert_many([
-        _row(_utc(2026, 3, 8, 5, 30), 10000), _row(_utc(2026, 3, 8, 6, 30), 10010),
-        _row(_utc(2026, 3, 8, 7, 30), 10020), _row(_utc(2026, 3, 8, 8, 30), 10030),
-    ])
-
-
-@pytest.mark.parametrize("night", [_fall_back_night, _spring_forward_night])
-@pytest.mark.parametrize("tf", ["1H", "4H"])
-def test_paging_across_a_dst_change_loses_and_duplicates_no_candle(logged_in, account, night, tf):
-    night()
+@pytest.mark.parametrize("tf", ["1H", "4H", "1D"])
+def test_paging_across_berlin_dst_loses_and_duplicates_no_candle(logged_in, account, monkeypatch, tf):
+    from swingbot.admin.api_v1 import equity
+    monkeypatch.setattr(equity, "_now", lambda: _utc(2026, 10, 26, 12))
+    _across_berlin_dst()
     full = logged_in.get(URL, query_string={"tf": tf}).get_json()["candles"]
     paged = _page_all(logged_in, tf=tf)
     assert paged == full
     assert len({c["t"] for c in paged}) == len(paged)
 
 
-def test_the_fall_back_night_has_two_distinct_01_00_candles(logged_in, account):
-    _fall_back_night()
-    times = [c["t"] for c in logged_in.get(URL + "?tf=1H").get_json()["candles"]]
-    assert "2026-11-01T01:00:00-04:00" in times
-    assert "2026-11-01T01:00:00-05:00" in times
+def test_the_hourly_series_has_no_holes_nights_or_weekend_and_uses_berlin_offsets(
+        logged_in, account, monkeypatch):
+    from swingbot.admin.api_v1 import equity
+    monkeypatch.setattr(equity, "_now", lambda: _utc(2026, 10, 26, 12))
+    _across_berlin_dst()
+    times = [c["t"] for c in logged_in.get(URL + "?tf=1H&limit=500").get_json()["candles"]]
+    assert times[0] == "2026-10-23T21:00:00+02:00"
+    assert times[1] == "2026-10-26T08:00:00+01:00"            # nothing in between
+    assert times[-1] == "2026-10-26T13:00:00+01:00"           # the slot holding now (13:00 CET)
+    assert len(times) == 1 + 6                                # 08:00..13:00 Monday
+    assert not any(t[11:13] < "08" or t[11:13] >= "22" for t in times)
 
 
 @pytest.mark.parametrize("query", [

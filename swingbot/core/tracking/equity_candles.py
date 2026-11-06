@@ -1,9 +1,13 @@
 """v172 § 4: equity candles, built on request from raw samples or realized legs.
 
-Pure functions, no I/O. Buckets follow the New York wall clock: 1H = clock
-hours; 4H starts at 00/04/08/12/16/20 (3 or 5 real hours on DST days); 1D =
-the New York calendar day; 1W starts Monday. A bucket with nothing in it
-produces no candle.
+Pure functions, no I/O. Buckets follow the **Berlin** wall clock and the
+trading day only: weekdays, 08:00-22:00. 1H = clock hours; 4H starts at
+08/12/16/20; 1D = the Berlin calendar day; 1W starts Monday. A sample or leg
+outside the window folds into the nearest slot of its own day (before 08:00 ->
+the 08:00 slot, from 22:00 -> the last slot); a weekend one into Monday's.
+`fill_flat` adds a flat candle (o=h=l=c=previous close, change 0) for every
+slot with nothing in it, so the series has no holes between its first candle
+and now.
 
 - **mtm:** `o`/`c` = the earliest/latest `point` row's `equity`; `h`/`l`
   over every row (backfill `day_high`/`day_low` included); `skipped` = the
@@ -20,16 +24,52 @@ from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Sequence
 
-from swingbot.core.market.session import US_MARKET_TZ
+from swingbot.core.market.session import BERLIN_TZ
 from swingbot.core.tracking.equity import CENT, RealizedLeg, to_decimal
 
 TIMEFRAMES = ("1H", "4H", "1D", "1W")
 _INTRADAY = ("1H", "4H")
+OPEN_HOUR, CLOSE_HOUR = 8, 22
+_FOUR_H_HOURS = (8, 12, 16, 20)
+
+
+def _day_start(day: date, hour: int = 0) -> datetime:
+    return datetime(day.year, day.month, day.day, hour, tzinfo=BERLIN_TZ)
+
+
+def _next_weekday(day: date) -> date:
+    day += timedelta(days=1)
+    while day.weekday() >= 5:
+        day += timedelta(days=1)
+    return day
+
+
+def _prev_weekday(day: date) -> date:
+    day -= timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return day
+
+
+def _fold_into_window(local: datetime, tf: str) -> datetime:
+    """The Berlin instant a sample at `local` is counted at: inside the
+    08:00-22:00 weekday window (intraday) or on a weekday (1D/1W)."""
+    day = local.date()
+    if tf == "1W":
+        return local
+    if day.weekday() >= 5:
+        return _day_start(_next_weekday(day), OPEN_HOUR)
+    if tf not in _INTRADAY:
+        return local
+    if local.hour < OPEN_HOUR:
+        return _day_start(day, OPEN_HOUR)
+    if local.hour >= CLOSE_HOUR:
+        return _day_start(day, CLOSE_HOUR - 1)
+    return local
 
 
 def _floor_hour(local: datetime) -> datetime:
-    # replace() keeps `fold`, so the repeated 01:00 on fall-back day stays two hours.
-    return local.replace(minute=0, second=0, microsecond=0)
+    return local.replace(minute=0, second=0, microsecond=0, fold=0)
 
 
 def _floor_4h(local: datetime) -> datetime:
@@ -42,19 +82,18 @@ def _floor_day(local: datetime) -> datetime:
 
 
 def _floor_week(local: datetime) -> datetime:
-    monday = local.date() - timedelta(days=local.weekday())
-    return datetime(monday.year, monday.month, monday.day, tzinfo=US_MARKET_TZ)
+    return _day_start(local.date() - timedelta(days=local.weekday()))
 
 
 _FLOORS = {"1H": _floor_hour, "4H": _floor_4h, "1D": _floor_day, "1W": _floor_week}
 
 
 def bucket_start(at: datetime, tf: str) -> datetime:
-    """The New York-aware start of the `tf` bucket holding instant `at`."""
+    """The Berlin-aware start of the `tf` bucket holding instant `at`."""
     floor = _FLOORS.get(tf)
     if floor is None:
         raise ValueError(f"tf {tf!r} is not one of {TIMEFRAMES}")
-    return floor(at.astimezone(US_MARKET_TZ))
+    return floor(_fold_into_window(at.astimezone(BERLIN_TZ), tf))
 
 
 def bucket_label(start: datetime, tf: str) -> str:
@@ -69,21 +108,70 @@ _TIME_LABEL = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}")
 
 
 def parse_bucket_label(label: str, tf: str) -> datetime:
-    """The inverse of `bucket_label` (v181 § 6): the aware New York bucket
+    """The inverse of `bucket_label` (v181 § 6): the aware Berlin bucket
     start a candle's `t` names. Accepts exactly the shape `bucket_label`
-    emits for `tf` -- an ISO date for 1D/1W, read as that New York day's
-    midnight; an ISO datetime with offset for 1H/4H, whose offset keeps the
-    two fall-back 01:00 hours apart. Anything else is a ValueError."""
+    emits for `tf` -- an ISO date for 1D/1W, read as that Berlin day's
+    midnight; an ISO datetime with offset for 1H/4H. Anything else is a
+    ValueError."""
     if tf not in _FLOORS:
         raise ValueError(f"tf {tf!r} is not one of {TIMEFRAMES}")
     if tf in _INTRADAY:
         if not _TIME_LABEL.fullmatch(label):
             raise ValueError(f"{label!r} is not a {tf} candle time")
-        return datetime.fromisoformat(label).astimezone(US_MARKET_TZ)
+        return datetime.fromisoformat(label).astimezone(BERLIN_TZ)
     if not _DATE_LABEL.fullmatch(label):
         raise ValueError(f"{label!r} is not a {tf} candle date")
-    day = date.fromisoformat(label)
-    return datetime(day.year, day.month, day.day, tzinfo=US_MARKET_TZ)
+    return _day_start(date.fromisoformat(label))
+
+
+def _next_slot(start: datetime, tf: str) -> datetime:
+    """The bucket start after `start`, skipping nights and weekends."""
+    day = start.date()
+    if tf == "1W":
+        return _day_start(day + timedelta(days=7))
+    if tf == "1D":
+        return _day_start(_next_weekday(day))
+    hours = _FOUR_H_HOURS if tf == "4H" else tuple(range(OPEN_HOUR, CLOSE_HOUR))
+    later = [h for h in hours if h > start.hour]
+    return _day_start(day, later[0]) if later else _day_start(_next_weekday(day), OPEN_HOUR)
+
+
+def _last_slot_start(now: datetime, tf: str) -> datetime:
+    """The latest bucket start at or before `now`, never a future slot."""
+    local = now.astimezone(BERLIN_TZ)
+    day = local.date()
+    if day.weekday() >= 5 or (tf in _INTRADAY and local.hour < OPEN_HOUR):
+        local = _day_start(_prev_weekday(day), CLOSE_HOUR - 1)
+    elif tf in _INTRADAY and local.hour >= CLOSE_HOUR:
+        local = _day_start(day, CLOSE_HOUR - 1)
+    return _FLOORS[tf](local)
+
+
+def _flat_candle(label: str, close: float) -> dict:
+    return {"t": label, "o": close, "h": close, "l": close, "c": close, "change": 0.0,
+            "change_pct": None if close == 0 else 0.0, "samples": 0, "skipped": 0,
+            "approx": False}
+
+
+def fill_flat(candles: list[dict], tf: str, now: datetime) -> list[dict]:
+    """`candles` (change already added) with a flat candle in every empty slot
+    from the first candle to the slot holding `now`. A flat candle carries the
+    previous close, so the real candles' `o`/`change` stay as they were."""
+    if tf not in TIMEFRAMES:
+        raise ValueError(f"tf {tf!r} is not one of {TIMEFRAMES}")
+    if not candles:
+        return []
+    have = {c["t"]: c for c in candles}
+    cursor = parse_bucket_label(candles[0]["t"], tf)
+    end = max(_last_slot_start(now, tf), parse_bucket_label(candles[-1]["t"], tf))
+    out, close = [], candles[0]["o"]
+    while cursor <= end:
+        label = bucket_label(cursor, tf)
+        candle = have.get(label) or _flat_candle(label, close)
+        out.append(candle)
+        close = candle["c"]
+        cursor = _next_slot(cursor, tf)
+    return out
 
 
 def _money(value: Decimal) -> float:

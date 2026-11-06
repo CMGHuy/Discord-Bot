@@ -5,7 +5,7 @@ Candles are built on request from raw rows (spec v172, approach A):
   live only for 1H/4H (intraday history starts at deploy, by design);
 - `basis=realized`: one step per realized leg of the main book
   (`swingbot.core.tracking.equity.realized_legs`), never the samples.
-Bucketing and `change` live in `swingbot.core.tracking.equity_candles`.
+Bucketing (Berlin weekdays 08-22), flat fill and `change` live in `swingbot.core.tracking.equity_candles`.
 `limit` keeps the most recent candles after `change` is computed over the
 whole series, so the first returned candle still compares with its real
 predecessor. `currency_symbol` is `config.CURRENCY_SYMBOL`, the symbol the
@@ -35,6 +35,10 @@ DEFAULT_LIMIT = 120
 MAX_LIMIT = 500
 BASES = ("mtm", "realized")
 _INTRADAY = ("1H", "4H")
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _choice(name: str, allowed: tuple[str, ...], default: str) -> str:
@@ -103,6 +107,7 @@ def equity_candles_view():
     limit = _limit()
     before = _before(tf)
     candles = _mtm(tf) if basis == "mtm" else _realized(tf)
+    candles = equity_candles.fill_flat(candles, tf, _now())
     page, has_more = _page(candles, tf, before, limit)
     return jsonify({
         "tf": tf,
@@ -111,5 +116,5 @@ def equity_candles_view():
         "candles": page,
         "has_more": has_more,
         "recording_since": iso(equity_samples_repo().earliest_at("live")),
-        "as_of": iso(datetime.now(timezone.utc)),
+        "as_of": iso(_now()),
     })

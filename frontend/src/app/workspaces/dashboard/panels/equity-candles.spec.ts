@@ -57,11 +57,11 @@ function at(fixture: { componentInstance: EquityCandles; detectChanges(): void }
   fixture.detectChanges();
 }
 
-/** `count` hourly candles from 2026-10-01 00:00 New York (EDT all month). */
+/** `count` hourly candles from 2026-10-01 00:00 Berlin (CEST until 25 Oct). */
 function hourlyCandles(count: number): EquityCandle[] {
   return Array.from({ length: count }, (_, i) => {
     const wall = new Date(Date.UTC(2026, 9, 1) + i * 3_600_000).toISOString().slice(0, 19);
-    return candle(`${wall}-04:00`);
+    return candle(`${wall}+02:00`);
   });
 }
 
@@ -84,8 +84,8 @@ function augustCandles(): EquityCandle[] {
 }
 
 const W = (from: string, to: string): TimeWindow => ({ from, to });
-/** New York midnights (EDT, UTC-4) of 3 Sep and 6 Sep: buckets 3, 4 and 5 Sep. */
-const SEP_3_TO_6 = W('2026-09-03T04:00:00.000Z', '2026-09-06T04:00:00.000Z');
+/** Berlin midnights (CEST, UTC+2) of 3 Sep and 6 Sep: buckets 3, 4 and 5 Sep. */
+const SEP_3_TO_6 = W('2026-09-02T22:00:00.000Z', '2026-09-05T22:00:00.000Z');
 
 type Linked = { programmatic: boolean; gesture: boolean; series: { setData(points: unknown): void } };
 const linked = (fixture: { componentInstance: EquityCandles }) => fixture.componentInstance as unknown as Linked;
@@ -107,14 +107,14 @@ describe('sb-equity-candles', () => {
     });
 
     it('has no range for a window no loaded candle meets', () => {
-      expect(targetLogicalRange(W('2026-12-01T05:00:00.000Z', '2026-12-02T05:00:00.000Z'),
+      expect(targetLogicalRange(W('2026-11-30T23:00:00.000Z', '2026-12-01T23:00:00.000Z'),
         dailyCandles(10), '1D')).toBeNull();
     });
 
     it('needs older history while the window opens before the oldest bucket, and always for all history', () => {
       const candles = dailyCandles(10);
-      expect(targetNeedsOlder(W('2026-08-20T04:00:00.000Z', '2026-09-05T04:00:00.000Z'), candles, '1D')).toBe(true);
-      expect(targetNeedsOlder(W('2026-09-01T04:00:00.000Z', '2026-09-05T04:00:00.000Z'), candles, '1D')).toBe(false);
+      expect(targetNeedsOlder(W('2026-08-19T22:00:00.000Z', '2026-09-04T22:00:00.000Z'), candles, '1D')).toBe(true);
+      expect(targetNeedsOlder(W('2026-08-31T22:00:00.000Z', '2026-09-04T22:00:00.000Z'), candles, '1D')).toBe(false);
       expect(targetNeedsOlder(null, candles, '1D')).toBe(true);
       expect(targetNeedsOlder(null, [], '1D')).toBe(false);
     });
@@ -133,13 +133,13 @@ describe('sb-equity-candles', () => {
       return seen;
     }
 
-    it('reports a pan or zoom the partner made as whole New York buckets', () => {
+    it('reports a pan or zoom the partner made as whole Berlin buckets', () => {
       const { fixture } = render(response(dailyCandles(40)));
       const seen = emitted(fixture);
       userGesture(fixture);
       at(fixture, 4.6, 24.4);
-      // Buckets 5..24 = 6 Sep .. 25 Sep; the window ends at 26 Sep's NY midnight.
-      expect(seen).toEqual([{ from: '2026-09-06T04:00:00.000Z', to: '2026-09-26T04:00:00.000Z' }]);
+      // Buckets 5..24 = 6 Sep .. 25 Sep; the window ends at 26 Sep's Berlin midnight.
+      expect(seen).toEqual([{ from: '2026-09-05T22:00:00.000Z', to: '2026-09-25T22:00:00.000Z' }]);
     });
 
     it('never reports a move the component made itself', () => {
@@ -262,7 +262,7 @@ describe('sb-equity-candles', () => {
       stub.hasMore.set(true);
       const move = vi.spyOn(linkScale(fixture), 'setVisibleLogicalRange').mockImplementation(() => {});
       fixture.componentRef.setInput('target',
-        { window: W('2026-08-01T04:00:00.000Z', '2026-09-03T04:00:00.000Z'), seq: 1 });
+        { window: W('2026-07-31T22:00:00.000Z', '2026-09-02T22:00:00.000Z'), seq: 1 });
       fixture.detectChanges();
       expect(stub.calls.loadOlder).toBe(1);
       expect(move).not.toHaveBeenCalled();
@@ -294,7 +294,7 @@ describe('sb-equity-candles', () => {
       stub.hasMore.set(true);
       stub.pageLoading.set(true);
       fixture.componentRef.setInput('target',
-        { window: W('2026-08-01T04:00:00.000Z', '2026-09-03T04:00:00.000Z'), seq: 1 });
+        { window: W('2026-07-31T22:00:00.000Z', '2026-09-02T22:00:00.000Z'), seq: 1 });
       fixture.detectChanges();
       expect([stub.calls.loadOlder, move.mock.calls.length]).toEqual([0, 0]);
 
@@ -318,7 +318,7 @@ describe('sb-equity-candles', () => {
       stub.hasMore.set(true);
       stub.pageError.set(true);
       fixture.componentRef.setInput('target', {
-        window: W('2026-08-01T04:00:00.000Z', '2026-09-03T04:00:00.000Z'), seq: 1,
+        window: W('2026-07-31T22:00:00.000Z', '2026-09-02T22:00:00.000Z'), seq: 1,
       });
       fixture.detectChanges();
       expect(stub.calls.loadOlder).toBe(0);
@@ -384,7 +384,7 @@ describe('sb-equity-candles', () => {
       const { fixture } = render(response(dailyCandles(40)));
       const latest = vi.spyOn(linkScale(fixture), 'scrollToRealTime').mockImplementation(() => {});
       fixture.componentRef.setInput('target',
-        { window: W('2026-12-01T05:00:00.000Z', '2026-12-02T05:00:00.000Z'), seq: 1 });
+        { window: W('2026-11-30T23:00:00.000Z', '2026-12-01T23:00:00.000Z'), seq: 1 });
       fixture.detectChanges();
       expect(latest).toHaveBeenCalledTimes(1);
     });
