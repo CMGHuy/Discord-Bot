@@ -33,7 +33,7 @@ closed nothing; other transitions are rate-limited to one per
 never an alert embed. `GET /api/v1/market/tape` gains a `shock` object and
 the shell tape shows a NORMAL / SHOCK / RECOVERY badge (with `VIX missing`
 when the VIX row is stale), beside the tape on desktop and on its own line
-under it on tablet.
+under it on tablet; on a phone (below 640 px) a compact SHOCK / RECOVERY pill in the top bar takes its place.
 
 It leaves alone: every trade decision (still shadow: no long blocked, no
 short issued, no stop moved), the detector, its thresholds and tables, the
@@ -43,7 +43,7 @@ screens. Success is measured by tests and by production, not by ExpR
 exception and the open-long lines are pinned by unit tests; a failing notice
 build never costs the reading; under `off` there is no notice and
 `shock: null`; after the deploy a notice builds and renders from production's
-stored state without being sent, and the badge renders at 820 and 1440 px.
+stored state without being sent, and the badge renders at 820 and 1440 px and the phone pill (V210-3c) at 390 px.
 
 ## Architecture
 
@@ -64,6 +64,8 @@ stored state without being sent, and the badge renders at 820 and 1440 px.
   `shock` from the repository's current state and latest reading.
 - **SPA badge** (V210-3b): `TapeShock` model, `TapeFeed.shock` signal, a
   `.shock-badge` sibling of the tape lane in `shell/tape/`.
+- **Phone pill** (V210-3c): `sb-shock-pill` in the phone top bar's
+  `.status-cluster`, `SHOCK` / `RECOVERY` only, fed by the same `TapeFeed.shock`.
 - **Release** (V210-4): bot patch + ui patch, deploy, read-only production
   checks of the notice path and the badge.
 - **Close-out** (V210-5): `/panel` with three roles, then `/close-out` without
@@ -86,15 +88,15 @@ pytest; Angular standalone components + signals, Vitest via
 - **One transaction.** The notice event goes through `repo.record(..., notice_event=)` (v209's V209-5b), so reading, state and event commit together; a failing *enqueue* rolls the pass back. A failure to *build* the notice is swallowed (`scan.shock.notice`) and the reading is recorded without an event.
 - **The two existing queue kinds are untouched** (`trade_closed`, `plan_transition`): their validators, renderers and tests do not change.
 - **Tape `shock` object, exact keys:** `{"label", "since", "as_of", "breadth_pct", "sectors_down", "sectors_total", "spy_atr_move", "qqq_atr_move", "vix_level", "vix_chg_pct", "vix_missing": bool}`; `breadth_pct = round(breadth_frac * 100, 1)`; `as_of` is the last reading's; `vix_missing = vix_level is None`. Both returns of `tape()` carry the key. The admin never steps the detector.
-- **Badge:** copy `NORMAL` / `SHOCK` / `RECOVERY`, and `VIX missing` when `vix_missing`; element `.shock-badge[data-label]`, a sibling of the tape lane; it never truncates the tape. Checked at 390, 820 and 1440 px: to the tape's right at ≥ 1024 px, on its own line under the tape at 640–1023 px. Below 640 px the shell hides the whole tape strip (see OPEN).
+- **Badge:** copy `NORMAL` / `SHOCK` / `RECOVERY`, and `VIX missing` when `vix_missing`; element `.shock-badge[data-label]`, a sibling of the tape lane; it never truncates the tape. Checked at 390, 820 and 1440 px: to the tape's right at ≥ 1024 px, on its own line under the tape at 640–1023 px. Below 640 px the shell hides the whole tape strip; there a compact `.shock-pill[data-label]` in the top bar's `.status-cluster` shows `SHOCK` / `RECOVERY` (nothing on `NORMAL` or `null`), hidden at ≥ 640 px (V210-3c).
 - Every function written or changed < 15 cyclomatic complexity (`python scripts/dev/complexity_gate.py`); no legacy function's CC rises.
 - Narrow test runs only: backend `python scripts/dev/testrun.py file <test>`; frontend `node frontend/scripts/ng-test.mjs frontend --include <spec>`. **No task runs the full suite**; CI does after the push. A task whose tests reach Postgres runs `/replicate-prod-db` first (one shared `swing-db` container, port 56789, `.env` credentials never printed). Every new test file sits in an existing `tests/` directory, so `tests/suites.toml` is unchanged.
 - `.env` values are read, never printed; production is reached only through `bash scripts/ops/ssh-hetzner.sh`.
-- Commit steps of V210-1..V210-3b run on the plan's worktree branch, never on `main`; V210-4 and V210-5 run on `main` after the merge.
+- Commit steps of V210-1..V210-3c run on the plan's worktree branch, never on `main`; V210-4 and V210-5 run on `main` after the merge.
 
 ## OPEN (for the partner, not decided)
 
-- **No badge on phones.** The shell hides the whole tape strip below 640 px (`frontend/src/app/shell/shell.css`, `.tape-strip { display: none; }`), so the badge, which lives in the tape component, is not shown at 390 px. V210-3b leaves the shell alone and documents this; showing the state on phones (e.g. a chip in the mobile header) would be a shell change outside the spec. The partner decides whether that is wanted and, if so, in which plan.
+- ~~**No badge on phones.**~~ Resolved (partner, 2026-11-06): compact phone pill, V210-3c. Below 640 px the shell hides the tape strip, so a non-interactive `SHOCK` / `RECOVERY` pill in the phone top bar's `.status-cluster` carries the state; it reads `TapeFeed.shock` (no new API, no new polling) and is hidden on `NORMAL`, on `null` and at ≥ 640 px.
 
 ## Review Focus
 
@@ -102,15 +104,15 @@ pytest; Angular standalone components + signals, Vitest via
 2. **Notice build failure.** An exception while reading the trade log or building the payload never costs the reading or the state. Owner: V210-2b.
 3. **Trade log unreadable vs. empty.** `open_longs_unavailable: true` renders a different line from `No open longs.` Owner: V210-1, V210-2b.
 4. **Many open longs.** 60 open longs never push the description past 4096 characters. Owner: V210-1.
-5. **Stale VIX / `off`.** `vix_missing` shows on the badge; under `off` the API returns `shock: null` and the badge is absent. Owner: V210-3, V210-3b.
+5. **Stale VIX / `off`.** `vix_missing` shows on the badge; under `off` the API returns `shock: null` and the badge and phone pill are absent. Owner: V210-3, V210-3b, V210-3c.
 
 ## Parallelisation
 
 | Group | Tasks | Files | Why sequential inside |
 |---|---|---|---|
 | E notices | V210-1 → V210-1b → V210-2 → V210-2b | `shock_notices.py` (1 creates, 2 extends), `lifecycle_events.py`, `lifecycle_notifications.py` (1b), `shock_scan.py` (2b), `tests/scanning/test_shock_notice_*.py`, `tests/infra/test_lifecycle_events_market_shock.py`, `tests/scanning/test_shock_pass*.py` | 1b dispatches to 1's renderer and appends to 1's test file; 2 calls `make_event` with 1b's kind; 2b calls 2's helpers |
-| F admin | V210-3 → V210-3b | `admin/api_v1/market.py`, `tests/admin/test_api_v1_tape_shock.py`, `frontend/src/app/{api/models.ts,stores/tape-feed.ts,shell/tape/*}` | 3b renders 3's API field. Shares no file with E: may run beside it |
-| H release | V210-4 | `docs/deploy/DEPLOY_HETZNER.md`, `VERSION.json`, `swingbot/admin/version_history.json` | needs E and F merged on `main` and CI green |
+| F admin | V210-3 → V210-3b → V210-3c | `admin/api_v1/market.py`, `tests/admin/test_api_v1_tape_shock.py`, `frontend/src/app/{api/models.ts,stores/tape-feed.ts,shell/tape/*}`, `frontend/src/app/shell/{shock-pill.ts,shock-pill.spec.ts,shell.ts,shell.html,shell.spec.ts}` | 3b renders 3's API field; 3c reads 3b's `TapeFeed.shock` and imports 3b's `shockSummary` from `tape.ts`. Shares no file with E: may run beside it |
+| H release | V210-4 | `docs/deploy/DEPLOY_HETZNER.md`, `VERSION.json`, `swingbot/admin/version_history.json` | needs E and F (through V210-3c) merged on `main` and CI green |
 | I close-out | V210-5 | plan files (moved) | needs V210-4 deployed and its checks done |
 
 Groups E and F need only plan v209 merged. Track 2's plan (the next free
@@ -126,14 +128,15 @@ number when written) shares no file with this plan.
 | V210-2b | Enqueue the notice from the stepped pass | 1 | sonnet | M `swingbot/core/scanning/shock_scan.py` (`_stepped_pass` passes `notice_event`; new `_open_trades`, `_open_longs`, `_notice_for`, `_safe_notice`); C `tests/scanning/test_shock_pass_notice.py`; M `tests/scanning/test_shock_pass.py` (one stub line in the autouse `_env` fixture) | `shock_scan._open_trades() -> list[dict] \| None` (`None` when the trade log cannot be read); a stepped pass that changes the label hands v209's `repo.record(..., notice_event=)` the event the V210-2 rules allow |
 | V210-3 | Admin tape `shock` object (API) | 1 | sonnet | M `swingbot/admin/api_v1/market.py` (`_iso()`, `_shock_fields()`, `_shock_block()`, `"shock"` in both returns of `tape()`); C `tests/admin/test_api_v1_tape_shock.py` | `GET /api/v1/market/tape` → `"shock": null` under `off`/unknown mode, before the first state row, or when the store cannot be read; else the object with the exact keys in Global Constraints |
 | V210-3b | SPA market-shock badge beside the tape, at three widths | 2 | sonnet | M `frontend/src/app/api/models.ts`; M `frontend/src/app/stores/tape-feed.ts` + `tape-feed.spec.ts`; M `frontend/src/app/shell/tape/tape.ts`, `tape.css`, `tape.spec.ts` | `type ShockLabel = 'NORMAL' \| 'SHOCK' \| 'RECOVERY'`; `interface TapeShock` (V210-3's keys); `TapeResponse.shock?: TapeShock \| null`; `TapeFeed.shock: Signal<TapeShock \| null>`; `shockSummary(s: TapeShock): string` in `tape.ts`; badge `.shock-badge[data-label]` |
-| V210-4 | Release: bot patch + ui patch, deploy, shadow checks for the notice path and the badge | 2 | sonnet | M `docs/deploy/DEPLOY_HETZNER.md` (one `v210` paragraph at the end of v209's `### v209: market shock tables` section); M `VERSION.json`; M `swingbot/admin/version_history.json` | release commit `release(bot,ui): bot <B> / ui <U> -- market-shock notice and tape badge (v210)` and its `chore(bot,ui)` regeneration commit, which V210-5 detects to skip a second bump; read-only production checks: `MARKET_SHOCK_MODE=shadow` still set, a notice built and rendered from stored state without enqueueing, queue rows delivered, tape `shock` object and badge at 1440/820 px; `/mirror-prod` for any production change |
+| V210-3c | Compact market-shock pill in the phone header | 2 | sonnet | C `frontend/src/app/shell/shock-pill.ts`, `shock-pill.spec.ts`; M `frontend/src/app/shell/shell.ts` (imports `TapeFeed`, `ShockPill`; field `shock = inject(TapeFeed).shock`), `shell.html` (`@if (isPhone()) { <sb-shock-pill [shock]="shock()" /> }` in `.status-cluster`, before `sb-alarm-chip`), `shell.spec.ts` | `export class ShockPill` (selector `sb-shock-pill`, input `shock: TapeShock \| null`); renders `<span class="shock-pill" role="status" [data-label]>` with the label word only for `SHOCK` / `RECOVERY`, `aria-label` = `shockSummary(s)`; host hidden at `(min-width: 640px)`. V210-4 Step 8 checks it at 390 px |
+| V210-4 | Release: bot patch + ui patch, deploy, shadow checks for the notice path and the badge | 2 | sonnet | M `docs/deploy/DEPLOY_HETZNER.md` (one `v210` paragraph at the end of v209's `### v209: market shock tables` section); M `VERSION.json`; M `swingbot/admin/version_history.json` | release commit `release(bot,ui): bot <B> / ui <U> -- market-shock notice and tape badge (v210)` and its `chore(bot,ui)` regeneration commit, which V210-5 detects to skip a second bump; read-only production checks: `MARKET_SHOCK_MODE=shadow` still set, a notice built and rendered from stored state without enqueueing, queue rows delivered, tape `shock` object and badge at 1440/820 px, phone pill (V210-3c) at 390 px; needs V210-1..V210-3c merged; `/mirror-prod` for any production change |
 | V210-5 | `/panel` (veteran-trader, senior-engineer, financial-advisor) + `/close-out` without a second bump | 2 | sonnet | M (moved by `/close-out`) the three v210 plan files (index + parts 1, 2) `docs/superpowers/plans/2026-11-06-v210-market-shock-notices-and-badge_*.md` → `docs/superpowers/plans/implemented/`; the v209 spec stays in `specs/` (the Track 2 plan closes it); `VERSION.json` and `version_history.json` **not** modified | none (last task). Double-bump guard: before `/close-out` Step 3, run `git log --oneline -- VERSION.json` and confirm V210-4's `release(bot,ui): ... (v210)` commit is present and `VERSION.json` holds that pair or later; if so, tell the close-out the bump is already released (Steps 3–4 skipped, Step 5's prediction check still runs) and record `bump released in V210-4 (<sha>)` in the close-out commit message. If the release commit is missing, stop and report — never bump here |
 
-8 ledger rows (`b` rows included).
+9 ledger rows (`b` and `c` rows included).
 
 ## Parts
 
 | Part | File | Tasks | Scope |
 |---|---|---|---|
 | 1 | `2026-11-06-v210-market-shock-notices-and-badge_1-notices.md` | V210-1, V210-1b, V210-2, V210-2b, V210-3 | `market_shock` renderer, queue kind, payload helpers, stepped-pass hook; tape API `shock` object |
-| 2 | `2026-11-06-v210-market-shock-notices-and-badge_2-admin-badge.md` | V210-3b, V210-4, V210-5 | SPA badge at three widths; release (bot patch, ui patch) with read-only production checks; `/panel` + `/close-out` |
+| 2 | `2026-11-06-v210-market-shock-notices-and-badge_2-admin-badge.md` | V210-3b, V210-3c, V210-4, V210-5 | SPA badge at three widths; compact phone-header pill (V210-3c); release (bot patch, ui patch) with read-only production checks; `/panel` + `/close-out` |

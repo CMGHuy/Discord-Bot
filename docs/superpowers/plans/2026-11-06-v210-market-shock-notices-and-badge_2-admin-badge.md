@@ -7,13 +7,13 @@
 **Brief:** `.superpowers/briefs/2026-11-05-v209-market-shock-detector.md` §3.9–3.10 (tape), §4 (frontend spec pattern), D8 (rollback).
 
 Tasks: V210-3b, the SPA half of V210-3 (its API half is the last task of
-part 1; split there at the 1500-line cap), V210-4 (release: bot patch, ui
+part 1; split there at the 1500-line cap), V210-3c (the phone header pill), V210-4 (release: bot patch, ui
 patch, deploy, shadow checks) and V210-5 (`/panel` and `/close-out` without a
 second bump). `V209-*` ids name tasks of plan v209, merged before this plan
 starts. Phone width: the shell hides the whole tape strip below 640 px, so the
 badge, which lives in the tape component, shows at tablet and desktop widths
-only; the shell is not edited (the index's OPEN item flags this for the
-partner).
+only; V210-3c adds a compact SHOCK / RECOVERY pill to the phone header
+(partner decision, 2026-11-06).
 
 ---
 
@@ -299,6 +299,320 @@ git commit -m "feat(v210): market-shock badge beside the shell tape"
 
 ---
 
+### Task V210-3c: Compact market-shock pill in the phone header
+
+**Model:** sonnet — one small presentational component plus a one-line shell wiring, behaviour pinned by the partner's decision; no backend, no new data path.
+
+Partner decision (2026-11-06), resolving the index's former OPEN item: below
+640 px the shell hides the whole tape strip, so V210-3b's badge never shows
+on a phone. This task adds a compact pill to the phone top bar, shown only
+while the label is `SHOCK` or `RECOVERY`. Needs V210-3b on the branch (it
+reads `TapeFeed.shock` and reuses `shockSummary`). UI work: one surface (the
+shell top bar, on every route), checked at 390, 820 and 1440 px per
+`docs/claude/ui-design.md` § UI tasks.
+
+**Files:**
+- Create: `frontend/src/app/shell/shock-pill.ts`, `frontend/src/app/shell/shock-pill.spec.ts`
+- Modify: `frontend/src/app/shell/shell.ts` (imports, one field), `frontend/src/app/shell/shell.html` (`.status-cluster`), `frontend/src/app/shell/shell.spec.ts` (two imports, one new `describe` at the end)
+
+**Interfaces:**
+- Consumes: `TapeFeed.shock: Signal<TapeShock | null>` (V210-3b, `frontend/src/app/stores/tape-feed.ts`); `TapeShock` (V210-3b, `frontend/src/app/api/models.ts`); `export function shockSummary(s: TapeShock): string` (V210-3b, `frontend/src/app/shell/tape/tape.ts`); `ViewportService.isPhone` (existing, `frontend/src/app/ui/breakpoints.ts:47`, `viewport() === 'xs'`, i.e. below `BREAKPOINTS.sm = 640`).
+- Produces: `export class ShockPill` (selector `sb-shock-pill`, input `shock: TapeShock | null`, default `null`); element `.shock-pill[data-label]` inside the phone top bar's `.status-cluster`. No new API, no new polling: the shell already starts the feed (`this.tape.load()`, `this.marketIndex.load()` in `shell.ts`) at every width, so `TapeFeed.shock` is filled on a phone although the tape strip is hidden.
+
+**Behaviour, pinned.**
+- Rendered only when `shock` is non-null **and** `shock.label` is `SHOCK` or `RECOVERY`; `NORMAL` and `null` (detector `off`, before the first reading, store unreadable) render nothing — the host is empty.
+- Copy is the label word alone (`SHOCK`, `RECOVERY`); the full `shockSummary(s)` is the pill's `aria-label` and `title`, so a screen reader hears the numbers. `VIX missing` is part of that summary, not a second word on the pill (the phone bar has no room for it).
+- The pill is a **status, not a control**: a `<span role="status">`, no `href`, no `tabindex`, no click handler — so it adds no tap target below 44 px for the layout audit's target check, and a tap on it does nothing. It never grows the 48 px phone bar (`height: 24px`, `flex: none`, `white-space: nowrap`).
+- Hidden at ≥ 640 px twice over: the shell renders it only under `@if (isPhone())`, and the component's own CSS hides its host at `(min-width: 640px)` (`breakpoint-guard.spec.ts` allows 640). V210-3b's tape badge covers tablet and desktop.
+- Colours follow the tape badge: `SHOCK` in `--neg` on `--neg-soft`, `RECOVERY` in `--warn` on `--warn-soft`; the word carries the state, colour only repeats it. Corners `--chip-radius` (the design system squares chips), text `--text-chip` (≥ 12 px).
+- Order inside `.status-cluster`: read-only badge (viewers only), **shock pill**, alarm chip, killswitch chip. The bar's direct children do not change, so the existing phone-bar order test (`shell on a phone`) still holds.
+
+- [ ] **Step 1: Write the failing component tests**
+
+`frontend/src/app/shell/shock-pill.spec.ts`:
+
+```ts
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { TapeShock } from '../api/models';
+import { ShockPill } from './shock-pill';
+import { shockSummary } from './tape/tape';
+
+const base: TapeShock = {
+  label: 'SHOCK', since: '2026-11-05T14:45:00+00:00', as_of: '2026-11-05T15:00:00+00:00',
+  breadth_pct: 42, sectors_down: 5, sectors_total: 8, spy_atr_move: -1.8, qqq_atr_move: -2.3,
+  vix_level: 21.13, vix_chg_pct: 27.2, vix_missing: false,
+};
+
+describe('ShockPill (v210, phone header)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  function render(shock: TapeShock | null): HTMLElement {
+    const fixture = TestBed.createComponent(ShockPill);
+    fixture.componentRef.setInput('shock', shock);
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  const empty = (el: HTMLElement) => el.innerHTML.replace(/<!--[\s\S]*?-->/g, '').trim();
+
+  it.each(['SHOCK', 'RECOVERY'] as const)('shows %s as a word of its own', (label) => {
+    const pill = render({ ...base, label }).querySelector('.shock-pill')!;
+    expect(pill.textContent!.trim()).toBe(label);
+    expect(pill.getAttribute('data-label')).toBe(label);
+  });
+
+  it('renders nothing on NORMAL', () => {
+    expect(empty(render({ ...base, label: 'NORMAL' }))).toBe('');
+  });
+
+  it('renders nothing without a shock object (detector off)', () => {
+    expect(empty(render(null))).toBe('');
+  });
+
+  it('reads the full summary to a screen reader, VIX missing included', () => {
+    const missing: TapeShock = { ...base, label: 'RECOVERY', vix_level: null, vix_chg_pct: null, vix_missing: true };
+    const pill = render(missing).querySelector('.shock-pill')!;
+    expect(pill.getAttribute('role')).toBe('status');
+    expect(pill.getAttribute('aria-label')).toBe(shockSummary(missing));
+    expect(pill.getAttribute('aria-label')).toContain('VIX missing');
+    expect(pill.getAttribute('title')).toBe(shockSummary(missing));
+    expect(pill.textContent!.trim()).toBe('RECOVERY');
+  });
+
+  it('is a status, not a tap target: no link, no button, no tabindex', () => {
+    const el = render(base);
+    const pill = el.querySelector('.shock-pill')!;
+    expect(pill.tagName).toBe('SPAN');
+    expect(el.querySelector('a, button, [tabindex]')).toBeNull();
+  });
+
+  it('hides its host from 640px and never grows the 48px phone bar', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/shell/shock-pill.ts'), 'utf8');
+    expect(src).toMatch(/@media \(min-width: 640px\) \{\s*:host \{ display: none; \}/);
+    expect(src).toMatch(/\.shock-pill \{[^}]*height: 24px;/);
+    expect(src).toMatch(/\.shock-pill \{[^}]*white-space: nowrap;/);
+    expect(src).toMatch(/\.shock-pill \{[^}]*font-size: var\(--text-chip\);/);
+  });
+});
+```
+
+Run: `node frontend/scripts/ng-test.mjs frontend --include src/app/shell/shock-pill.spec.ts`
+Expected: FAIL — `Cannot find module './shock-pill'`.
+
+- [ ] **Step 2: Write the failing shell tests**
+
+`frontend/src/app/shell/shell.spec.ts` — add `import { TapeShock } from '../api/models';`
+and `import { TapeFeed } from '../stores/tape-feed';` to the imports, then
+append at the end of the file:
+
+```ts
+describe('shell phone shock pill (v210)', () => {
+  const shockState: TapeShock = {
+    label: 'SHOCK', since: '2026-11-05T14:45:00+00:00', as_of: '2026-11-05T15:00:00+00:00',
+    breadth_pct: 42, sectors_down: 5, sectors_total: 8, spy_atr_move: -1.8, qqq_atr_move: -2.3,
+    vix_level: 21.13, vix_chg_pct: 27.2, vix_missing: false,
+  };
+
+  // The real MarketIndexStore (the shell injects it) and V210-3b's sb-tape
+  // read the feed too, so the fake carries every member they touch.
+  function mount(phone: boolean, state: TapeShock | null): HTMLElement {
+    TestBed.configureTestingModule({ providers: shellProviders() });
+    TestBed.overrideProvider(TapeFeed, {
+      useValue: {
+        register: vi.fn(), refresh: vi.fn(), rows: signal({}), asOf: signal(null),
+        loading: signal(false), shock: signal(state),
+      },
+    });
+    TestBed.overrideProvider(ViewportService, {
+      useValue: { isPhone: signal(phone), isNarrow: signal(phone), viewport: signal(phone ? 'xs' : 'md') },
+    });
+    const fixture = createShell();
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('shows SHOCK in the phone status cluster, before the alarm and killswitch chips', () => {
+    const el = mount(true, shockState);
+    const cluster = el.querySelector('header.topbar .status-cluster')!;
+    expect(cluster.querySelector('sb-shock-pill .shock-pill')!.textContent!.trim()).toBe('SHOCK');
+    const tags = [...cluster.children].map((c) => c.tagName.toLowerCase());
+    expect(tags.indexOf('sb-shock-pill')).toBeGreaterThanOrEqual(0);
+    expect(tags.indexOf('sb-shock-pill')).toBeLessThan(tags.indexOf('sb-alarm-chip'));
+    expect(tags.indexOf('sb-shock-pill')).toBeLessThan(tags.indexOf('sb-killswitch-chip'));
+  });
+
+  it('shows RECOVERY on a phone too', () => {
+    const el = mount(true, { ...shockState, label: 'RECOVERY' });
+    expect(el.querySelector('.status-cluster .shock-pill')!.textContent!.trim()).toBe('RECOVERY');
+  });
+
+  it('shows no pill on NORMAL', () => {
+    expect(mount(true, { ...shockState, label: 'NORMAL' }).querySelector('.shock-pill')).toBeNull();
+  });
+
+  it('shows no pill without a shock object (detector off)', () => {
+    expect(mount(true, null).querySelector('.shock-pill')).toBeNull();
+  });
+
+  it('renders no pill above phone width: the tape badge covers it there', () => {
+    expect(mount(false, shockState).querySelector('sb-shock-pill')).toBeNull();
+  });
+});
+```
+
+(`signal`, `vi`, `ViewportService`, `createShell` and `shellProviders` are
+already imported or defined in this file.)
+
+Run: `node frontend/scripts/ng-test.mjs frontend --include src/app/shell/shell.spec.ts`
+Expected: FAIL — the SHOCK and RECOVERY tests find no `.shock-pill`; every pre-existing test still passes.
+
+- [ ] **Step 3: Implement `ShockPill` and wire it into the shell**
+
+3a. `frontend/src/app/shell/shock-pill.ts`, in the `KillswitchChip` style
+(`killswitch-chip.ts`: standalone, `ChangeDetectionStrategy.OnPush`, inline
+template and styles):
+
+```ts
+/**
+ * v210: the market-shock state in the phone top bar. Below 640px the shell
+ * hides the tape strip and with it the tape's badge (V210-3b), so a phone
+ * reads SHOCK / RECOVERY here. NORMAL and "no reading" render nothing: the
+ * bar spends no width on a calm market. A status, never a control -- the
+ * numbers are in its accessible name; the Discord notice carries the rest.
+ */
+@Component({
+  selector: 'sb-shock-pill',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    @if (shown(); as s) {
+      <span class="shock-pill" role="status" [attr.data-label]="s.label"
+            [attr.aria-label]="summary()" [attr.title]="summary()">{{ s.label }}</span>
+    }
+  `,
+  styles: `
+    :host { display: inline-flex; }
+    .shock-pill { display: inline-flex; align-items: center; flex: none; height: 24px;
+                  padding: 0 var(--space-6); border: 1px solid currentColor;
+                  border-radius: var(--chip-radius); font-size: var(--text-chip);
+                  font-weight: 650; letter-spacing: .06em; white-space: nowrap; }
+    .shock-pill[data-label='SHOCK'] { color: var(--neg); background: var(--neg-soft); }
+    .shock-pill[data-label='RECOVERY'] { color: var(--warn); background: var(--warn-soft); }
+    @media (min-width: 640px) {
+      :host { display: none; }
+    }
+  `,
+})
+export class ShockPill {
+  readonly shock = input<TapeShock | null>(null);
+  protected readonly shown = computed(() => {
+    const s = this.shock();
+    return s && s.label !== 'NORMAL' ? s : null;
+  });
+  protected readonly summary = computed(() => {
+    const s = this.shown();
+    return s ? shockSummary(s) : null;
+  });
+}
+```
+
+Imports: `ChangeDetectionStrategy, Component, computed, input` from
+`@angular/core`; `TapeShock` from `'../api/models'`; `shockSummary` from
+`'./tape/tape'`. Keep the media block's `:host { display: none; }` on its own
+line exactly as above (the Step 1 source test matches it).
+
+3b. `frontend/src/app/shell/shell.ts`: import `TapeFeed` from
+`'../stores/tape-feed'` and `ShockPill` from `'./shock-pill'`; add
+`ShockPill` to the component's `imports` array (after `ReadOnlyBadge`); add
+the field `protected readonly shock = inject(TapeFeed).shock;` directly
+below `private readonly marketIndex = inject(MarketIndexStore);`.
+
+3c. `frontend/src/app/shell/shell.html`, inside `<div class="status-cluster">`,
+directly after the read-only badge's `@if (session.isViewer()) { ... }` block
+and before `<sb-alarm-chip`:
+
+```html
+        <!-- v210 (partner, 2026-11-06): a phone has no tape strip, so the
+             market state rides here -- SHOCK / RECOVERY only, nothing on a
+             calm market. Tablet and desktop read the tape's badge. -->
+        @if (isPhone()) {
+          <sb-shock-pill [shock]="shock()" />
+        }
+```
+
+`shell.css` is not edited: `.status-cluster` already lays its children on
+one line with `gap: var(--space-6)`.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `node frontend/scripts/ng-test.mjs frontend --include src/app/shell/shock-pill.spec.ts`
+Run: `node frontend/scripts/ng-test.mjs frontend --include src/app/shell/shell.spec.ts`
+Run: `node frontend/scripts/ng-test.mjs frontend --include src/app/ui/breakpoint-guard.spec.ts`
+Expected: PASS in all three, every pre-existing test included (`0 failed`).
+
+- [ ] **Step 5: Check the pill at 390, 820 and 1440 px**
+
+1. `/replicate-prod-db` (skip when V210-3b's Step 4 ran it this session).
+   Run `python -m alembic upgrade head` in the environment `admin_ui.py`
+   uses if the local database lacks `market_shock_state`.
+2. Seed one SHOCK state from a scratch script in the scratchpad (never in
+   the repo) — the same rows V210-3b Step 4 seeds:
+
+```python
+from datetime import datetime, timezone
+from swingbot.core.db.repositories.market_shock import market_shock_repo
+from swingbot.core.market import shock
+
+now = datetime.now(timezone.utc)
+reading = shock.ShockReading(
+    as_of=now, session_date=now.date(), minutes_since_open=60.0, breadth_frac=0.42,
+    sectors_down=5, sectors_total=8, breadth_speed=0.12, spy_atr_move=-1.8, qqq_atr_move=-2.3,
+    spy_last=671.2, spy_prev_close=683.0, spy_session_low=670.9, spy_new_low=True,
+    spy_retrace=0.05, vix_level=21.13, vix_chg_pct=27.2, vix_session_high=21.4,
+    vix_off_high_pct=1.3, n_names=61, insufficient=False)
+state = shock.ShockState(label="SHOCK", since=now, session_date=now.date())
+print(market_shock_repo().record(reading.as_row(), state.as_row(), state_after="SHOCK"))
+```
+
+3. `cd <wt>/frontend && npm run build`, then `cd <wt> && python admin_ui.py`;
+   sign in once with `node frontend/scripts/browse.mjs login --base http://localhost:1234`
+   (`.env` admin credentials loaded inside the script, never printed).
+4. `node frontend/scripts/layout-audit.mjs --base http://localhost:1234 --widths 390,820,1440`
+   must exit 0 — no page overflow, no clipped text, no sub-44 px target in
+   the phone bar with the pill present. A finding on the top bar is fixed
+   here (tighten the pill's padding, never shorten the label); findings on
+   routes unrelated to the shell are listed in the report, not fixed here.
+5. Shots (at most three):
+   `node frontend/scripts/browse.mjs shots --base http://localhost:1234 --path /dashboard --widths 390 --clip "header.topbar"`
+   — the phone bar reads diamond, wordmark, `SHOCK` pill, killswitch chip,
+   search icon, avatar on one 48 px line, nothing clipped, `page-scroll-x: 0`
+   in the `.txt`. Then
+   `node frontend/scripts/browse.mjs shots --base http://localhost:1234 --path /dashboard --widths 820,1440 --clip "header.topbar"`
+   and read only the two `.txt` files (no images): no `sb-shock-pill`
+   content in the bar (the tape badge under it carries the state there).
+6. Delete the seeded rows from the scratch script, same environment:
+   `with get_engine().begin() as c:` run `c.execute(sa.delete(schema.market_shock_state))`
+   and `c.execute(sa.delete(schema.market_shock_readings))`
+   (`swingbot.core.db.engine.get_engine`, `swingbot.core.db.schema`).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add frontend/src/app/shell/shock-pill.ts frontend/src/app/shell/shock-pill.spec.ts \
+        frontend/src/app/shell/shell.ts frontend/src/app/shell/shell.html \
+        frontend/src/app/shell/shell.spec.ts
+git commit -m "feat(v210): market-shock pill in the phone header"
+```
+
+---
+
 # Phase 3 — release and close-out
 
 ### Task V210-4: Release: bot patch + ui patch, deploy, shadow checks for the notice path and the badge
@@ -311,7 +625,7 @@ git commit -m "feat(v210): market-shock badge beside the shell tape"
 - Modify: `swingbot/admin/version_history.json` (regenerated, never hand-edited)
 
 **Interfaces:**
-- Consumes: every task V210-1..V210-3b merged on `main` with CI green; plan v209 merged **and released** (its `release(bot): ... -- v209 market-shock detector (shadow)` commit present in `git log -- VERSION.json`, production `MARKET_SHOCK_MODE=shadow`, `market_shock_state` row 1 written by a stepped pass). `shock_notices.notice_payload`, `notice_event`, `FOOTER` (V210-1, V210-2); `lifecycle_notifications.build_lifecycle_notification(event)` rendering `market_shock` (V210-1b); `market_shock_repo().current_state()` / `.latest_reading()`, `ShockState.from_row`, `ShockReading.from_row` (V209-2..5b, v209 (merged)); `GET /api/v1/market/tape` → `shock` (V210-3); `.shock-badge[data-label]` (V210-3b).
+- Consumes: every task V210-1..V210-3b merged on `main` with CI green; plan v209 merged **and released** (its `release(bot): ... -- v209 market-shock detector (shadow)` commit present in `git log -- VERSION.json`, production `MARKET_SHOCK_MODE=shadow`, `market_shock_state` row 1 written by a stepped pass). `shock_notices.notice_payload`, `notice_event`, `FOOTER` (V210-1, V210-2); `lifecycle_notifications.build_lifecycle_notification(event)` rendering `market_shock` (V210-1b); `market_shock_repo().current_state()` / `.latest_reading()`, `ShockState.from_row`, `ShockReading.from_row` (V209-2..5b, v209 (merged)); `GET /api/v1/market/tape` → `shock` (V210-3); `.shock-badge[data-label]` (V210-3b); `sb-shock-pill .shock-pill[data-label]` in the phone header (V210-3c).
 - Produces: release commit `release(bot,ui): bot <B> / ui <U> -- market-shock notice and tape badge (v210)` and its regeneration commit `chore(bot,ui): bot <B> / ui <U> -- market-shock notice and tape badge (v210)`, which V210-5's double-bump guard looks for.
 
 **Bump level (index `**Bump:**`): bot patch, ui patch.** A new Discord status notice and a new badge are "something someone might notice", the patch definition in `working-conventions.md` § The three levels; neither makes the bot or the admin UI something a user must look at anew (the minor test, used three times in the repo's life), and nothing needs a manual server step (major).
@@ -324,7 +638,7 @@ Run: `git log --oneline -- VERSION.json | head -5`
 Expected: the v209 `release(bot): ... -- v209 market-shock detector (shadow)` commit is present and newer than `10c75111`. Missing → stop (`BLOCKED: v209 not released`).
 
 Run: `git log --oneline main | grep -c "feat(v210)"`
-Expected: `6` (V210-1, 1b, 2, 2b, 3, 3b).
+Expected: `7` (V210-1, 1b, 2, 2b, 3, 3b, 3c).
 
 Run: `gh run list --branch main --limit 1 --json databaseId,status,conclusion`
 Expected: the newest run, which contains the last `feat(v210)` commit, is `completed` / `success`. Pending → `gh run watch <id> --exit-status` in the background first.
@@ -357,7 +671,8 @@ a stepped pass that changes the market state enqueues one `market_shock`
 event in the v197 notify queue (`manual_close_notify`), delivered as a plain
 status embed to `DISCORD_CHANNEL_OPS_ID` (falls back to the trades channel);
 `GET /api/v1/market/tape` carries a `shock` object and the shell tape shows
-a NORMAL / SHOCK / RECOVERY badge at 640 px and wider. `MARKET_SHOCK_MODE=off`
+a NORMAL / SHOCK / RECOVERY badge at 640 px and wider; below 640 px the
+phone header shows a SHOCK / RECOVERY pill instead. `MARKET_SHOCK_MODE=off`
 silences both (no reading, no notice, `shock: null`). Rollback is image-only
 (§ Rolling back): the previous image does not know the third queue kind, so
 after a rollback check
@@ -438,7 +753,10 @@ Run: `node frontend/scripts/browse.mjs api --base https://bomeo-capital.com --pa
 Expected: a `shock` object whose `label` equals Step 7's state label and whose keys are exactly `label, since, as_of, breadth_pct, sectors_down, sectors_total, spy_atr_move, qqq_atr_move, vix_level, vix_chg_pct, vix_missing`.
 
 Run: `node frontend/scripts/browse.mjs shots --out "$SCRATCH/v210_shots" --base https://bomeo-capital.com --path "/dashboard" --widths 1440,820,390 --clip ".tape-strip"`
-Expected (read the clipped PNGs and their `.txt`): at 1440 px the badge sits to the tape's right with the stored label; at 820 px it wraps onto its own line under the tape; at 390 px the tape strip is hidden by the shell (no badge — the index's OPEN item); horizontal page scroll `0` at every width.
+Expected (read the clipped PNGs and their `.txt`): at 1440 px the badge sits to the tape's right with the stored label; at 820 px it wraps onto its own line under the tape; at 390 px the tape strip is hidden by the shell (no badge); horizontal page scroll `0` at every width.
+
+Run: `node frontend/scripts/browse.mjs shots --out "$SCRATCH/v210_shots" --base https://bomeo-capital.com --path "/dashboard" --widths 390 --clip "header.topbar"`
+Expected (the phone pill, V210-3c): when Step 7's state label is `SHOCK` or `RECOVERY`, the 390 px bar shows a pill with that word inside `.status-cluster`, on one 48 px line with nothing clipped; when it is `NORMAL` (the usual case), the `.txt` shows no `sb-shock-pill` content. Either way `page-scroll-x: 0`.
 
 - [ ] **Step 9: Mirror and report**
 
