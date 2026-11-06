@@ -76,6 +76,15 @@ export function liveTickers(rows: readonly { ticker: string; status: string }[])
   return [...new Set(rows.filter((r) => LIVE_STATUSES.has(r.status)).map((r) => r.ticker))];
 }
 
+/** Lay live quotes over the still-live rows only; closed rows come back as-is. */
+export function patchLiveRows<T extends RowQuoteFields & { ticker: string; status: string }>(
+  live: Pick<LiveValuesStore, 'patchRows'>, rows: T[],
+): T[] {
+  const patched = live.patchRows(rows.filter((r) => LIVE_STATUSES.has(r.status)), (r) => r.ticker);
+  let next = 0;
+  return rows.map((r) => (LIVE_STATUSES.has(r.status) ? patched[next++] : r));
+}
+
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function resetResult(body: ClearHistoryResult): string {
@@ -142,8 +151,9 @@ export const TradesStore = signalStore(
     clearRefusal: null,
   }),
   withComputed(({ data, query }, live = inject(LiveValuesStore)) => {
-    // v201: live prices patch the rows in place, for every consumer.
-    const rows = computed(() => live.patchRows(data()?.items ?? [], (r) => r.ticker));
+    // v201: live prices patch the rows in place, for every consumer. A closed
+    // row's P&L is final: it never takes a quote's age or refresh mark.
+    const rows = computed(() => patchLiveRows(live, data()?.items ?? []));
     return {
     rows,
     meta: computed(() => liveMeta(data()?.market_meta, rows())),

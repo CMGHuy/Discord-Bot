@@ -732,6 +732,12 @@ describe('Dashboard price age (v201)', () => {
     expect(el.querySelector('sb-age-hint')).toBeNull();
   });
 
+  it('a closed row\'s final P&L carries no age or refresh mark', async () => {
+    const el = await withActiveRow({ status: 'CLOSED', pnl_pct: 2.5, price_as_of: null, price_refreshing: false });
+    expect(el.querySelector('sb-positions-table tbody sb-market-value')).toBeNull();
+    expect(el.querySelector('sb-positions-table tbody .mv-age')).toBeNull();
+  });
+
   it('a projected (pending) P&L cell also renders through sb-market-value', async () => {
     const asOf = new Date(Date.now() - 75_000).toISOString();
     const el = await withActiveRow({ pnl_pct: null, price_as_of: asOf, current_price: 101 });
