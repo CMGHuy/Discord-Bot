@@ -375,6 +375,17 @@ display-only. A test asserts that no fill, sizing, risk or P&L path reads
 the cache. This plan's task list stays open in this spec until the profiles
 exist.
 
+**Added 2026-11-06 (site audit): profile `/risk` too.** Production's
+slow-request log (2026-11-05 15:51 to 11-06 09:47 UTC) has it at 16 calls,
+avg 23.1 s, max 40.2 s, db 1.9 s, so nearly all of it is Python. An
+in-process cProfile on the local replica (refresher off, so not
+production-exact) put the warm call at 22.8 s: `collect_portfolio_state`
+15.6 s (per-ticker `_observed` daily bars, `_clusters_state`), trade-record
+loading 5.9 s (`codec.normalise`, 643k calls). The same log shows
+`/versions` at avg 88 s, db 0; that was `release_windows.telemetry_for`
+re-parsing `scan_telemetry.jsonl` once per release, fixed outside this spec
+(f425fc9f).
+
 ## Error handling
 
 - `scan` event without `progress`, or a malformed one: the client falls
