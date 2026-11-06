@@ -188,10 +188,19 @@ pasting its verdict line:
 Green is `0 failed` and `0 xfailed`. The August baseline and the xfail history
 go. `disable-model-invocation: true` stays: the gate runs only when typed.
 
+**Findings outside the ten skills.** The scan set is every skill, agent and
+eval prompt, so the repo-wide case also meets tokens in skills this spec does
+not otherwise touch (the plan-briefer dry run on 27fd81b2 counted about 19 of
+29 path findings there: the uncommitted `ssh-hetzner.sh`, the deleted-shim
+lists in `symbol-verifier` and `alert-surface`, vendored eToro config paths,
+hypothetical paths in eval prompts, a runtime `backups/` path). Part B clears
+each one: a real drift is fixed in its skill; a deliberate or uncommitted
+mention gets an allowlist line with its reason.
+
 ### C. Seat coverage
 
-The boundary paragraph becomes one canonical text, identical in every role
-skill and pinned whole by `test_role_skills.py`. It stays inside each skill,
+The boundary paragraph (not byte-identical today) becomes one canonical text,
+identical in every role skill, `fundamental-analyst` included, and pinned whole by `test_role_skills.py`. It stays inside each skill,
 because a role skill also loads on its own, without `expert-reviewer`.
 
 `test_role_skills.py` caps a checklist at 8-15 items. Additions come in by
