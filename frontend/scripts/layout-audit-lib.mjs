@@ -150,6 +150,17 @@ export async function probeHint({ open, measure, close, onSkip }) {
   return geometry;
 }
 
+/**
+ * probeHint, run a second time when the first measurement needs it (a zero-size popover). A
+ * slow tab can re-render as the trigger is tapped, swapping in an identical trigger whose
+ * popover is closed; a genuinely broken popover fails both tries, a re-render only the first.
+ */
+export async function probeHintTwice(steps, needsRetry) {
+  const first = await probeHint(steps);
+  if (first === null || !needsRetry(first)) return first;
+  return probeHint(steps);
+}
+
 /** Sub-pixel slack for the hint check's viewport test: a rect at -0.4px is a rounding artefact, not off-screen. */
 const HINT_EDGE_SLACK_PX = 0.5;
 

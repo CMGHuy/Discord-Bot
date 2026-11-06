@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   CHECKS, DOCK_MIN_WIDTH, DOCK_SELECTORS, FULL_WIDTHS, RAIL_MIN_WIDTH, ROUTES, classify, countByCheck, dedupe, formatFinding, dockVerdict, hintVerdict, inScope, isVisuallyHidden,
-  parseArgs, pickIds, probeHint, railLabelVerdict, resolveRoute, slug, validateAllow, vcenterGeometry,
+  parseArgs, pickIds, probeHint, probeHintTwice, railLabelVerdict, resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
 function hintSteps(overrides = {}) {
@@ -45,6 +45,38 @@ test('probeHint skips a trigger detached after it opened (the crash that aborted
   assert.equal(await probeHint(args), null);
   assert.deepEqual(calls, ['open']);
   assert.equal(skips[0][0], 'measure');
+});
+
+function measuring(...results) {
+  let call = 0;
+  const { calls, args } = hintSteps({ measure: async () => results[Math.min(call++, results.length - 1)] });
+  return { calls, args, count: () => call };
+}
+const zero = (m) => m.w === 0;
+
+test('probeHintTwice keeps a good first measurement without retrying', async () => {
+  const { args, count } = measuring({ w: 10 });
+  assert.deepEqual(await probeHintTwice(args, zero), { w: 10 });
+  assert.equal(count(), 1);
+});
+
+test('probeHintTwice re-opens once when the first popover measured zero (a re-render)', async () => {
+  const { args, count } = measuring({ w: 0 }, { w: 246 });
+  assert.deepEqual(await probeHintTwice(args, zero), { w: 246 });
+  assert.equal(count(), 2);
+});
+
+test('probeHintTwice reports a popover that is zero-size on both tries', async () => {
+  const { args, count } = measuring({ w: 0 }, { w: 0 });
+  assert.deepEqual(await probeHintTwice(args, zero), { w: 0 });
+  assert.equal(count(), 2);
+});
+
+test('probeHintTwice does not retry a skipped trigger', async () => {
+  const { args } = hintSteps({ open: detached });
+  let asked = false;
+  assert.equal(await probeHintTwice(args, () => { asked = true; return true; }), null);
+  assert.equal(asked, false);
 });
 
 test('probeHint keeps a good measurement when only close fails', async () => {
