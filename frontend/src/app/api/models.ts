@@ -2292,6 +2292,8 @@ export interface PnlCalendar {
   totals: CalendarTotals;
   longest_hold: CalendarLongestHold | null;
   day_of_week: CalendarWeekday[];
+  /** The same weekday breakdown, restricted to `month`. */
+  month_day_of_week: CalendarWeekday[];
   best_day: CalendarDay | null;
   worst_day: CalendarDay | null;
   streak: CalendarStreak;
@@ -2430,8 +2432,8 @@ export interface TapeResponse {
 
 /* -- equity candles (v172) ------------------------------------------------ */
 
-/** Candle width. Buckets are New York wall clock: 4H starts at
- *  00/04/08/12/16/20 NY, 1W on Monday. */
+/** Candle width. Buckets are Berlin wall clock, weekdays 08:00-22:00: 4H starts at
+ *  08/12/16/20, 1W on Monday. */
 export type EquityTimeframe = '1H' | '4H' | '1D' | '1W';
 
 /** `mtm` = realized balance + open positions' unrealized P&L ("Open +

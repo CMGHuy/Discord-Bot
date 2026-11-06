@@ -257,23 +257,44 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
          so a THIS MONTH empty state cannot hide it (see the head-status
          comment). Degrades safely via weekdays()'s own [] default before
          the first load. -->
-      <sb-panel page-secondary class="weekday-panel" heading="By weekday (all history)" [divided]="true">
-      <table class="dow">
-        <thead>
-          <tr><th>Day</th><th class="num">Avg</th><th class="num">Win rate</th><th class="num">n</th></tr>
-        </thead>
-        <tbody>
-          @for (weekday of store.weekdays(); track weekday.weekday) {
-            <tr class="dow-row">
-              <th scope="row">{{ weekday.weekday }}</th>
-              <td class="num">{{ weekdayValue(weekday) }}</td>
-              <td class="num">{{ weekdayWinRate(weekday) }}</td>
-              <td class="num">{{ weekday.trade_count }}</td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </sb-panel>
+      <!-- Two tables, one row from tablet width up (stacked on a phone): all
+           history on the left, the month on show on the right. -->
+      <div page-secondary class="weekday-pair">
+        <sb-panel class="weekday-panel" heading="By weekday (all history)" [divided]="true">
+          <table class="dow">
+            <thead>
+              <tr><th>Day</th><th class="num">Avg</th><th class="num">Win rate</th><th class="num">n</th></tr>
+            </thead>
+            <tbody>
+              @for (weekday of store.weekdays(); track weekday.weekday) {
+                <tr class="dow-row">
+                  <th scope="row">{{ weekday.weekday }}</th>
+                  <td class="num">{{ weekdayValue(weekday) }}</td>
+                  <td class="num">{{ weekdayWinRate(weekday) }}</td>
+                  <td class="num">{{ weekday.trade_count }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </sb-panel>
+        <sb-panel class="weekday-panel month-weekday-panel" [heading]="'By weekday (' + label() + ')'" [divided]="true">
+          <table class="dow">
+            <thead>
+              <tr><th>Day</th><th class="num">Avg</th><th class="num">Win rate</th><th class="num">n</th></tr>
+            </thead>
+            <tbody>
+              @for (weekday of store.monthWeekdays(); track weekday.weekday) {
+                <tr class="dow-row month-dow-row">
+                  <th scope="row">{{ weekday.weekday }}</th>
+                  <td class="num">{{ weekdayValue(weekday) }}</td>
+                  <td class="num">{{ weekdayWinRate(weekday) }}</td>
+                  <td class="num">{{ weekday.trade_count }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </sb-panel>
+      </div>
 
     <sb-drawer
       [open]="store.selectedDay() !== null"
@@ -370,8 +391,12 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     .head-status { display: contents; }
     .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-faint); min-width: 0; }
     .pnl-basis-line { margin: var(--space-6) 0 0; min-width: 0; }
-    /* All-time, so it reads across the whole width beside nothing. */
-    .weekday-panel { grid-column: 1 / -1; }
+    /* All history beside the month on show: two columns from tablet (640px), one on a phone. */
+    .weekday-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-14); grid-column: 1 / -1; }
+    .weekday-panel { min-width: 0; }
+    @media (min-width: 640px) {
+      .weekday-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
 
     /* The month stepper: two buttons with the month between them. Centred
        rather than bottom-aligned like the controls around it, because the

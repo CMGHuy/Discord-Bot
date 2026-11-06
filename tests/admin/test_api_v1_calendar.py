@@ -71,6 +71,7 @@ def test_response_shape(seed, logged_in):
     body = logged_in.get("/api/v1/calendar/pnl?month=2026-08").get_json()
     assert_shape(body, {
         "as_of": str, "month": str, "days": list, "totals": dict, "longest_hold": (dict, type(None)), "day_of_week": list,
+        "month_day_of_week": list,
         "best_day": (dict, type(None)), "worst_day": (dict, type(None)),
         "streak": dict, "filters": dict, "fx_missing_count": int,
         "market_meta": dict,
@@ -94,6 +95,17 @@ def test_response_shape(seed, logged_in):
     assert_shape(body["filters"], {"strategies": list, "horizons": list},
                  where="filters")
     assert len(body["day_of_week"]) == 5
+    assert len(body["month_day_of_week"]) == 5
+
+
+def test_month_day_of_week_counts_only_the_requested_month(seed, logged_in):
+    seed(trades=[
+        _trade("a" * 16, closed_at="2026-07-20T20:00:00+00:00"),
+        _trade("b" * 16, closed_at="2026-08-03T20:00:00+00:00"),
+    ])
+    body = logged_in.get("/api/v1/calendar/pnl?month=2026-08").get_json()
+    assert sum(w["trade_count"] for w in body["month_day_of_week"]) == 1
+    assert sum(w["trade_count"] for w in body["day_of_week"]) == 2
 
 
 def test_scopes_to_the_requested_month(seed, logged_in):

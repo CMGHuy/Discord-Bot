@@ -59,6 +59,13 @@ const RESPONSE: PnlCalendar = {
     { weekday: 'Thu', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
     { weekday: 'Fri', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
   ],
+  month_day_of_week: [
+    { weekday: 'Mon', avg_pnl_amount: 30, avg_r: 1.2, win_rate: 100, trade_count: 1 },
+    { weekday: 'Tue', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
+    { weekday: 'Wed', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
+    { weekday: 'Thu', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
+    { weekday: 'Fri', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
+  ],
   best_day: { date: '2026-08-03', net_pnl_amount: 30, net_r: 1.2, trade_count: 2, win_rate: 50 },
   worst_day: { date: '2026-08-05', net_pnl_amount: -90, net_r: -1.8, trade_count: 1, win_rate: 0 },
   streak: { direction: 'losing', days: 1 },
@@ -236,7 +243,7 @@ describe('Calendar summary strip', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const rows = el(fixture).querySelectorAll('.dow-row');
+    const rows = el(fixture).querySelectorAll('.weekday-panel:not(.month-weekday-panel) .dow-row');
     expect(rows).toHaveLength(5);
     expect(rows[0].textContent).toContain('Mon');
     // Tuesday has n=0 and must read as absent, never as 0.00.
@@ -558,7 +565,8 @@ describe('Calendar states', () => {
     expect(host.querySelector('.skeleton')).toBeNull();
     // All-time, deliberately outside the this-month empty gate.
     expect(host.textContent).toContain('By weekday (all history)');
-    expect(host.querySelectorAll('.dow-row').length).toBe(RESPONSE.day_of_week.length);
+    expect(host.querySelectorAll('.weekday-panel:not(.month-weekday-panel) .dow-row').length)
+      .toBe(RESPONSE.day_of_week.length);
   });
 });
 
@@ -1000,15 +1008,30 @@ describe('Calendar on sb-page (v195 Phase 4, §5.2)', () => {
     expect(el(fixture).querySelector('[page-kpis] .totals')).not.toBeNull();
   });
 
-  it('keeps the all-history weekday table as the one secondary panel, the drawer in the default slot', async () => {
+  it('keeps both weekday tables in the one secondary slot, the drawer in the default slot', async () => {
     const fixture = seed();
     await fixture.whenStable();
     fixture.detectChanges();
     const secondary = el(fixture).querySelectorAll('sb-page [page-secondary]');
     expect(secondary).toHaveLength(1);
     expect(secondary[0].textContent).toContain('By weekday (all history)');
-    expect(secondary[0].querySelectorAll('.dow-row')).toHaveLength(RESPONSE.day_of_week.length);
+    expect(secondary[0].querySelectorAll('.weekday-panel')).toHaveLength(2);
+    expect(secondary[0].querySelectorAll('.weekday-panel:not(.month-weekday-panel) .dow-row'))
+      .toHaveLength(RESPONSE.day_of_week.length);
     expect(el(fixture).querySelector('sb-page > sb-drawer')).not.toBeNull();
+  });
+
+  it('adds a second weekday table for the month on show, beside the all-history one', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const panel = el(fixture).querySelector('.month-weekday-panel') as HTMLElement;
+    expect(panel.textContent).toContain('By weekday (');
+    expect(panel.textContent).not.toContain('all history');
+    const rows = panel.querySelectorAll('.month-dow-row');
+    expect(rows).toHaveLength(RESPONSE.month_day_of_week.length);
+    expect(rows[0].textContent).toContain('Mon');
+    expect(rows[0].textContent).toContain('100%');
   });
 
   it('imports Page and no SectionHead', () => {

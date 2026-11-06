@@ -110,6 +110,7 @@ export const CalendarStore = signalStore(
     days: computed<CalendarDay[]>(() => data()?.days ?? []),
     totals: computed<CalendarTotals | null>(() => data()?.totals ?? null),
     weekdays: computed(() => data()?.day_of_week ?? []),
+    monthWeekdays: computed(() => data()?.month_day_of_week ?? []),
     bestDay: computed(() => data()?.best_day ?? null),
     worstDay: computed(() => data()?.worst_day ?? null),
     streak: computed(() => data()?.streak ?? null),

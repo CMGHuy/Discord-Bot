@@ -357,6 +357,10 @@ def calendar_body(month: str, filters: tuple[str | None, str | None], *,
         "totals": grid["totals"],
         "longest_hold": pc.longest_hold(rows, grid["month"]),
         "day_of_week": pc.day_of_week_breakdown(rows),
+        # The same breakdown restricted to the requested month (the one place a
+        # 4-5 observations-per-weekday table is wanted: beside the all-history one).
+        "month_day_of_week": pc.day_of_week_breakdown(
+            [r for r in rows if r["day"].startswith(grid["month"])]),
         "best_day": extremes["best"],
         "worst_day": extremes["worst"],
         "streak": pc.day_streak(rows),
