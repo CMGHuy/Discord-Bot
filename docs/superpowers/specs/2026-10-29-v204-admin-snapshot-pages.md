@@ -269,6 +269,10 @@ earlier text in this spec, they win.
   **and** `swingbot/admin/queries.py:209`.
 - **Rollback:** the Alembic downgrade drops the snapshot table. v201's
   `rollback_to.sh` refresher stop/start already covers the process.
+  *Corrected at close-out (staff-engineer panel, BLOCKING):* it does not. An
+  older image does not know the `v204_001` stamp, so `deploy.sh` aborts; the
+  downgrade must run from the v204 image first. Runbook:
+  `docs/deploy/DEPLOY_HETZNER.md` § v204: admin snapshots.
 
 The quant-engineer and financial-advisor findings add the following:
 
