@@ -2311,6 +2311,13 @@ export interface CalendarDayTrades {
   breakdown: DayBreakdown;
   /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
   fx_missing_count?: number;
+  /** v217 (v205 P3-b): the nearest trading days before and after `date`
+   *  under the same strategy/horizon filter, across all history. `null` is
+   *  measured: no trading day on that side. Missing (`undefined`) only from
+   *  a backend older than v217: the store then looks up the adjacent month
+   *  itself. */
+  prev_day?: string | null;
+  next_day?: string | null;
 }
 
 /** A difference from a reference day. Null when either side has no figure. */
