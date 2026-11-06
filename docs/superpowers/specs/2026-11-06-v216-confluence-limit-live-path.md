@@ -100,7 +100,7 @@ renumbered, dependent on v212's V212-2 and V212-4 being on `main`.
 
 ## Panel review
 
-*In progress (2026-11-06). The findings below are recorded but **not yet applied**. senior-engineer has not run yet. Resume: apply or reject each finding, run senior-engineer, then mark each line `-- applied` / `-- rejected: <why>`.*
+*In progress (2026-11-06). The findings below are recorded but **not yet applied**. All three roles have returned. Resume: apply or reject each finding in spec + plan, then mark each line `-- applied` / `-- rejected: <why>`.*
 
 BLOCKING
 - veteran-trader 1: plan V216-3 L735/737 heat-at-fill cancel text "no position, no P&L" is false, because the broker's resting limit has already filled. The follow-up must tell the user to close at market or keep the position and place the stop, or the spec must make heat-at-fill a bot-book-only rule and disclose it up front. -- pending
@@ -115,3 +115,10 @@ ADVISORY
 - risk-manager 3: a gap-stop's realised loss can exceed the 2% dollar cap. Report the gap-loss distribution in R and dollars, plus a worst case. -- pending
 - risk-manager 4: `make_fill_guard` (plan L431-453) re-sizes at fill instead of using the alert's stored size/risk_pct. Pin it to the alert's size or disclose the divergence. -- pending
 - risk-manager 5: spec Constraints (L79-86) do not cover `edge/throttle.py`/`risk_limits.py` on the limit-alert and fill paths, and name no "plan rejected (...)" log for `heat_at_fill`. -- pending
+- senior-engineer 1: no placeholder trade on an arm gap-stop (plan L314 vs `plan_manager.py:895-935`) means `_on_event` never calls `log_trade`, so the loss goes unlogged. Log it when `_persist_fill` returns None, and add a test. -- pending
+- senior-engineer 2: "marketable at alert" can fire on an extended-hours print when `INTRADAY_RTH_ONLY` is off (plan L310/L40 vs `plan_manager.py:816`). Gate it on `_arm_regular` and add a test. -- pending
+- senior-engineer 3: untested branches: `_session_open_for`'s five fallbacks, a first poll at or through the stop, the `PlanPersistFailed` retry, and a short through-stop inside RTH (plan L129-271). -- pending
+- senior-engineer 4: the fill guard's `_manager_daily` can do a blocking 2-year download per ticker inside the poll lock (plan V216-2 L550). Use the cached-only `rp.cached_daily_bars`, and test the cluster branch with real frames. -- pending
+- senior-engineer 5: "Valid through the close of <date>" uses `approx_last_trigger_session`, which has no holiday calendar (plan L936-940 vs `instructions.py:199-205`). Use a holiday-aware helper or soften the wording. -- pending
+- senior-engineer 6: gap-stop `r: 0.0` is a hard-coded literal in tests (plan L63/182/215). Derive `total_r` (V216-4 L989) from the leg, and comment that 0R is the scored convention. -- pending
+- senior-engineer 7: new tests import private helpers from sibling test modules (plan L93, L478). Move them to `tests/planning/conftest.py`. -- pending
