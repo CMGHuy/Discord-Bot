@@ -2,8 +2,8 @@
 
 Writers: the trade monitor's recorder (`commands/scanning/equity_recorder.py`,
 `insert_sample`) and `scripts/data/backfill_equity_samples.py` (`upsert_many`,
-`replace_backfill`, `update_realized`). Reader: `admin/api_v1/equity.py`
-(`list_rows`, `earliest_at`). Money arrives as `Decimal` (or float) and is
+`replace_backfill`, `update_realized`, `update_open_notional`). Reader:
+`admin/api_v1/equity.py` (`list_rows`, `earliest_at`). Money arrives as `Decimal` (or float) and is
 rounded to 2 dp ROUND_HALF_UP exactly once, here, on every write. The table
 raises no SSE event.
 """
@@ -52,6 +52,8 @@ def _prepared(row: dict) -> dict:
                 "open_n": int(row["open_n"]), "skipped_n": int(row["skipped_n"])}
     for field in MONEY_FIELDS:
         prepared[field] = round_money(row[field])
+    if row.get("open_notional") is not None:
+        prepared["open_notional"] = round_money(row["open_notional"])
     return prepared
 
 
@@ -137,6 +139,16 @@ class EquitySampleRepository(Repository):
         statement = (sa.update(self.table).where(self.table.c.id == sample_id)
                      .values(realized_balance=round_money(realized_balance),
                              equity=round_money(equity),
+                             updated_at=sa.func.clock_timestamp()))
+        with self._tx(conn) as connection:
+            connection.execute(statement)
+
+    def update_open_notional(self, sample_id: int, open_notional: Decimal | None,
+                             approx: bool | None, conn=None) -> None:
+        """Rewrite one row's open notional and approximation flag for backfill or rollback."""
+        amount = round_money(open_notional) if open_notional is not None else None
+        statement = (sa.update(self.table).where(self.table.c.id == sample_id)
+                     .values(open_notional=amount, open_notional_approx=approx,
                              updated_at=sa.func.clock_timestamp()))
         with self._tx(conn) as connection:
             connection.execute(statement)

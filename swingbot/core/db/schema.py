@@ -288,6 +288,9 @@ gate_rejections = register(sa.Table("gate_rejections", METADATA,
 # trade monitor's recorder (one `point` per 5 minutes in regular hours); `backfill` rows by
 # scripts/data/backfill_equity_samples.py (four per session day). Candles are built on request
 # (admin/api_v1/equity.py); nothing is pre-aggregated. No SSE event (not in TABLE_CHANNELS).
+# v208: open_notional sums absolute open shares times price in native currencies,
+# like unrealized_pnl. The Benchmark tab uses it for exposure and deployed return.
+# open_notional_approx marks values reconstructed from daily closes by the backfill.
 equity_samples = register(sa.Table("equity_samples", METADATA,
     sa.Column("id", sa.BigInteger, primary_key=True),
     sa.Column("at", sa.TIMESTAMP(timezone=True), nullable=False),
@@ -299,11 +302,13 @@ equity_samples = register(sa.Table("equity_samples", METADATA,
     sa.Column("source", sa.Text, nullable=False),
     sa.Column("kind", sa.Text, nullable=False),
     sa.Column("backfill_run", sa.Text),
+    sa.Column("open_notional", sa.Float(53)),
+    sa.Column("open_notional_approx", sa.Boolean),
     *standard_columns(),
     sa.UniqueConstraint("at", "source", "kind", name="equity_samples_at_source_kind_uq"),
     sa.Index("equity_samples_source_at_idx", "source", "at")),
     ("at", "realized_balance", "unrealized_pnl", "equity", "open_n", "skipped_n", "source", "kind",
-     "backfill_run"))
+     "backfill_run", "open_notional", "open_notional_approx"))
 
 # v173: the frozen verdict of a pre-registration, written once by the bot's daily
 # check (analytics/override_io.run_daily_check). The primary key is the idempotency
@@ -343,6 +348,29 @@ fx_daily_rates = register(sa.Table("fx_daily_rates", METADATA,
     sa.Column("source", sa.Text, nullable=False),
     *standard_columns()),
     ("base", "account", "day", "rate", "bar_date", "snapped_at", "source"))
+
+# v208: one row per benchmark symbol per NYSE session, written by the refresher's
+# `benchmarks` step (swingbot/refresher/benchmarks.py); day_pct is the only return ever
+# read. A proxy-sourced row (source_symbol != symbol) leaves close/adj_close NULL.
+# benchmark_refresh holds, per symbol, the session day its full adjusted history was
+# last rewritten (the once-per-session-day guard). No SSE trigger on either.
+benchmark_bars = register(sa.Table("benchmark_bars", METADATA,
+    sa.Column("symbol", sa.Text, primary_key=True),
+    sa.Column("session", sa.Date, primary_key=True),
+    sa.Column("close", sa.Float(53)),
+    sa.Column("adj_close", sa.Float(53)),
+    sa.Column("day_pct", sa.Float(53)),
+    sa.Column("source_symbol", sa.Text, nullable=False),
+    sa.Column("final", sa.Boolean, nullable=False),
+    sa.Column("as_of", sa.TIMESTAMP(timezone=True), nullable=False),
+    *standard_columns()),
+    ("symbol", "session", "close", "adj_close", "day_pct", "source_symbol", "final", "as_of"))
+
+benchmark_refresh = register(sa.Table("benchmark_refresh", METADATA,
+    sa.Column("symbol", sa.Text, primary_key=True),
+    sa.Column("full_refreshed_on", sa.Date, nullable=False),
+    *standard_columns()),
+    ("symbol", "full_refreshed_on"))
 
 # v207: viewer accounts. The `.env` admin is never stored here; every row is a
 # read-only viewer. `id` is the surrogate key (reserved, so not promoted).
@@ -579,6 +607,8 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "source": "equity_samples_at_source_kind_uq and the range index; live vs backfill filter",
         "kind": "equity_samples_at_source_kind_uq; point vs day_high/day_low, o/c read points only",
         "backfill_run": "names the run and bar date a backfill row was built from; NULL on live rows",
+        "open_notional": "benchmark exposure and deployed denominator; older rows stay NULL until backfill",
+        "open_notional_approx": "the backfill rollback's WHERE (IS TRUE); recorder rows carry FALSE",
     },
     "preregistration_verdicts": {
         "ledger_id": "primary key: one row per pre-registration, so a second insert is impossible",
@@ -600,6 +630,21 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "bar_date": "NOT NULL date of the frame bar the rate came from; the FALLBACK_DAYS test",
         "snapped_at": "NOT NULL write time; max(snapped_at) is half of the memo's version key",
         "source": "NOT NULL snap/backfill provenance, checked after the deploy backfill",
+    },
+    "benchmark_bars": {
+        "symbol": "primary key (symbol, session): one bar per benchmark per NYSE session",
+        "session": "primary key; the range WHERE and the alignment join to equity sessions",
+        "close": "price-index level (^IXIC, ^DJI); NULL on proxy-sourced rows",
+        "adj_close": "total-return level (SPY, QQQ); rewritten by the daily full refresh",
+        "day_pct": "the only return the tab reads; never recomputed across rows",
+        "source_symbol": "NOT NULL; differs from symbol on a proxy day, flagged in the tooltip",
+        "final": "NOT NULL; false rows feed only the Today card, never the series or stats",
+        "as_of": "NOT NULL time the row was written; the Today card's as-of stamp",
+    },
+    "benchmark_refresh": {
+        "symbol": "primary key: one guard row per benchmark symbol",
+        "full_refreshed_on": "NOT NULL; the full history rewrite runs when this is before the "
+                             "last completed NYSE session",
     },
     "admin_users": {
         "username": "admin_users_username_lower_uq: one viewer per name, case-insensitive",

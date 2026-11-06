@@ -4,9 +4,11 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+import sqlalchemy as sa
 
 from swingbot.core.db.repositories.equity_samples import (
     EquitySampleRepository, equity_samples_repo, round_money)
+from swingbot.core.db.schema import equity_samples
 
 UTC = timezone.utc
 OPEN = datetime(2026, 10, 15, 13, 30, tzinfo=UTC)     # 09:30 New York (EDT)
@@ -116,3 +118,41 @@ def test_update_realized_rewrites_only_the_realized_columns(repo, db_conn):
 
 def test_the_accessor_is_a_singleton():
     assert equity_samples_repo() is equity_samples_repo()
+
+
+def _columns(db_conn, sample_id):
+    table = equity_samples
+    return db_conn.execute(sa.select(table.c.open_notional, table.c.open_notional_approx,
+                                     table.c.doc).where(table.c.id == sample_id)).one()
+
+
+def test_open_notional_is_rounded_once_and_lands_in_its_own_column(repo, db_conn):
+    sample_id = repo.insert_sample({**_row(OPEN), "open_notional": Decimal("2040.005"),
+                                    "open_notional_approx": False}, conn=db_conn)
+    stored = _columns(db_conn, sample_id)
+    assert (stored.open_notional, stored.open_notional_approx) == (2040.01, False)
+    assert "open_notional" not in stored.doc and "open_notional_approx" not in stored.doc
+    (row,) = repo.list_rows(conn=db_conn)
+    assert (row["open_notional"], row["open_notional_approx"]) == (2040.01, False)
+
+
+def test_a_row_written_without_open_notional_reads_back_without_it(repo, db_conn):
+    sample_id = repo.insert_sample(_row(OPEN), conn=db_conn)
+    stored = _columns(db_conn, sample_id)
+    assert (stored.open_notional, stored.open_notional_approx) == (None, None)
+    (row,) = repo.list_rows(conn=db_conn)
+    assert row.get("open_notional") is None and row.get("open_notional_approx") is None
+
+
+def test_update_open_notional_touches_only_the_two_new_columns(repo, db_conn):
+    sample_id = repo.insert_sample(_row(CLOSE), conn=db_conn)
+    (before,) = repo.list_rows(conn=db_conn)
+    repo.update_open_notional(sample_id, Decimal("975.004"), True, conn=db_conn)
+    (after,) = repo.list_rows(conn=db_conn)
+    assert (after["open_notional"], after["open_notional_approx"]) == (975.0, True)
+    keep = ("realized_balance", "unrealized_pnl", "equity", "open_n", "skipped_n",
+            "source", "kind", "at")
+    assert {k: after[k] for k in keep} == {k: before[k] for k in keep}
+    repo.update_open_notional(sample_id, None, None, conn=db_conn)       # the rollback shape
+    (reset,) = repo.list_rows(conn=db_conn)
+    assert reset.get("open_notional") is None and reset.get("open_notional_approx") is None
