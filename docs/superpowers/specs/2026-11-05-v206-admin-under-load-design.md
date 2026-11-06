@@ -511,7 +511,7 @@ quiet.
 
 ### Plan 1 baseline (committed probe)
 
-**Not evidence yet.** One run so far, and it is labelled `quiet`, so it does
+**Superseded by `### Plan 1 after` below: the scan baseline was never taken and is no longer owed.** One run so far, and it is labelled `quiet`, so it does
 not count toward the Goal (only `scan` runs do). The `scan` baseline is still
 owed: rerun the probe during a US-session scan (`--date 2026-11-03`, same
 flags) before V206-13 pushes, then replace this note with that run's table.
@@ -557,6 +557,19 @@ Old-image mixed run → after-run (same probe, same flags):
 | `/market/tape` calls / max | 169 / 51.8 s | 73 / 9.2 s |
 | Idle tab | 39.5 req/min | 22.5 req/min |
 
-Indicative improvement, but the idle rate still sits above the under-10/min
+Confound: the after image also carries v204 (Risk/Analytics/Calendar read stored snapshots), so `/analytics/performance` and part of `/cancel-precision` are v204's effect, not Plan 1's. Indicative improvement, but the idle rate still sits above the under-10/min
 target and ten endpoints still exceed 5 s p90. The heavy calls (`/dashboard`,
 `/trades`, `/live`, `/market/tape`) are owned by the later v206 plans.
+
+## Panel review (pre-close-out, Plan 1)
+
+staff-engineer, senior-engineer, quant-engineer over `bfde298c^1...bfde298c`: 0 blocking, 16 advisory.
+
+- staff: after-table credits Plan 1 with v204's effect -- applied (confound named)
+- staff: baseline note contradicts the after section -- applied (marked superseded)
+- staff: probe keeps results in memory until the end -- carried to the later plans (probe checkpointing)
+- staff/senior: scan-event progress read runs on the listener thread, side pool budget undocumented -- carried (bounded by 250 ms statement timeout)
+- staff: lint was red after the merge -- rejected: fixed on main by 472da417/13920002 before this close-out
+- staff: `sse_streams` counts one process -- rejected: spec pins one gunicorn worker
+- senior: `summarise` complexity 13, `payload(_name)` comment -- rejected: under the limit, cosmetic
+- quant: hung/failed calls and page-with-no-calls bias the probe low; scan label ignores the idle window; meta lacks probe dirtiness/host; raw probe.json not committed -- carried to the later plans' probe work
