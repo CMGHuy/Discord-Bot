@@ -78,7 +78,15 @@ today's behaviour stays byte-identical.
 - its `level` (the pre-clamp `scenario.stop_loss`: `supports[0]` for a
   long, `resistances[0]` for a short) lies more than 2% from the market
   price M;
-- so today's stop was moved by the clamp (`stop_moved_by` records it).
+- so today's stop was moved by the v115 clamp. That is read from
+  `builders.clamped_distance` (`builders.py:588`), not `stop_moved_by`:
+  only v191's ATR band sets `stop_moved_by`, so on the clamp path it is
+  `None`.
+
+The existing scenario gates (`MIN_STOP_DISTANCE_PCT` and the max-stop gate
+in `levels.build_scenarios`) still run on the pre-clamp level before any
+plan exists. They therefore bound each cell's D range. The results doc
+prints the D range actually reached.
 
 Breakout `stop_entry` plans and plans whose level is within 2% (their stop
 already sits on structure) are untouched.
@@ -231,11 +239,35 @@ gate, § Funnel stages):
   Replay, live and the measurement read one rule. With the knob at 0, the
   output is byte-identical to today, pinned by a witness test over a
   fixture replay.
-- **G2.** Register the knob in the reachability registry and in the arm
-  producer (`scripts/backtest/measure_arms.py`). Write the pre-registration
-  record (`docs/superpowers/results/<date>-v212-preregistration.md`) before
-  any compute, freezing the rule, the grid, the clauses, the gate family,
-  the windows and `observed_n`.
+- **G2. A dedicated replay module and measure script,** following the
+  v139, v191 and v131 precedent: `confluence_stop_replay.py` with
+  `measure_confluence_stop.py`, `atr_band_replay.py` with
+  `measure_atr_band_stop.py`, and `measure_fib_limit.py`. The generic
+  `measure_arms.py` is not used. Rule 6 (fill semantics and frictions),
+  rule 7 (notional caps) and rule 8 (heat at fill) are new replay code:
+  - **Frictions:** the v2 exit sim is frictionless today, so frictions are
+    applied at scoring to both arms.
+  - **The portfolio pass:** heat at fill, sector caps, cluster caps,
+    `MAX_OPEN_POSITIONS` and the notional caps run in one portfolio pass.
+    It extends `backtest_wf.portfolio_replay`, which gains notional caps.
+    The clauses score that pass's kept trades, in both arms.
+
+  Register the knob in the reachability registry. Write the
+  pre-registration record
+  (`docs/superpowers/results/<date>-v212-preregistration.md`) before any
+  compute, freezing the rule, the grid, the clauses, the gate family, the
+  windows and `observed_n`.
+
+  **Three tie and cooldown rules, frozen here** *(author's calls, made after
+  the briefing)*:
+  - **TP1 cancel is inclusive.** A bar whose high reaches TP1 before a fill
+    cancels the limit (`≥`; a short uses `≤`). Today's `limit_cancelled`
+    is strict and is not reused unchanged for this arm.
+  - **Same-bar conflict.** A bar that trades both L and TP1 counts as
+    cancelled, not filled. This is the conservative choice.
+  - **Cooldown.** `_REPLAY_COOLDOWN_BARS` stays set at plan acceptance, as
+    today. An unfilled or dropped limit consumes it exactly as the
+    reference arm's plan does, so both arms see the same plan stream.
 - **G3.** Run Stages −1..3 through `backtest-runner`, chunked and
   checkpointed per unit, with a flushed percent print. Record the result
   and one ledger row per look.
@@ -253,10 +285,28 @@ gate, § Funnel stages):
   - cancelled because TP1 traded first;
   - filled-and-stopped on a gap.
 
-  The existing `cancelled_limit` event (`plan_manager.py:1254`) is confirmed
-  to reach the channel, or is wired to. The extra alert volume is reported:
-  limit alerts plus follow-ups per day, estimated from replay. Nothing is
-  switched on: `.env.example` documents the knob at 0.
+  The existing `cancelled_limit` event already reaches Discord: it is in
+  `PENDING_CANCEL_EVENTS` and `NOTICE_EVENTS`, with execution-feed,
+  lifecycle-embed and follow_notify mappings. Two events are new: the
+  `heat_at_fill` cancel and a filled-and-stopped-on-gap event.
+  - **Registration.** Each joins every event table that `cancelled_limit`
+    is in. The brief lists about 8 tables.
+  - **A test enforces it:** every cancel or close event appears in each
+    table, so a placeholder paper trade is never left open (the 2026-09-11
+    incident).
+  - **Alert text is new code.** Today a limit plan prints "BUY AT MARKET" /
+    "Entry: market ~X" (`presentation/instructions.py:ticket_for`,
+    `scanning/plan_table.py:entry_line`), so those gain limit wording. The
+    admin SPA already prints "Buy limit" (`trade-figures.ts:51`), and
+    `why/levels-block.ts` gains the limit mapping.
+  - **Live fill price.** For this arm only, `_fill_pending`'s `risk_cap`
+    check reads the planned `|L − stop|`, not the gap fill price. A long
+    fill below L only shrinks the loss; a gap below the stop takes the
+    filled-and-stopped path.
+
+  The extra alert volume is reported: limit alerts plus follow-ups per
+  day, estimated from replay. Nothing is switched on: `.env.example`
+  documents the knob at 0.
 
 ## Non-goals
 
@@ -296,8 +346,10 @@ gate, § Funnel stages):
 
 ## Left to the builder
 
-- Where the helper sits, and how `stop_moved_by` and the level reach it on
-  the replay path.
+- Where the helper sits, and how `clamped_distance` and the level reach it
+  on the replay path.
+- Keeping `build_confluence_plan` (12), `attach_plan_v2` (12) and
+  `_step_pending` (11) under 15: new branches go into named helpers.
 - The results-doc layout. The per-direction table, the per-cell D range and
   the disclosures above are required.
 
