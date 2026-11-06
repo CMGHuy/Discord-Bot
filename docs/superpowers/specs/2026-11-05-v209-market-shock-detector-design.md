@@ -83,8 +83,7 @@ follows v206's precedent of several plans under one spec.
 2. **Plan v210** builds Track 1's **Discord notices and admin badge** (the
    `market_shock` queue kind and notice, the tape `shock` object, the SPA
    badge). It follows plan v209 and needs it merged.
-3. **The Track 2 plan** (the next free number when it is written, v211 or
-   later) builds **Track 2**: the screen runner's `CONTEXT_KIND = "level"`
+3. **Plan v211** (`2026-11-06-v211-shock-short-screens`) builds **Track 2**: the screen runner's `CONTEXT_KIND = "level"`
    extension, the context files, the two ideas, and their one-shot runs.
 
    Its `**Spec:**` line points here. It does not depend on plans v209 or
