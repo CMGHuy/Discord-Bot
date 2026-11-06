@@ -67,6 +67,8 @@
  "detractors": [],
  "fx_missing_count": 0,
  "losers": 0,
+ "next_day": null,
+ "prev_day": "2026-11-02",
  "total_ccy": 163.5,
  "total_r": 2.2,
  "trade_count": 2,

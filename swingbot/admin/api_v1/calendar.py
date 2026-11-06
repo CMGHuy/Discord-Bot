@@ -132,6 +132,9 @@ def calendar_pnl_day():
     exactly `trades`, so a filtered grid cannot open a day that tells a
     different story; `context` compares the day against every OTHER trading
     day under the same filter (all history, like the grid's weekday table).
+    `prev_day` / `next_day` (v217) are the nearest trading days before and
+    after `date` under the same filter, across all history; null at either
+    end. The 404 above carries neither: an empty day has no body.
     """
     from swingbot.core.analytics import pnl_calendar as pc
 
@@ -157,6 +160,9 @@ def calendar_pnl_day():
         "fx_missing_count": missing_count(day_rows),
         **pc.day_totals(day_rows),
         "context": pc.day_context(rows, date),
+        # v217 P3-b: the nearest trading days under the same filter, from the
+        # rows already loaded, so the day page needs no neighbouring month grid.
+        **pc.adjacent_trading_days(rows, date),
         "breakdown": pc.day_breakdown(day_rows),
     })
 
