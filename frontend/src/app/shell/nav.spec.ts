@@ -29,7 +29,7 @@ describe('NAV_ENTRIES (v202 §1)', () => {
     );
     expect(sections).toEqual({
       '/dashboard': null, '/watchlist': null, '/risk': null,
-      '/trades': [['/trades', 'Book'], ['/trades/calendar', 'Calendar'], ['/trades/cancels', 'Cancels']],
+      '/trades': [['/trades', 'Book'], ['/trades/calendar', 'Calendar']],
       '/insights': [['/insights/analytics', 'Analytics'], ['/insights/research', 'Research'], ['/insights/reports', 'Reports']],
       '/system': [['/system', 'Health'], ['/system/versions', 'Versions']],
     });
@@ -73,7 +73,7 @@ describe('NAV_ENTRIES (v202 §1)', () => {
   });
 
   it('names the section words of the second-segment rule', () => {
-    expect([...SECTION_WORDS].sort()).toEqual(['analytics', 'calendar', 'cancels', 'reports', 'research', 'versions']);
+    expect([...SECTION_WORDS].sort()).toEqual(['analytics', 'calendar', 'reports', 'research', 'versions']);
   });
 });
 
@@ -81,7 +81,7 @@ describe('ALIASES (v202 §1)', () => {
   it('maps every moved page and the older renames onto their new home', () => {
     expect(ALIASES).toEqual({
       '/plans': '/trades', '/universe': '/watchlist', '/cockpit': '/dashboard',
-      '/calendar': '/trades/calendar', '/cancels': '/trades/cancels',
+      '/calendar': '/trades/calendar', '/cancels': '/insights/analytics',
       '/analytics': '/insights/analytics', '/research': '/insights/research', '/reports': '/insights/reports',
       '/versions': '/system/versions',
     });
@@ -89,9 +89,11 @@ describe('ALIASES (v202 §1)', () => {
 
   it('agrees with the redirects app.routes.ts declares', () => {
     for (const [from, to] of Object.entries(ALIASES)) {
+      if (from === '/cancels') continue; // a function redirect to ?tab=cancels; app.routes.spec.ts lands it
       if (from === '/plans') continue; // plans/:id is a real detail route of the trade book, not a redirect
       const route = routes.find((candidate) => `/${candidate.path}` === from);
-      expect(route?.redirectTo, from).toBe(to.slice(1));
+      // /cancels also names the tab it opens (?tab=cancels); the path is what must agree.
+      expect(String(route?.redirectTo).split('?')[0], from).toBe(to.slice(1));
     }
   });
 
@@ -123,7 +125,6 @@ describe('navEntryFor (v202 second-segment rule)', () => {
     ['/trades/812?tab=plan#why', ['Trades', 'Book']],
     ['/trades/calendar', ['Trades', 'Calendar']],
     ['/trades/calendar/2026-10-01', ['Trades', 'Calendar']],
-    ['/trades/cancels?page=2', ['Trades', 'Cancels']],
     // Another destination's word is a detail id here, not a section.
     ['/trades/analytics', ['Trades', 'Book']],
     ['/plans/5', ['Trades', 'Book']],
@@ -131,7 +132,7 @@ describe('navEntryFor (v202 second-segment rule)', () => {
     ['/universe', ['Watchlist', null]],
     ['/cockpit', ['Dashboard', null]],
     ['/calendar/2026-10-01', ['Trades', 'Calendar']],
-    ['/cancels', ['Trades', 'Cancels']],
+    ['/cancels', ['Insights', 'Analytics']],
     ['/analytics?tab=tuning#x', ['Insights', 'Analytics']],
     ['/research', ['Insights', 'Research']],
     ['/reports', ['Insights', 'Reports']],
@@ -154,7 +155,6 @@ describe('phoneTabPathFor', () => {
     ['/trades/calendar/2026-10-01', '/trades/calendar'],
     ['/calendar', '/trades/calendar'],
     ['/trades', '/trades'],
-    ['/trades/cancels', '/trades'],
     ['/trades/812', '/trades'],
     ['/plans/5', '/trades'],
     ['/dashboard', '/dashboard'],
@@ -181,7 +181,7 @@ describe('destinationFor', () => {
 });
 
 describe('isSectionUrl', () => {
-  it.each(['/trades/calendar', '/trades/calendar/2026-10-01', '/trades/cancels', '/insights/analytics',
+  it.each(['/trades/calendar', '/trades/calendar/2026-10-01', '/insights/analytics',
     '/insights/research?page=2', '/system/versions', '/calendar', '/versions'])('is true for %s', (url) => {
     expect(isSectionUrl(url)).toBe(true);
   });

@@ -42,8 +42,10 @@ describe('AnalyticsStore — partials slice', () => {
     backend = TestBed.inject(HttpTestingController);
   });
 
-  it('is the seventh tab and routes from ?tab=partials', () => {
-    expect(ANALYTICS_TABS.at(-1)).toBe('partials');
+  it('is the seventh tab, right before Cancels, and routes from ?tab=partials', () => {
+    expect(ANALYTICS_TABS.at(-2)).toBe('partials');
+    expect(ANALYTICS_TABS.at(-1)).toBe('cancels');
+    expect(scopeFromParams(convertToParamMap({ tab: 'cancels' })).tab).toBe('cancels');
     expect(scopeFromParams(convertToParamMap({ tab: 'partials' })).tab).toBe('partials');
   });
 

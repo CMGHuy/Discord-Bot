@@ -27,7 +27,6 @@ describe('crumbsFor (v202: Destination / Section)', () => {
 
   it.each([
     ['/trades/calendar', 'Calendar', ['Trades', 'Calendar']],
-    ['/trades/cancels', 'Cancels', ['Trades', 'Cancels']],
     ['/insights/analytics', 'Analytics', ['Insights', 'Analytics']],
     ['/system/versions', 'Versions', ['System', 'Versions']],
     ['/system?tab=logs', 'System', ['System', 'Health']],

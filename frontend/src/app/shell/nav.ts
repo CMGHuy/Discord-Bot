@@ -37,7 +37,6 @@ export const NAV_ENTRIES: readonly NavEntry[] = [
     sections: [
       { path: '/trades', label: 'Book' },
       { path: '/trades/calendar', label: 'Calendar' },
-      { path: '/trades/cancels', label: 'Cancels' },
     ],
   },
   { path: '/risk', label: 'Risk', icon: 'risk' },
@@ -96,7 +95,7 @@ export const ALIASES: Readonly<Record<string, string>> = {
   '/universe': '/watchlist',
   '/cockpit': '/dashboard',
   '/calendar': '/trades/calendar',
-  '/cancels': '/trades/cancels',
+  '/cancels': '/insights/analytics',
   '/analytics': '/insights/analytics',
   '/research': '/insights/research',
   '/reports': '/insights/reports',

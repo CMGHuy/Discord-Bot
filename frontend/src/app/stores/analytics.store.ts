@@ -12,6 +12,7 @@ import { ApiClient } from '../api/api-client';
 import { StrategyRow } from '../api/models';
 import { ApiError } from '../api/api-error';
 import { routeRequest } from '../routing/route-request';
+import { CancelsStore } from './cancels.store';
 import { Observable } from 'rxjs';
 import {
   AnalyticsByDimension,
@@ -209,10 +210,10 @@ function numberOrNull(record: Record<string, unknown> | undefined, key: string):
  *  Attribution and Execution. Tabs, not sub-navigation: a second level of
  *  nav inside one of six workspaces reintroduces exactly the depth the IA
  *  change removed. */
-export type AnalyticsTab = 'overview' | 'attribution' | 'execution' | 'edge' | 'pipeline' | 'tuning' | 'partials';
+export type AnalyticsTab = 'overview' | 'attribution' | 'execution' | 'edge' | 'pipeline' | 'tuning' | 'partials' | 'cancels';
 
 export const ANALYTICS_TABS: readonly AnalyticsTab[] =
-  ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials'] as const;
+  ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials', 'cancels'] as const;
 
 /** Old `?tab=` values keep working (spec D1). A bookmark or a Discord link
  *  posted before v94 lands on the tab that now answers its question rather
@@ -712,7 +713,7 @@ export const AnalyticsStore = signalStore(
     };
   }),
 
-  withMethods((store, api = inject(ApiClient), preferences = inject(PreferencesStore)) => {
+  withMethods((store, api = inject(ApiClient), preferences = inject(PreferencesStore), cancels = inject(CancelsStore)) => {
     /** Every failure lands here, and none of them clear the data already on
      *  screen. A table that empties because one refetch failed is worse than
      *  a slightly stale one beside a warning — especially when the event
@@ -950,9 +951,19 @@ export const AnalyticsStore = signalStore(
       error: fail,
     });
 
+    // The Cancels tab's figures live in the root CancelsStore, which records
+    // its own loading and error; this store only starts the request. The
+    // resolver swallows a failure so the tab renders it instead of failing
+    // the navigation.
+    const loadCancels = (): void => { cancels.load().subscribe({ error: () => undefined }); };
+    const resolveCancels = (): Observable<void> => routeRequest(cancels.load(), {
+      start: () => undefined, next: () => undefined, error: () => undefined,
+    });
+
     const RESOLVERS: Record<AnalyticsTab, () => Observable<void>> = {
       overview: resolveOverview, attribution: resolveAttribution, execution: resolveExecution,
       edge: resolveEdge, pipeline: resolvePipeline, tuning: resolveTuning, partials: resolvePartials,
+      cancels: resolveCancels,
     };
 
     const resolveTab = (tab: AnalyticsTab): Observable<void> => {
@@ -963,6 +974,7 @@ export const AnalyticsStore = signalStore(
     const LOADERS: Record<AnalyticsTab, () => void> = {
       overview: loadOverview, attribution: loadAttribution, execution: loadExecution,
       edge: loadEdge, pipeline: loadPipeline, tuning: loadTuning, partials: loadPartials,
+      cancels: loadCancels,
     };
 
     const load = (): void => LOADERS[store.tab()]();

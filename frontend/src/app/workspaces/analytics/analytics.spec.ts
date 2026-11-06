@@ -79,11 +79,11 @@ describe('Analytics shell', () => {
     const { fixture } = create();
     fixture.detectChanges();
     const text = fixture.nativeElement.textContent as string;
-    for (const label of ['Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Tuning', 'Partials']) {
+    for (const label of ['Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Tuning', 'Partials', 'Cancels']) {
       expect(text).toContain(label);
     }
     expect(tabLabels(fixture.nativeElement as HTMLElement)).toEqual([
-      'Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Tuning', 'Partials',
+      'Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Tuning', 'Partials', 'Cancels',
     ]);
   });
 
@@ -111,6 +111,19 @@ describe('Analytics shell', () => {
     TestBed.inject(AnalyticsStore).setTab('partials', false);
     fixture.detectChanges();
     expect((fixture.nativeElement as HTMLElement).querySelector('sb-partials-tab')).not.toBeNull();
+  });
+
+  it('mounts the Cancels tab after Partials and hides the scope bar, which does not scope it', () => {
+    const { fixture } = create();
+    const el = fixture.nativeElement as HTMLElement;
+    fixture.detectChanges();
+    expect(el.querySelector('sb-scope-bar')).not.toBeNull();
+    TestBed.inject(AnalyticsStore).setTab('cancels', false);
+    fixture.detectChanges();
+    expect(el.querySelector('sb-cancels-tab')).not.toBeNull();
+    expect(el.querySelector('sb-scope-bar')).toBeNull();
+    const labels = tabLabels(el);
+    expect(labels.indexOf('Cancels')).toBe(labels.indexOf('Partials') + 1);
   });
 
   it('mounts the tab the store says is open', () => {
@@ -158,7 +171,7 @@ describe('Analytics for a viewer (v207)', () => {
   it('lists Tuning for the admin and not for a viewer, order otherwise kept', () => {
     expect(visibleAnalyticsTabs(true).map((t) => t.id)).toEqual(ANALYTICS_TAB_LIST.map((t) => t.id));
     expect(visibleAnalyticsTabs(false).map((t) => t.id)).toEqual(
-      ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'partials']);
+      ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'partials', 'cancels']);
   });
 
   it('renders six tabs for a viewer and seven for the admin', () => {
@@ -169,7 +182,7 @@ describe('Analytics for a viewer (v207)', () => {
     const asViewer = create().fixture;
     asViewer.detectChanges();
     expect(tabLabels(asViewer.nativeElement as HTMLElement)).toEqual(
-      ['Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Partials']);
+      ['Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Partials', 'Cancels']);
   });
 
   it('resolves Overview for a viewer asking for tuning, and nothing else changes', () => {

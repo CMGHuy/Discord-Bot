@@ -1087,7 +1087,7 @@ describe('section tabs in the shell (v202 §1)', () => {
     const content = el.querySelector('main.workspace > .workspace-content')!;
     expect(content.firstElementChild!.tagName.toLowerCase()).toBe('sb-section-tabs');
     expect([...content.querySelectorAll('sb-section-tabs a')].map((a) => a.textContent!.trim()))
-      .toEqual(['Book', 'Calendar', 'Cancels']);
+      .toEqual(['Book', 'Calendar']);
     expect(current(el)).toEqual(['Calendar']);
   });
 

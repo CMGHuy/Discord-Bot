@@ -51,7 +51,7 @@ describe('PhoneTabBar (v195 Phase 3)', () => {
     for (const url of ['/trades/calendar', '/trades/calendar/2026-10-01', '/calendar/2026-10-01']) {
       expect(current((await mount(url)).el), url).toEqual(['Calendar']);
     }
-    for (const url of ['/trades', '/trades/cancels', '/trades/812', '/cancels']) {
+    for (const url of ['/trades', '/trades/812']) {
       expect(current((await mount(url)).el), url).toEqual(['Trades']);
     }
   });

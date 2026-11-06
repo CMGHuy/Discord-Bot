@@ -34,7 +34,7 @@ describe('morePageGroups (v202 §3)', () => {
     expect(groups).toHaveLength(6);
     expect(shape(groups)[0]).toEqual(['more-dashboard', 'Dashboard', [['Dashboard', '/dashboard']]]);
     expect(shape(groups)[2]).toEqual(['more-trades', 'Trades',
-      [['Book', '/trades'], ['Calendar', '/trades/calendar'], ['Cancels', '/trades/cancels']]]);
+      [['Book', '/trades'], ['Calendar', '/trades/calendar']]]);
   });
 
   it('is empty for an empty model', () => {
