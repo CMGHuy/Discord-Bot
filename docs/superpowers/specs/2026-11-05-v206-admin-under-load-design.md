@@ -620,3 +620,40 @@ staff-engineer, senior-engineer, quant-engineer over `bfde298c^1...bfde298c`: 0 
 - staff: `sse_streams` counts one process -- rejected: spec pins one gunicorn worker
 - senior: `summarise` complexity 13, `payload(_name)` comment -- rejected: under the limit, cosmetic
 - quant: hung/failed calls and page-with-no-calls bias the probe low; scan label ignores the idle window; meta lacks probe dirtiness/host; raw probe.json not committed -- carried to the later plans' probe work
+
+### Plan 2 after (committed probe)
+
+**Not a strict `scan` run:** labelled `mixed`, like both pre-Plan-1 runs (scans run
+back to back, so the gap between two scans always catches a sample). Run
+2026-11-06 17:43 Berlin, `--date 2026-11-03`, 3 rounds x 12 pages, image
+`ghcr.io/cmghuy/discord-bot:sha-7b17ccc000ae` (ui 1.40.3 / bot 2.17.3: v206
+Plan 1 + v217), credentials absent from the output. Compared with the
+second pre-Plan-1 run (15:44 Berlin, image `sha-68927fbd8cc2`, same flags);
+the two share a label and a time of day, so the comparison is fair but not
+a strict A/B. Output: `.superpowers/probe/v217-after-1/` (git-ignored).
+
+| Endpoint | Before p90 / max | After p90 / max |
+|---|---|---|
+| `/system/scan` | 34.7 s / 50.4 s (289 calls) | 0.7 s / 2.2 s (78 calls) |
+| `/health` | 32.8 s / 50.2 s (351 calls) | 0.15 s / 0.43 s (78 calls) |
+| `/session` | 16.3 s / 39.8 s | 0.10 s / 0.21 s |
+| `/dashboard` | 33.1 s / 35.8 s (median 17.0 s) | 11.4 s / 16.2 s (median 9.0 s) |
+| `/market/tape` | 23.3 s / 49.1 s (76 calls) | 6.9 s / 9.3 s (78 calls) |
+| `/trades` | 20.5 s / 21.0 s | 11.1 s / 11.4 s |
+| `/market/updates` | 12.3 s / 43.4 s (171 calls) | 1.9 s / 5.0 s (229 calls) |
+| `/live` | 10.8 s / 17.2 s | 8.8 s / 10.1 s |
+| Idle tab | 38 requests / 120 s = 19.0 per min | 33 requests / 120 s = 16.5 per min |
+
+The scan-time polling Plan 1 removed is gone: `/system/scan` and `/health` calls
+fell by 73% and 78%, and both are fast again. No page load timed out this
+time (the baseline had `/risk`, `/insights/*` and `/system/versions` loads at
+the 90 s cap). Still slow and owned by Plans 3 and 4: `/dashboard` (median
+9 s), `/trades` (9 s median) and `/live` (5.5 s median), plus
+`/cancel-precision` (36 s max, 3 calls). The idle tab at 16.5 per minute
+is still above the Plan 1 target of under 10 per minute, so that target is
+not met in a mixed run and needs a look in Plan 3.
+
+The probe cannot show v217's own savings: it opens the Dashboard on 1D, which
+sent one `/dashboard` before v217 too, and a mid-month day page made no extra
+month call before either. The wider-scope Dashboard request and the
+day-edge month lookup are pinned by their specs (V217-3, V217-4, V217-5, V217-5b).
