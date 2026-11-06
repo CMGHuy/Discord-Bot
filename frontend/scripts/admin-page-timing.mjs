@@ -22,14 +22,32 @@ export const GLOBAL_DEADLINE_MS = 30 * 60_000;
 export const LIMITS = { firstDataMs: 2_000, callMs: 2_000, scanMs: 500 };
 /** Out of scope by the index's endpoint sweep: bar-backed charts load behind their own spinner. */
 export const EXCLUDED = [/\/api\/v1\/equity\/candles/, /\/chart/, /\/events$/];
+export const PNL_BASIS = 'pre-tax, before modelled frictions';
 export const PAGES = [
-  { name: 'Dashboard', rail: 'Dashboard' }, { name: 'Trades', rail: 'Trades' },
-  { name: 'Trade detail', path: 'TRADE' }, { name: 'Watchlist', rail: 'Watchlist' },
+  { name: 'Dashboard', rail: 'Dashboard', selectors: ['sb-portfolio-value sb-market-value'] },
+  { name: 'Trades', rail: 'Trades' }, { name: 'Trade detail', path: 'TRADE' }, { name: 'Watchlist', rail: 'Watchlist' },
+  { name: 'Risk', rail: 'Risk', phrases: ['FX rates as of', 'daily bars through', PNL_BASIS] },
+  { name: 'Analytics', rail: 'Analytics', phrases: [PNL_BASIS] },
+  { name: 'Calendar', rail: 'Calendar', phrases: [PNL_BASIS] },
 ];
 const LABEL = /\bago\b|last close|\bas of\b/;
 const ENV_FILE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '.env');
 
 export const labelOk = ({ age, valueHidden }) => valueHidden || LABEL.test(age ?? '');
+
+/** The spec's phrases not in `text`, then its selectors not `true` in `present`. */
+export function missingRequirements(text, present, spec) {
+  const phrases = (spec.phrases ?? []).filter((p) => !(text ?? '').includes(p));
+  const selectors = (spec.selectors ?? []).filter((s) => present?.[s] !== true);
+  return [...phrases, ...selectors];
+}
+
+/** null when /market/updates carries the v204 snapshot fields, else the exit-2 message. */
+export function preflightSnapshots(body) {
+  const ok = Array.isArray(body?.snapshots) && body.status && typeof body.status === 'object'
+    && 'stale_snapshot_s' in body.status;
+  return ok ? null : 'v204 not deployed: /market/updates has no snapshots';
+}
 
 export function visitVerdict(v) {
   const reasons = [];
@@ -37,6 +55,7 @@ export function visitVerdict(v) {
   if (v.calls.some((c) => !c.excluded && (c.ms === null || c.ms > LIMITS.callMs))) reasons.push('call > 2 s');
   if (v.scanMs.some((ms) => ms === null || ms > LIMITS.scanMs)) reasons.push('/system/scan > 0.5 s');
   if (v.unlabelled > 0) reasons.push('unlabelled value');
+  if ((v.missing ?? []).length) reasons.push('missing label: ' + v.missing.join(', '));
   return { pass: reasons.length === 0, reasons };
 }
 
@@ -123,15 +142,19 @@ async function preflight(page) {
   if (health.status !== 200 || status !== 'ok') return `v201 not deployed or refresher not ok: ${status ?? health.status}`;
   const updates = await getJson(page, '/api/v1/market/updates');
   if (updates.status !== 200) return `v201 not deployed or refresher not ok: market/updates ${updates.status}`;
-  return null;
+  return preflightSnapshots(updates.body);
 }
 
-async function labelScan(page) {
-  return page.evaluate(() => [...document.querySelectorAll('main.workspace sb-market-value')].map((el) => ({
-    age: el.querySelector('.mv-age')?.textContent?.trim() ?? '',
-    valueHidden: el.querySelector('.mv-value')?.hasAttribute('hidden') ?? false,
-    error: !!el.querySelector('.mv-err'),
-  })));
+async function labelScan(page, spec) {
+  return page.evaluate((selectors) => ({
+    cells: [...document.querySelectorAll('main.workspace sb-market-value')].map((el) => ({
+      age: el.querySelector('.mv-age')?.textContent?.trim() ?? '',
+      valueHidden: el.querySelector('.mv-value')?.hasAttribute('hidden') ?? false,
+      error: !!el.querySelector('.mv-err'),
+    })),
+    text: document.querySelector('main.workspace')?.innerText ?? '',
+    present: Object.fromEntries(selectors.map((s) => [s, document.querySelector(s) !== null])),
+  }), spec.selectors ?? []);
 }
 
 async function navigate(ctx, spec, hardLoad) {
@@ -179,16 +202,17 @@ async function visit(ctx, spec, passName, hardLoad) {
   const timedOut = await waitForData(page);
   const firstDataMs = timedOut ? null : Date.now() - t0;
   await page.waitForTimeout(SETTLE_MS);
-  const cells = await labelScan(page);
+  const { cells, text, present } = await labelScan(page, spec);
   const { calls, scanMs } = summariseCalls(records, t0);
   const slug = spec.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   await page.screenshot({ path: join(out, `${passName}-${slug}.png`), fullPage: true }).catch(() => {});
   const line = { pass: passName, page: spec.name, firstDataMs, timedOut, calls, scanMs,
-    cells: cells.length, unlabelled: cells.filter((c) => !labelOk(c)).length, errors: cells.filter((c) => c.error).length };
+    cells: cells.length, unlabelled: cells.filter((c) => !labelOk(c)).length, errors: cells.filter((c) => c.error).length,
+    missing: missingRequirements(text, present, spec) };
   const verdict = visitVerdict(line);
-  const text = verdict.pass ? 'PASS' : `FAIL (${verdict.reasons.join(', ')})`;
-  appendLine(out, { ...line, verdict: text });
-  return { ...line, slowest: slowestOf(calls), verdict: text,
+  const label = verdict.pass ? 'PASS' : `FAIL (${verdict.reasons.join(', ')})`;
+  appendLine(out, { ...line, verdict: label });
+  return { ...line, slowest: slowestOf(calls), verdict: label,
     scanMaxMs: scanMs.length ? Math.max(...scanMs.map((m) => m ?? 0)) : null };
 }
 
@@ -236,7 +260,31 @@ async function signIn(ctx, flags) {
   return ctx.context.storageState();
 }
 
+function versionsOf(body) {
+  const v = body?.versions ?? body ?? {};
+  return { ui: v.ui ?? null, bot: v.bot ?? null };
+}
+
+/** After a pass's visits: GET-only reads of the deployed versions, scan state, risk clocks and snapshots. */
+async function recordInputs(ctx, passName) {
+  const { page, out } = ctx;
+  const [session, scan, risk, updates] = await Promise.all(
+    ['/api/v1/session', '/api/v1/system/scan', '/api/v1/risk', '/api/v1/market/updates'].map((p) => getJson(page, p)));
+  const meta = risk.body?.bars_meta ?? {};
+  appendLine(out, { pass: passName, kind: 'inputs', at: new Date().toISOString(),
+    versions: versionsOf(session.body), scanRunning: scan.body?.running ?? null,
+    risk: { computed_at: risk.body?.computed_at ?? null, oldest: meta.oldest ?? null,
+      newest: meta.newest ?? null, stale_inputs: meta.stale_inputs ?? null },
+    snapshots: (updates.body?.snapshots ?? []).map((s) => ({ key: s.key, computed_at: s.computed_at,
+      stale_inputs: s.stale_inputs, refreshing: s.refreshing, error: s.error })) });
+}
+
 async function runPass(passName, env) {
+  await runPassVisits(passName, env);
+  if (env.ctx) await recordInputs(env.ctx, passName);
+}
+
+async function runPassVisits(passName, env) {
   const { flags, rows } = env;
   if (passName === 'warm' && env.ctx) { await runPages(env.ctx, 'warm', rows, false); return; }
   if (env.ctx) await env.ctx.context.close();
