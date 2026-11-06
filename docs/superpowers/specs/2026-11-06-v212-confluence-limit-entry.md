@@ -120,8 +120,35 @@ already sits on structure) are untouched.
      discloses it.
    - **Frictions.** `swingbot/core/edge/frictions.py` applies, non-zero,
      to both arms on every trade.
-7. **Sizing.** Fixed dollar risk on `|L − stop|`. The share count follows,
-   with no change to the risk-per-trade setting.
+7. **Sizing.** Fixed dollar risk on `|L − stop|`, with no change to the
+   risk-per-trade setting. The notional caps
+   `MAX_POSITION_SIZE_PCT` (`config.py:572`) and
+   `MAX_POSITION_VALUE_ABSOLUTE` (`config.py:650`) **still bind** in replay,
+   the measurement and live alike. A fill whose size a notional cap cut
+   carries less than the fixed dollar risk, and its R is still scored on
+   the plan's stop. The share of such fills is disclosed.
+   - Every kept plan satisfies `|L − stop| / L ≤ 2%`, asserted in replay
+     and live (`known-traps.md` § Stop floor and 2% cap).
+   - The alert's suggested size equals the engine's size. An alert blocked
+     by a heat, sector or cluster cap is still flagged with size 0, as
+     today.
+8. **Heat is re-checked at fill** *(author's call among the options the
+   panel offered)*. Today's heat, sector, cluster and `MAX_OPEN_POSITIONS`
+   checks (`scan_run.py:1210-1229`, `heat.py`) run at alert time against
+   open trades only, so a pending limit reserves nothing. When a limit
+   fills, the same checks run again against the then-open book, using the
+   fill's actual risk.
+   - If any cap would be breached, the fill is cancelled. The plan is then
+     `cancelled_limit` with the reason `heat_at_fill`, and live posts a
+     follow-up.
+   - Replay applies the identical rule, so the scored portfolio is one that
+     could exist. On a sell-off day this stops resting limits stacking risk
+     past the caps.
+   - Pending limits do not reserve heat, because that would block other
+     alerts on orders that mostly never fill.
+9. **Drops are logged** through the existing `plan rejected (` lines,
+   with reasons `limit_scope`, `limit_stop_beyond_cap` and
+   `limit_rr_fail`. A quiet day caused by this arm can then be diagnosed.
 
 Grid (pre-registered, three cells): f ∈ {⅓, ½, ⅔}. **Looks: 3.** The
 verdict unit is pooled over both directions. Per-direction results are
@@ -186,7 +213,16 @@ gate, § Funnel stages):
 - fills and ExpR by ATR14% bucket;
 - fills and ExpR on SPY down days (close < prior close − 1%) against
   other days, and the number of distinct fill days;
-- the share of fills with an earnings date inside the 3-bar window.
+- the share of fills with an earnings date inside the 3-bar window;
+- dollar P&L at fixed risk per cell, on filled trades only;
+- the share of fills whose size a notional cap cut;
+- fills cancelled by `heat_at_fill`;
+- risk and ruin (`edge/ruin.py`, `analytics/risk_metrics.py`), for the arm
+  against the reference:
+  - the worst single-day sum of R;
+  - the maximum simultaneous open risk at one open;
+  - the maximum drawdown;
+  - the worst gap-through-stop R, and its per-day clustering.
 
 ## Goals
 
@@ -322,4 +358,22 @@ before compute):
    rule 6 and G4.
 9. Bigger share counts on a tighter stop -- deferred to risk-manager.
 
-**risk-manager**: pending (rerun on the revised spec).
+**risk-manager** (on 6f2801be; the first run was stopped and rerun):
+
+1. BLOCKING: no notional bound on larger share counts -- applied: rule 7,
+   the caps bind in all paths and capped fills are disclosed.
+2. BLOCKING: pending limits reserve no heat; a sell-off day can stack fills
+   past the caps -- applied: rule 8, caps re-checked at fill in live and
+   replay, cancel with a follow-up. The author chose re-check at fill over
+   reserving heat while pending, which would block other alerts on orders
+   that mostly never fill.
+3. BLOCKING: no portfolio-level bound for a gap morning -- applied:
+   worst-day R, maximum simultaneous risk, drawdown and gap clustering
+   disclosed.
+4. Assert `|L − stop| / L ≤ 2%` in replay and live -- applied: rule 7.
+5. Dollar P&L at fixed risk on filled trades -- applied (disclosure).
+6. Alert size equals engine size; a blocked alert shows size 0 -- applied:
+   rule 7.
+7. Drop reasons logged; admin risk view -- applied: rule 9. The admin view
+   is unaffected, because nothing reserves pending heat.
+8. Veteran-trader item 9 covered -- applied.
