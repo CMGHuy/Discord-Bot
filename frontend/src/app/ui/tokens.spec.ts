@@ -265,6 +265,9 @@ const NOT_CONTROL_ROWS = new Set([
   // 720px rather than the primitive's 640. Bottom-aligning the button against
   // a variable-height paragraph is a regression, not the fix.
   'kill',
+  // Users tab: the action group inside a table cell (Reset password, Delete); it wraps on a
+  // phone and stays on one line from 640px, which is not a control lane (v207).
+  'row-actions',
 ]);
 
 describe('no workspace hand-rolls a control row', () => {

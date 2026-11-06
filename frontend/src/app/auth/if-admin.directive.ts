@@ -3,7 +3,7 @@ import { Directive, TemplateRef, ViewContainerRef, effect, inject } from '@angul
 import { SessionStore } from '../stores/session.store';
 
 /**
- * v207: `<button *ifAdmin>` renders only for an admin session. It hides,
+ * v207: an element marked `*ifAdmin` renders only for an admin session. It hides,
  * never disables, and is presentation only (the server is the boundary).
  * There is no `else` branch: a control with a read-only stand-in uses
  * `@if (session.isAdmin()) { ... } @else { ... }` in its own template.

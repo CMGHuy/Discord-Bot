@@ -243,6 +243,7 @@ describe('PreferencesStore', () => {
       .filter((path) => readFileSync(path, 'utf8').includes('savePreferences'))
       .map((path) => relative(root, path).replaceAll('\\', '/'))
       .sort();
-    expect(callers).toEqual(['api/api-client.ts', 'stores/preferences.store.ts']);
+    // auth/write-calls.ts only names it in the write-call inventory (V207-12).
+    expect(callers).toEqual(['api/api-client.ts', 'auth/write-calls.ts', 'stores/preferences.store.ts']);
   });
 });
