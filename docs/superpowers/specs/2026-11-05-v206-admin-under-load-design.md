@@ -520,11 +520,23 @@ flags) before V206-13 pushes, then replace this note with that run's table.
 |---|---|---|---|---|---|
 | `v206-baseline-quiet-1` | quiet (not evidence) | 2026-11-05 22:03 UTC, no scan running | `ghcr.io/cmghuy/discord-bot:sha-d0500efab0cc` | 36 | 17 requests in 120 s = 8.5/min |
 | `v206-baseline-mixed-1` | mixed (not evidence) | 2026-11-06 12:39 Berlin, scan ended mid-run | `ghcr.io/cmghuy/discord-bot:sha-d5f56464e217` | 36 | 79 requests in 120 s = 39.5/min |
+| `v206-baseline-scan-1` (labelled mixed) | mixed (not evidence) | 2026-11-06 15:44 Berlin, session scans every 5 min (~286 s each), gaps between them hit some samples | `ghcr.io/cmghuy/discord-bot:sha-68927fbd8cc2` (ui 1.40.0 / bot 2.17.0, pre-Plan-1), probe `92d2b3f7` | 36 | 38 requests in 120 s = 19.0/min |
 
 The mixed run (scan stopped partway) still shows the load: `/cancel-precision`
 43.0 s max, `/analytics/performance` 35.6 s, `/dashboard` median 10.8 s /
 p90 23.9 s over 27 samples, `/market/tape` 169 calls (median 4.3 s, max 51.8 s)
 and an idle tab at 39.5 requests/min. The `scan` baseline is still owed.
+
+The second mixed run (15:44 Berlin, mostly inside scans) is worse: 27 of 36
+pages hit the 90 s cap in round 1. `/system/scan` 289 calls (median 1.1 s,
+p90 34.7 s, max 50.4 s), `/health` 351 calls (p90 32.8 s, max 50.2 s),
+`/dashboard` median 17.0 s / p90 33.1 s over 15 samples, `/market/tape` 76
+calls (median 10.7 s, p90 23.3 s, max 49.1 s), `/trades` median 13.8 s, and
+`/insights/*`, `/risk`, `/system/versions` page loads timed out. A strict
+`scan` label looks unreachable with back-to-back 5-minute session scans: the
+few seconds between scans catch at least one sample per hour-long run. The
+Plan 1 after-run (V206-13) should be compared against this run with that
+caveat, using the same flags.
 
 Worth knowing from the quiet run: with no scan running the idle tab already
 sits near the Plan 1 target (under 10/min), as expected since the polling
