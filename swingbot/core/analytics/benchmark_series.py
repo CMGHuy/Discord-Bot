@@ -133,7 +133,9 @@ def _deployed_day(points: list[dict], prev: dict, legs: list[RealizedLeg]) -> De
         return Deployed(None, False, approx, "missing")
     if peak <= 0:
         return Deployed(None, False, approx, "no_exposure")
-    if peak < DEPLOYED_MIN_SHARE * close["equity"]:
+    # Compare the decimal amounts so an exact 5% position passes the floor.
+    minimum = to_decimal(DEPLOYED_MIN_SHARE) * to_decimal(close["equity"])
+    if to_decimal(peak) < minimum:
         return Deployed(None, False, approx, "below_min")
 
     pnl = session_trade_pnl(

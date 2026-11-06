@@ -43,6 +43,17 @@ def test_exposure_is_time_weighted_to_the_close():
     assert (exp.open_n, exp.approx) == (2, False)
 
 
+@pytest.mark.parametrize("usable_approx", [False, True])
+def test_exposure_uses_only_usable_rows_for_weights_and_approx(usable_approx):
+    by_day = {TUE: [
+        _row(TUE, 9, 30, approx=True, open_n=5),
+        _row(TUE, 10, 0, notional=1_000.0, open_n=1),
+        _row(TUE, 12, 0, notional=5_000.0, equity=0.0, approx=True, open_n=3),
+        _row(TUE, 14, 0, notional=4_000.0, approx=usable_approx, open_n=2),
+    ]}
+    assert bs.exposure_by_session(by_day)[TUE] == bs.Exposure(pytest.approx(0.2), 5, usable_approx)
+
+
 def test_a_half_day_weights_to_the_1300_close():
     by_day = {HALF_DAY: [_row(HALF_DAY, 9, 30, notional=0.0), _row(HALF_DAY, 12, 0, notional=5_000.0)]}
     assert bs.exposure_by_session(by_day)[HALF_DAY].pct == pytest.approx(0.5 / 3.5)
@@ -76,13 +87,15 @@ def test_a_zero_exposure_day_is_not_chained():
     assert _deployed(by_day)[TUE] == bs.Deployed(None, False, False, "no_exposure")
 
 
-@pytest.mark.parametrize("notional, ret, reason", [
-    (499.0, None, "below_min"),
-    (500.0, pytest.approx(0.1), None),
+@pytest.mark.parametrize("equity, notional, ret, reason", [
+    (10_000.0, 499.0, None, "below_min"),
+    (10_000.0, 500.0, pytest.approx(0.1), None),
+    (8_000.60, 400.02, None, "below_min"),
+    (8_000.60, 400.03, pytest.approx(0.1), None),
 ])
-def test_the_five_percent_floor(notional, ret, reason):
+def test_the_five_percent_floor(equity, notional, ret, reason):
     by_day = {MON: [_row(MON, 15, 55, notional=notional)],
-              TUE: [_row(TUE, 15, 55, notional=notional, unrealized=notional * 0.1)]}
+              TUE: [_row(TUE, 15, 55, notional=notional, equity=equity, unrealized=notional * 0.1)]}
     assert bs.DEPLOYED_MIN_SHARE == 0.05
     assert _deployed(by_day)[TUE] == bs.Deployed(ret, False, False, reason)
 
