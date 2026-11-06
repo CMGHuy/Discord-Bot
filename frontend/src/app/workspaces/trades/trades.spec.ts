@@ -525,6 +525,34 @@ describe('Trades on a phone (v179 §3.1)', () => {
 });
 
 
+describe('Trades row click vs the # link', () => {
+  const desktopRows = () => {
+    const el = renderLegRows([row({ id: 'plan-aaa111' })]);
+    return el;
+  };
+
+  it('opens the overview drawer on a row click without navigating', () => {
+    const el = desktopRows();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate');
+    expect(el.querySelector('sb-trade-drawer')).toBeNull();
+    (el.querySelector('tbody tr') as HTMLElement).click();
+    TestBed.tick();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(document.querySelector('sb-trade-drawer') ?? el.querySelector('sb-trade-drawer')).not.toBeNull();
+  });
+
+  it('keeps the # link pointing at the trade page, and a click on it opens no drawer', () => {
+    const el = desktopRows();
+    const link = el.querySelector('sb-row-link a') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe('/trades/plan-aaa111');
+    link.addEventListener('click', (event) => event.preventDefault());
+    link.click();
+    TestBed.tick();
+    expect(el.querySelector('sb-trade-drawer')).toBeNull();
+  });
+});
+
+
 describe('Trades page-size URL precedence (v194 B2)', () => {
   afterEach(() => preferencesStub.values.set({}));
 
@@ -571,44 +599,37 @@ describe('Trades — leg rows (v194 B3)', () => {
       row({ id: 'plan-aaaaaa', leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }),
       row({ id: 'plan-aaaaaa', leg_index: 1, leg_total: 2, leg_exit_reason: 'stop' }),
     ]);
-    const labels = [...el.querySelectorAll('.leg')].map((n) => n.firstChild!.textContent!.trim());
+    const labels = [...el.querySelectorAll('.leg .name')].map((n) => n.textContent!.trim());
     expect(labels[0]).toMatch(/^Leg 1 of 2 · /);
     expect(labels[1]).toMatch(/^Leg 2 of 2 · /);
   });
 
   it('labels a leg with no recorded reason by its position alone', () => {
     const el = renderLegRows([row({ leg_index: 2, leg_total: 3, leg_exit_reason: null })]);
-    expect(el.querySelector('.leg')!.firstChild!.textContent!.trim()).toBe('Leg 3 of 3');
+    expect(el.querySelector('.leg .name')!.textContent!.trim()).toBe('Leg 3 of 3');
   });
 
-  it('shows no label and no leg hint on a single-leg trade', () => {
+  it('shows no label and no leg tooltip on a single-leg trade', () => {
     const el = renderLegRows([row({ leg_index: 0, leg_total: 1 })]);
     expect(el.querySelector('.leg')).toBeNull();
-    expect(el.querySelector('.leg sb-hint')).toBeNull();
+    expect(el.querySelector('sb-leg-name')).toBeNull();
   });
 
-  it('puts an sb-hint naming plans-not-legs on every leg row, in place of the old icon', () => {
+  it('explains each leg in a tooltip on its own text, with no info icon beside it', () => {
     const el = renderLegRows([
-      row({ leg_index: 0, leg_total: 2 }),
-      row({ leg_index: 1, leg_total: 2 }),
+      row({ leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }),
+      row({ leg_index: 1, leg_total: 2, leg_exit_reason: 'tp1_runner_tp2' }),
     ]);
-    const hints = [...el.querySelectorAll('.leg sb-hint')];
-    expect(hints).toHaveLength(2);
-    expect(hints[0].textContent).toContain(LEG_HINT_TEXT);
-    expect(hints[0].textContent).toContain('count plans on Analytics');   // A4 audit
-    expect(hints[0].textContent).not.toContain('plans, not legs');
-    expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
-  });
-
-  it('keeps the 44px hint tap area out of the leg line height (layout audit vcenter at 768)', () => {
-    // jsdom lays nothing out, so the contract is source text: on coarse /
-    // tablet widths sb-hint's trigger grows to --control-h, and unless the
-    // .leg rule pulls that padding back with a negative block margin the
-    // cell's box is ~14px taller than the ink it shows (content sits high).
-    const css = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trades.ts'), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(css).toMatch(/\.leg sb-hint\s*\{[^}]*margin-block:\s*calc\(\(var\(--control-h\) - 14px\) \/ -2\)/);
-    expect(css).toMatch(/@media \(pointer: coarse\), \(max-width: 1023px\)\s*\{\s*\.leg sb-hint/);
+    const names = [...el.querySelectorAll('.leg sb-leg-name')];
+    expect(names).toHaveLength(2);
+    expect(el.querySelector('.leg button.trigger')).toBeNull();
+    const tips = names.map((n) => n.querySelector('[role="tooltip"]')!.textContent!);
+    expect(tips[0]).toContain('Leg 1 of 2 is the first part of the plan to close');
+    expect(tips[0]).toContain('first target was reached');
+    expect(tips[1]).toContain('Leg 2 of 2 is the last part of the plan to close');
+    expect(tips[1]).toContain('second target, T2');
+    expect(tips[1]).toContain(LEG_HINT_TEXT);
+    expect(tips[1]).toContain('count plans on Analytics');   // A4 audit
   });
 
   it('carries the label into the expansion the phone drawer reuses', () => {
