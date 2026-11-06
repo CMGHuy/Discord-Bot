@@ -35,8 +35,8 @@ screened change can be argued from numbers. It is not that change.
      column.
    - **Odds chart:** of runners that reached a level, how they ended.
 2. The scorecard rows, in this order: **TP2**, **Trailing stop**,
-   **Breakeven**, **↳ Giveback**, **Other** (stall + time + manual +
-   `other`).
+   **Breakeven**, **Other** (stall + time + manual + `other`), then a
+   separated cross-cutting row **Giveback (any ending)**.
 3. The scorecard columns:
 
    | Column | Definition |
@@ -48,7 +48,7 @@ screened change can be argued from numbers. It is not that change.
    | vs all-out | mean `PartialTrade.delta_r` (blended R minus closing everything at TP1, already defined in `partials.py`) |
    | Best R seen | mean `runner_path["mfe_r"]`, the best R the trade reached from TP1 to the runner's close, measured from entry (see "Progress to TP2") |
    | % to TP2 | mean **progress to TP2** per runner (defined below), as % |
-   | Giveback | mean `max(0, mfe_r − r_runner)`. Clamped at 0, because a manual close's synthesised exit can sit above a stamp that never saw it. |
+   | Gave back | mean `mfe_r − r_runner`, the same unclamped formula as the existing Giveback strip (`partials.py::_giveback`), so the tab has one meaning for the measure. It is named "Gave back" so it is not confused with the Giveback ending. |
    | Sessions | median `hold_tp1_exit` (trading sessions from TP1 to the runner's close) |
 
 4. The **odds chart**: for progress levels **25%, 50% and 75% of the way
@@ -71,8 +71,17 @@ screened change can be argued from numbers. It is not that change.
   - A plan whose `tp2_r ≤ r_tp1` has no TP1→TP2 distance. It is left out
     of every progress figure, with the count shown.
 - **Giveback:** a runner whose progress reached **≥ 50%** and that closed
-  with `r_runner ≤ 0` (breakeven or worse).
-- **Breakeven:** close reason `tp1_runner_be` (bucket `floor`).
+  **below the TP1 price** (`r_runner < r_tp1`), whatever its close reason:
+  breakeven, trail or other. It reached halfway to TP2 and ended up
+  giving back all of the gain past TP1. *(Partner, 2026-11-07, after the
+  panel found the "breakeven" exit is the floor, below.)*
+- **Breakeven:** close reason `tp1_runner_be` (bucket `floor`). Since v39
+  this is **not** the entry price. It is the post-TP1 floor at
+  `entry + ⅔·(tp1 − entry)` (`exit_sim.py::runner_floor`,
+  `params.py::RUNNER_FLOOR_FRACTION`), so it banks about ⅔ of TP1's R.
+  The partner chose to keep the name "breakeven". The card's and row's
+  hint says "the floor locks ⅔ of the TP1 gain" so the label is not read
+  as 0R.
 - **Trailing stop:** close reason `tp1_runner_trail` (bucket `trail`).
 - **TP2:** close reason `tp1_runner_tp2` (bucket `tp2`).
 
@@ -82,35 +91,41 @@ screened change can be argued from numbers. It is not that change.
   runner figure on the tab.
 - **Plans with no TP2 (`no_tp2`) are excluded from the whole section.**
   "% to TP2" and "reached TP2" mean nothing for them. The section states
-  how many were left out. *(Author's call.)*
-- **Pre-v142 runners without a `runner_path` stamp** (`pathed` false)
-  count in the cards and in N, Share, Avg/Med/Total R, vs all-out and
-  Sessions. They are left out of Best R seen, % to TP2, Giveback, the
-  Giveback row/card (which needs `mfe_r`) and the odds chart. The section
-  says how many runners each of those figures left out, reusing the
-  `path_unavailable` idea in `partials.py::_exclusions`. *(Author's
-  call.)*
-- **Giveback spans endings.** Most givebacks are breakeven exits, but a
-  stall, time or manual close at ≤ 0R after reaching 50% progress is a
-  giveback too. The "↳ Giveback" row sits under Breakeven but is labelled
-  as counted across endings. It is excluded from the share total, so the
-  other rows still sum to 100%. *(Author's call; the mockup showed it as
-  "of which" under Breakeven.)*
-- **The Giveback card's and row's share uses only the runners where
-  giveback can be decided:** pathed, measured and with a TP1→TP2
-  distance. The card states that N. A pre-v142 runner can never be a
-  giveback, so counting it in the denominator would understate the
-  share. *(Author's call.)*
-- **The no-TP2 exclusion counts closed plans only.** Open runners are
-  excluded anyway.
-- A runner with no known runner R (a manual close with no price,
-  `measured` false) counts in N and Share only. It is counted out of
-  every R column, with the count shown.
+  how many closed plans were left out. *(Author's call.)*
+- **Path figures** are Best R seen, % to TP2, Gave back, the Giveback
+  ending (row and card) and the odds chart. They use only runners that
+  meet all of these:
+  - **pathed:** a `runner_path` stamp with both `mfe_r` and `ladder`.
+    Pre-v142 runners and malformed stamps fail this.
+  - **measured:** the runner R is known.
+  - **not a manual close:** the stamp never sees a manual exit price
+    (`runner_path.exit_r` is None for one, `runner_path.py:146-148`), so
+    `mfe_r` understates it.
+  - **a TP1→TP2 distance:** `tp2_r > r_tp1`.
+
+  Each exclusion is counted and shown, extending
+  `partials.py::_exclusions`. *(Author's call; the manual-close exclusion
+  is the panel's, quant-researcher 5.)*
+- Every runner in the section counts in the three ending cards (TP2,
+  Breakeven, Trailing stop), and in N, Share, Avg/Med/Total R, vs all-out
+  and Sessions. A runner with no known runner R counts in N and Share
+  only, with the count shown.
+- **Giveback spans endings.** It is a separate, visually set-apart row
+  after Other, labelled "any ending", excluded from the share total, so
+  the four ending rows still sum to 100%.
+- **The Giveback card's and row's share has its own denominator**: the
+  runners that pass the path filter above. The card and the row's Share
+  cell both carry it in place ("23% of 41 decidable"), not only in a
+  footnote, so no one reads the four cards as one total. *(Panel:
+  quant-researcher 6, financial-advisor 2.)*
 - Everything follows the tab's existing scope (date range on fill date,
   strategy, horizon, side, ledger, origin): the same `select_plans`
   population as the rest of the tab.
-- Any row, card or odds bar with N < `THIN_N` (10) carries the tab's
-  existing thin marker. Nothing is hidden for being thin.
+- **Uncertainty:** every share (cards, Share column, odds bars) shows a
+  95% Wilson interval beside it. R means show no interval, and their N
+  is always visible. Any row, card or odds bar with N < `THIN_N` (10)
+  also carries the tab's existing thin marker. Nothing is hidden for
+  being thin. *(Panel: quant-researcher 3, financial-advisor 4.)*
 
 ## How (decided)
 
@@ -119,15 +134,43 @@ screened change can be argued from numbers. It is not that change.
   section from the existing `PartialTrade` list. `build_report` adds it to
   the `/analytics/partials` payload under a new key. No new endpoint, no
   new store, no schema change, no change to `runner_path` stamping.
-  `PartialTrade` gains the plan's TP2 in R (`tp2_r`), computed in
-  `partial_trade()` from `plan.tp2` on the initial entry/stop basis
-  (as `_one_leg_r` does), not as a new stored field. The builder
-  confirms whether anything rewrites `plan.tp2` after the fill. If
-  something does, progress uses the TP2 in force at TP1 when the record
-  has it, and the spec's Population section gains a line saying so.
+- **`tp2_r`:** `PartialTrade` gains the plan's TP2 in R, computed in
+  `partial_trade()` from `plan.tp2` on the initial entry/stop basis (as
+  `_one_leg_r` does). It is not a stored field. `plan.tp2` is assigned
+  only at plan build (`builders.py:494`, `:796`), and the exit code only
+  reads it, so the TP2 on the record is the TP2 in force at TP1.
+  *(Panel: staff-engineer 1.)*
+- **The `outcomes` payload key is removed.** Its only consumers are the
+  panel this replaces (`partials.ts:81`, `:167`, `:209`) and its fixture
+  (`partials.fixture.ts:19`). Nothing under `scripts/` or `swingbot/`
+  reads it. *(Panel: staff-engineer 2.)*
+- **Blast radius:** the new function runs inside `build_report`, and an
+  exception there fails the whole `/analytics/partials` response
+  (`api_v1/analytics.py:534-547`). The Partials tab would then show one
+  panel error for the entire tab. So:
+  - The function never raises on a malformed or partial `runner_path`.
+    The path filter treats such a stamp as unpathed.
+  - A test pins that behaviour.
+  - Rollback is an admin-image rollback. Nothing is stored.
+
+  *(Panel: staff-engineer 3.)*
 - **Frontend:** the model in `frontend/src/app/api/models.ts`
-  (`AnalyticsPartials`) gains the new block. The Partials tab swaps the
-  "Runner outcome mix" panel for the Runner endings section.
+  (`AnalyticsPartials`) swaps `outcomes` for the new block. The Partials
+  tab swaps the "Runner outcome mix" panel for the Runner endings
+  section.
+- **Copy the section must carry** (exact wording is the builder's, in the
+  tab's voice):
+  - Header hint: "R, before commissions and tax."
+  - On Best R seen / % to TP2: "The peak is known only afterwards; it is
+    not a target."
+  - On Breakeven: "The floor locks ⅔ of the TP1 gain."
+  - On the odds chart: "Read off this book; any threshold taken from it
+    is screened on backtest data first." The odds are descriptive
+    conditionals on the live book. A progress or giveback threshold read
+    from them would need a Stage −2 screen on backtest data before any
+    rule uses it (`backtest-methodology.md` § Stage −2).
+
+  *(Panel: financial-advisor 1 and 3, quant-researcher 2.)*
 - **Layout C across three widths** (`docs/claude/ui-design.md`):
   - Desktop: 4 cards in a row, then the full-width table, then the odds
     chart.
@@ -135,16 +178,19 @@ screened change can be argued from numbers. It is not that change.
     column pinned.
   - Phone: cards 2×2, the table scrolls with the Ending column pinned,
     the odds bars stacked full width with labels that wrap.
-- The existing **Giveback** strip panel stays. It shows the distribution
-  of giveback over all pathed runners, which the new mean-per-ending
-  column does not replace.
+- The existing **Giveback** strip panel stays, and keeps its name. It
+  shows the distribution of `mfe_r − r_runner` over pathed runners. The
+  new "Gave back" column uses the same unclamped formula, so the two
+  agree. The strip adopts the same path filter (manual closes out) so
+  both read one population. *(Panel: quant-researcher 4, staff-engineer
+  4.)*
 - Ending colours reuse the tab's existing outcome tones (`tp2` pos,
   `trail` accent, and so on) so the cards, table and odds bars agree with
   the rest of the tab.
 
 ## Non-goals
 
-- No change to any exit rule, trail distance, breakeven move, TP2
+- No change to any exit rule, trail distance, floor fraction, TP2
   placement or runner fraction. No setting, toggle or "what-if" control
   in this section.
 - No money ($) view. The Partials tab is R-only today and stays R-only.
@@ -154,37 +200,66 @@ screened change can be argued from numbers. It is not that change.
 
 ## Anti-goals
 
-- **Numbers that don't add up.** Card shares, table shares and the odds
-  bars must come from one population and agree. A giveback runner
-  counted twice in a total is a failure, even if every cell is "right".
+- **Numbers that don't add up.** The ending cards, the Share column and
+  the odds bars must come from one stated population each and agree. A
+  giveback runner counted into a 100% total is a failure, even if every
+  cell is "right".
 - **Thin numbers presented as findings.** A 3-runner row must look thin.
 - **Any code path that changes how a live runner is managed.** This spec
-  is read-only. A diff touching `plan_manager.py` exit logic is out of
-  scope.
+  is read-only. A diff touching `plan_manager.py` or `exit_sim*.py` exit
+  logic is out of scope.
 
 ## Left to the builder
 
 - The payload key name and exact JSON shape (one block holding cards,
   rows, odds and exclusion counts is the expectation).
-- Whether the `outcomes` payload key stays. The new section supersedes
-  it on screen. Drop it only if nothing else reads it (grep the
-  frontend and `swingbot/`).
 - Chart component choice for the odds bars: reuse an existing
   `ui/` chart or a stacked-bar primitive if one exists, else a plain
   CSS stacked bar as in the mockup.
-- Panel header copy and hint text, in the tab's existing voice.
+- Exact header and hint wording, carrying the copy above.
 
 ## Tests
 
-- Backend unit tests for the new function: each definition (progress at
-  exactly 50% and `r_runner` at exactly 0R for giveback, progress clamp at
-  0 and 1, `tp2_r ≤ r_tp1` excluded, no_tp2 exclusion, unpathed runners,
-  unmeasured manual closes, giveback clamp at 0, the giveback
-  denominator), shares summing to 100% without the giveback row, odds
-  groups at 25/50/75%, thin flags, and an empty population.
+- Backend unit tests for the new function. Each definition gets a test:
+  - Giveback: progress at exactly 50%, `r_runner` exactly at `r_tp1`
+    (not a giveback) and just below (is one).
+  - Progress clamped at 0 and at 1.
+  - `tp2_r ≤ r_tp1` excluded.
+  - no_tp2 exclusion.
+  - Unpathed, malformed-stamp and manual-close runners: out of the path
+    figures and counted.
+  - Unmeasured runners.
+  - The Giveback denominator.
+
+  Also: the four ending shares sum to 100%, odds groups at 25/50/75%,
+  Wilson bounds, thin flags, and an empty population.
 - An endpoint test that the `/analytics/partials` payload carries the
-  block.
-- Frontend specs: the section renders the four cards, the table rows in
-  order and the odds bars from a fixture. The old "Runner outcome mix"
-  panel is gone. Exclusion counts and thin markers show, and an empty
-  population renders as measured zeros, not an error.
+  block and no longer carries `outcomes`.
+- Frontend specs:
+  - The section renders the four cards (Giveback with its "of N
+    decidable" label), the table rows in order, and the odds bars from a
+    fixture.
+  - The "Runner outcome mix" panel is gone.
+  - Exclusion counts, intervals, thin markers and the required copy show.
+  - An empty population renders as measured zeros, not an error.
+
+## Panel review
+
+Run 2026-11-07, after the spec commit, before the partner's review.
+
+- quant-researcher: "Breakeven" exit is the ⅔-of-TP1 floor, not 0R, so the `r_runner ≤ 0` giveback almost never fires -- **applied**: partner redefined giveback as ≥50% progress then closed below TP1; partner kept the name "breakeven", with a hint stating the floor.
+- quant-researcher: odds are descriptive conditionals; thresholds read off them need a Stage −2 screen on backtest data -- **applied** (odds-chart copy, How).
+- quant-researcher: only a binary thin flag; add intervals -- **applied** (Wilson 95% on every share; R means show N, no interval).
+- quant-researcher: clamping giveback biases the mean and disagrees with the unclamped strip -- **applied** (unclamped, renamed "Gave back", strip and column share one formula and population).
+- quant-researcher: manual closes understate `mfe_r` -- **applied** (manual closes out of every path figure, counted).
+- quant-researcher: Giveback share uses another denominator in the same column -- **applied** ("x% of N decidable" in the cell and on the card).
+- staff-engineer: close the "is `plan.tp2` rewritten" question now -- **applied** (only set at build, `builders.py:494`, `:796`).
+- staff-engineer: decide the `outcomes` key -- **applied** (removed; only the replaced panel read it).
+- staff-engineer: name the blast radius, never raise on a malformed `runner_path`, test it -- **applied**.
+- staff-engineer: two "Giveback" meanings on one tab -- **applied** (column renamed "Gave back"; the ending keeps "Giveback").
+- staff-engineer: one-population question belongs to quant-researcher -- **rejected**: pointer only, covered by the Population and Anti-goals sections.
+- financial-advisor: say R is before commissions and tax -- **applied** (header hint).
+- financial-advisor: Giveback card's different denominator must be visible on the card -- **applied** (merged with quant-researcher 6).
+- financial-advisor: peak figures read as achievable exits -- **applied** (hint copy).
+- financial-advisor: small odds groups read as findings -- **applied** (Wilson interval and N on every bar, thin marker).
+- financial-advisor: threshold validity is quant-researcher's -- **rejected**: pointer only, not a finding.
