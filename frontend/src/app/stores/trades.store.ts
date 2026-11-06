@@ -37,6 +37,11 @@ interface TradesSlice {
    *  Dashboard could end up showing the same (unfiltered, CLOSED-included)
    *  trades in all three status panels. */
   queryReady: boolean;
+  /** The query `data` answered. A refetch keeps the old rows on screen (a
+   *  skeleton belongs on the first load only), so a consumer that switches to
+   *  a different result set -- a lifecycle tab -- compares this to tell rows
+   *  that belong to the new query from the previous one's. */
+  dataQuery: TradeQuery | null;
   loading: boolean;
   error: string | null;
 
@@ -142,6 +147,7 @@ export const TradesStore = signalStore(
     data: null,
     query: { page: 1, per_page: DEFAULT_PER_PAGE },
     queryReady: false,
+    dataQuery: null,
     loading: false,
     error: null,
     clearing: null,
@@ -207,17 +213,18 @@ export const TradesStore = signalStore(
     resolve(): Observable<void> {
       return routeRequest(api.trades(store.query()), {
         start: () => patchState(store, { loading: true }),
-        next: (data) => patchState(store, { data, loading: false, error: null }),
+        next: (data) => patchState(store, { data, dataQuery: store.query(), loading: false, error: null }),
         error: (error) => patchState(store, { loading: false, error: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
       });
     },
     load(): void {
       const request = ++latestRequest;
+      const query = store.query();
       patchState(store, { loading: true });
-      api.trades(store.query()).subscribe({
+      api.trades(query).subscribe({
         next: (data) => {
           if (request !== latestRequest) return;
-          patchState(store, { data, loading: false, error: null });
+          patchState(store, { data, dataQuery: query, loading: false, error: null });
         },
         error: (error: ApiError) => {
           if (request !== latestRequest) return;

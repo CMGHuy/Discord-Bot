@@ -6,6 +6,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { patchState } from '@ngrx/signals';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TradesStore } from '../../stores/trades.store';
@@ -85,6 +86,31 @@ describe('positions table', () => {
     f.detectChanges();
     expect(setQuery).toHaveBeenCalledTimes(1);
     expect(setQuery.mock.calls[0][0]).toMatchObject({ status: 'PENDING' });
+  });
+
+  it('shows the loading state, not the previous tab\'s rows, while a switched tab fetches', () => {
+    const f = mount();
+    const store = f.debugElement.injector.get(TradesStore) as unknown as Parameters<typeof patchState>[0];
+    const el = f.nativeElement as HTMLElement;
+    // The Open tab has answered its own query.
+    patchState(store, {
+      data: { items: [], total: 0, page: 1, per_page: 10 } as never,
+      dataQuery: { status: 'ACTIVE', page: 1, per_page: 10 },
+      loading: false,
+    });
+    f.detectChanges();
+    expect(el.querySelector('sb-data-table')).not.toBeNull();
+
+    // Switch to Partial: the fetch is in flight (setQuery is mocked, so mark it by hand).
+    (el.querySelectorAll<HTMLButtonElement>('[role="tab"]')[2]).click();
+    patchState(store, { loading: true });
+    f.detectChanges();
+    expect(el.querySelector('sb-data-table')).toBeNull();
+
+    // The Partial answer lands: its rows show.
+    patchState(store, { dataQuery: { status: 'PARTIAL', page: 1, per_page: 10 }, loading: false });
+    f.detectChanges();
+    expect(el.querySelector('sb-data-table')).not.toBeNull();
   });
 
   it('uses the device default rows per page (10 on desktop) for every lifecycle tab', () => {

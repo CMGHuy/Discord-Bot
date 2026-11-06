@@ -80,7 +80,7 @@ const EMPTY_STATES: Record<string, EmptyState> = {
         [rowKey]="rowKey()"
         [phoneTap]="phoneTap()"
         [emptyState]="emptyState()"
-        [pagination]="trades.pagination()"
+        [pagination]="otherTab() ? null : trades.pagination()"
         [fillPage]="false"
         [showPerPage]="true"
         [perPageChoice]="perPage()"
@@ -146,8 +146,15 @@ export class PositionsTable {
   });
 
   protected readonly rows = computed(() => this.trades.rows());
+  /** The rows on hand answer another tab's query: a refetch keeps old rows on
+   *  screen, which on a tab switch would show the previous tab's trades
+   *  under the new tab's name until the response lands. */
+  protected readonly otherTab = computed(() => {
+    const tab = POSITION_TABS.find((t) => t.id === this.active());
+    return this.trades.dataQuery()?.status !== (tab?.status ?? 'ACTIVE');
+  });
   protected readonly async = computed(() => asyncInputs(
-    { data: () => this.trades.empty() ? null : this.trades.rows(),
+    { data: () => this.trades.empty() || this.otherTab() ? null : this.trades.rows(),
       loading: this.trades.loading, error: this.trades.error },
     { isEmpty: () => false },
   ));
