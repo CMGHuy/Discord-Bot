@@ -50,7 +50,8 @@ def _open_trades() -> list | None:
     from swingbot.core.tracking.performance import TradeLog
     try:
         return TradeLog().get_trades(status="open", limit=None)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - no open book reads as unavailable
+        swallowed(log, "ops.risk_payload.open_trades", exc, level=logging.DEBUG)
         return None
 
 
@@ -61,7 +62,8 @@ def _position_risk(trade: dict, balance: float | None) -> float | None:
     try:
         value = float(trade_risk_pct(trade, balance))
         return round(value, 3) if math.isfinite(value) else None
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - one unpriceable position reads as None
+        swallowed(log, "ops.risk_payload.position_risk", exc, level=logging.DEBUG)
         return None
 
 

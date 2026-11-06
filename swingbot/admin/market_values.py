@@ -162,7 +162,7 @@ def _snapshot_row(key: str) -> tuple[Optional[dict], Optional[str]]:
     try:
         return snapshot_store.admin_snapshot_repo().read(key), None
     except Exception as exc:  # noqa: BLE001 - fail open: the page renders without the row
-        swallowed(log, "admin.market_values.snapshot_read", exc, "snapshot read failed: %s", exc)
+        swallowed(log, "ops.admin.market_values.snapshot_read", exc, "snapshot read failed: %s", exc)
         return None, "snapshot store unavailable"
 
 

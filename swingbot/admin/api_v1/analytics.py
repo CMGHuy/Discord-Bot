@@ -124,7 +124,7 @@ def _fx_as_of(tickers: Iterable[str]) -> str | None:
     try:
         fx_map, _ = admin_snapshots._fx_inputs(list(tickers), on=now.date())
     except DailyCacheUnavailable as exc:
-        swallowed(log, "admin.analytics.fx_as_of", exc)
+        swallowed(log, "ops.admin.analytics.fx_as_of", exc)
         return None
     return admin_snapshots.build_inputs(computed_at=now, fx=fx_map)["oldest_fx_as_of"]
 

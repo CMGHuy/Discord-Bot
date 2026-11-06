@@ -55,7 +55,7 @@ def _default_watcher(emit):
 
 
 #: Swallowed-error tag for a failed progress read on a `scan` event (v206 P1-b).
-SCAN_PROGRESS_TAG = "admin.events.scan_progress"
+SCAN_PROGRESS_TAG = "ops.admin.events.scan_progress"   # = the literal swallowed() call below
 
 #: A failing read is counted every time but logged at WARNING at most this often.
 PROGRESS_LOG_INTERVAL_S = 60.0
@@ -344,7 +344,7 @@ class EventBroker:
         loud = last is None or now - last >= PROGRESS_LOG_INTERVAL_S
         if loud:
             self._progress_logged_at = now
-        swallowed(log, SCAN_PROGRESS_TAG, exc,
+        swallowed(log, "ops.admin.events.scan_progress", exc,
                   "scan event sent without progress: the progress read failed",
                   level=logging.WARNING if loud else logging.DEBUG)
 
