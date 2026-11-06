@@ -322,7 +322,13 @@ one screened behaviour at a time.
   15-minute step. The VIX path is the tape's `^VIX` change (+27.2 % at
   15:20 UTC, from the replica's `market_cache`), interpolated per step and
   marked as such in the fixture. The detector replayed over the fixture
-  must reach SHOCK **no later than** the 14:36 UTC STX long entry. If the
+  must reach SHOCK **no later than 15:00 UTC**, the earliest its own rules
+  allow on 15-minute steps (2026-11-05 is EST, so the open is 14:30 UTC;
+  readings before `SHOCK_OPEN_SETTLE_MIN` never count and two consecutive
+  counting readings are needed), and it reports how many of the 18 longs
+  opened after the 14:36 UTC turn came before that SHOCK. (Corrected
+  2026-11-06 from "no later than 14:36 UTC", which the settle and
+  two-reading rules make unreachable; partner's call.) If the
   fetch is unavailable, the task records that and the test becomes a
   synthetic sequence shaped on the day; it never silently skips.
 - **Long and short plans are byte-identical** under `MARKET_SHOCK_MODE=off`
