@@ -8,8 +8,50 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   CHECKS, DOCK_MIN_WIDTH, DOCK_SELECTORS, FULL_WIDTHS, RAIL_MIN_WIDTH, ROUTES, classify, countByCheck, dedupe, formatFinding, dockVerdict, hintVerdict, inScope, isVisuallyHidden,
-  parseArgs, pickIds, railLabelVerdict, resolveRoute, slug, validateAllow, vcenterGeometry,
+  parseArgs, pickIds, probeHint, railLabelVerdict, resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
+
+function hintSteps(overrides = {}) {
+  const calls = [];
+  const skips = [];
+  const step = (name, result) => async () => { calls.push(name); return result; };
+  return {
+    calls, skips,
+    args: {
+      open: step('open'), measure: step('measure', { rect: 'r' }), close: step('close'),
+      onSkip: (where, reason) => skips.push([where, reason]),
+      ...overrides,
+    },
+  };
+}
+const detached = async () => { throw new Error('locator.getAttribute: Timeout 30000ms exceeded.\nCall log: ...'); };
+
+test('probeHint returns the measurement after open, measure, close', async () => {
+  const { calls, skips, args } = hintSteps();
+  assert.deepEqual(await probeHint(args), { rect: 'r' });
+  assert.deepEqual(calls, ['open', 'measure', 'close']);
+  assert.deepEqual(skips, []);
+});
+
+test('probeHint skips a trigger detached before it opens, without measuring', async () => {
+  const { calls, skips, args } = hintSteps({ open: detached });
+  assert.equal(await probeHint(args), null);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(skips, [['open', 'Error: locator.getAttribute: Timeout 30000ms exceeded.']]);
+});
+
+test('probeHint skips a trigger detached after it opened (the crash that aborted a run)', async () => {
+  const { calls, skips, args } = hintSteps({ measure: detached });
+  assert.equal(await probeHint(args), null);
+  assert.deepEqual(calls, ['open']);
+  assert.equal(skips[0][0], 'measure');
+});
+
+test('probeHint keeps a good measurement when only close fails', async () => {
+  const { skips, args } = hintSteps({ close: detached });
+  assert.deepEqual(await probeHint(args), { rect: 'r' });
+  assert.equal(skips[0][0], 'close');
+});
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TODAY = '2026-10-19';

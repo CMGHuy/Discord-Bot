@@ -125,6 +125,31 @@ export function vcenterGeometry() {
 }
 
 
+/**
+ * One hint trigger, opened, measured and closed, where any step may throw because a slow page
+ * re-rendered and detached the trigger mid-check. Such a trigger is skipped (onSkip gets the
+ * step and the error's first line) and the run goes on: one vanished element must never abort
+ * a 30-minute audit. Returns measure()'s result, or null when skipped. A close() failure after
+ * a good measurement keeps the measurement.
+ */
+export async function probeHint({ open, measure, close, onSkip }) {
+  let geometry;
+  for (const [step, run] of [['open', open], ['measure', async () => { geometry = await measure(); }]]) {
+    try {
+      await run();
+    } catch (error) {
+      onSkip(step, String(error).split('\n')[0]);
+      return null;
+    }
+  }
+  try {
+    await close();
+  } catch (error) {
+    onSkip('close', String(error).split('\n')[0]);
+  }
+  return geometry;
+}
+
 /** Sub-pixel slack for the hint check's viewport test: a rect at -0.4px is a rounding artefact, not off-screen. */
 const HINT_EDGE_SLACK_PX = 0.5;
 

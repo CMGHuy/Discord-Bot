@@ -51,7 +51,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import {
   CHECKS, DOCK_MIN_WIDTH, DOCK_SELECTORS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, RAIL_MIN_WIDTH, ROUTES, TOUCH_MAX_WIDTH,
-  classify, countByCheck, dedupe, dockVerdict, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs, pickIds, railLabelVerdict,
+  classify, countByCheck, dedupe, dockVerdict, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs, pickIds, probeHint, railLabelVerdict,
   resolveRoute, slug, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
@@ -312,18 +312,19 @@ async function auditHints(page, width) {
   for (let i = 0, n = await triggers.count(); i < n; i += 1) {
     const trigger = triggers.nth(i);
     if (!(await trigger.isVisible())) continue;
-    const label = (await trigger.getAttribute('aria-label')) ?? '';
-    try {
-      await (touch ? trigger.tap({ timeout: 2000 }) : trigger.hover({ timeout: 2000 }));
-    } catch (error) {
-      console.error(`  hint "${label}" @${width}: cannot ${touch ? 'tap' : 'hover'} (${String(error).split('\n')[0]})`);
-      continue;
-    }
-    await page.waitForTimeout(HINT_SETTLE_MS);
-    const geometry = await page.evaluate(measureHint, await trigger.getAttribute('aria-describedby'));
+    const label = (await trigger.getAttribute('aria-label', { timeout: 2000 }).catch(() => null)) ?? '';
+    const geometry = await probeHint({
+      open: () => (touch ? trigger.tap({ timeout: 2000 }) : trigger.hover({ timeout: 2000 })),
+      measure: async () => {
+        await page.waitForTimeout(HINT_SETTLE_MS);
+        return page.evaluate(measureHint, await trigger.getAttribute('aria-describedby', { timeout: 2000 }));
+      },
+      close: () => closeHint(page, trigger, touch),
+      onSkip: (step, reason) => console.error(`  hint "${label}" @${width}: cannot ${step} (${reason})`),
+    });
+    if (!geometry) continue;
     const verdict = hintVerdict(geometry.rect, geometry.viewport, geometry.hits);
     if (!verdict.ok) findings.push(hintFinding(label, verdict.reason, geometry.rect));
-    await closeHint(page, trigger, touch);
   }
   return findings;
 }
