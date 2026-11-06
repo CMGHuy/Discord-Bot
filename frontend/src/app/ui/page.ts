@@ -54,10 +54,14 @@ import { RouteTitleService } from '../routing/route-title.service';
   styles: `
     :host { display: flex; flex-direction: column; gap: var(--space-14); min-width: 0; }
     .slot:empty { display: none; }
+    /* baseline: the h1 and the first line of the actions (buttons, counts,
+       chips) share one baseline when they sit on one line (ui-design.md,
+       mixed sizes align on the baseline). flex-start left 44px buttons'
+       labels 8px below the title on every page with actions. */
     .bar {
       display: flex;
       flex-wrap: wrap;
-      align-items: flex-start;
+      align-items: baseline;
       justify-content: space-between;
       gap: var(--space-10) var(--space-14);
     }
