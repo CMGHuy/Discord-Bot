@@ -1,7 +1,7 @@
 # v205 — Admin read performance: Dashboard and Calendar in seconds, not a minute
 
 **Version:** ui 1.38.0 · bot 2.16.1
-**Bump:** bot patch, ui patch
+**Bump:** bot patch (was `bot patch, ui patch`: v205 changed no frontend file)
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, quant-engineer
@@ -408,6 +408,92 @@ role and is recorded as applied or rejected.
   cycles a day, and a definition of "in use" -- **applied** (L1-a Snap;
   Testing).
 
+### Pre-close-out panel (2026-11-05, staff-engineer, quant-engineer)
+
+Over the plan's diff (`891d860b..92e35a03`, the `2fc79125` merge fix, `27568e0a`).
+
+- quant-engineer BLOCKING: `fx_snap._is_current` could freeze a non-final D-1
+  bar into the insert-if-absent table, so snap(D) != backfill(D) -- **applied**
+  (`4afb9a67`: a row is written only from a bar known final, in snap and
+  backfill; a weekday file mtime is not accepted as proof, because a failed
+  ranged fetch also touches the file). Re-reviewed: no BLOCKING. Production's
+  2026-11-05 row was read-only checked: equal to the final 2026-11-04 close.
+- staff-engineer: CURRENCY_SYMBOL change needs a backfill re-run; rollback order
+  and downgrade scope unwritten -- **applied** (`fe7997b8`, DEPLOY_HETZNER.md).
+- staff-engineer: bump level vs the manual backfill step -- partner chose
+  `bot patch`; the spec's `ui patch` prediction is amended to none (backend only).
+- staff-engineer: `snap` pulls each pair's whole day history every cycle
+  (`fx_snap.py:97`, `market_refresh.py:115`); no repair path for a wrong
+  permanent row; `fx_daily.lookup` swallows every failure at DEBUG
+  (`fx_daily.py:137`) -- **carried**: a single-row EXISTS or a per-day flag, a
+  documented repair statement, and a rate-limited WARNING belong in a follow-up.
+- staff-engineer: Layer 2 must profile the application-side time of `dashboard`
+  and `dashboard_today` (about 2.1-3.0 s with 0.4-0.6 s of database) before
+  building the snapshot machinery -- **carried** to the Layer 2 plan.
+- quant-engineer: `_day_rate` returns the nearest earlier row when D's own row
+  is absent, so a past amount can shift once D's row is written; `snap` never
+  fills a skipped weekday (documented: run the backfill); `_stale_logged` is
+  never pruned; `_final_through` counts a junk-close later bar as proof -- **carried**
+  (the skipped-weekday note is **applied** in the runbook).
+
 ## Results
 
 Filled by each plan after its production measurement.
+
+### Before v205 (script)
+
+Measured 2026-11-04 ~23:15 Berlin with `scripts/ops/admin_endpoint_timing.py --month 2026-11 --date 2026-11-03 --runs 2`
+inside the production `admin` container (piped over stdin), script at commit 4f1f8230.
+
+| Endpoint | Path | Run | Status | ms | Bytes | db ms | Statements |
+|---|---|---|---|---|---|---|---|
+| dashboard | `/api/v1/dashboard` | 1 | 200 | 4422.2 | 1430 | - | - |
+| dashboard_today | `/api/v1/dashboard?mode=today` | 1 | 200 | 4007.9 | 1429 | - | - |
+| trades | `/api/v1/trades` | 1 | 200 | 5149.4 | 43190 | - | - |
+| trades_open | `/api/v1/trades?status=open` | 1 | 200 | 4763.2 | 28085 | - | - |
+| live | `/api/v1/live` | 1 | 200 | 1381.8 | 2040 | - | - |
+| calendar_month | `/api/v1/calendar/pnl?month=2026-11` | 1 | 200 | 4116.4 | 2332 | - | - |
+| calendar_day | `/api/v1/calendar/pnl/day?date=2026-11-03` | 1 | 200 | 4131.4 | 7384 | - | - |
+| calendar_sparklines | `/api/v1/calendar/pnl/day/sparklines?date=2026-11-03` | 1 | 200 | 948.1 | 2939 | - | - |
+| dashboard | `/api/v1/dashboard` | 2 | 200 | 4114.2 | 1430 | - | - |
+| dashboard_today | `/api/v1/dashboard?mode=today` | 2 | 200 | 3812.9 | 1429 | - | - |
+| trades | `/api/v1/trades` | 2 | 200 | 4907.0 | 43189 | - | - |
+| trades_open | `/api/v1/trades?status=open` | 2 | 200 | 4885.4 | 28076 | - | - |
+| live | `/api/v1/live` | 2 | 200 | 1401.7 | 2040 | - | - |
+| calendar_month | `/api/v1/calendar/pnl?month=2026-11` | 2 | 200 | 4197.7 | 2332 | - | - |
+| calendar_day | `/api/v1/calendar/pnl/day?date=2026-11-03` | 2 | 200 | 4191.5 | 7384 | - | - |
+| calendar_sparklines | `/api/v1/calendar/pnl/day/sparklines?date=2026-11-03` | 2 | 200 | 780.6 | 2939 | - | - |
+
+### After v205 (script)
+
+Measured 2026-11-05 15:14 Berlin with `scripts/ops/admin_endpoint_timing.py --month 2026-11 --date 2026-11-03 --runs 2`
+inside the `admin` container (image `sha-2fc791252ee1`), after the backfill (dry run planned=8362,
+written=8362, re-run written=0; `fx_daily_rates`: 1 pair (USD/EUR), 8363 rows: 8362 backfill + 1 snap).
+
+| Endpoint | Path | Run | Status | ms | Bytes | db ms | Statements |
+|---|---|---|---|---|---|---|---|
+| dashboard | `/api/v1/dashboard` | 1 | 200 | 3021.6 | 1386 | 621.1 | 23 |
+| dashboard_today | `/api/v1/dashboard?mode=today` | 1 | 200 | 2121.7 | 1385 | 444.5 | 8 |
+| trades | `/api/v1/trades` | 1 | 200 | 964.9 | 43016 | 274.9 | 6 |
+| trades_open | `/api/v1/trades?status=open` | 1 | 200 | 1115.5 | 24539 | 227.5 | 5 |
+| live | `/api/v1/live` | 1 | 200 | 1283.0 | 2022 | 404.5 | 6 |
+| calendar_month | `/api/v1/calendar/pnl?month=2026-11` | 1 | 200 | 810.3 | 2420 | 160.0 | 2 |
+| calendar_day | `/api/v1/calendar/pnl/day?date=2026-11-03` | 1 | 200 | 825.2 | 7389 | 160.2 | 2 |
+| calendar_sparklines | `/api/v1/calendar/pnl/day/sparklines?date=2026-11-03` | 1 | 200 | 726.5 | 3233 | 142.0 | 2 |
+| dashboard | `/api/v1/dashboard` | 2 | 200 | 2368.4 | 1386 | 454.5 | 8 |
+| dashboard_today | `/api/v1/dashboard?mode=today` | 2 | 200 | 2191.8 | 1385 | 447.0 | 8 |
+| trades | `/api/v1/trades` | 2 | 200 | 1139.8 | 43020 | 276.7 | 5 |
+| trades_open | `/api/v1/trades?status=open` | 2 | 200 | 989.1 | 24560 | 222.9 | 5 |
+| live | `/api/v1/live` | 2 | 200 | 1555.6 | 2022 | 438.9 | 6 |
+| calendar_month | `/api/v1/calendar/pnl?month=2026-11` | 2 | 200 | 776.6 | 2420 | 240.6 | 2 |
+| calendar_day | `/api/v1/calendar/pnl/day?date=2026-11-03` | 2 | 200 | 752.0 | 7389 | 139.2 | 2 |
+| calendar_sparklines | `/api/v1/calendar/pnl/day/sparklines?date=2026-11-03` | 2 | 200 | 686.3 | 3233 | 181.4 | 2 |
+
+**Verdict against the Layer 1 Goal (every endpoint under 1.5 s):** not met.
+Slowest row: `dashboard` run 1 at 3021.6 ms (before: 4422.2 ms). Rows at or over 1500 ms,
+which is where the Layer 2 plan starts: `dashboard` run 1 (3021.6 ms, db 621.1 ms, 23
+statements), `dashboard` run 2 (2368.4 ms, db 454.5 ms, 8 statements), `dashboard_today`
+run 1 (2121.7 ms, db 444.5 ms, 8 statements), `dashboard_today` run 2 (2191.8 ms, db
+447.0 ms, 8 statements), `live` run 2 (1555.6 ms, db 438.9 ms, 6 statements). Database
+time is a minor share of these rows, so most of the remainder is application-side.
+On purpose (L1-a): converted money amounts now use the close before the exit's Berlin day.

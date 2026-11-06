@@ -204,16 +204,28 @@ PLAN_WINDOW = 200
 TRADE_WINDOW = 50
 
 
+def _newest_first(rows: list[dict], column: str, tiebreak: str) -> list[dict]:
+    """`ORDER BY <column> DESC` in Python: NULLs first as in PostgreSQL, equal
+    values by `tiebreak` descending (SQL leaves ties unspecified; this pins them)."""
+    return sorted(rows, key=lambda row: (row.get(column) is None, row.get(column) or "",
+                                         str(row.get(tiebreak) or "")), reverse=True)
+
+
 def _load_plans() -> list[dict]:
-    from swingbot.core.db.repositories.plans import plans_repo
-    from swingbot.core.db.schema import plans
-    return plans_repo().list_all(order_by=plans.c.updated_at.desc(), limit=PLAN_WINDOW)
+    """The PLAN_WINDOW most recently updated plans, from the memoised full read."""
+    from swingbot.core.planning.plan_store import PlanStore
+    return _newest_first(PlanStore().records(), "updated_at", "plan_id")[:PLAN_WINDOW]
+
+
+def _closed_newest(limit: int) -> list[dict]:
+    """Closed trades newest close first, in TradeLog's shape, from the memoised full read."""
+    from swingbot.core.tracking.performance import TradeLog
+    closed = [t for t in TradeLog()._all() if t.get("status") != "open"]
+    return _newest_first(closed, "closed_at", "id")[:limit]
 
 
 def _load_trades() -> list[dict]:
-    from swingbot.core.db.repositories.trades import trades_repo
-    from swingbot.core.tracking.performance import _json_record
-    return [_json_record(row) for row in trades_repo().closed_trades(limit=TRADE_WINDOW)]
+    return _closed_newest(TRADE_WINDOW)
 
 
 def _load_killswitch() -> dict:
@@ -223,9 +235,9 @@ def _load_killswitch() -> dict:
 
 def _load_shares() -> dict[str, float]:
     """plan_id -> shares, for TP1 amounts; open and recently closed trades."""
-    from swingbot.core.db.repositories.trades import trades_repo
-    repo = trades_repo()
-    rows = repo.open_trades() + repo.closed_trades(limit=PLAN_WINDOW)
+    from swingbot.core.tracking.performance import TradeLog
+    opened = _newest_first([t for t in TradeLog()._all() if t.get("status") == "open"], "opened_at", "id")
+    rows = opened + _closed_newest(PLAN_WINDOW)
     return {str(row["plan_id"]): row["shares"] for row in rows
             if row.get("plan_id") and row.get("shares")}
 

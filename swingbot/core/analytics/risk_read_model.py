@@ -62,6 +62,9 @@ def _position_notional(trade: dict, account: str, on: date) -> tuple[str, float,
 
 def signed_weights(open_trades: list[dict], *, on: date,
                    account: str | None = None) -> tuple[dict[str, float], str | None]:
+    """Signed position weights by ticker, valued in the account currency at
+    `on`'s rate. `on` is the FX day: the caller passes the Berlin date of its
+    check stamp (`fx_convert.fx_day`, v205), never a UTC date."""
     if not open_trades:
         return {}, None
     try:

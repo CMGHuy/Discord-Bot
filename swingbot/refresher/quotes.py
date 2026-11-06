@@ -11,6 +11,7 @@ its own); ``loop.run_cycle`` raises the second once values have landed.
 
 ``fx_step`` resolves quote-currency codes for every symbol it sees (and, on a
 full cycle, every ticker ever traded) and refreshes the pair frames.
+``fx_snap_step`` (v205) writes the day's FX rate rows from 08:00 Berlin.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ from swingbot import config
 from swingbot.core.db import engine, notify
 from swingbot.core.db.repositories.market_refresh import quote_currency_repo, refresh_mark_repo
 from swingbot.core.infra.swallowed import swallowed
-from swingbot.core.marketdata import data, fx
+from swingbot.core.marketdata import data, fx, fx_snap
 from swingbot.core.marketdata.shared import admin_refresh, tape
 from swingbot.core.marketdata.shared.kinds import Asker
 
@@ -133,3 +134,17 @@ def fx_step(ctx: "CycleContext") -> None:
     if full:
         rows = quote_currency_repo().get_many(symbols)
         fx.refresh_pair_frames({row["code"] for row in rows.values() if row.get("code")})
+
+
+def fx_snap_step(ctx: "CycleContext") -> None:
+    """v205: from 08:00 Berlin, the day's fx_daily_rates rows (insert-if-absent).
+
+    Runs every cycle, after `fx_step` and even when it returned early. A failure
+    is swallowed and stays out of `report.error`, because a missed snap does not
+    make quotes stale and the next cycle writes the same row. Before
+    `alembic upgrade head` creates the table, each cycle logs one warning."""
+    try:
+        fx_snap.snap(ctx.now)
+    except Exception as exc:  # noqa: BLE001 - a missed snap never fails the cycle
+        swallowed(log, "ops.refresher.fx_snap", exc, "fx snap failed: %s", exc,
+                  level=logging.WARNING)

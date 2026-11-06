@@ -8,6 +8,7 @@ def scenario_gate_inputs(params: ScanParams, horizon: dict) -> dict:
         "min_stop_distance_pct": params.min_stop_distance_pct,
         "max_stop_distance_pct": max(params.max_stop_loss_pct, horizon.get("max_risk_pct", 0)),
         "min_risk_reward": params.min_risk_reward_ratio,
+        "atr_stop_floor": params.confluence_atr_stop_floor,
     }
 
 

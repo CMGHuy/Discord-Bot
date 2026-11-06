@@ -171,7 +171,7 @@ checklists for an explicit slash command. `/deploy`, `/stable-snapshot`,
 Claude run the first two 2026-10-08, the third 2026-10-18): Claude invokes `new-doc` right before creating a
 numbered spec or plan, `close-out` once a plan's final full-suite task is
 green and its results are recorded, and `replicate-prod-db` before a task's
-first test run against the database. `MODEL_RUN_RITUALS` in
+first test run against the database. `/task-brief` (grandfathered, outside the tiers) was opened to Claude too (partner, 2026-11-05): Claude invokes it right after `task_handoff.py` writes a handoff. `MODEL_RUN_RITUALS` in
 `tests/hooks/test_skill_shape.py` pins the split.
 
 ## Proving a skill fires: the eval suites

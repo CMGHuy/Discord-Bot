@@ -206,7 +206,7 @@ own secret and pass it as a build arg.
 ## Rolling back
 
 Every build is published under an immutable `sha-<12>` tag, so a rollback is
-a pull of an older tag — no rebuild, no revert commit, seconds not minutes:
+a pull of an older tag — no rebuild, no revert commit, seconds not minutes. **From v197 this is only safe when the older image knows the database's current Alembic revision**; otherwise `deploy.sh` aborts before `up` with bot, admin and refresher stopped (recover with `unset SWING_BOT_IMAGE; docker compose up -d --no-build --wait bot admin refresher`, or use `scripts/ops/rollback_to.sh`):
 
 ```bash
 ssh deploy@167.233.26.185
@@ -317,6 +317,45 @@ pages only read what it stored.
 - `scripts/ops/rollback_to.sh` stops it with the other writers and starts it only
   when the target image has `swingbot.refresher`.
 
+### v205: daily FX rates (`fx_daily_rates`)
+
+The admin converts money at one FX rate per currency pair per Berlin day,
+stored in `fx_daily_rates` (revision `v205_001`). The refresher writes the
+day's row from 08:00 Berlin by itself. Past days are filled once, by a
+backfill, after the deploy that brings the revision:
+
+1. Deploy as usual. `deploy.sh` runs `alembic upgrade head` after
+   `up --wait`; until it has, the admin shows converted amounts as
+   `fx_missing` and the refresher logs `fx snap failed` once per cycle. Both
+   recover by themselves.
+2. Check the revision:
+   `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot alembic current"`
+   prints `v205_001 (head)` or a later head.
+3. Dry run:
+   `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T admin python scripts/ops/backfill_fx_daily_rates.py --dry-run"`.
+   It prints `<PAIR> planned=<n>` per pair and the total, and writes nothing.
+4. Backfill: the same command without `--dry-run`. It prints `written=<n>`.
+   A re-run is safe (insert-if-absent) and prints `written=0`.
+
+After changing `CURRENCY_SYMBOL` (the account currency), re-run steps 3-4:
+the new account's pairs have no rows yet, so until the backfill runs, past
+amounts show `fx_missing` while the refresher is on.
+
+`snap` writes only the current Berlin day. A weekday it skips (no later bar yet:
+a Yahoo gap, a holiday or a failed fetch) stays empty until the backfill runs;
+a later snap never fills it.
+
+The snap writes a day's row only once the bar behind it is final (its London
+day ended). Expect the row later than 08:00 when the pair file was last
+written before London midnight; it arrives on the cycle after the next refresh.
+
+Rollback, in this order: (1) redeploy the previous image (§ Rolling back). The
+old code never reads the table, so it can stay. (2) Only to remove it, run
+`docker compose exec -T bot alembic downgrade <the revision v205_001 revises>`
+(`v200_001` when v205 was written). Downgrading to that revision also rolls
+back every later revision stacked on top of `v205_001`, so check
+`alembic history` first.
+
 ## Accessing the admin UI
 
 The admin UI runs on port `1234` (or `$ADMIN_PORT`), published on
@@ -363,6 +402,10 @@ no per-store stage and no import step. Only `analytics_snapshot.json`,
 - **Editing `.env`.** `python3 scripts/ops/env_set.py KEY value` edits it in
   place and snapshots it; `sed -i` leaves the containers reading the old inode
   (`docs/claude/known-traps.md`, "Editing production `.env` with `sed -i`").
+
+### Lifecycle notification queue (v197)
+
+`deploy.sh` stops bot and admin, migrates with the new image, then starts them. Legacy queue rows, if any, stay blocked for the audited retarget. Never roll back by image alone: see `LIFECYCLE_NOTIFICATIONS.md` (Rollout prerequisites, Rollback).
 
 ### Point-in-time rollback
 

@@ -10,6 +10,7 @@ from swingbot.core.db.repositories.heartbeat import heartbeat_repo
 from swingbot.core.db.repositories.market_data_state import market_data_state_repo
 from swingbot.core.db.repositories.notify_queue import NotifyQueueRepository
 from swingbot.core.db.repositories.scan_progress import scan_progress_repo
+from swingbot.core.infra.lifecycle_events import make_event
 from swingbot.core.marketdata import data_refresh
 from swingbot.core.scanning import progress_store
 
@@ -17,12 +18,25 @@ STATE = {"AAPL|daily": {"last_status": "failed", "fail_count": 1, "last_error": 
 PROGRESS = {"at": "2026-10-01T10:00:00+00:00", "pct": 50, "stage": "analyzing"}
 
 
+def _event(transition):
+    at = f"2026-10-28T12:00:0{transition[-1]}+00:00"
+    return make_event(
+        transition_id=transition, kind="plan_transition", target_channel_id="5", occurred_at=at,
+        payload=dict(ticker="NVDA", direction="bullish", plan_id="P1", trade_id=None,
+                     prior_status="PENDING", new_status="CANCELLED", reason="manual",
+                     occurred_at=at))
+
+
+def make_event_id(transition):
+    return _event(transition)["event_id"]
+
+
 def _seed():
     flags_repo().set("scan_paused")
     heartbeat_repo().beat({"session_active": True, "consecutive_failures": 2})
     queue = NotifyQueueRepository()
-    queue.enqueue({"trade_id": "T1"})
-    queue.enqueue({"trade_id": "T2"})
+    for transition in ("T1", "T2"):
+        queue.enqueue(_event(transition))
     scan_progress_repo().publish(PROGRESS)
     market_data_state_repo().save(STATE)
 
@@ -39,7 +53,7 @@ def test_every_ops_store_exports_and_reads_back_at_the_json_stage(store_db, tmp_
     assert runstate.is_trigger_requested() is False        # the stale flag was removed
     assert runstate._read_heartbeat()["consecutive_failures"] == 2
     queued = json.loads((tmp_path / "manual_close_notify.json").read_text())
-    assert [r["trade_id"] for r in queued] == ["T1", "T2"]
+    assert [r["event_id"] for r in queued] == [make_event_id(t) for t in ("T1", "T2")]
     assert all("queued_at" not in r for r in queued)
     assert progress_store.read() == PROGRESS
     assert data_refresh.load_state() == STATE

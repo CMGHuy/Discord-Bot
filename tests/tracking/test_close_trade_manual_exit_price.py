@@ -74,3 +74,11 @@ def test_an_already_closed_trade_is_not_touched(book):
     book["rows"][0]["status"] = "closed"
     assert TradeLog().close_trade_manual("t1", exit_price=123.45) is False
     assert book["upserts"] == []
+
+
+def test_legacy_manual_close_still_invokes_safe_post_close_hooks(book, monkeypatch):
+    calls = []
+    monkeypatch.setattr(perf, "_after_close", lambda trade: calls.append(trade["id"]))
+    monkeypatch.setattr(perf, "_refresh_snapshot_safely", lambda: calls.append("snapshot"))
+    assert TradeLog().close_trade_manual("t1", exit_price=101)
+    assert calls == ["t1", "snapshot"]

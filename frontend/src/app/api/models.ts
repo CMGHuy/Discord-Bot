@@ -1814,6 +1814,12 @@ export interface SwallowedRow {
   last_error: string | null;
 }
 
+export interface NotificationHealth {
+  pending_count: number;
+  oldest_pending_age_seconds: number | null;
+  blocked_count: number;
+}
+
 export interface SystemHealth {
   /** Newest first, at most 20. */
   providers: ProviderHealthRow[];
@@ -1824,6 +1830,9 @@ export interface SystemHealth {
   /** When the bot's counts began (its process start); null when the bot has
    *  not yet written them. */
   bot_counts_since: string | null;
+  /** Lifecycle notification backlog; null when the queue could not be read
+   *  (unknown, never a healthy zero). */
+  notifications: NotificationHealth | null;
 }
 
 /* -- market: the interactive chart (SR33, v25) -------------------------- */

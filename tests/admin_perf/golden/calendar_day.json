@@ -1,0 +1,140 @@
+{
+ "as_of": "2026-11-04T12:00:00+00:00",
+ "avg_trade_r": 1.1,
+ "breakdown": {
+  "direction": [
+   {
+    "key": "bullish",
+    "n": 2,
+    "pnl_amount": 163.5,
+    "r": 2.2,
+    "win_rate": 100.0
+   }
+  ],
+  "exit_reason": [
+   {
+    "key": "other",
+    "n": 2,
+    "pnl_amount": 163.5,
+    "r": 2.2,
+    "win_rate": 100.0
+   }
+  ],
+  "horizon": [
+   {
+    "key": "4w",
+    "n": 2,
+    "pnl_amount": 163.5,
+    "r": 2.2,
+    "win_rate": 100.0
+   }
+  ],
+  "strategy": [
+   {
+    "key": "S/R Confluence",
+    "n": 2,
+    "pnl_amount": 163.5,
+    "r": 2.2,
+    "win_rate": 100.0
+   }
+  ]
+ },
+ "context": {
+  "history_days": 2,
+  "percentile": null,
+  "vs_avg_day": {
+   "pnl_amount": 146.22,
+   "r": 1.8
+  },
+  "vs_weekday_avg": {
+   "pnl_amount": null,
+   "r": null
+  }
+ },
+ "contributors": [
+  {
+   "pnl": 120.0,
+   "r": 1.2,
+   "ticker": "SAP.DE"
+  },
+  {
+   "pnl": 43.5,
+   "r": 1.0,
+   "ticker": "AAPL"
+  }
+ ],
+ "date": "2026-11-03",
+ "detractors": [],
+ "fx_missing_count": 0,
+ "losers": 0,
+ "total_ccy": 163.5,
+ "total_r": 2.2,
+ "trade_count": 2,
+ "trades": [
+  {
+   "auto_lesson": null,
+   "closed_at": "2026-11-03T14:00:00+00:00",
+   "day": "2026-11-03",
+   "direction": "bullish",
+   "entry_price": 200.0,
+   "exit_efficiency": null,
+   "exit_price": 212.0,
+   "exit_reason": "other",
+   "fx_missing": false,
+   "held_hours": 168.0,
+   "horizon": "4w",
+   "leg_index": 0,
+   "leg_total": 1,
+   "mae_r": null,
+   "mfe_r": null,
+   "opened_at": "2026-10-27T14:00:00+00:00",
+   "outcome": "win",
+   "plan_id": null,
+   "pnl_amount": 120.0,
+   "r_multiple": 1.2,
+   "return_pct": 6.0,
+   "shares": 10.0,
+   "stop_price": 190.0,
+   "strategy": "S/R Confluence",
+   "tags": [],
+   "ticker": "SAP.DE",
+   "tp1": 240.0,
+   "tp2": null,
+   "trade_id": "golden-t1-sap-win"
+  },
+  {
+   "auto_lesson": null,
+   "closed_at": "2026-11-03T20:30:00+00:00",
+   "day": "2026-11-03",
+   "direction": "bullish",
+   "entry_price": 100.0,
+   "exit_efficiency": null,
+   "exit_price": 105.0,
+   "exit_reason": "other",
+   "fx_missing": false,
+   "held_hours": 174.5,
+   "horizon": "4w",
+   "leg_index": 0,
+   "leg_total": 1,
+   "mae_r": null,
+   "mfe_r": null,
+   "opened_at": "2026-10-27T14:00:00+00:00",
+   "outcome": "win",
+   "plan_id": null,
+   "pnl_amount": 43.5,
+   "r_multiple": 1.0,
+   "return_pct": 5.0,
+   "shares": 10.0,
+   "stop_price": 95.0,
+   "strategy": "S/R Confluence",
+   "tags": [],
+   "ticker": "AAPL",
+   "tp1": 120.0,
+   "tp2": null,
+   "trade_id": "golden-t2-usd-win"
+  }
+ ],
+ "win_rate": 100.0,
+ "winners": 2,
+ "worst_drawdown_r": 0.0
+}

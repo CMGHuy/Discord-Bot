@@ -196,6 +196,7 @@ _closed_metrics = risk_payload._closed_metrics
 _closed_history = risk_payload._closed_history
 _max_drawdown_amount = risk_payload._max_drawdown_amount
 _pnl_amounts = risk_payload._pnl_amounts
+_open_short_gap_risk = risk_payload._open_short_gap_risk
 _DISTRIBUTION_KEYS = risk_payload._DISTRIBUTION_KEYS
 
 

@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 _TRADE_ID_ALPHABET = string.ascii_letters + string.digits
 
 from swingbot import config
+from swingbot.core.infra import read_memo
 from swingbot.core.planning import account as account_module
 from swingbot.core.planning import gap_sizing as gap_sizing_mod
 from swingbot.core.charts.trendline_fit import TRENDLINE_FIT_KEY
@@ -667,12 +668,12 @@ def _paper_sizing(entry, stop_loss, direction, gap_sizing, label) -> dict | None
     """The paper book's share count, from the alert's one sizing path (v183).
 
     A failure in the gap path logs one line and sizes on the stop, never
-    leaving the trade unsized; a long never logs and never leaves today's path."""
+    leaving the trade unsized; an unstamped long never logs."""
     try:
         return gap_sizing_mod.size_for(entry, stop_loss, direction=direction,
                                        gap_sizing=gap_sizing, label=label)
     except Exception as exc:
-        if direction == "bearish" and gap_sizing:
+        if gap_sizing:
             log.info("%s: gap sizing fell back to stop (%s)", label, exc)
         return _stop_only_sizing(entry, stop_loss)
 
@@ -715,6 +716,12 @@ def _json_record(row: dict) -> dict:
     # datetime/Decimal values into analytics and command consumers.
     from swingbot.core.db.codec import normalise
     return normalise(result)
+
+
+def _load_trade_records() -> list[dict]:
+    """Every trades row in TradeLog's JSON shape, read fresh (TradeLog._all's loader)."""
+    from swingbot.core.db.repositories.trades import trades_repo
+    return [_json_record(row) for row in trades_repo().list_all()]
 
 
 def _manual_close_quote(ticker: str) -> float | None:
@@ -784,9 +791,10 @@ class TradeLog:
             self._db_upsert(trade)
 
     def _all(self) -> list[dict]:
-        """Every trade, in TradeLog's API shape."""
-        from swingbot.core.db.repositories.trades import trades_repo
-        return [_json_record(row) for row in trades_repo().list_all()]
+        """Every trade, in TradeLog's API shape. v205: inside an admin read scope
+        (``read_memo.scope()``) the table is read and parsed once per request and
+        each call gets shallow copies; outside one, today's direct read."""
+        return read_memo.records(read_memo.TRADES, _load_trade_records)
 
     def _open_trade_for_plan(self, plan_id: str, *, conn=None) -> dict | None:
         """The plan's open trade. Standalone: from ``self._all()`` exactly as
@@ -1629,6 +1637,38 @@ class TradeLog:
                     self._db_upsert(t)
                     return True
         return False
+
+    def close_trade_manual_in_transaction(self, trade_id: str, reason: str, *, exit_price,
+                                          closed_at: str, transition_id: str,
+                                          conn) -> dict | None:
+        """v197: close a trade inside the caller's transaction and return the
+        closed record, or None when the trade is missing or not open.
+
+        The caller owns the advisory lock, the commit and the post-commit
+        effects (`after_manual_close_commit`). Every read and write goes
+        through `conn`: the trade row is locked (`SELECT ... FOR UPDATE`),
+        the balance point is written in the same transaction and a
+        settlement failure raises. No process-local `_LOCK`, no price fetch
+        (a missing `exit_price` settles nothing), no journal/snapshot hook.
+        The leg and label rules are `close_trade_manual`'s own; `closed_at`
+        and `transition_id` are the caller's, so the record carries the
+        transition that closed it."""
+        if conn is None:
+            raise ValueError("caller_connection_required")
+        trade = self._open_trade_by_id(trade_id, conn=conn)
+        if trade is None:
+            return None
+        _close_manually_onto(trade, exit_price, reason)
+        trade.update(closed_at=closed_at, manual_transition_id=transition_id)
+        self._settle_account_balance(trade, conn=conn)
+        self._db_upsert(trade, conn=conn)
+        return dict(trade)
+
+    def after_manual_close_commit(self, trade: dict) -> None:
+        """v197: the derived effects of a transactional manual close (journal,
+        snapshot), run by the caller only after its commit succeeded."""
+        _after_close(trade)
+        _refresh_snapshot_safely()
 
     def close_trade_manual(self, trade_id: str, reason: str = "manual", *,
                            exit_price: float | None = None, conn=None,

@@ -61,6 +61,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from swingbot import config as app_config
+from swingbot.core.infra import read_memo
 from swingbot.core.edge.sizing import RISK_CEILING_PCT
 from swingbot.core.market import opex
 from swingbot.core.market.session import BERLIN_TZ as _BERLIN_TZ
@@ -83,6 +84,17 @@ def _with_conn(conn) -> dict:
     return {} if conn is None else {"conn": conn}
 
 
+def _trade_rows(conn) -> list[dict]:
+    """Every trades row, normalised. Inside a caller's transaction (``conn``): read
+    on it and never memoised. Standalone: through the v205 read memo, which outside
+    an admin read scope is today's direct ``list_all()``."""
+    from swingbot.core.db.codec import normalise
+    from swingbot.core.db.repositories.trades import trades_repo
+    if conn is not None:
+        return normalise(trades_repo().list_all(conn=conn))
+    return read_memo.records(read_memo.TRADE_ROWS, lambda: normalise(trades_repo().list_all()))
+
+
 def _sum_realized_pnl(*, conn=None) -> float:
     """
     All-time realized P&L: sum of `realized_pnl_amount` across every trade
@@ -96,9 +108,7 @@ def _sum_realized_pnl(*, conn=None) -> float:
     so an open trade must never be treated as settled merely because it has a
     banked scale-out leg.
     """
-    from swingbot.core.db.repositories.trades import trades_repo
-    from swingbot.core.db.codec import normalise
-    trades = normalise(trades_repo().list_all(**_with_conn(conn)))
+    trades = _trade_rows(conn)
     total = 0.0
     for t in trades:
         pnl = t.get("realized_pnl_amount")

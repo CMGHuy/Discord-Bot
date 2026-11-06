@@ -18,6 +18,7 @@ from swingbot.core.infra.swallowed import swallowed
 
 from . import api_v1, error, iso
 from .auth import require_auth
+from .read_scope import read_scope
 from .live_events import EVENT_KINDS, collect_events, iso_at
 
 log = logging.getLogger(__name__)
@@ -109,9 +110,8 @@ def _next_expiry(pending: list[dict], now: datetime) -> str | None:
 def _awaiting_values(now: datetime) -> dict:
     """A state count, not a since-last-visit badge: it drops only when a plan
     fills, expires or is cancelled."""
-    from swingbot.core.db.repositories.plans import plans_repo
-    from swingbot.core.db.schema import plans
-    pending = plans_repo().list_all(where=plans.c.status == "PENDING")
+    from swingbot.core.planning.plan_store import PlanStore
+    pending = [p for p in PlanStore().records() if p.get("status") == "PENDING"]
     return {"count": len(pending), "next_expiry": _next_expiry(pending, now)}
 
 
@@ -150,6 +150,7 @@ def _events(limit: int, now: datetime) -> tuple[list, dict]:
 
 @api_v1.route("/live", methods=["GET"])
 @require_auth
+@read_scope
 def get_live():
     """The Live dock in one read; the shape is `LiveSnapshot` in models.ts."""
     limit = parse_limit(request.args.get("limit"))

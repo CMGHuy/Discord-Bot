@@ -22,6 +22,7 @@ def _env(monkeypatch):
     monkeypatch.setattr(account, "load_account_config", lambda: dict(CFG))
     monkeypatch.setattr(analyze, "load_account_config", lambda: dict(CFG))
     monkeypatch.setattr(config, "SHORT_GAP_SIZING", True)
+    monkeypatch.setattr(config, "LONG_GAP_SIZING", False)
 
 
 def _plan(direction="bearish", **kw):

@@ -173,8 +173,21 @@ killswitch = register(sa.Table("killswitch", METADATA,
     sa.Column("engaged", sa.Boolean, nullable=False), sa.Column("engaged_at", sa.TIMESTAMP(timezone=True)),
     *standard_columns()), ("key", "engaged", "engaged_at"))
 manual_close_notify = register(sa.Table("manual_close_notify", METADATA,
-    sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("queued_at", sa.TIMESTAMP(timezone=True), nullable=False),
-    *standard_columns(), sa.Index("manual_close_notify_queued_idx", "queued_at")), ("queued_at",))
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("queued_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("event_id", sa.Text, nullable=False),
+    sa.Column("next_attempt_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("lease_token", sa.Text),
+    sa.Column("lease_until", sa.TIMESTAMP(timezone=True)),
+    sa.Column("delivered_at", sa.TIMESTAMP(timezone=True)),
+    *standard_columns(),
+    sa.Index("manual_close_notify_queued_idx", "queued_at"),
+    sa.Index("manual_close_notify_event_uidx", "event_id", unique=True),
+    sa.Index("manual_close_notify_due_idx", "next_attempt_at", "queued_at",
+             postgresql_where=sa.text("delivered_at IS NULL")),
+    sa.Index("manual_close_notify_delivered_idx", "delivered_at",
+             postgresql_where=sa.text("delivered_at IS NOT NULL"))),
+    ("queued_at", "event_id", "next_attempt_at", "lease_token", "lease_until", "delivered_at"))
 ticker_directory = register(sa.Table("ticker_directory", METADATA,
     sa.Column("id", sa.BigInteger, primary_key=True), sa.Column("symbol", sa.Text, nullable=False, unique=True),
     sa.Column("name", sa.Text), *standard_columns(), sa.Index("ticker_directory_name_idx", "name")), ("symbol", "name"))
@@ -315,6 +328,21 @@ quote_currencies = register(sa.Table("quote_currencies", METADATA,
     sa.Column("retry_after", sa.TIMESTAMP(timezone=True)),
     *standard_columns()),
     ("symbol", "code", "outcome", "checked_at", "retry_after"))
+
+# v205: one FX rate per (major base, major account, Berlin day): the last positive
+# daily close strictly before that day. Written insert-if-absent by the refresher's
+# 08:00 Berlin snap and the one-off backfill (core/marketdata/fx_snap.py); read whole
+# by core/marketdata/fx_daily.py. No SSE trigger.
+fx_daily_rates = register(sa.Table("fx_daily_rates", METADATA,
+    sa.Column("base", sa.Text, primary_key=True),
+    sa.Column("account", sa.Text, primary_key=True),
+    sa.Column("day", sa.Date, primary_key=True),
+    sa.Column("rate", sa.Float(53), nullable=False),
+    sa.Column("bar_date", sa.Date, nullable=False),
+    sa.Column("snapped_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("source", sa.Text, nullable=False),
+    *standard_columns()),
+    ("base", "account", "day", "rate", "bar_date", "snapped_at", "source"))
 
 market_refresh_queue = register(sa.Table("market_refresh_queue", METADATA,
     sa.Column("id", sa.BigInteger, primary_key=True),
@@ -466,7 +494,14 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "engaged": "NOT NULL on/off that every issuance checks",
         "engaged_at": "when it engaged; shown to the partner",
     },
-    "manual_close_notify": {"queued_at": "manual_close_notify_queued_idx; drain order"},
+    "manual_close_notify": {
+        "queued_at": "manual_close_notify_queued_idx; oldest pending age and ordering",
+        "event_id": "manual_close_notify_event_uidx; immutable event deduplication and lookup",
+        "next_attempt_at": "manual_close_notify_due_idx; due event selection",
+        "lease_token": "fenced completion ownership comparison",
+        "lease_until": "expired lease selection and fenced completion expiry",
+        "delivered_at": "pending partial index and acknowledged retention index",
+    },
     "ticker_directory": {"symbol": "natural key", "name": "ticker_directory_name_idx; name search"},
     "tuning_results": {"job_id": "natural key; one result per job", "created_at": "NOT NULL creation time"},
     "tuning_proposals": {
@@ -552,6 +587,15 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "outcome": "NOT NULL known/unknown answer the FX job branches on",
         "checked_at": "NOT NULL time of the last lookup; the FX job's staleness test",
         "retry_after": "the FX job's backoff WHERE for an unknown answer; NULL when known",
+    },
+    "fx_daily_rates": {
+        "base": "primary key (base, account, day): one rate per major-code pair per Berlin day",
+        "account": "primary key (base, account, day): the major account currency converted into",
+        "day": "primary key: the Berlin calendar day the rate serves; fx_daily.lookup's sort key",
+        "rate": "NOT NULL multiplier fx_daily.lookup returns; never 1.0 for a missing pair",
+        "bar_date": "NOT NULL date of the frame bar the rate came from; the FALLBACK_DAYS test",
+        "snapped_at": "NOT NULL write time; max(snapped_at) is half of the memo's version key",
+        "source": "NOT NULL snap/backfill provenance, checked after the deploy backfill",
     },
     "market_refresh_queue": {
         "kind": "market_refresh_queue_pending_uq: one pending request per (kind, key)",

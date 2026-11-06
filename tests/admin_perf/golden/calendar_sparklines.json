@@ -1,0 +1,73 @@
+{
+ "as_of": "2026-11-04T12:00:00+00:00",
+ "date": "2026-11-03",
+ "series": {
+  "golden-t1-sap-win:0": {
+   "closes": [
+    {
+     "close": 201.0,
+     "date": "2026-10-28"
+    },
+    {
+     "close": 203.0,
+     "date": "2026-10-29"
+    },
+    {
+     "close": 205.0,
+     "date": "2026-10-30"
+    },
+    {
+     "close": 208.0,
+     "date": "2026-11-02"
+    },
+    {
+     "close": 212.0,
+     "date": "2026-11-03"
+    }
+   ],
+   "entry": null,
+   "exit": null,
+   "exit_bar": 4,
+   "exit_date": "2026-11-03",
+   "last_bar": "2026-11-03",
+   "stale": false,
+   "stop": null,
+   "tp1": null,
+   "tp2": null
+  },
+  "golden-t2-usd-win:0": {
+   "closes": [
+    {
+     "close": 99.0,
+     "date": "2026-10-28"
+    },
+    {
+     "close": 101.0,
+     "date": "2026-10-29"
+    },
+    {
+     "close": 100.5,
+     "date": "2026-10-30"
+    },
+    {
+     "close": 102.0,
+     "date": "2026-11-02"
+    },
+    {
+     "close": 104.0,
+     "date": "2026-11-03"
+    }
+   ],
+   "entry": 100.0,
+   "exit": 105.0,
+   "exit_bar": 4,
+   "exit_date": "2026-11-03",
+   "last_bar": "2026-11-03",
+   "stale": false,
+   "stop": 95.0,
+   "tp1": 120.0,
+   "tp2": null
+  }
+ },
+ "truncated": false
+}

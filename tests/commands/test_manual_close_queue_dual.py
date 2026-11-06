@@ -1,28 +1,18 @@
-"""The manual-close queue is the notify_queue table (v116)."""
 import asyncio
+from unittest.mock import AsyncMock
 
-import pytest
-
-from swingbot.commands.scanning import loops
-from swingbot.core.db.repositories.notify_queue import NotifyQueueRepository
-
-RECORD = {"trade_id": "T1", "ticker": "AAPL"}
+from swingbot.commands.scanning import lifecycle_delivery, loops
 
 
-@pytest.fixture
-def posted(store_db, monkeypatch):
-    sent = []
-
-    async def fake_notify(_bot, records):
-        sent.extend(records)
-
-    monkeypatch.setattr("swingbot.core.scanning.embeds.notify_closed_trades", fake_notify)
-    return sent
-
-
-def test_the_queue_is_drained_from_the_table(posted):
-    NotifyQueueRepository().enqueue(dict(RECORD))
+def test_watcher_delegates_to_durable_tick(monkeypatch):
+    worker = AsyncMock(return_value=dict(attempted=1, acknowledged=0, retried=1, blocked=0))
+    bot = object()
+    monkeypatch.setattr(loops, "bot", bot)
+    monkeypatch.setattr(lifecycle_delivery, "deliver_lifecycle_tick", worker)
+    automatic = AsyncMock(side_effect=AssertionError("automatic path must remain separate"))
+    monkeypatch.setattr("swingbot.core.scanning.embeds.notify_closed_trades", automatic)
     asyncio.run(loops._post_manual_close_queue())
-    # The embeds read the trade as `id`; the table stores it as `trade_id`.
-    assert posted == [{"id": "T1", "ticker": "AAPL"}]
-    assert NotifyQueueRepository().pending() == 0
+    worker.assert_awaited_once_with(bot)
+    automatic.assert_not_awaited()
+    assert not hasattr(loops, "_take_manual_close_queue")
+    assert not hasattr(loops, "_with_trade_id_as_id")

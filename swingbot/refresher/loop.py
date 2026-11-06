@@ -11,9 +11,10 @@ looks like a quiet market.
 A full cycle (the whole symbol set) runs once per session cadence; a cycle in
 between carries ``SymbolSet((), ())`` and only the queued keys, so a user's
 Refresh is served within ``QUEUE_POLL_S`` without refetching everything.
-``STEPS`` runs the quote and FX steps (``quotes``), then the snapshot step
-(``snapshot_job``, v204), so snapshots see this cycle's FX codes; a cycle that
-changed something raises one ``market`` NOTIFY at its end.
+``STEPS`` runs the quote and FX steps and the v205 FX snap (``quotes``),
+then the snapshot step (``snapshot_job``, v204), so snapshots see this
+cycle's FX codes and snapped rates; a cycle that changed something raises
+one ``market`` NOTIFY at its end.
 """
 from __future__ import annotations
 
@@ -68,7 +69,7 @@ class CycleContext:
 
 
 STEPS: list[Callable[[CycleContext], None]] = [quotes.quote_step, quotes.fx_step,
-                                               snapshot_job.snapshot_step]
+                                               quotes.fx_snap_step, snapshot_job.snapshot_step]
 
 _last_full: datetime | None = None
 

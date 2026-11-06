@@ -13,6 +13,11 @@ uses -- so there is no third cache (docs/claude/known-traps.md). Not
 `router.daily_bars_between`: that path is Alpaca-only and never serves an FX
 pair.
 
+v205: a request reads one rate per pair per Berlin day from `fx_daily_rates`
+(`fx_daily.lookup`): the last positive close dated strictly before the day,
+written by the refresher's 08:00 snap (`fx_snap`) from these same files. With
+the refresher off, a missing row is computed by the same rule from the frame.
+
 Display only. Nothing here feeds sizing, the account balance, the
 kill-switch or a stored record; a missing rate is `None`, never 1.0, so a
 caller can flag the row instead of showing a dollar amount as euros.
@@ -29,21 +34,25 @@ import pandas as pd
 from swingbot import config
 from swingbot.core.db.repositories.market_refresh import quote_currency_repo
 from swingbot.core.infra.swallowed import swallowed
-from swingbot.core.marketdata import data, data_refresh, data_store, spot_metals
+from swingbot.core.marketdata import data, data_refresh, data_store, fx_daily, spot_metals
 from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.shared import kinds
 from swingbot.core.marketdata.shared.kinds import Asker
 
 log = logging.getLogger(__name__)
 
-#: How far back a missing exit-date bar may fall back. A long weekend plus a
-#: holiday is four days; a week covers every market closure without letting
-#: a stale rate stand in for a missing one.
-FALLBACK_DAYS = 7
+#: How old the bar behind a rate may be (a week covers every market closure
+#: without letting a stale rate stand in for a missing one). The same object as
+#: fx_daily.FALLBACK_DAYS: one rule for the table, the snap and the fallback.
+FALLBACK_DAYS = fx_daily.FALLBACK_DAYS
 
 #: How long this process trusts a loaded pair frame (or a miss) before asking
 #: the cache again: one admin page converts hundreds of rows.
 FRAME_TTL_S = 15 * 60
+#: v205 L1-b: how long an unknown (or absent) stored quote code is remembered,
+#: so a request never re-asks the store per ticker, and a code the refresher
+#: resolves meanwhile shows within this long.
+UNKNOWN_MEMO_S = 300
 
 #: Yahoo quotes some exchanges in a minor unit: LSE pence, JSE cents, TASE agorot.
 MINOR_UNITS: dict[str, tuple[str, float]] = {
@@ -61,6 +70,7 @@ SPOT_METAL_QUOTE = "USD"
 
 _frames: dict[str, tuple[float, pd.DataFrame | None]] = {}
 _quote_codes: dict[str, str] = {}
+_unknown_until: dict[str, float] = {}
 
 
 def account_currency_code() -> str:
@@ -109,15 +119,52 @@ def quote_currency_code(ticker: str, *, fetch: bool = True) -> str | None:
 
 def _stored_code(key: str) -> str | None:
     """v201: the refresher's persisted answer; never the network. Unknown/missing -> None."""
+    return stored_codes([key]).get(key)
+
+
+def stored_codes(keys: Iterable[str]) -> dict[str, str | None]:
+    """v205 L1-b: the refresher's persisted answers for many tickers in one query.
+
+    A known code is memoised for the process (`_quote_codes`); an unknown or
+    absent one for UNKNOWN_MEMO_S (`_unknown_until`, monotonic `_clock()`).
+    Keys in neither memo cost one `get_many` together. A store error answers
+    None for those keys and memoises nothing, so the next call asks again."""
+    now = _clock()
+    out: dict[str, str | None] = {}
+    ask: list[str] = []
+    for key in dict.fromkeys(str(k or "").upper().strip() for k in keys):
+        if not key:
+            continue
+        if spot_metals.is_spot_metal(key):
+            out[key] = SPOT_METAL_QUOTE   # same rule as quote_currency_code
+        elif key in _quote_codes:
+            out[key] = _quote_codes[key]
+        elif _unknown_until.get(key, 0.0) > now:
+            out[key] = None
+        else:
+            ask.append(key)
+    if ask:
+        out.update(_ask_store(ask, now))
+    return out
+
+
+def _ask_store(keys: list[str], now: float) -> dict[str, str | None]:
+    """One `get_many` for `keys`; memoise every answer (see `stored_codes`)."""
     try:
-        row = quote_currency_repo().get_many([key]).get(key)
+        rows = quote_currency_repo().get_many(keys)
     except Exception as exc:
         swallowed(log, "marketdata.fx.stored_code", exc, level=logging.DEBUG)
-        return None
-    if not row or row.get("outcome") != "known" or not row.get("code"):
-        return None
-    _quote_codes[key] = str(row["code"])
-    return _quote_codes[key]
+        return dict.fromkeys(keys)
+    out: dict[str, str | None] = {}
+    for key in keys:
+        row = rows.get(key)
+        if row and row.get("outcome") == "known" and row.get("code"):
+            _quote_codes[key] = str(row["code"])
+            out[key] = _quote_codes[key]
+        else:
+            _unknown_until[key] = now + UNKNOWN_MEMO_S
+            out[key] = None
+    return out
 
 
 def _ask_provider(key: str) -> tuple[str | None, bool]:
@@ -171,10 +218,12 @@ def refresh_pair_frames(codes: Iterable[str]) -> list[str]:
 def fx_rate(from_code: str, to_code: str, on: date, *, refresh: bool = True) -> float | None:
     """The multiplier turning an amount in `from_code` into `to_code` on `on`.
 
-    1.0 for equal codes, with no fetch. Otherwise the `{FROM}{TO}=X` close on
-    `on`, else the last close within FALLBACK_DAYS before it, else None.
-    Minor units scale (GBp -> GBP x 0.01). `refresh=False` (v201, the
-    refresher is on) reads the cache file only, never the network.
+    The scale alone for equal majors (GBp -> GBP is 0.01), with no lookup.
+    Otherwise v205's day rate: the `fx_daily_rates` row for (FROM, TO, day),
+    the last positive `{FROM}{TO}=X` close strictly before the day, times the
+    minor-unit scale. On a missing row, `refresh=True` (the refresher is off)
+    applies the same rule to the pair frame and writes nothing; `refresh=False`
+    (the refresher is on) is None. Never 1.0 for a missing rate.
     """
     if not from_code or not to_code:
         return None
@@ -184,8 +233,17 @@ def fx_rate(from_code: str, to_code: str, on: date, *, refresh: bool = True) -> 
     if src == dst:
         return scale
     day = on.date() if isinstance(on, datetime) else on
-    close = _close_on_or_before(_pair_frame(f"{src}{dst}=X", refresh=refresh), day)
-    return None if close is None else close * scale
+    rate = _day_rate(src, dst, day, refresh=refresh)
+    return None if rate is None else rate * scale
+
+
+def _day_rate(src: str, dst: str, day: date, *, refresh: bool) -> float | None:
+    """The stored row's rate, else (refresh only) the same rule over the pair frame."""
+    stored = fx_daily.lookup(src, dst, day)
+    if stored is not None or not refresh:
+        return stored
+    found = fx_daily.rate_before(_pair_frame(f"{src}{dst}=X", refresh=True), day)
+    return None if found is None else found[0]
 
 
 def _major(code: str) -> tuple[str, float]:
@@ -232,14 +290,3 @@ def _refreshed_frame(pair: str, asker: Asker = Asker.ADMIN_PAGE) -> pd.DataFrame
                   pair, exc, level=logging.DEBUG)
     return data_store.load_normalized(pair, "daily")
 
-
-def _close_on_or_before(frame: pd.DataFrame | None, day: date) -> float | None:
-    """The last positive close dated within [day - FALLBACK_DAYS, day]."""
-    if frame is None or not len(frame) or "Close" not in frame.columns:
-        return None
-    earliest = day - timedelta(days=FALLBACK_DAYS)
-    dates = [stamp.date() for stamp in pd.to_datetime(frame.index)]
-    keep = [earliest <= d <= day for d in dates]
-    closes = pd.to_numeric(frame["Close"][keep], errors="coerce").dropna()
-    closes = closes[closes > 0]
-    return float(closes.iloc[-1]) if len(closes) else None

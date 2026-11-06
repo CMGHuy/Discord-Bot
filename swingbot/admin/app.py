@@ -49,6 +49,7 @@ from swingbot.core.scanning.engine import is_scan_running
 from .helpers import docker_sdk, _load_or_create_secret_key  # noqa: F401
 from . import login_limiter
 from . import freshness
+from . import request_timing
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
@@ -220,6 +221,10 @@ def _reload_env_if_changed():
 
 # v171 D2: `X-Swingbot-Fresh: 1` marks one request's market-data calls fresh.
 freshness.install(app)
+# v205 L1-d: Server-Timing (total, db time, statement count) on every /api/v1
+# response, the ADMIN_SLOW_REQUEST_MS log line, and the SQL counter on the
+# admin's engines only -- the bot and the refresher never import this module.
+request_timing.install(app)
 
 
 # ---------------------------------------------------------------------------

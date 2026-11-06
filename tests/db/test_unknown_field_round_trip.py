@@ -58,7 +58,7 @@ CASES = {
     "ui_preferences": (PreferencesRepository, {"owner": "admin"}),
     "settings_audit": (SettingsAuditRepository, {"ts": TS}),
     "killswitch": (KillswitchRepository, {"key": "global", "engaged": False}),
-    "manual_close_notify": (NotifyQueueRepository, {"queued_at": TS}),
+    "manual_close_notify": (NotifyQueueRepository, {"queued_at": TS, "event_id": "round-trip", "next_attempt_at": TS}),
     "ticker_directory": (TickerDirectoryRepository, {"symbol": "AAPL", "name": "Apple"}),
     "tuning_results": (TuningRepository, {"job_id": "J-probe", "created_at": TS}),
     "tuning_proposals": (ProposalRepository, {"filename": "p.json", "created_at": TS}),
@@ -105,6 +105,8 @@ NOT_REPOSITORY_BACKED = {
     "dropped_doc_fields": "written only by swingbot.core.db.doc_fields inside Alembic revisions",
     "preregistration_verdicts": "write-once (insert_once only; upsert/insert refused); its doc "
                                 "round trip is tests/db/test_preregistration_verdicts_repository.py",
+    "fx_daily_rates": "composite key (base, account, day), written insert_if_absent only and "
+                      "read as promoted columns; its round trip is tests/db/test_v205_fx_daily_rates.py",
 }
 
 #: Tables whose rows need the probe plan first (a foreign key into plans).

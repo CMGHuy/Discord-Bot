@@ -95,7 +95,11 @@ export function providerLines(health: SystemHealth | null): ProviderHealthLine[]
           </table>
         </div>
       } @else {
-        <p class="explain">No scan recorded yet.</p>
+        @if (current() === null) {
+          <p class="explain">Provider health unavailable.</p>
+        } @else {
+          <p class="explain">No scan recorded yet.</p>
+        }
       }
     </sb-panel>
   `,
@@ -130,8 +134,11 @@ export function providerLines(health: SystemHealth | null): ProviderHealthLine[]
 })
 export class ProviderHealthPanel {
   readonly health = input<SystemHealth | null>(null);
+  /** True after a failed refresh: show unavailable, never an empty table as current. */
+  readonly stale = input(false);
 
-  protected readonly lines = computed(() => providerLines(this.health()));
-  protected readonly fallbackPct = computed(() => this.health()?.thresholds.fallback_pct ?? ABSENT);
-  protected readonly emptyPct = computed(() => this.health()?.thresholds.empty_pct ?? ABSENT);
+  protected readonly current = computed(() => this.stale() ? null : this.health());
+  protected readonly lines = computed(() => providerLines(this.current()));
+  protected readonly fallbackPct = computed(() => this.current()?.thresholds.fallback_pct ?? ABSENT);
+  protected readonly emptyPct = computed(() => this.current()?.thresholds.empty_pct ?? ABSENT);
 }

@@ -5,6 +5,7 @@ import { SystemStore } from '../../stores/system.store';
 import { num } from '../../ui/format';
 import { Panel } from '../../ui/layout';
 import { Sparkline } from '../../ui/sparkline';
+import { NotificationHealthPanel } from './notification-health-panel';
 import { ProviderHealthPanel } from './provider-health-panel';
 import { SwallowedErrorsPanel } from './swallowed-errors-panel';
 
@@ -44,9 +45,13 @@ export function scanSecondsText(seconds: number | null): string {
 @Component({
   selector: 'sb-providers-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Sparkline, ProviderHealthPanel, SwallowedErrorsPanel],
+  imports: [Panel, Sparkline, ProviderHealthPanel, SwallowedErrorsPanel, NotificationHealthPanel],
   template: `
-    <sb-provider-health-panel [health]="store.health()" />
+    <sb-notification-health-panel
+      [health]="store.health()?.notifications ?? null"
+      [stale]="store.healthError() !== null"
+    />
+    <sb-provider-health-panel [health]="store.health()" [stale]="store.healthError() !== null" />
 
     <!-- v106: where live bars and prices come from, and how often Alpaca
          misses. A fallback price is still a real price, so the rate is
@@ -93,10 +98,10 @@ export function scanSecondsText(seconds: number | null): string {
       }
     </sb-panel>
 
-    <sb-swallowed-errors-panel [health]="store.health()" />
+    <sb-swallowed-errors-panel [health]="store.health()" [stale]="store.healthError() !== null" />
 
     @if (store.healthError(); as message) {
-      <p class="error" role="alert">Data providers and swallowed errors: {{ message }}</p>
+      <p class="error" role="alert">Data providers, swallowed errors and notification delivery: {{ message }}</p>
     }
     @if (store.riskError(); as message) {
       <p class="error" role="alert">Scan health and data source: {{ message }}</p>

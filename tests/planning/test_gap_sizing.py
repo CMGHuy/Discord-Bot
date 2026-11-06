@@ -42,6 +42,7 @@ def _env(monkeypatch):
     monkeypatch.setattr(account.opex, "size_mult", lambda *a, **k: 1.0)
     monkeypatch.setattr(account, "load_account_config", lambda: dict(CFG))
     monkeypatch.setattr(config, "SHORT_GAP_SIZING", True)
+    monkeypatch.setattr(config, "LONG_GAP_SIZING", False)
     monkeypatch.setattr(config, "SHORT_RISK_NOTICE", False)   # V183-12 snapshot: no data/ queue write here
 
 

@@ -1,0 +1,70 @@
+{
+ "account_balance": 10000.0,
+ "avg_confidence": 4.0,
+ "default_expiry_bars": 5,
+ "equity_30d": {
+  "change_pct": null,
+  "points": []
+ },
+ "expectancy_n": 0,
+ "expectancy_r": null,
+ "fx_missing_count": 0,
+ "heat_enforced_pct": 1.0,
+ "lifecycle": {
+  "ACTIVE": 1,
+  "CANCELLED": 0,
+  "CLOSED": 0,
+  "PARTIAL": 0,
+  "PENDING": 1
+ },
+ "market_meta": {
+  "as_of": null,
+  "computed_at": null,
+  "error": null,
+  "incomplete": false,
+  "missing_count": 0,
+  "refreshing": false,
+  "source": "request",
+  "stale_count": 0,
+  "stale_inputs": false
+ },
+ "open_pnl_amount": 94.88,
+ "open_pnl_pct": 5.0,
+ "open_trades": 2,
+ "payoff_ratio": null,
+ "position_premium": {
+  "max_position": 1000.0,
+  "max_position_pct": 20.0,
+  "max_position_value_absolute": 1000.0,
+  "max_risk_amount_absolute": 100.0,
+  "mode": "risk_pct",
+  "risk_amount": 100.0,
+  "risk_pct": 1.0
+ },
+ "realized": {
+  "amount": null,
+  "fx_missing_count": 0,
+  "losses": 0,
+  "n": 0,
+  "pct": null,
+  "wins": 0
+ },
+ "realized_weak": {
+  "amount": null,
+  "fx_missing_count": 0,
+  "losses": 0,
+  "n": 0,
+  "pct": null,
+  "wins": 0
+ },
+ "risk_cap_pct": 6.0,
+ "risk_of_loss_amount": 100.0,
+ "risk_of_loss_pct": 1.0,
+ "scope": {
+  "from": null,
+  "mode": "active",
+  "to": null
+ },
+ "win_rate": null,
+ "win_rate_n": 0
+}

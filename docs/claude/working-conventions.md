@@ -13,10 +13,9 @@ This file is session hygiene: commits, shared state, and versioning.
 - Conventional commits (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`), one
   commit per task; the task's own narrow test run
   (`scripts/dev/testrun.py file ...`, or `fast` when it crosses files) plus
-  `make check` green before each. **The full suite runs once, as the plan's
-  final verification task** — not per task, and not again after the merge to
-  `main` unless that merge resolved conflicts. See
-  `document-conventions.md` -> "One full suite run, at the end of the plan".
+  `make check` green before each. **No plan runs the full suite** — the CI
+  pipeline does, on push to `main`. See `document-conventions.md` -> "No full
+  suite in a plan" and § Pipeline watch below.
 - Active plans live in `docs/superpowers/plans/*.md` with a Progress block at
   the top; the per-task execution ledger is `.superpowers/sdd/progress.md`
   (gitignored). Update both when completing plan tasks — both have drifted
@@ -263,6 +262,32 @@ the percentage it states, not a paraphrase of recent prints. **Delete the log
 once the task finishes** (success or failure) — it exists only to answer that
 one question while the task is live, not as a permanent artifact.
 
+## Long runs must checkpoint (never hold results only in memory)
+
+**A script that runs past a few minutes writes each finished unit of work
+(ticker, fold, chunk) to disk the moment it completes, and a restart reads
+those files and replays only the missing units.** A progress line says how far
+a run got; only a checkpoint lets the next session pick it up. The
+counterexample: the v191 arm K Stage -1 census held every ticker's rows in a
+dict, died at 61/67 tickers after ~20 hours, and all 61 were lost -- a rerun of
+the 6 missing tickers was impossible.
+
+- **Location and format:** under git-ignored `logs/`, one JSON file per unit,
+  written to a `.tmp` and `replace`d so a kill never leaves a half file; remove
+  the directory when the run completes (like the percent log above).
+- **Invalidate on change:** each checkpoint carries a fingerprint of everything
+  the unit depends on (arm, window, grid and a hash of the code it replays). A
+  mismatch is ignored and recomputed, never reused -- a stale checkpoint must
+  not leak into frozen evidence.
+- **The final artifact comes from one complete pass over all units**, merged in
+  a fixed order, so a resumed run is byte-identical to an uninterrupted one.
+- **Say it on resume:** print `resuming: n/N units restored` first, so the log
+  shows the run did not start from scratch.
+- **Before launching** any run expected past a few minutes, confirm the script
+  checkpoints; if it does not, add it (with a test that kills mid-run and
+  resumes) before the first run, not after the first crash. Reference
+  implementation: `build()` in `scripts/backtest/measure_atr_band_stop.py`.
+
 ## Subagents must keep a progress file
 
 **A subagent dispatched for multi-step or long-running work keeps a plain-text
@@ -370,3 +395,24 @@ it has no Codex mirror (like the usage watcher).
 `.env` is readable (partner, 2026-11-04): no `.env` deny rules; allow rules cover the
 main checkout's `.env` by absolute path so worktrees (which have none) can read it.
 Values are still never printed, echoed or logged.
+
+## Pipeline watch
+
+After a merge to `main` is **pushed**, Claude follows the CI run until it ends —
+the full suites run there (`.github/workflows/deploy.yml`), not locally.
+
+1. `gh run list --branch main --limit 1 --json databaseId,status,conclusion`
+   for the run id, then `gh run watch <id> --exit-status` in the background
+   (`run_in_background`), so the wait costs no turns.
+2. Green: report it and continue (close-out, deploy follows by itself).
+3. Red: `gh run view <id> --log-failed > <scratchpad file>`, read only the
+   failing test names and assertion lines, fix each (`testrun.py file ...`,
+   alone, never the whole suite), commit scoped, push, and watch the new run.
+   A load-sensitive timeout that passes alone is re-run in the pipeline
+   (`gh run rerun <id> --failed`) and recorded, not "fixed".
+4. A failure that is not a unit test (build, lint, complexity gate, deploy job)
+   is read the same way; a deploy-job failure touches production, so stop and
+   tell the partner rather than retry.
+
+Never push to `main` and walk away: the plan is not closed out while the run is
+red or pending.

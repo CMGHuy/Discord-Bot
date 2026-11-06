@@ -133,25 +133,27 @@ def test_a_failed_balance_write_leaves_the_plan_open(golden, monkeypatch):
     assert TradeLog().get_trade_by_id(TRADE_ID)["status"] == "open"
 
 
-def test_a_plan_closed_before_the_lock_is_a_409_and_nothing_changes(golden, logged_in,
+def test_a_plan_closed_before_the_lock_is_a_422_and_nothing_changes(golden, logged_in,
                                                                       monkeypatch):
     """The bot closes the plan while the admin's stamp quote is in flight."""
     def stamp_while_the_bot_closes(ticker):
         PlanRepository().patch(PLAN_ID, {"status": "CLOSED"})
         return None
 
+    # V197-4b: the atomic service re-reads under the lock and reports the moved
+    # status as a LifecycleConflict, mapped to the 422 "invalid" path.
     monkeypatch.setattr(tc, "_override_stamp", stamp_while_the_bot_closes)
-    assert_error(logged_in.post(f"/api/v1/trades/{PLAN_ID}/close"), "conflict", 409)
+    assert_error(logged_in.post(f"/api/v1/trades/{PLAN_ID}/close"), "invalid", 422)
     trade = TradeLog().get_trade_by_id(TRADE_ID)
     assert trade["status"] == "open" and len(trade["legs"]) == 1
     assert account_module.get_balance_history() == []
 
 
 def test_a_lock_timeout_is_a_409(golden, logged_in, monkeypatch):
-    def busy(store, plan, reason="manual"):
+    def busy(plan_id, reason="manual"):
         raise LockTimeout("plan row held by the bot")
 
-    monkeypatch.setattr(tc, "_close_plan", busy)
+    monkeypatch.setattr(tc.lifecycle, "close_plan_atomic", busy)
     assert_error(logged_in.post(f"/api/v1/trades/{PLAN_ID}/close"), "conflict", 409)
 
 
@@ -178,14 +180,17 @@ def test_the_quote_and_the_daily_bars_are_read_before_a_transaction_opens(golden
                                                                          monkeypatch):
     import threading
     open_on = set()
-    real_tx = tc.transaction
+    from swingbot.admin.api_v1 import lifecycle_commands as lifecycle
+    real_tx = lifecycle.transaction
     seen = {}
+    entered = []
 
     class Tracked:
         def __init__(self, *a, **k):
             self.cm = real_tx(*a, **k)
 
         def __enter__(self):
+            entered.append(True)
             open_on.add(threading.get_ident())
             return self.cm.__enter__()
 
@@ -201,10 +206,11 @@ def test_the_quote_and_the_daily_bars_are_read_before_a_transaction_opens(golden
             return inner(*a, **k)
         return wrapped
 
-    monkeypatch.setattr(tc, "transaction", Tracked)
+    monkeypatch.setattr(lifecycle, "transaction", Tracked)
     import swingbot.core.marketdata.data as data_module
     monkeypatch.setattr(data_module, "get_current_price_detail",
                         guard("quote", data_module.get_current_price_detail))
     monkeypatch.setattr(rp, "cached_daily_bars", guard("bars", rp.cached_daily_bars))
     assert logged_in.post(f"/api/v1/trades/{PLAN_ID}/close").status_code == 200
+    assert entered, "the close must open its transaction through the lifecycle service"
     assert seen == {"quote": False, "bars": False}
