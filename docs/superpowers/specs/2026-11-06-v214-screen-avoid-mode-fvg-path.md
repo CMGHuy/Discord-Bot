@@ -49,16 +49,17 @@ later veto spec must say so.
    a matched random baseline by ≥ +0.10R. A veto in keep form selects most
    bars and is diluted towards zero by construction. A plain sign flip is
    not enough either: the panel showed it is **easier** to clear than the
-   edge bar. Four closed long screens already sit at ΔExpR ≤ −0.10 with p
-   near 1:
-   - `screen-high52w` −0.366;
-   - `screen-gap_volume` −0.464;
-   - `screen-sweep_reclaim_bos` −0.162;
-   - `screen-range_breakdown_close` −0.321.
+   edge bar. Four closed screens already sit at ΔExpR ≤ −0.10 with p near
+   1:
+   - long `screen-high52w` −0.366;
+   - long `screen-gap_volume` −0.464;
+   - long `screen-sweep_reclaim_bos` −0.162;
+   - short `screen-range_breakdown_close` −0.321.
 
-   Partly, the 2010–2019 bull window flatters the long null
-   (`backtest-methodology.md`, the range_breakdown_close row). So the avoid
-   mode must beat a **control arm** as well as the null (G1).
+   Partly, the 2010–2019 bull window flatters the null: it lifts the long
+   null and sinks shorts (`backtest-methodology.md`, the
+   range_breakdown_close row). So the avoid mode must beat a **control arm**
+   as well as the null (G1).
 2. **v68 `DEAD_CAT_BOUNCE_VETO` is closed** (validation failed, budget
    spent). It keyed on decline size and a fresh gap. Here the event fires
    only on gaps **at least 5 bars old**, never on the bar a gap forms. The
@@ -90,8 +91,14 @@ month and trend state), with d = R_event − mean(R_null):
 
 **Against the control arm.** Up to K = 20 bars are drawn per event from the
 same ticker, month and trend state, among bars where the idea's
-`control_condition` holds (G3). With d_c = R_event − mean(R_control), over
-events that have at least one control bar:
+`control_condition` holds (G3).
+- **Floor:** an event needs at least `null.MIN_CANDIDATES` (5) control
+  candidates, the same floor as the null.
+- **Seed:** `null_seed(idea + ":control", ticker)`.
+
+*(Author's call, made after the briefing: it reuses the null's draw.)*
+
+With d_c = R_event − mean(R_control), over events that meet the floor:
 
 5. mean d_c ≤ −(0.10 − tolerance).
 6. The upper 95% week-clustered bound of d_c is < 0, and N_c ≥ 300. Below
@@ -101,9 +108,9 @@ Any clause failing gives `SCREEN-FAIL`.
 
 The report also prints, without gating:
 - per-year d_c;
-- the share of events with no control bar;
-- the closed long screens' recorded exp_r, showing which would have cleared
-  clauses 1–2 alone (calibration context, never re-run).
+- the share of events below the control floor;
+- the four closed screens' recorded exp_r, showing which would have
+  cleared clauses 1–2 alone (calibration context, never re-run).
 
 ### G2. One shot, one family
 
@@ -199,8 +206,13 @@ The results doc prints events per year and errors per ticker.
 ### G6. Spec gate accepts an avoid pass for a veto only
 
 `tests/hooks/test_spec_screen_header.py` accepts
-`<ledger-id> SCREEN-AVOID-PASS` only for an `Edge: expectancy` spec adding a
-**veto** filter. Every other case still requires `SCREEN-PASS`.
+`<ledger-id> SCREEN-AVOID-PASS (veto)` only for an `Edge: expectancy` spec.
+The literal `(veto)` suffix is the machine-readable marker that the spec
+adds a veto filter. Today no header carries that signal. *(Author's call,
+made after the briefing.)*
+- `SCREEN-AVOID-PASS` without the suffix is rejected.
+- `(veto)` beside a `SCREEN-PASS` id is rejected.
+- Every other case still requires `SCREEN-PASS`.
 
 ### G7. Docs, and their mirrors in the same commit
 
@@ -250,6 +262,29 @@ The results doc prints events per year and errors per ticker.
   - a later wick fill.
 - **Truncation test.** Appending bars after t never changes the event or
   the condition at t.
+- **Sequencing with v211 (v209 Track 2, another session's plan).** v211
+  edits the same runner files: `ideas/__init__.py` (`Idea.context_kind`,
+  `IDEA_MODULES`), `screen_idea.py` and `diagnostics.scope_sentence`, plus
+  the exact-equality registry pins.
+  - **Start after v211's merge.** Implementation begins only once V211-4
+    (level context kind) and V211-6 (per-ticker checkpoints) are merged on
+    `main`.
+  - **Reuse its checkpoints.** v214 uses V211-6's
+    `screen_universe(checkpoint_dir=)` for G8 and does not re-implement
+    checkpointing.
+  - **Keep its pins.** v214 keeps v211's promised pins (`PARITY_DIGESTS`,
+    `test_long_byte_identical.py`, the hypothesis golden).
+  - **Ledger order.** The two plans' shots share the ledger's BH family, so
+    the order of the shots is recorded in both results docs.
+- **Avoid p.** `verdict.bootstrap` gains its mirror, the share of resamples
+  ≥ 0. Every `decide` call site the brief lists takes `MODE`:
+  - `screen_idea._stress`, `summarise` and `_decide`;
+  - `diagnostics._decide` and `_overlap`;
+  - `screen_trail_calibration.replicate`.
+
+  `_render_verdict` prints the mode's own rule text.
+- **The admin research API** (`admin/api_v1/research.py:78`) lists
+  `stats.VERDICTS`. The new label must render there, with a test.
 - **Complexity.** Every function stays under complexity 15.
 - **Tests ship with the work:**
   - the verdict clauses in both modes and their edges: exactly −0.10, an
