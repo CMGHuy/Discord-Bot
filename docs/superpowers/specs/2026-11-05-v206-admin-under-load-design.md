@@ -534,3 +534,29 @@ under repair is scan-driven. Heavy calls were still slow with the scan off
 not the only load on the single admin worker. Plans 2-4 own those calls. The
 probe's `/health` had no `sse_streams` yet (it ships in V206-4), so the
 stream count reads `-`.
+
+### Plan 1 after (committed probe)
+
+**Not evidence for the Goal.** The scan baseline (V206-3) was never taken: Plan 1
+deployed before it, so production no longer runs the code it had to measure.
+Scans also run back to back every ~5 minutes (about 4 min each), so a strict
+`scan`-labelled run is not reachable. Partner decision 2026-11-06: record the
+`mixed` after-run and compare it with the old-image `mixed` run above.
+
+| Run | Label | When | Image | Pages |
+|---|---|---|---|---|
+| `v206-after-mixed-1` | mixed (not evidence) | 2026-11-06 17:17 Berlin | `ghcr.io/cmghuy/discord-bot:sha-2365278852ec` | 36 |
+
+Old-image mixed run → after-run (same probe, same flags):
+
+| Measure | Before | After |
+|---|---|---|
+| `/dashboard` p90 | 23.9 s | 14.8 s |
+| `/cancel-precision` max | 43.0 s | 11.7 s |
+| `/analytics/performance` max | 35.6 s | 0.33 s |
+| `/market/tape` calls / max | 169 / 51.8 s | 73 / 9.2 s |
+| Idle tab | 39.5 req/min | 22.5 req/min |
+
+Indicative improvement, but the idle rate still sits above the under-10/min
+target and ten endpoints still exceed 5 s p90. The heavy calls (`/dashboard`,
+`/trades`, `/live`, `/market/tape`) are owned by the later v206 plans.
