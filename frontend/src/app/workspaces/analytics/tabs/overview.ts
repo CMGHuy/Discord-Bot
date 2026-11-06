@@ -1,15 +1,20 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { AnalyticsPerformance, HistogramBucket } from '../../../api/models';
 import { ConnectionStore } from '../../../stores/connection.store';
-import { AnalyticsStore, RELOCATED_METRICS } from '../../../stores/analytics.store';
+import { AnalyticsStore, RELOCATED_METRICS, requestAsOfText } from '../../../stores/analytics.store';
 import { BarList } from '../../../ui/bar-list';
 import { ColumnDef } from '../../../ui/data-table/data-table.types';
 import { DataTable } from '../../../ui/data-table/data-table';
 import { EmptyStateComponent } from '../../../ui/empty-state';
 import { ABSENT, money, num, pct as pctText, rMultiple, share, signed } from '../../../ui/format';
 import { Histogram } from '../../../ui/histogram';
+import { IncompleteNote } from '../../../ui/incomplete-note';
+import { MarketValue } from '../../../ui/market-value';
+import { PnlBasis } from '../../../ui/pnl-basis';
+import { Spinner } from '../../../ui/spinner';
 import { Panel } from '../../../ui/layout';
 import { LineChart, LineChartSeries } from '../../../ui/line-chart';
 import { PanelHeader } from '../../../ui/panel-header';
@@ -123,8 +128,24 @@ function maxDrawdown(values: readonly number[]): number | null {
   imports: [
     Panel, PanelHeader, PanelError, EmptyStateComponent, StatTile, StatStrip, LineChart,
     ShareBar, Histogram, BarList, DataTable, RouterLink, VarianceBandPanel,
+    IncompleteNote, MarketValue, NgTemplateOutlet, PnlBasis, Spinner,
   ],
   template: `
+    <ng-template #asOf let-meta>
+      @if (meta) {
+        <div class="as-of">
+          @if (meta.source === 'snapshot') {
+            <sb-market-value kind="snapshot" [asOf]="null" [computedAt]="meta.computed_at"
+              [staleInputs]="meta.stale_inputs" [refreshing]="meta.refreshing" [error]="meta.error" />
+          } @else {
+            <span class="req-as-of">{{ requestAsOf(meta) }}</span>
+            @if (meta.refreshing) { <sb-spinner label="Refreshing" /> }
+          }
+          <sb-incomplete-note [missing]="meta.missing_count" />
+        </div>
+      }
+    </ng-template>
+
     <sb-stat-strip class="kpis">@for (tile of kpiTiles(); track tile.label) {
       <sb-stat-tile [label]="tile.label" [value]="tile.value" [secondary]="tile.money"
         [sample]="tile.sample" [trend]="tile.trend" [hint]="tile.hint" [about]="tile.about" />
@@ -133,6 +154,8 @@ function maxDrawdown(values: readonly number[]): number | null {
     <div class="panels">
       <sb-panel>
         <sb-panel-header title="Equity" [n]="store.scopeN()" [total]="equityMoney()" [hint]="equityHint()" />
+        <ng-container *ngTemplateOutlet="asOf; context: { $implicit: store.equityCurveMeta() }" />
+        <p class="basis-line"><sb-pnl-basis /></p>
         @if (store.equityCurveError(); as error) {
           <sb-panel-error [message]="error" (retry)="store.reload('equityCurve')" />
         } @else if (!points().length) {
@@ -152,6 +175,7 @@ function maxDrawdown(values: readonly number[]): number | null {
       <sb-panel>
         <sb-panel-header title="Outcome" [n]="store.scopeN()" [tableable]="true" [(tableOpen)]="outcomeTableOpen"
           [hint]="outcomeHint" />
+        <ng-container *ngTemplateOutlet="asOf; context: { $implicit: store.performanceMeta() }" />
         @if (store.performanceError(); as error) {
           <sb-panel-error [message]="error" (retry)="store.reload('performance')" />
         } @else {
@@ -198,6 +222,8 @@ function maxDrawdown(values: readonly number[]): number | null {
     /* v175: the Normal bad luck panel spans both columns; its own two bars
        take the columns from 640px up and stack below. */
     .wide { grid-column: 1 / -1; }
+    .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-faint); min-width: 0; }
+    .basis-line { margin: var(--space-4) 0 0; min-width: 0; }
     .pane-label { font-size: var(--text-chip); color: var(--text-secondary); margin: var(--space-10) 0 var(--space-4); }
     /* Named .benchmark-note, not .note (v54 precedent, trade-detail.ts):
        that name is a promoted sb-note callout composite -- this is an
@@ -214,6 +240,8 @@ function maxDrawdown(values: readonly number[]): number | null {
 export class OverviewTab {
   readonly store = inject(AnalyticsStore);
   private readonly connection = inject(ConnectionStore);
+
+  protected readonly requestAsOf = requestAsOfText;
 
   readonly format = (value: number) =>
     inUnit({ r: value, pct: value, money: value }, this.store.unit(), this.connection.currency());

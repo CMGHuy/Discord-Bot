@@ -18,9 +18,15 @@ import datetime as dt
 
 from flask import jsonify, request
 
+from swingbot.core.analytics import page_bodies
+from swingbot.core.marketdata.shared import admin_refresh
+
 from . import ApiError, api_v1
 from .auth import require_auth
 from .read_scope import read_scope
+
+# v204 V204-14: the body lives in core (`page_bodies`); the route looks it up at call time.
+_calendar_body = page_bodies.calendar_body
 
 # `month` is handled separately from the filters: it scopes the grid rather
 # than narrowing the population, and it has its own format.
@@ -69,6 +75,13 @@ def _filter_args() -> tuple[str | None, str | None]:
     return strategy, horizon
 
 
+def _calendar_default_key(month: str, filters: tuple[str | None, str | None]) -> str | None:
+    """The snapshot key of an unfiltered current or previous month, else None."""
+    if filters == (None, None) and month in admin_refresh.calendar_months():
+        return admin_refresh.calendar_key(month)
+    return None
+
+
 @api_v1.route("/calendar/pnl", methods=["GET"])
 @require_auth
 @read_scope
@@ -81,36 +94,13 @@ def calendar_pnl():
     strategy/horizon filter. A weekday pattern drawn from one month is 4-5
     observations per weekday and would be noise presented as a finding.
     """
-    from swingbot.core.analytics import pnl_calendar as pc
-
-    from .money import missing_count, to_account_currency
+    from .analytics import default_view_body
 
     _reject_unknown_params()
     month = _month_param()
-    strategy, horizon = _filter_args()
-
-    everything = pc.load_rows(convert=to_account_currency)
-    rows = pc.filter_rows(everything, strategy=strategy, horizon=horizon)
-    grid = pc.month_grid(rows, month)
-    extremes = pc.best_worst_days(rows)
-
-    return jsonify({
-        # A panel-level timestamp is the time this filtered view was composed,
-        # not a claim about the age of any individual close in the month.
-        "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "month": grid["month"],
-        "days": grid["days"],
-        "totals": grid["totals"],
-        "longest_hold": pc.longest_hold(rows, grid["month"]),
-        "day_of_week": pc.day_of_week_breakdown(rows),
-        "best_day": extremes["best"],
-        "worst_day": extremes["worst"],
-        "streak": pc.day_streak(rows),
-        "fx_missing_count": missing_count(
-            [r for r in rows if r["day"].startswith(grid["month"])]),
-        # Derived from the UNFILTERED set -- see `available_filters`.
-        "filters": pc.available_filters(everything),
-    })
+    filters = _filter_args()
+    return jsonify(default_view_body("calendar.pnl", _calendar_default_key(month, filters),
+                                     lambda: _calendar_body(month, filters)))
 
 
 def _date_param() -> str:

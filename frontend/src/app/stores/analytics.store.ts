@@ -3,6 +3,7 @@ import {
   patchState,
   signalStore,
   withComputed,
+  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
@@ -28,12 +29,32 @@ import {
   BookScope,
   LiveLossRow,
   LiveLossWatch,
+  MarketMeta,
   OverrideFidelity,
   TuneDefaults,
 } from '../api/models';
 import { HistogramBin } from '../ui/histogram';
 import { BarRow } from '../ui/bar-list';
+import { LiveValuesStore } from './live-values.store';
 import { PreferencesStore } from './preferences.store';
+import { followSnapshot, snapshotMeta } from './snapshot-follow';
+
+const AS_OF_DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+/**
+ * v204: the clock of a view computed for the request that asked (a filtered
+ * Analytics view, a filtered Calendar month). A snapshot view has its own
+ * age label, so it gets none here. FX is the one cached input, named when
+ * the server dated it; a timed value prints its date.
+ */
+export function requestAsOfText(meta: MarketMeta | null | undefined): string | null {
+  if (!meta || meta.source === 'snapshot') return null;
+  const at = meta.as_of ? new Date(`${meta.as_of.slice(0, 10)}T00:00:00Z`) : null;
+  if (at === null || Number.isNaN(at.getTime())) return 'as of this request';
+  return `as of this request · FX rates as of ${AS_OF_DAY.format(at)}`;
+}
+
+const SCOPE_FILTERS = ['from', 'to', 'strategy', 'horizon', 'direction'] as const;
 
 /* -- row shapes ---------------------------------------------------------
  *
@@ -667,6 +688,30 @@ export const AnalyticsStore = signalStore(
         .map((d) => ({ label: d.decile, count: d.win_rate }))),
   })),
 
+  withComputed((store, live = inject(LiveValuesStore)) => {
+    // Local consts, because computeds in one object cannot read each other
+    // through `store`. Only the unfiltered view is served from a snapshot
+    // row (the server's own default-view rule), so only it has a key.
+    const defaultView = computed(() => SCOPE_FILTERS.every((k) => !store.scope()[k]));
+    const performanceKey = computed(() =>
+      defaultView() ? `analytics.performance:${store.scope().ledger}` : null);
+    const equityCurveKey = computed(() =>
+      defaultView() ? `analytics.equity_curve:${store.scope().ledger}` : null);
+    return {
+      defaultView,
+      performanceKey,
+      equityCurveKey,
+      performanceMeta: computed(() => {
+        const k = performanceKey();
+        return snapshotMeta(store.performance()?.market_meta, k ? live.snapshot(k)() : null);
+      }),
+      equityCurveMeta: computed(() => {
+        const k = equityCurveKey();
+        return snapshotMeta(store.equityCurve()?.market_meta, k ? live.snapshot(k)() : null);
+      }),
+    };
+  }),
+
   withMethods((store, api = inject(ApiClient), preferences = inject(PreferencesStore)) => {
     /** Every failure lands here, and none of them clear the data already on
      *  screen. A table that empties because one refetch failed is worse than
@@ -1116,4 +1161,20 @@ export const AnalyticsStore = signalStore(
     };
   }),
 
+  withHooks({
+    onInit(store) {
+      // A key whose route left `request` never gets a row, so it never
+      // reloads; nothing reloads before its first payload either.
+      followSnapshot(
+        store.performanceKey,
+        () => store.performance()?.market_meta?.computed_at ?? null,
+        () => { if (store.performance() !== null) store.reload('performance'); },
+      );
+      followSnapshot(
+        store.equityCurveKey,
+        () => store.equityCurve()?.market_meta?.computed_at ?? null,
+        () => { if (store.equityCurve() !== null) store.reload('equityCurve'); },
+      );
+    },
+  }),
 );

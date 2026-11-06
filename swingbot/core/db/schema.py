@@ -396,6 +396,20 @@ refresher_heartbeat = register(sa.Table("refresher_heartbeat", METADATA,
     *standard_columns()),
     ("key", "beat_at", "cadence_s", "session", "cycle_ms", "last_error"))
 
+# v204: the admin snapshot pages' stored payloads, one row per key (risk,
+# analytics.snapshot, analytics.performance:<ledger>, analytics.equity_curve:<ledger>,
+# calendar.pnl:<YYYY-MM>). Written only by the refresher's snapshot worker,
+# compare-and-set on computed_at. Read by the admin request door. No SSE trigger:
+# the worker raises `market` itself.
+admin_snapshots = register(sa.Table("admin_snapshots", METADATA,
+    sa.Column("key", sa.Text, primary_key=True),
+    sa.Column("computed_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("stale_inputs", sa.Boolean, nullable=False, server_default=sa.false()),
+    sa.Column("inputs", JSONB, nullable=False),
+    *standard_columns(),
+    sa.Index("admin_snapshots_updated_idx", "updated_at")),
+    ("key", "computed_at", "stale_inputs", "inputs"))
+
 
 # v171: the shared market-data layer (spec D1/D6/D9). No SSE event; none in TABLE_CHANNELS.
 market_cache = register(sa.Table("market_cache", METADATA,
@@ -631,5 +645,14 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "session": "NOT NULL market session the cadence was chosen for",
         "cycle_ms": "duration of the last cycle in /system/health; NULL before the first",
         "last_error": "last cycle failure in /system/health; NULL when clean",
+    },
+    "admin_snapshots": {
+        "key": "primary key; one row per snapshot key, so the table never grows with time",
+        "computed_at": "the compare-and-set WHERE in put (newer computed_at wins) and the "
+                       "closed-market stale rule",
+        "stale_inputs": "bars older than the last completed session; read by /market/updates "
+                        "without the doc",
+        "inputs": "recorded inputs (quotes, FX, bar fingerprints, thresholds, code version), "
+                  "apart from doc",
     },
 }

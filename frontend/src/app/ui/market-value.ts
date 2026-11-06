@@ -9,8 +9,8 @@ import { Spinner } from './spinner';
 /**
  * v201: a price (or any figure derived from one) with its age, a spinner
  * while a refresh is pending and "refresh failed" when it was not answered.
- * The projected content is the value; with no as-of the value slot is
- * hidden, so a never-priced cell is the spinner alone. The meta wraps under
+ * The value slot stays hidden until a quote has an as-of time or a snapshot
+ * has a build time. The meta wraps under
  * the value on a phone and never widens its column.
  */
 @Component({
@@ -18,7 +18,7 @@ import { Spinner } from './spinner';
   imports: [Spinner],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '[class.mv-empty]': 'empty()' },
-  template: `<span class="mv" [attr.data-tone]="tone()"><span class="mv-value" [hidden]="asOf() === null"><ng-content /></span><span class="mv-meta">@if (spinning()) {<sb-spinner label="Refreshing" />} @if (label().text; as t) {<span class="mv-age">{{ t }}</span>} @if (error()) {<span class="mv-err">refresh failed</span>}</span></span>`,
+  template: `<span class="mv" [attr.data-tone]="tone()"><span class="mv-value" [hidden]="valueHidden()"><ng-content /></span><span class="mv-meta">@if (spinning()) {<sb-spinner label="Refreshing" />} @if (label().text; as t) {<span class="mv-age">{{ t }}</span>} @if (error()) {<span class="mv-err">refresh failed</span>}</span></span>`,
   styles: `
     :host { display: inline-block; max-width: 100%; }
     /* Nothing to show (no as-of, no spinner, no error): take no line, so a
@@ -41,15 +41,21 @@ import { Spinner } from './spinner';
 })
 export class MarketValue {
   readonly asOf = input<string | null>(null);
+  readonly kind = input<'price' | 'snapshot'>('price');
+  readonly staleInputs = input(false);
+  readonly computedAt = input<string | null>(null);
   readonly refreshing = input(false);
   readonly error = input<string | null>(null);
 
   private readonly clock = inject(CLOCK);
   private readonly live = inject(LiveValuesStore);
 
-  protected readonly label = computed(() => marketAgeLabel(this.asOf(), this.clock(), this.live.status()));
+  protected readonly label = computed(() => marketAgeLabel(this.asOf(), this.clock(), this.live.status(), {
+    kind: this.kind(), staleInputs: this.staleInputs(), computedAt: this.computedAt(),
+  }));
+  protected readonly valueHidden = computed(() => (this.kind() === 'snapshot' ? this.computedAt() : this.asOf()) === null);
   protected readonly tone = computed(() => this.label().tone);
   protected readonly spinning = computed(() => this.refreshing() && !this.error());
   protected readonly empty = computed(() =>
-    this.asOf() === null && !this.spinning() && !this.error() && !this.label().text);
+    this.valueHidden() && !this.spinning() && !this.error() && !this.label().text);
 }

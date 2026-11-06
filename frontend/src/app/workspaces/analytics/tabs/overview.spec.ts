@@ -7,13 +7,25 @@ import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { MarketMeta } from '../../../api/models';
+
 import { AnalyticsStore, RELOCATED_METRICS } from '../../../stores/analytics.store';
 import { ConnectionStore } from '../../../stores/connection.store';
+import { LiveValuesStore } from '../../../stores/live-values.store';
+import { FakeLiveValues } from '../../../testing/fake-live-values';
 import { PreferencesStore } from '../../../stores/preferences.store';
 import { ANALYTICS_DRAWDOWN_LABEL, ANALYTICS_EXPR_ABOUT, ANALYTICS_SHARPE_LABEL, OverviewTab } from './overview';
 import { BAND_OK } from './variance-band.fixture';
 import { Hint } from '../../../ui/hint';
 import { PERFORMANCE_CAVEAT, StatTile } from '../../../ui/stat-tile';
+
+const SNAP_META: MarketMeta = {
+  as_of: '2026-10-29', refreshing: false, stale_count: 0, missing_count: 0, incomplete: false,
+  computed_at: '2026-10-29T14:00:00Z', stale_inputs: false, source: 'snapshot', error: null,
+};
+const REQ_META: MarketMeta = {
+  ...SNAP_META, computed_at: null, source: 'request', as_of: '2026-10-28', missing_count: 1, incomplete: true,
+};
 
 /** The text of the sb-hint whose aria label is `label` (A4 audit). */
 function hintText(fixture: ComponentFixture<unknown>, label: string): string {
@@ -57,6 +69,7 @@ function storeStub(over: Record<string, unknown> = {}) {
     }),
     equityCurveError: signal(null),
     varianceBand: signal(null), varianceBandError: signal(null),
+    performanceMeta: signal<MarketMeta | null>(null), equityCurveMeta: signal<MarketMeta | null>(null),
     setTableOpen: () => {}, reload: () => {},
   };
   return { ...base, ...over };
@@ -69,6 +82,7 @@ function render(over: Record<string, unknown> = {}) {
       provideRouter([]),
       { provide: AnalyticsStore, useValue: storeStub(over) },
       { provide: ConnectionStore, useValue: { currency: signal('$') } },
+      { provide: LiveValuesStore, useClass: FakeLiveValues },
       { provide: PreferencesStore, useValue: { values: () => ({}), update: () => {} } },
     ],
   });
@@ -338,5 +352,41 @@ describe('OverviewTab performance strip (v195 §5.2)', () => {
     expect(strip.querySelector('.sb-strip-grid')!.classList).not.toContain('sb-strip-fixed');
     const src = readFileSync(join(process.cwd(), 'src/app/workspaces/analytics/tabs/overview.ts'), 'utf8');
     expect(src).not.toMatch(/\.kpis\s*\{/);
+  });
+});
+
+describe('OverviewTab as-of labels (v204)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+  const panel = (el: HTMLElement, title: string) =>
+    Array.from(el.querySelectorAll('sb-panel')).find((p) => p.querySelector('sb-panel-header')?.getAttribute('title') === title
+      || p.textContent?.includes(title))!;
+
+  it('equity and outcome panels show the snapshot age', () => {
+    const { el } = render({ performanceMeta: signal(SNAP_META), equityCurveMeta: signal(SNAP_META) });
+    expect(el.querySelectorAll('.as-of sb-market-value')).toHaveLength(2);
+    expect(el.querySelector('.req-as-of')).toBeNull();
+  });
+
+  it('a filtered view shows the request as-of', () => {
+    const { el } = render({ performanceMeta: signal(REQ_META), equityCurveMeta: signal(REQ_META) });
+    const labels = Array.from(el.querySelectorAll('.req-as-of')).map((e) => e.textContent?.trim());
+    expect(labels).toEqual(['as of this request · FX rates as of Oct 28', 'as of this request · FX rates as of Oct 28']);
+    expect(el.textContent).toContain('incomplete: 1 position unpriced');
+    expect(el.querySelector('.as-of sb-market-value')).toBeNull();
+  });
+
+  it('the equity panel carries the P&L basis', () => {
+    const { el } = render({ equityCurveMeta: signal(SNAP_META) });
+    const basis = el.querySelectorAll('sb-pnl-basis');
+    expect(basis).toHaveLength(1);
+    expect(basis[0].textContent?.trim()).toBe('pre-tax, before modelled frictions');
+    expect(panel(el, 'Equity').contains(basis[0])).toBe(true);
+  });
+
+  it('no meta renders no as-of', () => {
+    const { el } = render({ performanceMeta: signal(null), equityCurveMeta: signal(null) });
+    expect(el.querySelector('.as-of sb-market-value')).toBeNull();
+    expect(el.querySelector('.req-as-of')).toBeNull();
+    expect(el.querySelector('sb-incomplete-note')).toBeNull();
   });
 });

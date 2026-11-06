@@ -16,7 +16,7 @@ import contextvars
 import logging
 import threading
 from contextlib import ExitStack
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -24,6 +24,8 @@ from flask import g, has_request_context, request
 
 from swingbot import config
 from swingbot.core.infra.swallowed import swallowed
+from swingbot.core.marketdata.daily_readonly import (  # noqa: F401  (_PERIOD_DAYS kept as the old name)
+    PERIOD_DAYS as _PERIOD_DAYS, read_cached_daily, trim as _trim)
 from swingbot.core.marketdata.shared import kinds
 from swingbot.core.marketdata.shared.kinds import Asker, DataKind, Entry, QuoteDetail
 
@@ -116,7 +118,6 @@ def quote_age(q: Optional[QuoteDetail], now: Optional[datetime] = None) -> tuple
 # ---------------------------------------------------------------------------
 # Daily bars for the chart, risk and watchlist pages (V171-26)
 # ---------------------------------------------------------------------------
-_PERIOD_DAYS = {"6mo": 183, "1y": 366, "2y": 731, "5y": 1827}
 
 
 def _daily_stale(ticker: str) -> bool:
@@ -169,15 +170,13 @@ def _daily_for(ticker: str):
     return df
 
 
-def _trim(df, period: str):
-    days = _PERIOD_DAYS.get(period)
-    if days is None or df is None or not len(df):
-        return df
-    return df[df.index >= df.index[-1] - timedelta(days=days)]
+def page_daily(tickers: list[str], *, period: str = "2y", read_only: bool = False) -> dict:
+    """Daily frames for an admin page: spot metals as today, the rest from the shared file.
 
-
-def page_daily(tickers: list[str], *, period: str = "2y") -> dict:
-    """Daily frames for an admin page: spot metals as today, the rest from the shared file."""
+    `read_only=True` (v204 snapshots) reads the cached file only: no refresh,
+    no spot-metal fetch; gaps are simply absent from the result."""
+    if read_only:
+        return read_cached_daily(tickers, period=period).frames
     from swingbot.core.marketdata import data, spot_metals
     names = [str(t).upper().strip() for t in tickers]
     spot, regular = spot_metals.split_spot(names)

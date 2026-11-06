@@ -20,6 +20,8 @@ import {
   loadingInterceptor,
 } from '../api/interceptors';
 import { AnalyticsStore } from './analytics.store';
+import { FakeLiveValues } from '../testing/fake-live-values';
+import { LiveValuesStore } from './live-values.store';
 
 /* SR51 — the tuning grid and Propose.
  *
@@ -111,6 +113,7 @@ describe('AnalyticsStore — the tuning grid', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: new FakeEventStream() },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         AnalyticsStore,
       ],
     });

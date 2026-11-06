@@ -8,6 +8,8 @@ import { EventStream } from '../api/event-stream';
 import { authInterceptor, errorInterceptor, loadingInterceptor } from '../api/interceptors';
 import { OVERRIDE_FIDELITY_FIXTURE } from '../workspaces/analytics/tabs/override-fidelity.fixture';
 import { AnalyticsStore } from './analytics.store';
+import { FakeLiveValues } from '../testing/fake-live-values';
+import { LiveValuesStore } from './live-values.store';
 
 /* v173 — the "Overrides vs engine" slice: global, its own error, loaded with Execution. */
 
@@ -35,6 +37,7 @@ describe('AnalyticsStore — overrideFidelity slice', () => {
         provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor])),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: new FakeEventStream() },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         AnalyticsStore,
       ],
     });

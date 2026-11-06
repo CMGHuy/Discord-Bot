@@ -145,6 +145,7 @@ export const PERF_BASIS = {
           (viewReset)="viewReset.emit()"
           [balance]="balance()"
           [changePct]="changePct()"
+          [meta]="equityMeta()"
           [points]="points()"
           [currency]="currency()"
         />
@@ -291,6 +292,8 @@ export class TradingPerformance {
   readonly openPnlAmount = input<number | null>(null);
   /** v201: freshness of the server's open-P&L totals; null from an older server. */
   readonly openMeta = input<MarketMeta | null>(null);
+  /** v204: the 30-day series' snapshot clock, shown under the day change. */
+  readonly equityMeta = input<MarketMeta | null>(null);
   readonly winRate = input<number | null>(null);
   readonly expectancyR = input<number | null>(null);
   readonly winRateN = input<number | null>(null);

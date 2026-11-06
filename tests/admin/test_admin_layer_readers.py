@@ -118,7 +118,7 @@ def test_chart_risk_and_watchlist_read_page_daily_when_on(admin_app, env, monkey
     from swingbot.admin.api_v1 import risk
     asked = []
     monkeypatch.setattr(freshness, "page_daily",
-                        lambda t, period="2y": asked.append((list(t), period)) or {s: make_ohlcv([1.0, 2.0]) for s in t})
+                        lambda t, period="2y", **_kw: asked.append((list(t), period)) or {s: make_ohlcv([1.0, 2.0]) for s in t})
     monkeypatch.setattr(data, "get_daily_data", lambda *a, **k: pytest.fail("live chart fetch"))
     monkeypatch.setattr(data, "get_daily_data_batch", lambda *a, **k: pytest.fail("live batch fetch"))
     monkeypatch.setattr(watchlist_rows, "get_daily_data_batch", lambda *a, **k: pytest.fail("live batch fetch"))
@@ -128,6 +128,18 @@ def test_chart_risk_and_watchlist_read_page_daily_when_on(admin_app, env, monkey
     assert set(risk._risk_bars(["AAPL", "SPY"])) == {"AAPL", "SPY"}
     watchlist_rows.build_market_rows(["MSFT"])
     assert asked == [(["AAPL"], "2y"), (["AAPL", "SPY"], "2y"), (["MSFT"], "6mo")]
+
+
+@pytest.mark.parametrize("refresher", ["on", "off"])
+def test_risk_bars_reads_page_daily_read_only_when_the_refresher_is_on(admin_app, env, monkeypatch, refresher):
+    from swingbot.admin.api_v1 import risk
+    from swingbot.core.marketdata.shared import admin_refresh
+    monkeypatch.setattr(config, "ADMIN_REFRESHER", refresher)
+    seen = []
+    monkeypatch.setattr(freshness, "page_daily",
+                        lambda t, period="2y", read_only=False: seen.append(read_only) or {})
+    risk._risk_bars(["AAPL"])
+    assert seen == [admin_refresh.refresher_on()] == [refresher == "on"]
 
 
 def test_off_mode_keeps_the_live_readers(admin_app, monkeypatch):

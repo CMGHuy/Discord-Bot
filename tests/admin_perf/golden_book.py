@@ -31,6 +31,8 @@ CLOCK_MODULES: tuple[str, ...] = (
     "swingbot.admin.api_v1.live_events",
     "swingbot.admin.api_v1.trades",
     "swingbot.admin.dashboard",
+    "swingbot.core.analytics.admin_snapshots",   # v204: snapshot computed_at
+    "swingbot.core.analytics.page_bodies",       # v204: calendar/analytics as_of
     "swingbot.core.analytics.rank",
     "swingbot.core.analytics.snapshots",
     "swingbot.core.market.session",
@@ -41,6 +43,15 @@ CLOCK_MODULES: tuple[str, ...] = (
 
 #: Keys still nondeterministic under the frozen clock, key -> why. Masked anywhere.
 VOLATILE_KEYS: dict[str, str] = {}
+
+#: Keys a later plan ADDED to a frozen payload on purpose, endpoint -> pointer -> why.
+#: The goldens stay frozen; `without_added` drops exactly these pointers from the
+#: live payload before comparing, so every field the golden pins stays pinned.
+ADDED_POINTERS: dict[str, dict[str, str]] = {
+    "dashboard": {"/equity_30d/market_meta": "v204 sparkline snapshot meta; tests/admin_snapshots"},
+    "dashboard_today": {"/equity_30d/market_meta": "v204 sparkline snapshot meta; tests/admin_snapshots"},
+    "calendar_month": {"/market_meta": "v204 calendar snapshot meta; tests/admin_snapshots"},
+}
 
 ACCOUNT_CODE = "EUR"
 QUOTES: dict[str, str] = {"AAPL": "USD", "SAP.DE": "EUR"}
@@ -232,6 +243,20 @@ def _set(payload, pointer: str, value) -> None:
     *parents, last = pointer.split("/")[1:]
     node = resolve(payload, "/" + "/".join(parents)) if parents else payload
     node[int(last) if isinstance(node, list) else last] = value
+
+
+def without_added(name: str, payload):
+    """A deep copy of ``payload`` minus ADDED_POINTERS[name]; a pointer already absent is skipped."""
+    out = copy.deepcopy(payload)
+    for pointer in ADDED_POINTERS.get(name, {}):
+        *parents, last = pointer.split("/")[1:]
+        try:
+            node = resolve(out, "/" + "/".join(parents)) if parents else out
+        except (KeyError, IndexError, TypeError):
+            continue
+        if isinstance(node, dict):
+            node.pop(last, None)
+    return out
 
 
 def _mask_keys(node) -> None:

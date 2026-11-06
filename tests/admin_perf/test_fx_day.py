@@ -175,7 +175,8 @@ def test_trades_unrealized_amounts_use_berlin_today(asked, monkeypatch):
 
 def test_risk_weights_take_the_berlin_day_of_the_check(monkeypatch):
     import swingbot.admin.app  # noqa: F401
-    from swingbot.admin.api_v1 import risk, risk_read_model
+    from swingbot.admin.api_v1 import risk
+    from swingbot.core.analytics import risk_read_model  # v204: the payload reads core's
     seen = []
 
     def weights(open_trades, *, on, account=None):

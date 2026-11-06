@@ -423,7 +423,7 @@ describe('Trades - price age and Refresh (v201)', () => {
     const el = renderPriced([priced('a', 'MSFT', 'ACTIVE'), priced('b', 'AAPL', 'CLOSED')]);
     el.querySelector<HTMLButtonElement>('sb-page [page-actions] sb-market-refresh button')!.click();
     const live = TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues;
-    expect(live.requestRefresh).toHaveBeenCalledWith(['MSFT']);
+    expect(live.requestRefresh).toHaveBeenCalledWith(['MSFT'], []);
   });
 });
 

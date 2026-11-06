@@ -15,6 +15,8 @@ import { Observable, Subject, debounceTime, defer, finalize } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { routeRequest } from '../routing/route-request';
+import { LiveValuesStore } from './live-values.store';
+import { followSnapshot, snapshotMeta } from './snapshot-follow';
 import { Dashboard, DashboardScope } from '../api/models';
 import {
   ChartTarget,
@@ -312,6 +314,12 @@ export const DashboardStore = signalStore(
       return used / cap;
     }),
   })),
+  withComputed((store, live = inject(LiveValuesStore)) => ({
+    /** v204: the 30-day sparkline's snapshot clock, with the live
+     *  `refreshing`/`error` marks laid over it. */
+    equityMeta: computed(() =>
+      snapshotMeta(store.data()?.equity_30d?.market_meta, live.snapshot('analytics.snapshot')())),
+  })),
   withMethods((store, api = inject(ApiClient)) => {
     let latestRequest = 0;
     // Today's figures arrive by two roads -- a 1D scoped fetch and the
@@ -463,6 +471,14 @@ export const DashboardStore = signalStore(
           refresh.next();
         }
       });
+      // v204: a newer analytics snapshot refetches through the same debounce,
+      // so one landing beside a `market` event costs one request. Nothing
+      // reloads before the first payload (the first effect run is that load).
+      followSnapshot(
+        () => 'analytics.snapshot',
+        () => store.data()?.equity_30d?.market_meta?.computed_at ?? null,
+        () => { if (store.data() !== null) refresh.next(); },
+      );
     },
   }),
 );

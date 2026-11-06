@@ -3,6 +3,7 @@
 Handlers swallow exceptions, so a raising fake alone proves nothing: every
 forbidden call is recorded, and the test asserts the record is empty."""
 import importlib
+import inspect
 
 import pytest
 
@@ -18,6 +19,13 @@ PAGE_LOAD_ENDPOINTS: list[str] = [
     "/api/v1/trades?page=1&per_page=200",
     "/api/v1/trades?status=open&sort=-pnl_pct",
     "/api/v1/trades/22222222-2222-4222-8222-222222222222",
+    "/api/v1/risk",
+    "/api/v1/analytics/snapshot",
+    "/api/v1/analytics/performance",
+    "/api/v1/analytics/equity-curve",
+    "/api/v1/calendar/pnl",
+    "/api/v1/analytics/performance?strategy=Fibonacci",
+    "/api/v1/calendar/pnl?month=2025-01",
 ]
 
 FORBIDDEN: list[tuple[str, str]] = [
@@ -45,6 +53,11 @@ FORBIDDEN: list[tuple[str, str]] = [
     ("swingbot.admin.dashboard", "prefetch_prices"),
     ("swingbot.admin.watchlist_rows", "get_daily_data_batch"),
     ("swingbot.admin.watchlist_rows", "warm_batch_price_cache_background"),
+    # v204: the Risk, Analytics and Calendar request paths.
+    ("swingbot.core.marketdata.data", "get_daily_data"),
+    ("swingbot.admin.freshness", "_daily_for"),
+    ("swingbot.core.analytics.snapshots", "compute_snapshot"),
+    ("swingbot.admin.queries", "refresh_snapshot"),
 ]
 
 
@@ -56,6 +69,28 @@ def network_forbidden(monkeypatch):
             calls.append(_name)
             raise AssertionError(f"network call on a page load: {_name}")
         monkeypatch.setattr(importlib.import_module(module), name, boom)
+
+    from swingbot.core.analytics import admin_snapshots
+    from swingbot.core.marketdata import fx
+
+    for name in sorted(n for n in dir(admin_snapshots) if n.startswith("build_") and n != "build_inputs"):
+        def build_boom(*args, _name=f"admin_snapshots.{name}", **kwargs):
+            calls.append(_name)
+            raise AssertionError(f"snapshot build on a page load: {_name}")
+        monkeypatch.setattr(admin_snapshots, name, build_boom)
+
+    real_code = fx.quote_currency_code
+    # tests/admin/conftest.py stubs quote_currency_code with `lambda ticker, **_kw`, which has no
+    # `fetch` parameter; fall back to the production default (fetch=True), the stricter reading.
+    fetch_param = inspect.signature(real_code).parameters.get("fetch")
+    fetch_default = True if fetch_param is None else fetch_param.default
+
+    def code_without_fetch(ticker, *args, **kwargs):
+        if kwargs.get("fetch", fetch_default):
+            calls.append("fx.quote_currency_code(fetch=True)")
+            raise AssertionError("quote currency fetched on a page load")
+        return real_code(ticker, *args, **kwargs)
+    monkeypatch.setattr(fx, "quote_currency_code", code_without_fetch)
     return calls
 
 

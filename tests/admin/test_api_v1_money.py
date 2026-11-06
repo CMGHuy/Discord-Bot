@@ -20,12 +20,12 @@ def rates(monkeypatch):
     `seed`/`logged_in` so it overrides admin_app's identity pin."""
     asked = []
 
-    def fake_rate(from_code, to_code, on):
+    def fake_rate(from_code, to_code, on, **_kw):
         asked.append((from_code, to_code, on))
         return _RATES.get(on)
 
     monkeypatch.setattr(fx, "account_currency_code", lambda: "EUR")
-    monkeypatch.setattr(fx, "quote_currency_code", lambda ticker: _QUOTES.get(ticker))
+    monkeypatch.setattr(fx, "quote_currency_code", lambda ticker, **_kw: _QUOTES.get(ticker))
     monkeypatch.setattr(fx, "fx_rate", fake_rate)
     return asked
 

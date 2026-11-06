@@ -705,7 +705,7 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     expect(refresh).not.toBeNull();
     refresh!.click();
     const live = TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues;
-    expect(live.requestRefresh).toHaveBeenCalledWith(['AAPL']);
+    expect(live.requestRefresh).toHaveBeenCalledWith(['AAPL'], []);
   });
 
   it('no Refresh on a closed trade', () => {

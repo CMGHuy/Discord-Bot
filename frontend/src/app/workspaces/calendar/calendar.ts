@@ -1,12 +1,18 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { CalendarDay, CalendarTrade, CalendarWeekday } from '../../api/models';
+import { requestAsOfText } from '../../stores/analytics.store';
 import { CalendarMetric, CalendarStore } from '../../stores/calendar.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Hint } from '../../ui/hint';
+import { IncompleteNote } from '../../ui/incomplete-note';
+import { MarketValue } from '../../ui/market-value';
+import { PnlBasis } from '../../ui/pnl-basis';
+import { Spinner } from '../../ui/spinner';
 import { Viewport, ViewportService } from '../../ui/breakpoints';
 import { ABSENT, dateTime, money, rMultiple } from '../../ui/format';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
@@ -29,7 +35,10 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Drawer, Hint, Panel, Page, RouterLink, Select, StatStrip, StatTile, Async],
+  imports: [
+    Button, ControlRow, Drawer, Hint, Panel, Page, RouterLink, Select, StatStrip, StatTile, Async,
+    IncompleteNote, MarketValue, NgTemplateOutlet, PnlBasis, Spinner,
+  ],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
   // so this workspace defaults to the presentation register. On the host
   // (a static class, not a template wrapper) because :host IS the grid
@@ -51,6 +60,23 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
         @if (store.error(); as message) {
           <span class="stale" role="status">{{ message }}</span>
         }
+        <!-- v204: the snapshot age of a default month, or the request clock of
+             a filtered one; wraps under the title on a phone. -->
+        <ng-template #asOf let-meta>
+          @if (meta) {
+            <span class="as-of">
+              @if (meta.source === 'snapshot') {
+                <sb-market-value kind="snapshot" [asOf]="null" [computedAt]="meta.computed_at"
+                  [staleInputs]="meta.stale_inputs" [refreshing]="meta.refreshing" [error]="meta.error" />
+              } @else {
+                <span class="req-as-of">{{ requestAsOf(meta) }}</span>
+                @if (meta.refreshing) { <sb-spinner label="Refreshing" /> }
+              }
+              <sb-incomplete-note [missing]="meta.missing_count" />
+            </span>
+          }
+        </ng-template>
+        <ng-container *ngTemplateOutlet="asOf; context: { $implicit: store.meta() }" />
       </div>
 
       <!-- v195 §5.2: the scope bar holds the month and the filters only. -->
@@ -123,6 +149,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
             <sb-stat-tile class="longest-hold" label="Longest holding time"
                           [value]="longestHoldValue()" [hint]="store.longestHold()?.ticker ?? undefined" />
           </sb-stat-strip>
+          <p class="pnl-basis-line"><sb-pnl-basis /></p>
         </sb-panel>
         @if (monthFxMissing() > 0) {
           <p class="fx-caveat" role="note">{{ fxText(monthFxMissing()) }}</p>
@@ -341,6 +368,8 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     :host { display: block; min-width: 0; }
     /* contents: sb-page's actions slot lays the status out. */
     .head-status { display: contents; }
+    .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-faint); min-width: 0; }
+    .pnl-basis-line { margin: var(--space-6) 0 0; min-width: 0; }
     /* All-time, so it reads across the whole width beside nothing. */
     .weekday-panel { grid-column: 1 / -1; }
 
@@ -493,6 +522,7 @@ export class Calendar {
   readonly store = inject(CalendarStore);
   private readonly connection = inject(ConnectionStore);
   private readonly viewportService = inject(ViewportService);
+  protected readonly requestAsOf = requestAsOfText;
 
   /** Test override — jsdom resolves no media query. */
   readonly viewportAt = input<Viewport | null>(null);

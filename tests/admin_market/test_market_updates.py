@@ -26,11 +26,11 @@ def changes(monkeypatch):
 def test_without_since_only_status_is_filled(on_client, market, changes):
     market.heartbeat.row = _beat(10)
     body = on_client.get("/api/v1/market/updates").get_json()
-    assert body["quotes"] == [] and "snapshots" not in body
+    assert body["quotes"] == [] and body["snapshots"] == []
     datetime.fromisoformat(body["cursor"])
     status = body["status"]
     assert status["session"] == "regular" and status["stale_price_s"] == 120
-    assert "stale_snapshot_s" not in status
+    assert status["stale_snapshot_s"] == 600.0
     assert status["heartbeat"]["stalled"] is False and status["heartbeat"]["cadence_s"] == 30.0
     assert status["last_close_at"] is not None
 

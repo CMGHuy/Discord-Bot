@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiClient } from '../api/api-client';
 import { EventStream } from '../api/event-stream';
-import { MarketStatus, MarketUpdates, QuoteUpdate, RowQuoteFields } from '../api/models';
+import { MarketStatus, MarketUpdates, QuoteUpdate, RowQuoteFields, SnapshotUpdate } from '../api/models';
 import { LOCAL_REFRESH_TIMEOUT_MS, LiveValuesStore, STATUS_POLL_MS, overlayQuote } from './live-values.store';
 
 class FakeEventStream {
@@ -62,6 +62,7 @@ describe('LiveValuesStore (v201)', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.setSystemTime(Date.parse('2026-10-29T14:00:00Z'));
     events = new FakeEventStream();
     api = { marketUpdates: vi.fn(), refreshMarket: vi.fn(() => of({ queued: 1 })) };
     TestBed.configureTestingModule({
@@ -154,6 +155,76 @@ describe('LiveValuesStore (v201)', () => {
     const row = overlayQuote<RowQuoteFields>({ price_refreshing: true }, { ...update!, refreshing: false });
     expect(row.price_refreshing).toBe(false);
     expect(row.price_error).toBe('no quote');
+  });
+
+  const olderSnapshot: SnapshotUpdate = {
+    key: 'risk', computed_at: '2026-10-29T13:55:00Z',
+    stale_inputs: false, refreshing: false, error: null,
+  };
+  const snapshotReply = (snapshots: SnapshotUpdate[]): MarketUpdates =>
+    ({ ...reply('c1'), snapshots });
+
+  it('merges snapshot updates by key with the last entry winning', () => {
+    const next = { ...olderSnapshot, stale_inputs: true };
+    const month = { ...olderSnapshot, key: 'calendar:2026-10' };
+    const store = make([of(reply('c0')), of(snapshotReply([olderSnapshot, month, next]))]);
+    const risk = store.snapshot('risk');
+    raiseMarket();
+    expect(risk()).toEqual(next);
+    expect(store.snapshot('risk')).toBe(risk);
+    expect(store.snapshot('calendar:2026-10')()).toEqual(month);
+  });
+
+  it('handles a reply without snapshots from an older server', () => {
+    const store = make([of(reply('c0')), of(reply('c1'))]);
+    raiseMarket();
+    expect(store.snapshot('risk')()).toBeNull();
+  });
+
+  it('marks snapshots immediately and posts both refresh lists', () => {
+    const store = make([of(reply('c0'))]);
+    store.requestRefresh([], ['risk']);
+    expect(store.snapshot('risk')()).toEqual({
+      key: 'risk', computed_at: null, stale_inputs: false, refreshing: true, error: null,
+    });
+    expect(api.refreshMarket).toHaveBeenCalledWith({ symbols: [], snapshots: ['risk'] });
+  });
+
+  it('keeps the snapshot spinner on when an older row arrives', () => {
+    const store = make([of(reply('c0')), of(snapshotReply([olderSnapshot]))]);
+    store.requestRefresh([], ['risk']);
+    raiseMarket();
+    expect(store.snapshot('risk')()).toEqual({ ...olderSnapshot, refreshing: true });
+  });
+
+  it('clears the snapshot spinner when a newer build finishes', () => {
+    const newer = { ...olderSnapshot, computed_at: '2026-10-29T14:01:00Z' };
+    const store = make([of(reply('c0')), of(snapshotReply([newer]))]);
+    store.requestRefresh([], ['risk']);
+    raiseMarket();
+    expect(store.snapshot('risk')()?.refreshing).toBe(false);
+  });
+
+  it('clears the snapshot spinner when a build errors', () => {
+    const error = 'budget exceeded after 90s';
+    const store = make([of(reply('c0')), of(snapshotReply([{ ...olderSnapshot, error }]))]);
+    store.requestRefresh([], ['risk']);
+    raiseMarket();
+    expect(store.snapshot('risk')()).toEqual({ ...olderSnapshot, error });
+  });
+
+  it('clears the local snapshot mark after LOCAL_REFRESH_TIMEOUT_MS', () => {
+    const store = make([of(reply('c0'))]);
+    store.requestRefresh([], ['risk']);
+    vi.advanceTimersByTime(LOCAL_REFRESH_TIMEOUT_MS);
+    expect(store.snapshot('risk')()).toBeNull();
+  });
+
+  it('clears the local snapshot mark when the POST errors', () => {
+    const store = make([of(reply('c0'))]);
+    api.refreshMarket.mockReturnValue(throwError(() => new Error('down')));
+    store.requestRefresh([], ['risk']);
+    expect(store.snapshot('risk')()).toBeNull();
   });
 
   it('a failed sync keeps every value and the cursor', () => {

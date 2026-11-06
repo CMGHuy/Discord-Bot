@@ -1,0 +1,598 @@
+{
+  "by": {
+    "badge": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "unknown",
+        "losses": 6,
+        "n": 12,
+        "profit_factor": 1.25,
+        "total_pnl": 120.0,
+        "total_r": 2.4,
+        "win_rate": 50.0,
+        "wins": 6
+      }
+    ],
+    "confidence": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "3",
+        "losses": 6,
+        "n": 12,
+        "profit_factor": 1.25,
+        "total_pnl": 120.0,
+        "total_r": 2.4,
+        "win_rate": 50.0,
+        "wins": 6
+      }
+    ],
+    "confluence": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "unknown",
+        "losses": 6,
+        "n": 12,
+        "profit_factor": 1.25,
+        "total_pnl": 120.0,
+        "total_r": 2.4,
+        "win_rate": 50.0,
+        "wins": 6
+      }
+    ],
+    "direction": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "bullish",
+        "losses": 6,
+        "n": 12,
+        "profit_factor": 1.25,
+        "total_pnl": 120.0,
+        "total_r": 2.4,
+        "win_rate": 50.0,
+        "wins": 6
+      }
+    ],
+    "dow": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "Monday",
+        "losses": 1,
+        "n": 2,
+        "profit_factor": 1.25,
+        "total_pnl": 20.0,
+        "total_r": 0.4,
+        "win_rate": 50.0,
+        "wins": 1
+      },
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "Sunday",
+        "losses": 1,
+        "n": 2,
+        "profit_factor": 1.25,
+        "total_pnl": 20.0,
+        "total_r": 0.4,
+        "win_rate": 50.0,
+        "wins": 1
+      },
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "Saturday",
+        "losses": 1,
+        "n": 2,
+        "profit_factor": 1.25,
+        "total_pnl": 20.0,
+        "total_r": 0.4,
+        "win_rate": 50.0,
+        "wins": 1
+      },
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "Friday",
+        "losses": 1,
+        "n": 2,
+        "profit_factor": 1.25,
+        "total_pnl": 20.0,
+        "total_r": 0.4,
+        "win_rate": 50.0,
+        "wins": 1
+      },
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "Thursday",
+        "losses": 1,
+        "n": 2,
+        "profit_factor": 1.25,
+        "total_pnl": 20.0,
+        "total_r": 0.4,
+        "win_rate": 50.0,
+        "wins": 1
+      },
+      {
+        "avg_r": 2.0,
+        "expectancy_r": 2.0,
+        "key": "Wednesday",
+        "losses": 0,
+        "n": 1,
+        "profit_factor": null,
+        "total_pnl": 100.0,
+        "total_r": 2.0,
+        "win_rate": 100.0,
+        "wins": 1
+      },
+      {
+        "avg_r": -1.6,
+        "expectancy_r": -1.6,
+        "key": "Tuesday",
+        "losses": 1,
+        "n": 1,
+        "profit_factor": 0.0,
+        "total_pnl": -80.0,
+        "total_r": -1.6,
+        "win_rate": 0.0,
+        "wins": 0
+      }
+    ],
+    "horizon": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "1m",
+        "losses": 6,
+        "n": 12,
+        "profit_factor": 1.25,
+        "total_pnl": 120.0,
+        "total_r": 2.4,
+        "win_rate": 50.0,
+        "wins": 6
+      }
+    ],
+    "ledger": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "main",
+        "losses": 6,
+        "n": 12,
+        "profit_factor": 1.25,
+        "total_pnl": 120.0,
+        "total_r": 2.4,
+        "win_rate": 50.0,
+        "wins": 6
+      },
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "weak",
+        "losses": 1,
+        "n": 2,
+        "profit_factor": 1.25,
+        "total_pnl": 20.0,
+        "total_r": 0.4,
+        "win_rate": 50.0,
+        "wins": 1
+      }
+    ],
+    "month": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "2026-06",
+        "losses": 1,
+        "n": 2,
+        "profit_factor": 1.25,
+        "total_pnl": 20.0,
+        "total_r": 0.4,
+        "win_rate": 50.0,
+        "wins": 1
+      },
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "2026-05",
+        "losses": 1,
+        "n": 2,
+        "profit_factor": 1.25,
+        "total_pnl": 20.0,
+        "total_r": 0.4,
+        "win_rate": 50.0,
+        "wins": 1
+      },
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "2026-04",
+        "losses": 1,
+        "n": 2,
+        "profit_factor": 1.25,
+        "total_pnl": 20.0,
+        "total_r": 0.4,
+        "win_rate": 50.0,
+        "wins": 1
+      },
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "2026-03",
+        "losses": 1,
+        "n": 2,
+        "profit_factor": 1.25,
+        "total_pnl": 20.0,
+        "total_r": 0.4,
+        "win_rate": 50.0,
+        "wins": 1
+      },
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "2026-02",
+        "losses": 1,
+        "n": 2,
+        "profit_factor": 1.25,
+        "total_pnl": 20.0,
+        "total_r": 0.4,
+        "win_rate": 50.0,
+        "wins": 1
+      },
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "2026-01",
+        "losses": 1,
+        "n": 2,
+        "profit_factor": 1.25,
+        "total_pnl": 20.0,
+        "total_r": 0.4,
+        "win_rate": 50.0,
+        "wins": 1
+      }
+    ],
+    "rs_quintile": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "unknown",
+        "losses": 6,
+        "n": 12,
+        "profit_factor": 1.25,
+        "total_pnl": 120.0,
+        "total_r": 2.4,
+        "win_rate": 50.0,
+        "wins": 6
+      }
+    ],
+    "source": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "unknown",
+        "losses": 6,
+        "n": 12,
+        "profit_factor": 1.25,
+        "total_pnl": 120.0,
+        "total_r": 2.4,
+        "win_rate": 50.0,
+        "wins": 6
+      }
+    ],
+    "strategy": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "VWAP",
+        "losses": 6,
+        "n": 12,
+        "profit_factor": 1.25,
+        "total_pnl": 120.0,
+        "total_r": 2.4,
+        "win_rate": 50.0,
+        "wins": 6
+      }
+    ],
+    "taken": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "paper",
+        "losses": 6,
+        "n": 12,
+        "profit_factor": 1.25,
+        "total_pnl": 120.0,
+        "total_r": 2.4,
+        "win_rate": 50.0,
+        "wins": 6
+      }
+    ],
+    "ticker": [
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "SAP.DE",
+        "losses": 2,
+        "n": 4,
+        "profit_factor": 1.25,
+        "total_pnl": 40.0,
+        "total_r": 0.8,
+        "win_rate": 50.0,
+        "wins": 2
+      },
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "MSFT",
+        "losses": 2,
+        "n": 4,
+        "profit_factor": 1.25,
+        "total_pnl": 40.0,
+        "total_r": 0.8,
+        "win_rate": 50.0,
+        "wins": 2
+      },
+      {
+        "avg_r": 0.19999999999999996,
+        "expectancy_r": 0.19999999999999996,
+        "key": "AAPL",
+        "losses": 2,
+        "n": 4,
+        "profit_factor": 1.25,
+        "total_pnl": 40.0,
+        "total_r": 0.8,
+        "win_rate": 50.0,
+        "wins": 2
+      }
+    ]
+  },
+  "calibration": {
+    "deciles": [],
+    "drift": [],
+    "levels": [
+      {
+        "expectancy_r": null,
+        "level": 1,
+        "n": 0,
+        "win_rate": null
+      },
+      {
+        "expectancy_r": null,
+        "level": 2,
+        "n": 0,
+        "win_rate": null
+      },
+      {
+        "expectancy_r": 0.19999999999999996,
+        "level": 3,
+        "n": 12,
+        "win_rate": 50.0
+      },
+      {
+        "expectancy_r": null,
+        "level": 4,
+        "n": 0,
+        "win_rate": null
+      },
+      {
+        "expectancy_r": null,
+        "level": 5,
+        "n": 0,
+        "win_rate": null
+      }
+    ],
+    "live_loss_watch": {
+      "counts": {
+        "manual_close": 0,
+        "no_entry_date": 0,
+        "no_r": 0,
+        "no_source": 0,
+        "unknown_strategy": 0
+      },
+      "rows": []
+    }
+  },
+  "drawdown": [
+    {
+      "date": "2026-01-05",
+      "dd_pct": 0.0
+    },
+    {
+      "date": "2026-01-08",
+      "dd_pct": 0.0
+    },
+    {
+      "date": "2026-01-23",
+      "dd_pct": 0.7921
+    },
+    {
+      "date": "2026-02-07",
+      "dd_pct": 0.0
+    },
+    {
+      "date": "2026-02-22",
+      "dd_pct": 0.7905
+    },
+    {
+      "date": "2026-03-09",
+      "dd_pct": 0.0
+    },
+    {
+      "date": "2026-03-24",
+      "dd_pct": 0.789
+    },
+    {
+      "date": "2026-04-08",
+      "dd_pct": 0.0
+    },
+    {
+      "date": "2026-04-23",
+      "dd_pct": 0.7874
+    },
+    {
+      "date": "2026-05-08",
+      "dd_pct": 0.0
+    },
+    {
+      "date": "2026-05-23",
+      "dd_pct": 0.7859
+    },
+    {
+      "date": "2026-06-07",
+      "dd_pct": 0.0
+    },
+    {
+      "date": "2026-06-22",
+      "dd_pct": 0.7843
+    }
+  ],
+  "equity_curve": {
+    "points": [
+      {
+        "balance": 10000.0,
+        "date": "2026-01-05",
+        "pnl": 0.0
+      },
+      {
+        "balance": 10100.0,
+        "date": "2026-01-08",
+        "pnl": 100.0
+      },
+      {
+        "balance": 10020.0,
+        "date": "2026-01-23",
+        "pnl": -80.0
+      },
+      {
+        "balance": 10120.0,
+        "date": "2026-02-07",
+        "pnl": 100.0
+      },
+      {
+        "balance": 10040.0,
+        "date": "2026-02-22",
+        "pnl": -80.0
+      },
+      {
+        "balance": 10140.0,
+        "date": "2026-03-09",
+        "pnl": 100.0
+      },
+      {
+        "balance": 10060.0,
+        "date": "2026-03-24",
+        "pnl": -80.0
+      },
+      {
+        "balance": 10160.0,
+        "date": "2026-04-08",
+        "pnl": 100.0
+      },
+      {
+        "balance": 10080.0,
+        "date": "2026-04-23",
+        "pnl": -80.0
+      },
+      {
+        "balance": 10180.0,
+        "date": "2026-05-08",
+        "pnl": 100.0
+      },
+      {
+        "balance": 10100.0,
+        "date": "2026-05-23",
+        "pnl": -80.0
+      },
+      {
+        "balance": 10200.0,
+        "date": "2026-06-07",
+        "pnl": 100.0
+      },
+      {
+        "balance": 10120.0,
+        "date": "2026-06-22",
+        "pnl": -80.0
+      }
+    ],
+    "skipped_n": 0
+  },
+  "overall": {
+    "expectancy_r": 0.19999999999999996,
+    "losses": 6,
+    "max_drawdown_pct": 0.7921,
+    "n": 12,
+    "profit_factor": 1.25,
+    "sharpe": 0.10638078975070422,
+    "sortino": 0.17677669529663687,
+    "streaks": {
+      "best_win_streak": 1,
+      "current": 1,
+      "current_kind": "loss",
+      "worst_loss_streak": 1
+    },
+    "total_pnl": 120.0,
+    "win_rate": 50.0,
+    "wins": 6
+  },
+  "r_multiples": [
+    -1.6,
+    2.0,
+    -1.6,
+    2.0,
+    -1.6,
+    2.0,
+    -1.6,
+    2.0,
+    -1.6,
+    2.0,
+    -1.6,
+    2.0
+  ],
+  "rolling_wr": [
+    {
+      "date": "2026-03-09",
+      "win_rate": 60.0
+    },
+    {
+      "date": "2026-03-24",
+      "win_rate": 50.0
+    },
+    {
+      "date": "2026-04-08",
+      "win_rate": 57.14
+    },
+    {
+      "date": "2026-04-23",
+      "win_rate": 50.0
+    },
+    {
+      "date": "2026-05-08",
+      "win_rate": 55.56
+    },
+    {
+      "date": "2026-05-23",
+      "win_rate": 50.0
+    },
+    {
+      "date": "2026-06-07",
+      "win_rate": 54.55
+    },
+    {
+      "date": "2026-06-22",
+      "win_rate": 50.0
+    }
+  ],
+  "weak": {
+    "expectancy_r": 0.19999999999999996,
+    "losses": 1,
+    "n": 2,
+    "total_pnl": 20.0,
+    "win_rate": 50.0,
+    "wins": 1
+  }
+}

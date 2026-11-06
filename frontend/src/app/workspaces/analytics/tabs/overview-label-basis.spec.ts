@@ -7,6 +7,8 @@ import { AnalyticsStore } from '../../../stores/analytics.store';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
 import { OverviewTab, winRateHint } from './overview';
+import { LiveValuesStore } from '../../../stores/live-values.store';
+import { FakeLiveValues } from '../../../testing/fake-live-values';
 
 /* v189 D6: scaled-out closes are labelled by net R from the deploy date and
  * not backfilled, so the win rate steps at deploy. The tile says so, and
@@ -45,6 +47,7 @@ describe('OverviewTab win-rate tile', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideRouter([]),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         { provide: AnalyticsStore, useValue: {
           unit: signal('r'), scopeN: signal(34), tableOpen: signal({}),
           performance: signal({
@@ -55,6 +58,7 @@ describe('OverviewTab win-rate tile', () => {
           }),
           performanceError: signal(null), equityCurve: signal(null), equityCurveError: signal(null),
           varianceBand: signal(null), varianceBandError: signal(null),
+          performanceMeta: signal(null), equityCurveMeta: signal(null),
           setTableOpen: () => {}, reload: () => {},
         } },
         { provide: ConnectionStore, useValue: { currency: signal('$') } },

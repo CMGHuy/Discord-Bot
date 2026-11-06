@@ -10,18 +10,21 @@ import { MarketValue } from './market-value';
 const NOW = Date.parse('2026-10-30T15:00:00Z'); // a Friday, regular hours
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString();
 const regular: MarketStatus = {
-  session: 'regular', last_close_at: '2026-10-29T20:00:00Z', stale_price_s: 120,
+  session: 'regular', last_close_at: '2026-10-29T20:00:00Z', stale_price_s: 120, stale_snapshot_s: 600,
   heartbeat: { beat_at: null, cadence_s: 30, stalled: false },
 };
 
 @Component({
   imports: [MarketValue],
-  template: `<sb-market-value [asOf]="a" [refreshing]="r" [error]="e">187.42</sb-market-value>`,
+  template: `<sb-market-value [asOf]="a" [refreshing]="r" [error]="e" [kind]="kind" [computedAt]="computedAt" [staleInputs]="staleInputs">187.42</sb-market-value>`,
 })
 class Host {
   a: string | null = ago(12);
   r = false;
   e: string | null = null;
+  kind: 'price' | 'snapshot' = 'price';
+  computedAt: string | null = null;
+  staleInputs = false;
 }
 
 describe('sb-market-value (v201)', () => {
@@ -108,6 +111,24 @@ describe('sb-market-value (v201)', () => {
   it('a stale price takes the stale tone', () => {
     const el = render({ a: ago(180) });
     expect(el.querySelector('.mv')?.getAttribute('data-tone')).toBe('stale');
+  });
+
+  it('shows the age and value of a fresh snapshot with a date-only input', () => {
+    const el = render({ kind: 'snapshot', a: '2026-10-28', computedAt: ago(180) });
+    expect(el.querySelector('.mv')?.getAttribute('data-tone')).toBe('fresh');
+    expect(el.querySelector('.mv-age')?.textContent?.trim()).toBe('3 min ago');
+    expect(el.querySelector<HTMLElement>('.mv-value')?.hidden).toBe(false);
+  });
+
+  it('shows a stale tone for a snapshot with stale inputs', () => {
+    const el = render({ kind: 'snapshot', a: '2026-10-28', computedAt: ago(180), staleInputs: true });
+    expect(el.querySelector('.mv')?.getAttribute('data-tone')).toBe('stale');
+  });
+
+  it('shows only the spinner for a snapshot waiting on its first build', () => {
+    const el = render({ kind: 'snapshot', a: '2026-10-28', r: true });
+    expect(el.querySelector<HTMLElement>('.mv-value')?.hidden).toBe(true);
+    expect(el.querySelector('sb-spinner')).not.toBeNull();
   });
 
   it('the age ticks with the clock', () => {

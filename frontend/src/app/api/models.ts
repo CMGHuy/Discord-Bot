@@ -52,16 +52,26 @@ export interface QuoteUpdate {
   error: string | null;
 }
 
+export interface SnapshotUpdate {
+  key: string;
+  computed_at: string | null;
+  stale_inputs: boolean;
+  refreshing: boolean;
+  error: string | null;
+}
+
 export interface MarketStatus {
   session: 'regular' | 'extended' | 'closed';
   last_close_at: string | null;
   stale_price_s: number | null;
+  stale_snapshot_s?: number | null;
   heartbeat: { beat_at: string | null; cadence_s: number; stalled: boolean };
 }
 
 export interface MarketUpdates {
   cursor: string;
   quotes: QuoteUpdate[];
+  snapshots?: SnapshotUpdate[];
   status: MarketStatus;
 }
 
@@ -497,6 +507,8 @@ export const TRADE_SORTABLE = [
 export interface EquitySeries {
   points: unknown[];
   change_pct: number | null;
+  /** v204: `source: "snapshot"`, or null/absent when the series build failed. */
+  market_meta?: MarketMeta | null;
 }
 
 export interface Dashboard {
@@ -576,6 +588,7 @@ export type DashboardScope = 'active' | 'today' | 'all' | 'range';
  * each holding one `StatRow` per group.
  */
 export interface AnalyticsSnapshot {
+  market_meta?: MarketMeta;
   built_at: string | null;
   overall: Record<string, unknown>;
   equity_curve: { points?: unknown[]; skipped_n?: number } | null;
@@ -663,6 +676,7 @@ export interface BookScope { from: string | null; to: string | null; ledger: Led
 export interface Scoped { scope: BookScope; n: number; }
 
 export interface AnalyticsEquityCurve extends Scoped {
+  market_meta?: MarketMeta;
   points: EquityCurvePoint[];
   points_n: number;
   as_of: string | null;
@@ -697,6 +711,7 @@ export interface AnalyticsByDimension extends Scoped {
 }
 
 export interface AnalyticsPerformance extends Scoped {
+  market_meta?: MarketMeta;
   totals: Record<string, unknown>;
   relocated: Record<string, unknown>;
   win_rate: number | null;
@@ -1515,6 +1530,7 @@ export interface RiskAvailability {
   distribution_metrics?: DomainAvailability;
   drawdown_r?: DomainAvailability;
   drawdown_amount?: DomainAvailability;
+  beta_spy?: DomainAvailability | 'zero_variance';
 }
 
 export interface LastKnownKillswitch {
@@ -1600,10 +1616,35 @@ export interface RiskMetrics {
  *  zero correlation is a finding, no data is not. */
 export interface Correlation {
   labels: string[];
-  values: (number | null)[][];
+  values: (number | null)[][] | null;
+  reason?: string | null;
+}
+
+export interface RiskBarsMeta {
+  per_symbol: Record<string, string>;
+  oldest: string | null;
+  newest: string | null;
+  stale_inputs: boolean;
+  missing: { symbol: string; reason: string }[];
+}
+
+export interface RiskFxMeta {
+  as_of: string | null;
+  missing: string[];
+}
+
+export interface RiskAccount {
+  balance: number | null;
+  currency: string;
 }
 
 export interface Risk {
+  market_meta?: MarketMeta;
+  computed_at?: string | null;
+  bars_meta?: RiskBarsMeta;
+  fx_meta?: RiskFxMeta;
+  lower_bound?: string[];
+  account?: RiskAccount;
   availability: RiskAvailability;
   heat: RiskHeat;
   positions: RiskPosition[] | null;
@@ -2231,6 +2272,7 @@ export interface CalendarLongestHold {
 }
 
 export interface PnlCalendar {
+  market_meta?: MarketMeta;
   /** Instant the server composed this filtered calendar response. */
   as_of: string;
   month: string;

@@ -189,6 +189,39 @@ def _gate_description(strategy: str) -> str:
     return f"{base} + {cells}" if cells else base
 
 
+def _snapshot_read_on(fresh: bool) -> tuple[dict, dict]:
+    """Refresher on: the stored analytics.snapshot row through the door, never a rebuild."""
+    from swingbot.admin import market_values
+    from swingbot.core.marketdata.shared import admin_refresh
+
+    if fresh:
+        market_values.request_refresh([], snapshots=[admin_refresh.SNAPSHOT_ANALYTICS])
+    snap = market_values.read_snapshot(admin_refresh.SNAPSHOT_ANALYTICS)
+    return snap["doc"] or {}, market_values.snapshot_meta(snap)
+
+
+def _snapshot_read_off(fresh: bool) -> tuple[dict, dict]:
+    """Kill switch: today's request-time file path, the only rebuild left in swingbot/admin."""
+    from swingbot.admin import market_values
+
+    if fresh:
+        refresh_snapshot()
+        doc = load_snapshot(max_age_seconds=3600) or {}
+    else:
+        doc = load_snapshot(max_age_seconds=3600) or refresh_snapshot() or {}
+    built = doc.get("built_at")
+    return doc, {**market_values.total_meta([]), "as_of": built, "computed_at": built}
+
+
+def analytics_snapshot_read(*, fresh: bool = False) -> tuple[dict, dict]:
+    """The analytics snapshot doc (never None) and its MarketMeta."""
+    from swingbot.core.marketdata.shared import admin_refresh
+
+    if admin_refresh.refresher_on():
+        return _snapshot_read_on(fresh)
+    return _snapshot_read_off(fresh)
+
+
 def _registry_rows() -> list[dict]:
     """Shared by /strategies (this task) and /api/registry (C9 -- api.py
     imports this instead of keeping its own copy). snap["by"]["strategy"]
@@ -206,7 +239,7 @@ def _registry_rows() -> list[dict]:
     key).
 
     v162: active_rows keeps one row per key, the active training source's."""
-    snap = load_snapshot(max_age_seconds=3600) or refresh_snapshot()
+    snap, _meta = analytics_snapshot_read()
     by_strategy_rows = ((snap or {}).get("by") or {}).get("strategy", [])
     by_strategy = {row["key"]: row for row in by_strategy_rows}
     drift_by_strategy = {d["strategy"]: d for d in ((snap or {}).get("calibration") or {}).get("drift") or []}

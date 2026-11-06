@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
+import { MarketMeta } from '../../../api/models';
 import { amount, pct } from '../../../ui/format';
+import { MarketValue } from '../../../ui/market-value';
+import { PnlBasis } from '../../../ui/pnl-basis';
 import { ChartTarget, TimeWindow, signTone } from './equity-range.model';
 import { EquityCandles } from './equity-candles';
 
@@ -19,7 +22,7 @@ import { EquityCandles } from './equity-candles';
 @Component({
   selector: 'sb-portfolio-value',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [EquityCandles],
+  imports: [EquityCandles, MarketValue, PnlBasis],
   template: `
     @if (balance() !== null) {
       <p class="figure">{{ money() }}</p>
@@ -33,12 +36,21 @@ import { EquityCandles } from './equity-candles';
       </p>
     }
 
+    @if (meta(); as m) {
+      <p class="as-of">
+        <sb-market-value kind="snapshot" [asOf]="null" [computedAt]="m.computed_at ?? null"
+          [staleInputs]="m.stale_inputs ?? false" [refreshing]="m.refreshing" [error]="m.error ?? null" />
+        <sb-pnl-basis />
+      </p>
+    }
+
     <sb-equity-candles [currency]="currency()" [target]="chartTarget()"
                        (rangeChange)="chartRangeChange.emit($event)"
                        (viewReset)="viewReset.emit()" />
   `,
   styles: `
     :host { display: block; }
+    .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-muted); min-width: 0; margin: 0 0 var(--space-10); }
     .figure {
       margin: 0;
       font-size: var(--text-title);
@@ -68,6 +80,8 @@ export class PortfolioValue {
   readonly viewReset = output<void>();
   readonly balance = input<number | null>(null);
   readonly changePct = input<number | null>(null);
+  /** v204: the 30-day series' snapshot clock; null from an older server. */
+  readonly meta = input<MarketMeta | null>(null);
   /** The API's 30-day `equity_30d` series. Still bound by
    *  `sb-trading-performance` and still served (spec v172 § 4 keeps it this
    *  release); no longer drawn here. Retiring it is a separate change. */

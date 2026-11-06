@@ -131,6 +131,8 @@ def test_risk_shape(logged_in):
         "clusters": (list, type(None)), "throttle": dict, "killswitch": dict,
         "availability": dict,
         "scan_health": dict, "metrics": dict, "correlation": dict,
+        "market_meta": dict, "computed_at": (str, type(None)), "bars_meta": dict,
+        "fx_meta": dict, "lower_bound": list, "account": dict,
     })
     assert_shape(body["heat"], {
         "open_pct": NULLABLE_NUMBER, "cap_pct": NULLABLE_NUMBER,
@@ -761,7 +763,7 @@ def test_a_conversion_failure_degrades_only_the_money_drawdown(logged_in, eur_ac
     def boom(rows, **kwargs):
         raise RuntimeError("rate store down")
 
-    monkeypatch.setattr("swingbot.admin.api_v1.money.to_account_currency", boom)
+    monkeypatch.setattr("swingbot.core.marketdata.fx_convert.to_account_currency", boom)
     seed_store("trades", [
         _closed_trade("c1", win=True), _closed_trade("c2", win=False),
         _settled("c3", pnl=-100.0, closed_at="2026-08-05T20:00:00+00:00"),
@@ -818,7 +820,9 @@ def projection_state(monkeypatch):
              "availability": {key: dict(ok) for key in
                               ("positions", "heat", "sector_heat", "clusters", "throttle", "killswitch")}}
     monkeypatch.setattr(portfolio_state, "collect_portfolio_state", lambda: state)
-    monkeypatch.setattr(risk, "_risk_metrics_and_correlation", lambda: ({}, {"labels": [], "values": []}, {}))
+    from swingbot.core.analytics import risk_payload
+    monkeypatch.setattr(risk, "_risk_metrics", lambda: risk_payload.RiskMetrics(
+        {}, {"labels": [], "values": []}, {}, {}, {}))
     monkeypatch.setattr(risk, "_scan_health", lambda: {})
     monkeypatch.setattr(throttle, "kill_state", lambda: {"on": False, "reason": None, "at": None})
     return state
@@ -998,7 +1002,8 @@ def test_distribution_market_failure_preserves_trade_metrics(distribution_inputs
     risk, _ = distribution_inputs
     monkeypatch.setattr(TradeLog, "get_trades", lambda self, status=None, **kw:
                         [_open_trade("open")] if status == "open" else [_closed_trade("closed")])
-    monkeypatch.setattr(risk, "_money_metric", lambda closed: ({"value": 0, "n": 1, "fx_missing_count": 0, "invalid_date_count": 0}, None))
+    from swingbot.core.analytics import risk_payload
+    monkeypatch.setattr(risk_payload, "_money_metric", lambda closed: ({"value": 0, "n": 1, "fx_missing_count": 0, "invalid_date_count": 0}, None))
     monkeypatch.setattr(risk, "_risk_bars", unavailable_read)
     metrics, _, availability = risk._risk_metrics_and_correlation()
     assert metrics["max_drawdown_r"]["n"] == 1
@@ -1034,7 +1039,8 @@ def test_distribution_unavailable_open_read_and_configured_benchmark(distributio
     risk, _ = distribution_inputs
     monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "QQQ")
     monkeypatch.setattr(TradeLog, "get_trades", lambda *args, **kwargs: None)
-    monkeypatch.setattr(risk, "_money_metric", lambda closed: ({"value": None, "n": 0, "fx_missing_count": 0, "invalid_date_count": 0}, None))
+    from swingbot.core.analytics import risk_payload
+    monkeypatch.setattr(risk_payload, "_money_metric", lambda closed: ({"value": None, "n": 0, "fx_missing_count": 0, "invalid_date_count": 0}, None))
     metrics, _, availability = risk._risk_metrics_and_correlation()
     assert metrics["benchmark_symbol"] == "QQQ"
     assert availability["distribution_metrics"]["reason"] == "positions_unavailable"
@@ -1044,7 +1050,9 @@ def test_distribution_availability_merges_without_mutating_cache(projection_clie
     from swingbot.admin.api_v1 import risk
     availability = {"distribution_metrics": {"state": "unavailable", "reason": "missing_fx",
                                              "checked_at": _DISTRIBUTION_CHECKED}}
-    monkeypatch.setattr(risk, "_risk_metrics_and_correlation", lambda: ({}, {"labels": [], "values": []}, availability))
+    from swingbot.core.analytics import risk_payload
+    monkeypatch.setattr(risk, "_risk_metrics", lambda: risk_payload.RiskMetrics(
+        {}, {"labels": [], "values": []}, availability, {}, {}))
     body = projection_client.get("/api/v1/risk").get_json()
     assert body["availability"]["distribution_metrics"] == availability["distribution_metrics"]
     assert body["availability"]["positions"] == projection_state["availability"]["positions"]
@@ -1081,7 +1089,8 @@ def test_distribution_failed_open_read_preserves_closed_metrics(distribution_inp
         return [_closed_trade("closed")]
 
     monkeypatch.setattr(TradeLog, "get_trades", trades)
-    monkeypatch.setattr(risk, "_money_metric", lambda closed: ({"value": 0, "n": 1, "fx_missing_count": 0, "invalid_date_count": 0}, None))
+    from swingbot.core.analytics import risk_payload
+    monkeypatch.setattr(risk_payload, "_money_metric", lambda closed: ({"value": 0, "n": 1, "fx_missing_count": 0, "invalid_date_count": 0}, None))
     metrics, _, availability = risk._risk_metrics_and_correlation()
     assert metrics["max_drawdown_r"]["n"] == 1
     assert metrics["max_drawdown_amount"]["n"] == 1
@@ -1102,7 +1111,8 @@ def test_distribution_invalid_frames_are_unavailable(distribution_inputs, monkey
 
 def test_distribution_computation_failure_is_sanitized(distribution_inputs, monkeypatch):
     risk, _ = distribution_inputs
-    monkeypatch.setattr(risk, "_market_values", unavailable_read)
+    from swingbot.core.analytics import risk_payload
+    monkeypatch.setattr(risk_payload, "_market_values", unavailable_read)
     metrics, corr, availability = risk._distribution_metrics([_open_trade("bad")], "SPY", _DISTRIBUTION_CHECKED)
     assert metrics["var_95"]["value"] is None
     assert corr["labels"] == ["AAPL"]
@@ -1244,12 +1254,12 @@ def test_closed_projection_money_partial_reasons(isolated_eur_account, missing, 
 
 
 def test_closed_projection_conversion_failure_preserves_r_and_market(distribution_inputs, monkeypatch):
-    from swingbot.admin.api_v1 import money
+    from swingbot.core.marketdata import fx_convert
     from swingbot.core.tracking.performance import TradeLog
     risk, _ = distribution_inputs
     monkeypatch.setattr(TradeLog, "get_trades", lambda self, status=None, **kw:
                         [_open_trade("open")] if status == "open" else [_closed_trade("closed")])
-    monkeypatch.setattr(money, "to_account_currency", unavailable_read)
+    monkeypatch.setattr(fx_convert, "to_account_currency", unavailable_read)
     metrics, _, availability = risk._risk_metrics_and_correlation()
     assert metrics["max_drawdown_r"]["n"] == 1
     assert availability["drawdown_r"]["state"] == "ok"

@@ -1,7 +1,7 @@
 import { Signal, WritableSignal, signal } from '@angular/core';
 import { vi } from 'vitest';
 
-import { MarketStatus, QuoteUpdate, RowQuoteFields } from '../api/models';
+import { MarketStatus, QuoteUpdate, RowQuoteFields, SnapshotUpdate } from '../api/models';
 import { overlayQuote } from '../stores/live-values.store';
 
 /**
@@ -13,6 +13,7 @@ export class FakeLiveValues {
   readonly status = signal<MarketStatus | null>(null);
   readonly requestRefresh = vi.fn();
   private readonly quotes = new Map<string, WritableSignal<QuoteUpdate | null>>();
+  private readonly snapshots = new Map<string, WritableSignal<SnapshotUpdate | null>>();
 
   private slot(symbol: string): WritableSignal<QuoteUpdate | null> {
     const key = symbol.toUpperCase();
@@ -26,6 +27,23 @@ export class FakeLiveValues {
 
   quote(symbol: string): Signal<QuoteUpdate | null> {
     return this.slot(symbol).asReadonly();
+  }
+
+  /** A snapshot key's live update; null until `setSnapshot` plays one. */
+  snapshot(key: string): Signal<SnapshotUpdate | null> {
+    let found = this.snapshots.get(key);
+    if (!found) {
+      found = signal<SnapshotUpdate | null>(null);
+      this.snapshots.set(key, found);
+    }
+    return found.asReadonly();
+  }
+
+  setSnapshot(key: string, update: Partial<SnapshotUpdate>): void {
+    this.snapshot(key);
+    this.snapshots.get(key)!.set({
+      key, computed_at: null, stale_inputs: false, refreshing: false, error: null, ...update,
+    });
   }
 
   set(symbol: string, update: Partial<QuoteUpdate>): void {

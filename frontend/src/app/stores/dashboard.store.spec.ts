@@ -7,6 +7,7 @@ import {
   ApplicationRef,
   Signal,
   WritableSignal,
+  computed,
   provideZonelessChangeDetection,
   signal,
 } from '@angular/core';
@@ -19,8 +20,9 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { Dashboard } from '../api/models';
+import { Dashboard, MarketMeta, SnapshotUpdate } from '../api/models';
 import { DashboardStore, RANGE_DEBOUNCE_MS } from './dashboard.store';
+import { LiveValuesStore } from './live-values.store';
 
 /* NG35/NG36 — the reference store, and the tracer bullet's data path.
  *
@@ -65,6 +67,17 @@ class FakeEventStream {
   }
 }
 
+function fakeLive(snaps = signal<Record<string, SnapshotUpdate>>({})) {
+  const live = {
+    snaps,
+    status: signal(null),
+    snapshot: (k: string) => computed(() => snaps()[k] ?? null),
+    quote: () => signal(null),
+    requestRefresh: vi.fn(),
+  };
+  return { live, provider: { provide: LiveValuesStore, useValue: live } };
+}
+
 const RESPONSE: Dashboard = {
   // SR53. Five counts, PENDING/ACTIVE/PARTIAL all-time and CLOSED/CANCELLED
   // today's only.
@@ -106,6 +119,7 @@ describe('DashboardStore', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
+        fakeLive().provider,
         DashboardStore,
       ],
     });
@@ -938,5 +952,82 @@ describe('DashboardStore', () => {
       expect(store.loading()).toBe(true);
       expect(store.error()).toBeNull();
     });
+  });
+});
+
+describe('DashboardStore snapshots (v204)', () => {
+  const SNAP_META: MarketMeta = {
+    as_of: '2026-10-29', refreshing: false, stale_count: 0, missing_count: 0, incomplete: false,
+    computed_at: '2026-10-29T14:00:00Z', stale_inputs: false, source: 'snapshot', error: null,
+  };
+  const upd = (computed_at: string | null, refreshing = false): SnapshotUpdate =>
+    ({ key: 'analytics.snapshot', computed_at, stale_inputs: false, refreshing, error: null });
+  const DASH_URL = (r: { url: string }) => r.url === '/api/v1/dashboard';
+
+  let live: ReturnType<typeof fakeLive>['live'];
+  let backend: HttpTestingController;
+  let store: InstanceType<typeof DashboardStore>;
+  const tick = () => TestBed.inject(ApplicationRef).tick();
+
+  const setup = (cached: Record<string, SnapshotUpdate> = {}) => {
+    const fake = fakeLive(signal(cached));
+    live = fake.live;
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor])),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+        fake.provider,
+        DashboardStore,
+      ],
+    });
+    store = TestBed.inject(DashboardStore);
+    backend = TestBed.inject(HttpTestingController);
+  };
+  const withMeta = { ...RESPONSE, equity_30d: { points: [], change_pct: 2, market_meta: SNAP_META } };
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('equityMeta merges the live analytics snapshot', () => {
+    setup();
+    tick();
+    backend.expectOne(DASH_URL).flush(withMeta);
+    expect(store.equityMeta()?.refreshing).toBe(false);
+    live.snaps.set({ 'analytics.snapshot': upd(null, true) });
+    expect(store.equityMeta()?.refreshing).toBe(true);
+  });
+
+  it('equityMeta is null from an older server', () => {
+    setup();
+    tick();
+    backend.expectOne(DASH_URL).flush(RESPONSE);
+    expect(store.equityMeta()).toBeNull();
+  });
+
+  it('a newer analytics snapshot refetches the dashboard once', () => {
+    setup();
+    tick();
+    backend.expectOne(DASH_URL).flush(withMeta);
+    live.snaps.set({ 'analytics.snapshot': upd('2026-10-29T14:05:00Z') });
+    tick();
+    vi.advanceTimersByTime(300);
+    tick();
+    expect(backend.match(DASH_URL)).toHaveLength(1);
+    // The same update again adds nothing.
+    live.snaps.set({ 'analytics.snapshot': upd('2026-10-29T14:05:00Z') });
+    tick();
+    vi.advanceTimersByTime(300);
+    tick();
+    expect(backend.match(DASH_URL)).toHaveLength(0);
+  });
+
+  it('still loads once at creation with a cached snapshot', () => {
+    setup({ 'analytics.snapshot': upd('2026-10-29T14:05:00Z') });
+    tick();
+    vi.advanceTimersByTime(300);
+    tick();
+    expect(backend.match(DASH_URL)).toHaveLength(1);
   });
 });
