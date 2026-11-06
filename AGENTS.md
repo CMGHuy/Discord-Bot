@@ -78,8 +78,10 @@ broker-neutral interface (`BROKER` in `.env`; v160 § Amendment, 2026-10-16). Un
 `docs/claude/etoro-roadmap.md`.
 
 **"Production" always means the Hetzner VM** (`docs/deploy/DEPLOY_HETZNER.md`),
-never this dev machine. Do not deploy, SSH to production or make live changes
-unless the user explicitly asks. **Always connect through
+never this dev machine. Do not deploy or make live changes unless the user
+explicitly asks; read-only access (logs, `docker ps`, read-only `psql`, status
+checks) through `ssh-hetzner.sh` is always allowed (standing permission,
+2026-11-06). **Always connect through
 `scripts/ops/ssh-hetzner.sh`** (a command, or bare for a shell; pipe stdin to
 run a script) -- never a raw `ssh`/`scp` or another key path; it is
 deliberately uncommitted (it shells through WSL to a key in WSL's home). **Any live fix or config change made on production must be mirrored back

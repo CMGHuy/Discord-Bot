@@ -58,6 +58,17 @@ def _write_heartbeat() -> None:
     })
 
 
+def record_tick_start(phase: str = "scan") -> None:
+    """Stamp that a real (in-session) scan tick has begun, and in which phase.
+
+    The stale-scan watchdog reads this to tell "a long tick is still running"
+    from "no tick has started at all"; success and failure clear it."""
+    _update_heartbeat({
+        "tick_started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "tick_phase": phase,
+    })
+
+
 def record_tick_success() -> bool:
     """Mark the tick as completed. Returns True iff this clears an active
     alert -- i.e. the caller should post a recovery notice."""
@@ -66,19 +77,34 @@ def record_tick_success() -> bool:
         "last_success": dt.datetime.now(dt.timezone.utc).isoformat(),
         "consecutive_failures": 0,
         "alert_active": False,
+        "tick_started_at": None,
+        "tick_phase": None,
+        "last_error": None,
     })
     return was_alerting
 
 
-def record_tick_failure() -> int:
+def record_tick_failure(exc: Exception | None = None) -> int:
     """Mark the tick as failed. Returns the new consecutive-failure count.
 
     Persisted rather than held in memory so a crash-looping container that
-    restarts does not reset its own outage counter.
+    restarts does not reset its own outage counter. `exc`, when given, is kept
+    as `last_error` so the stale-scan notice can name it.
     """
     failures = int(_read_heartbeat().get("consecutive_failures") or 0) + 1
-    _update_heartbeat({"consecutive_failures": failures})
+    fields = {"consecutive_failures": failures, "tick_started_at": None, "tick_phase": None}
+    if exc is not None:
+        fields["last_error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
+        fields["last_error_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    _update_heartbeat(fields)
     return failures
+
+
+def tick_snapshot() -> dict:
+    """The tick-progress keys the stale-scan notice explains itself with."""
+    beat = _read_heartbeat()
+    return {key: beat.get(key) for key in (
+        "tick_started_at", "tick_phase", "last_error", "last_error_at", "consecutive_failures")}
 
 
 def get_alert_active() -> bool:

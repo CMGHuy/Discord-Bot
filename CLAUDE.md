@@ -14,7 +14,7 @@ multi-method-confirmed support/resistance setups across swing horizons
 with charts. **Paper trades only** — it never places orders (roadmap: eToro demo, see below). Python 3.11+,
 discord.py, pandas/numpy, yfinance, mplfinance, pytest; JSON under `data/`.
 
-**"Production" always means the Hetzner VM** (`167.233.26.185`, `docs/deploy/DEPLOY_HETZNER.md`) — never this dev machine. **Always connect through `scripts/ops/ssh-hetzner.sh`** (uncommitted; WSL key) — never a raw `ssh`/`scp` or another key path: `bash scripts/ops/ssh-hetzner.sh "<cmd>"`, piping stdin for a script (`... "cd /opt/swing-bot && docker compose exec -T bot python -" < script.py`).
+**"Production" always means the Hetzner VM** (`167.233.26.185`, `docs/deploy/DEPLOY_HETZNER.md`) — never this dev machine. **Always connect through `scripts/ops/ssh-hetzner.sh`** (uncommitted; WSL key) — never a raw `ssh`/`scp` or another key path: `bash scripts/ops/ssh-hetzner.sh "<cmd>"`, piping stdin for a script (`... "cd /opt/swing-bot && docker compose exec -T bot python -" < script.py`). **Standing permission (2026-11-06): read-only production access through that script (logs, `docker ps`, read-only `psql`, status checks) is always allowed, by you or `prod-inspector`, no asking**; any change still needs `mirror-prod`.
 
 Far-off scheduled work (cron, `scripts/ops/`) also runs **on the VM**, never this laptop: `working-conventions.md` § Scheduling.
 
