@@ -74,7 +74,7 @@ class FakeEventStream {
   }
 
   /** v206: ConnectionStore patches the strip from this; null = fetch instead. */
-  payload(_name: 'scan'): Signal<ScanEventProgress | null> {
+  payload(): Signal<ScanEventProgress | null> {
     return signal<ScanEventProgress | null>(null).asReadonly();
   }
 }

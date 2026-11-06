@@ -138,7 +138,8 @@ export class EventStream {
    * malformed read as null -- the store's cue to fetch `/system/scan`
    * through its throttled fallback instead.
    */
-  payload(_name: 'scan'): Signal<ScanEventProgress | null> {
+  payload(name: 'scan'): Signal<ScanEventProgress | null>;
+  payload(): Signal<ScanEventProgress | null> {
     return this.scanPayloadView;
   }
 

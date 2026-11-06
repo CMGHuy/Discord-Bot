@@ -58,7 +58,7 @@ class FakeEventStream {
     return this.counterFor(name).asReadonly();
   }
 
-  payload(_name: 'scan'): Signal<ScanEventProgress | null> {
+  payload(): Signal<ScanEventProgress | null> {
     return this.scanPayload.asReadonly();
   }
 
