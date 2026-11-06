@@ -193,11 +193,11 @@ it), and split findings into still-firing versus historical
 Every trading and operational store is Postgres-only (v116): no JSON copy, no
 dual writes. Rollback is point-in-time: `scripts/ops/rollback_to.sh "<UTC>"
 [--dry-run]` on the VM (30 days; scanning restarts paused), with `pg_dump` files
-(90 days) as fallback (`DB_RESTORE.md`). A DB
+(90 days) as fallback. A DB
 write failure at issuance pauses scanning (`StoreWriteHalt`); unpause from the
 admin UI.
 
-Read the `docs/claude/` file first:
+Read the `docs/claude/` file:
 
 - `architecture.md`: changing `swingbot/core`, plan engine or scan pipeline.
 - `known-traps.md`: data caching (every provider call goes through `core/marketdata/shared/`), scan output, embeds, the 2% stop
@@ -220,8 +220,8 @@ Read the `docs/claude/` file first:
   on one baseline, cells/icons vertically centred, 44px hit areas on phone/tablet
   (`.sb-hit`), phone tables `compact`. Before merging a UI change,
   `node frontend/scripts/layout-audit.mjs --base http://localhost:1234` must
-  exit 0 (allow-list entries need a reason and date; never allow `hint`,
-  `rail-label` or `dock`).
+  exit 0 (allow-list entries need reason and date; never `hint`,
+  `rail-label`, `dock`). UI: `shots --clip <css selector>`, one page per task.
 
 ## Skills: the same ones Claude uses
 
@@ -240,7 +240,7 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 | About to change anything on the Hetzner VM | `mirror-prod` |
 | Creating, merging or removing a git worktree | `worktree-lifecycle` |
 | Mining the live book for ranked hypotheses: `trade-scout` dispatches the read-only `scout` agent per generator role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
-| Using the eToro Public API MCP (portfolio, instruments, real or demo trades) (outside the paper-only scope) | `etoro-public-api-operations` |
+| Using the eToro Public API MCP (portfolio, instruments, real or demo trades) (not paper-only) | `etoro-public-api-operations` |
 
 `task-brief` (fill a plan task's handoff with trap preflight) is not explicit-only: run it right after `task_handoff.py` writes a handoff.
 
@@ -341,7 +341,7 @@ python scripts/dev/testrun.py fast                    # ~27s, skips the slow tie
 python scripts/dev/testrun.py changed                 # only tests reaching your diff; widens to full when unsure
 python scripts/dev/testrun.py file tests/test_foo.py  # one file (~7s): use while iterating
 python -m pytest tests/test_foo.py::test_bar -v       # single test, raw pytest
-make check                                            # py_compile pass (no make on Windows: python -m py_compile)
+make check                                            # py_compile pass (Windows: python -m py_compile)
 python scripts/data/fetch_backtest_data.py            # populate the CSV cache (once, network); every backtest/grid needs it
 python scripts/backtest/run_backtest_range.py --train|--validation [--exit-model v2 --scale-out] [--strategy "RSI"] [--json out.json]
 python scripts/backtest/tune_strategy.py --strategy "RSI" --grid key=v1,v2 --exit-model v2 --scale-out   # TRAIN-only grid
