@@ -319,7 +319,13 @@ async function auditHints(page, width) {
       open: () => (touch ? trigger.tap({ timeout: 2000 }) : trigger.hover({ timeout: 2000 })),
       measure: async () => {
         await page.waitForTimeout(HINT_SETTLE_MS);
-        return page.evaluate(measureHint, await trigger.getAttribute('aria-describedby', { timeout: 2000 }));
+        const geometry = await page.evaluate(measureHint, await trigger.getAttribute('aria-describedby', { timeout: 2000 }));
+        // A still-loading tab can swap its KPI strip out mid-check: the popover then measures
+        // 0x0 because its trigger is gone, not because it failed to open. Skip that trigger.
+        if (await trigger.getAttribute('aria-label', { timeout: 500 }).catch(() => null) !== label) {
+          throw new Error('trigger replaced by a re-render');
+        }
+        return geometry;
       },
       close: () => closeHint(page, trigger, touch),
       onSkip: (step, reason) => console.error(`  hint "${label}" @${width}: cannot ${step} (${reason})`),
@@ -420,7 +426,9 @@ async function openSheet(page, width) {
     console.error(`  live strip @${width}: cannot tap (${String(error).split('\n')[0]})`);
     return null;
   }
-  await page.locator('sb-live-sheet [role=dialog]').waitFor({ state: 'visible', timeout: 2000 }).catch(() => null);
+  // 5 s, not 2: on a slow replica a still-rendering tab delayed a sheet that opens in ~100 ms
+  // once settled, and the run reported sheet-not-opened on a different tab each time.
+  await page.locator('sb-live-sheet [role=dialog]').waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
   await page.waitForTimeout(SHEET_SETTLE_MS);
   const sheet = await page.evaluate(measureSheet);
   await page.keyboard.press('Escape');
