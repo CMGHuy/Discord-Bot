@@ -390,7 +390,7 @@ Rollback, in this order: (1) redeploy the previous image (§ Rolling back).
 The old code never reads `admin_users`, so the table can stay and viewer
 accounts survive a later roll-forward; until then only the `.env` admin can
 sign in. (2) Only to remove it, run
-`docker compose exec -T bot alembic downgrade v205_001`
+`docker compose exec -T bot alembic downgrade v197_001`
 (the revision `v207_001` revises). This **drops `admin_users` and every
 viewer account**, and also rolls back every later revision stacked on top of
 `v207_001`, so check `alembic history` first.

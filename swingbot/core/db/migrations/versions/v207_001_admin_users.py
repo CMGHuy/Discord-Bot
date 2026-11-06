@@ -5,14 +5,14 @@ the table, so it can stay). This revision's downgrade drops the table and
 every viewer account with it.
 
 Revision ID: v207_001
-Revises: v205_001
+Revises: v197_001
 """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "v207_001"
-down_revision = "v205_001"   # = python -m alembic heads on the branch at implementation time
+down_revision = "v197_001"
 branch_labels = None
 depends_on = None
 
