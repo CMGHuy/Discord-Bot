@@ -13,6 +13,7 @@ import pandas as pd
 from swingbot import config
 from swingbot.core.market.session import nyse_calendar
 from swingbot.core.marketdata import data, yf_safe
+from swingbot.core.marketdata.providers import router
 
 BENCHMARK_SYMBOLS: tuple[str, ...] = ("SPY", "QQQ", "^IXIC", "^DJI")
 TOTAL_RETURN: frozenset[str] = frozenset({"SPY", "QQQ"})
@@ -126,7 +127,9 @@ def history_with_fallback(
 
 def latest_benchmark_prices(symbols: Sequence[str]) -> dict[str, float]:
     """Fetch fresh positive quotes for the Today card."""
-    prices = data.get_current_price_batch(list(symbols), allow_stale=False) or {}
+    prices = data.get_current_price_batch(
+        list(symbols), allow_stale=False, asker=router.current_asker(),
+    ) or {}
     return {
         symbol: float(price)
         for symbol, price in prices.items()

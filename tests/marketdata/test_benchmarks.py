@@ -7,6 +7,8 @@ import pytest
 
 from swingbot import config
 from swingbot.core.marketdata import benchmarks
+from swingbot.core.marketdata.providers import router
+from swingbot.core.marketdata.shared.kinds import Asker
 
 NOW = datetime(2026, 11, 4, 22, 0, tzinfo=timezone.utc)
 OCT30, NOV2, NOV3, NOV4 = date(2026, 10, 30), date(2026, 11, 2), date(2026, 11, 3), date(2026, 11, 4)
@@ -78,8 +80,8 @@ def test_a_total_return_symbol_without_adj_close_is_blank():
 
 
 def test_proxy_map_parses_on_the_last_equals(monkeypatch):
-    monkeypatch.setattr(config, "BENCHMARK_PROXY_SYMBOLS", " ^ixic=oneq , ^DJI=DIA,bad,=X", raising=False)
-    assert benchmarks.benchmark_proxy_map() == {"^IXIC": "ONEQ", "^DJI": "DIA"}
+    monkeypatch.setattr(config, "BENCHMARK_PROXY_SYMBOLS", " ^ixic=oneq , ^DJI=DIA,si=f=slv,bad,=X")
+    assert benchmarks.benchmark_proxy_map() == {"^IXIC": "ONEQ", "^DJI": "DIA", "SI=F": "SLV"}
 
 
 def test_fallback_uses_the_proxy_only_when_yahoo_is_blank(monkeypatch):
@@ -97,10 +99,10 @@ def test_fallback_uses_the_proxy_only_when_yahoo_is_blank(monkeypatch):
 
     calls.clear()
     rows = benchmarks.history_with_fallback(
-        "SPY", OCT30, sessions=SESSIONS, final_through=NOV3, now=NOW,
-        fetch=lambda symbols, start: calls.append(list(symbols)) or {"SPY": SPY})
-    assert calls == [["SPY"]]
-    assert {r["source_symbol"] for r in rows} == {"SPY"}
+        "^DJI", OCT30, sessions=SESSIONS, final_through=NOV3, now=NOW,
+        fetch=lambda symbols, start: calls.append(list(symbols)) or {"^DJI": SPY})
+    assert calls == [["^DJI"]]
+    assert {r["source_symbol"] for r in rows} == {"^DJI"}
 
 
 def test_fallback_without_a_proxy_is_empty(monkeypatch):
@@ -156,10 +158,15 @@ def test_intraday_row_is_skipped_rather_than_computed_from_nothing(prev, price):
 def test_latest_prices_never_take_a_stale_price(monkeypatch):
     seen = {}
 
-    def batch(tickers, *, allow_stale=True):
-        seen.update(tickers=tickers, allow_stale=allow_stale)
+    def batch(tickers, *, allow_stale=True, asker=Asker.SCAN):
+        seen.update(tickers=tickers, allow_stale=allow_stale, asker=asker)
         return {"SPY": 680.5, "^DJI": 0.0, "QQQ": None}
 
     monkeypatch.setattr(benchmarks.data, "get_current_price_batch", batch)
-    assert benchmarks.latest_benchmark_prices(["SPY", "QQQ", "^DJI"]) == {"SPY": 680.5}
-    assert seen == {"tickers": ["SPY", "QQQ", "^DJI"], "allow_stale": False}
+    with router.asker_scope(Asker.ADMIN_REFRESH):
+        assert benchmarks.latest_benchmark_prices(["SPY", "QQQ", "^DJI"]) == {"SPY": 680.5}
+    assert seen == {
+        "tickers": ["SPY", "QQQ", "^DJI"],
+        "allow_stale": False,
+        "asker": Asker.ADMIN_REFRESH,
+    }
