@@ -74,19 +74,23 @@ Two tracks, approved by the partner on 2026-11-05.
 
 ### Plans
 
-Two plans, because together the tracks exceed the 20-task cap. This
+Three plans, because together the tracks exceed the 20-task cap. This
 follows v206's precedent of several plans under one spec.
 
-1. **Plan v209** takes this spec's number and builds **Track 1**: the
-   detector, storage, wiring, notices, admin badge, the 2026-11-05 replay,
-   and the release in shadow mode.
-2. **Plan v210** (the next free number when it is written) builds **Track
-   2**: the screen runner's `CONTEXT_KIND = "level"` extension, the context
-   files, the two ideas, and their one-shot runs.
+1. **Plan v209** takes this spec's number and builds **Track 1** without
+   the notices and the admin badge: the detector, storage, wiring, the
+   2026-11-05 replay, and the release in shadow mode.
+2. **Plan v210** builds Track 1's **Discord notices and admin badge** (the
+   `market_shock` queue kind and notice, the tape `shock` object, the SPA
+   badge). It follows plan v209 and needs it merged.
+3. **The Track 2 plan** (the next free number when it is written, v211 or
+   later) builds **Track 2**: the screen runner's `CONTEXT_KIND = "level"`
+   extension, the context files, the two ideas, and their one-shot runs.
 
-   Its `**Spec:**` line points here. It does not depend on plan v209, and
-   it can run before, after or alongside it. It ends with `/panel` and
-   `/close-out` of this spec family once both plans are merged.
+   Its `**Spec:**` line points here. It does not depend on plans v209 or
+   v210, and it can run before, after or alongside them. It ends with
+   `/panel` and `/close-out` of this spec family once all three plans are
+   merged.
 
 ## Track 1 — the detector
 
@@ -183,6 +187,13 @@ Every field is declared in `swingbot/config.py`'s schema, in a new
 `MARKET_SHOCK_MODE`: `off | shadow | live`, default `shadow`. In this spec,
 `live` behaves exactly like `shadow`. A later spec gives `live` meaning,
 one screened behaviour at a time.
+**Binding on that later spec (partner, 2026-11-06): the focus is SHORT
+performance, and LONG issuing must work as normal on a bullish day.** Any
+live behaviour may touch longs only while the label is SHOCK (or RECOVERY,
+if screened); under NORMAL the long lane stays byte-identical to `off`,
+pinned by a regression test, and the screen must show NORMAL-day longs
+unchanged. Track 1 itself changes no long (see the plan's Global
+Constraints).
 
 ### Units
 

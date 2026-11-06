@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Bump:** bot minor, ui patch
+**Bump:** bot minor
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 **Spec:** [v209 — Market-shock detector](../specs/2026-11-05-v209-market-shock-detector-design.md) (main @ 437dd4d5; the spec's closing *Plan-briefer reconciliation* paragraph overrides earlier spec text; § What changes → *Plans* puts Track 1 in this plan and Track 2 in a separate one)
@@ -24,11 +24,11 @@ Once it ships, every scheduled scan pass in NYSE regular hours takes one
 prior close, sectors down, the speed of that drop, SPY/QQQ ATR moves, VIX
 level and change) and steps a **NORMAL → SHOCK → RECOVERY → NORMAL** state
 machine with hysteresis, minimum dwells, an open-settle rule and a cheap
-second-leg re-entry. The state is stored in two new tables, every new plan's
-`entry_context` gains `shock_state` (so the live book can measure shock
-cohorts directly), a `market_shock` notice goes to the ops channel on every
-transition (listing open longs with last price, open R and "THROUGH STOP" on
-entry into SHOCK), and the admin tape shows a NORMAL/SHOCK/RECOVERY badge.
+second-leg re-entry. The state is stored in two new tables, and every new
+plan's `entry_context` gains `shock_state` (so the live book can measure
+shock cohorts directly). Notices and admin badge: plan v210 (the
+`market_shock` ops-channel notice and the tape badge, carved out of this plan
+at the 20-task cap; it follows this one and consumes its contracts).
 In `shadow` mode, which is the default and the only meaning `live` has in
 this spec, **no trade changes**: no long blocked, no short issued, no stop
 moved. `MARKET_SHOCK_MODE=off` is a byte-identical kill switch.
@@ -37,8 +37,8 @@ moved. `MARKET_SHOCK_MODE=off` is a byte-identical kill switch.
 (`shock_support_break_short`, `shock_failed_bounce_short`, family
 `shock_breakdown`), the screen runner's `CONTEXT_KIND = "level"` path, the
 `BREADTH_ATR1` / `^VIX` context files, the `listing()` exclusion and the
-results/ledger rows are built by the plan the spec calls "plan v210", written
-later under the next free number with its `**Spec:**` line pointing at the
+results/ledger rows are built by the Track 2 plan, written later under the
+next free number (v211 or later) with its `**Spec:**` line pointing at the
 same spec. It neither depends on this plan nor blocks it, and it owns the
 `/close-out` of the spec itself; this plan's close-out moves only the v209
 plan files.
@@ -87,11 +87,8 @@ full session on production.
   `QualifyContext` (SHORT lane: from the lane dict);
   `params.stamp_entry_context` merges it into `entry_context` after the
   feature dict. Never in `FEATURE_KEYS`.
-- **Notices** (V209-9, V209-10): a third v197 queue kind `market_shock`
-  (validator, renderer, delivery dispatch); payload, open-long lines and the
-  rate limit in new `swingbot/core/scanning/shock_notices.py`.
-- **Admin** (V209-11): `/api/v1/market/tape` gains a `shock` object; the SPA
-  tape shows a badge.
+- **Notices and admin badge:** plan v210 (the `market_shock` queue kind and
+  notice, the tape API `shock` object, the SPA badge).
 - **Replay** (V209-12): a frozen 2026-11-05 fixture (Alpaca 15-minute bars,
   synthetic fallback recorded as such) replayed through `measure`/`step`.
 - **Release** (V209-13): production checks, rollback doc line, bump, deploy
@@ -100,12 +97,12 @@ full session on production.
   merged diff, then `/close-out` without a second bump.
 
 **Tech stack:** Python 3.11, SQLAlchemy + psycopg 3, Alembic, discord.py,
-Flask, pandas/numpy, pytest; Angular standalone components + signals,
-Vitest via `frontend/scripts/ng-test.mjs`.
+Flask, pandas/numpy, pytest.
 
 ## Global Constraints
 
 - **No trade changes.** `shadow` and `live` behave identically in this plan. No long is blocked, no short issued, no stop moved, no plan's levels, size or status altered by the detector.
+- **LONG issuing is unchanged on every day (partner, 2026-11-06).** This plan exists to measure for SHORT work; on a bullish or any other day the long lane issues exactly the plans, alerts, sizes and timings it issues today. Concretely: (a) long plans differ from pre-v209 only by the `entry_context["shock_state"]` record key under `shadow`/`live` and not at all under `off` (V209-8b pins it); (b) the shock pass adds **no network call of its own** to the scan's path before the plan builders: SPY and QQQ quotes ride the scan's existing one batched live-price fetch (V209-6b), and a pass that finds SPY unquoted records the reading without it instead of fetching (V209-6a); (c) a shock pass that raises or whose store is down leaves the scan's long plans byte-identical to a scan with the pass stubbed to `None` (V209-8b pins it); (d) nothing downstream of the plan builders (gates, ranking, heat, alert posting) reads `shock_state` in this plan.
 - **`MARKET_SHOCK_MODE=off` is a byte-identical kill switch:** no reading, no state write, no notice, no `entry_context["shock_state"]` key (absent, not `None`). Unknown mode values fall back to `off`. The nightly prune is retention, not detector behaviour: it trims old rows in every mode.
 - **`shock_state` is never added to `swingbot/core/edge/context.py:FEATURE_KEYS`** and never stamped by `entry_context()` itself; it is merged into `plan.entry_context` by `params.stamp_entry_context` after the feature dict is built, and also after a feature-build failure (so `{"shock_state": ...}` survives T3's `entry_context = {}` fallback).
 - **Only the scheduled `session_scan` steps the state** (`loops.py:252`, `step_shock=True` keyword), and only while **`swingbot/core/market/session.py:is_nyse_regular_session(now)`** is true (the spec's `is_regular_session` window narrowed to skip NYSE holidays and stop at a half-day close, because on those days the "live" quote is the last close and a zero-move reading would walk SHOCK into RECOVERY). Never gate on `data.is_us_market_active()`, `bot_core.in_session()` or plain `is_regular_session`. `!check` (`commands.py:199`), the recap (`recap.py:104`), the admin-UI scan (`loops.py:489`) and the SHORT lane read the stored label and never write.
@@ -119,14 +116,12 @@ Vitest via `frontend/scripts/ng-test.mjs`.
 - **Entry from NORMAL** needs the condition on **two consecutive** readings, and a reading with `minutes_since_open < SHOCK_OPEN_SETTLE_MIN` resets the streak to 0 and never counts. The open-settle rule also applies to RECOVERY → SHOCK re-entry; re-entry needs one qualifying reading, and "new SPY session low" needs an earlier reading in the same session.
 - **VIX:** read from the tape's `^VIX` row via `read_tape` (never fetches); a row older than `SHOCK_VIX_MAX_AGE_S` or missing ⇒ `vix_*` fields `None`. Prior VIX close = `price / (1 + change_pct/100)`. Session high = running max of readings this session. Missing VIX never blocks entry into SHOCK; it leaves the RECOVERY VIX clause unmet.
 - **RECOVERY → NORMAL** needs the RECOVERY conditions to hold on every reading for `RECOVERY_MIN_DWELL_MIN`; a reading where they fail resets the hold clock (`ShockState.hold_since = None`) without leaving RECOVERY unless a re-entry rule fires.
-- **Notice copy, exact.** Footer line on entry into SHOCK and on a second leg: `The bot moved no stop and closed nothing. Stop move-up and long block are pending screen (v209 Track 2).` Through-stop marker: `THROUGH STOP`. Otherwise: `stop at broker untouched: <stop:.2f>`. Unknown last price: `last n/a` and `stop status unknown: <stop:.2f>`. Zero open longs: `No open longs.`
-- **Rate limit:** at most one `market_shock` notice per `SHOCK_MIN_DWELL_MIN`, except any transition **into** SHOCK, which is always sent. Notices are routed to `config.DISCORD_CHANNEL_OPS_ID or config.DISCORD_CHANNEL_TRADES_ID`, computed in the worker thread (never `bot.get_channel` there). A notice is a plain status embed, never an alert embed.
+- Notice copy, rate limit, routing, the tape `shock` object and the badge rules: plan v210's Global Constraints. This plan's `MarketShockRepository.record(notice_event=)` keeps the hook v210 uses.
 - **The two existing queue kinds are untouched** (`trade_closed`, `plan_transition`): their validators, renderers and tests do not change.
 - **Revision id `v209_001`, `down_revision = "v197_001"`**, file `swingbot/core/db/migrations/versions/v209_001_market_shock.py`; working `downgrade()` dropping both tables; exactly one Alembic head. Neither table joins `TABLE_CHANNELS` (no SSE).
 - **No screen-runner, idea-module, context-file or ledger change** in this plan: those are Track 2's plan. `PARITY_DIGESTS` and `test_long_byte_identical.py` are not touched.
 - Every function written or changed < 15 cyclomatic complexity (`python scripts/dev/complexity_gate.py`); no legacy function's CC rises.
-- Every UI change is checked at 390 px, 820 px and 1440 px; the badge never truncates the tape and wraps below it on narrow widths; badge copy `NORMAL` / `SHOCK` / `RECOVERY`, and `VIX missing` when `vix_level` is null.
-- Narrow test runs only: backend `python scripts/dev/testrun.py file <test>`; frontend `node frontend/scripts/ng-test.mjs frontend --include <spec>`. **No task runs the full suite**; CI does after the push. A task whose tests reach Postgres runs `/replicate-prod-db` first (one shared `swing-db` container, port 56789, `.env` credentials never printed). Every new test file sits in an existing `tests/` directory, so `tests/suites.toml` is unchanged.
+- Narrow test runs only: `python scripts/dev/testrun.py file <test>`. **No task runs the full suite**; CI does after the push. A task whose tests reach Postgres runs `/replicate-prod-db` first (one shared `swing-db` container, port 56789, `.env` credentials never printed). Every new test file sits in an existing `tests/` directory, so `tests/suites.toml` is unchanged.
 - `.env` values are read, never printed; production is reached only through `bash scripts/ops/ssh-hetzner.sh`.
 - Commit steps run on the plan's worktree branch, never on `main`.
 
@@ -135,7 +130,7 @@ Vitest via `frontend/scripts/ng-test.mjs`.
 1. **Stale bars outside regular hours.** A pass at 08:00 ET (inside `is_us_market_active()`), at 22:00 Berlin (inside `in_session()`), on an NYSE holiday or after a half-day close must not write a reading. Owner: V209-6 (gate), V209-6b (only `loops.py:252` steps).
 2. **Overnight carry.** The first reading of a new session has `breadth_speed=None`, a new `vix_session_high`, a new SPY prior close; a gap-up repair reaches RECOVERY, a second leg down stays SHOCK. Owner: V209-4.
 3. **Kill switch.** Under `off`, a plan built by each of the three lanes and both rebuild paths has no `shock_state` key and is byte-identical to the pre-v209 plan. Owner: V209-7, V209-8, V209-8b.
-4. **Second leg notice.** RECOVERY → SHOCK inside the rate-limit window still enqueues. Owner: V209-10.
+4. **Second-leg notice** — moved to plan v210 (its Review Focus 1).
 5. **One transaction.** Reading, state row and notice event commit together or not at all; a failing enqueue leaves no reading. Owner: V209-5b.
 
 ## Parallelisation
@@ -146,10 +141,8 @@ Vitest via `frontend/scripts/ng-test.mjs`.
 | B detector | V209-2 → V209-2b → V209-3 → V209-4 | `swingbot/core/market/shock.py` + `tests/market/test_shock_*.py` | one module: 2b adds `measure` to 2's types, 3 adds `step` entry rules, 4 adds the exit/carry rules to 3's table |
 | C storage | V209-5 → V209-5b | `schema.py`, migration, `repositories/market_shock.py`, `loops.py` (`daily_recap` prune), `tests/db/*` | 5b's repository reads 5's tables; may run beside A and B (contract in the ledger) |
 | D wiring | V209-6 → V209-6a → V209-6b → V209-7 → V209-8 → V209-8b | `shock_scan.py`, `scan_run.py`, `loops.py:252`, `analyze.py`, `params.py`, `strategy_pass.py`, `qualify.py`, `short_run.py` | 6 needs A, B and 5b's repository; 6b edits `scan_run.py` and `loops.py` after 6 (and after 5b, which also edits `loops.py`); 7 edits `scan_run.py` after 6b and consumes its `shock_state` local; 8 consumes 6's `current_label` and 7's `stamp_entry_context` merge |
-| E notices | V209-9 → V209-10 | `lifecycle_events.py`, `lifecycle_notifications.py`, `shock_notices.py` (9 creates, 10 extends), `shock_scan.py` (10) | 9 needs only B's `LABELS`; 10 needs 5b's `record(notice_event=)`, 6's `run_shock_pass` and 9's kind; 10 edits `shock_scan.py` so it runs after 6 (and never beside 6b–8 touching the same function) |
-| F admin | V209-11 | `admin/api_v1/market.py`, `frontend/src/app/{api/models.ts,stores/tape-feed.ts,shell/tape/*}` | needs C's repository only; may run beside D/E |
-| G replay | V209-12 | `scripts/data/build_shock_replay_fixture.py`, `tests/fixtures/shock_replay_2026_11_05.json`, `tests/market/test_shock_replay_2026_11_05.py`, `tests/scripts/test_build_shock_replay_fixture.py` | needs B complete; may run beside C–F |
-| H release | V209-13 | `docs/deploy/DEPLOY_HETZNER.md`, `VERSION.json`, `swingbot/admin/version_history.json` | needs every task V209-1..V209-12 merged and CI green |
+| G replay | V209-12 → V209-12b | `scripts/data/build_shock_replay_fixture.py`, `tests/fixtures/shock_replay_2026_11_05.json`, `tests/market/test_shock_replay_2026_11_05.py`, `tests/scripts/test_build_shock_replay_fixture.py` | needs B complete; may run beside C and D |
+| H release | V209-13 | `docs/deploy/DEPLOY_HETZNER.md`, `VERSION.json`, `swingbot/admin/version_history.json` | needs V209-1..V209-8b and V209-12 merged and CI green |
 | I close-out | V209-14 | plan files (moved), `VERSION.json` untouched | needs V209-13 deployed and the shadow log writing on production |
 
 Track 2's plan shares no file with this plan, so the two may be implemented
@@ -167,17 +160,15 @@ in either order or side by side on separate worktrees.
 | V209-5 | `v209_001` tables, `PROMOTION_REASONS`, migration, schema test | 2 | opus | M `swingbot/core/db/schema.py` (two `register(...)` tables above `PROMOTION_REASONS`; two `PROMOTION_REASONS` entries at its end); C `swingbot/core/db/migrations/versions/v209_001_market_shock.py`; C `tests/db/test_v209_market_shock_schema.py`; M `tests/db/test_unknown_field_round_trip.py` (two `NOT_REPOSITORY_BACKED` entries) | `schema.market_shock_state`: `id` SmallInteger PK (always 1), `label` Text NOT NULL, `since` TIMESTAMPTZ NULL, `session_date` Date NULL, `vix_session_high` Float(53) NULL, `last_reading_id` BigInteger NULL FK → `market_shock_readings.id` ON DELETE SET NULL, `last_notice_at` TIMESTAMPTZ NULL, + `doc`, `updated_at`; `schema.market_shock_readings`: `id` BigInteger identity PK, `as_of` TIMESTAMPTZ NOT NULL (indexed), `session_date` Date NOT NULL, `state_after` Text NOT NULL, `breadth_frac`, `breadth_speed`, `spy_atr_move`, `qqq_atr_move`, `vix_level`, `vix_chg_pct`, `vix_off_high_pct` Float(53) NULL, `sectors_down`, `sectors_total`, `n_names` Integer NOT NULL, `insufficient` Boolean NOT NULL, + `doc`, `updated_at`; `schema.PROMOTION_REASONS["market_shock_state"]`, `["market_shock_readings"]`; Alembic revision `v209_001` (sole head) |
 | V209-5b | `MarketShockRepository` + nightly `_prune_shock_readings` | 2 | opus | C `swingbot/core/db/repositories/market_shock.py`; M `swingbot/commands/scanning/loops.py` (`_prune_shock_readings` beside `_prune_alert_posts`; one `await _prune_shock_readings()` line in `daily_recap`); C `tests/db/test_market_shock_repository.py`; C `tests/commands/test_shock_readings_prune.py` | `market_shock.LABELS` (restated, pinned equal to `shock.LABELS`); `market_shock_repo() -> MarketShockRepository` with `record(reading: dict, state: dict, *, state_after: str, notice_event: dict \| None = None, conn=None) -> int` (one transaction: insert reading with full `as_row()` in `doc`, upsert state row 1 with `last_reading_id` and `doc={"state": state}`, enqueue `notice_event` via `NotifyQueueRepository().enqueue(event, conn=)` and set `last_notice_at` when given; returns reading id), `current_state(*, conn=None) -> dict \| None` (keys `label`, `since`, `session_date`, `vix_session_high`, `last_reading_id`, `last_notice_at`, `updated_at`, `doc`), `latest_reading(*, conn=None) -> dict \| None` (stored `as_row()` + `id`, `state_after`), `prune_before(cutoff: datetime, *, conn=None) -> int`; `loops._prune_shock_readings() -> None` (async, never raises, every mode) |
 | V209-6 | `shock_scan.py`: mode, thresholds, VIX read, snapshot, step gate | 2 | opus | C `swingbot/core/scanning/shock_scan.py`; C `tests/scanning/test_shock_scan.py` | `shock_mode`, `THRESHOLD_ATTRS`, `thresholds_from_config`, `read_vix` (a proxied `^VIX` row counts as missing), `build_snapshot`, `should_step` |
-| V209-6a | `shock_scan.py`: `run_shock_pass`, `current_label` | 2 | opus | M `swingbot/core/scanning/shock_scan.py`; C `tests/scanning/test_shock_pass.py` | `run_shock_pass` and `current_label` with the signatures in Global Constraints (`current_label()` returns `None` when the store cannot be read, so that pass stamps no key); private `_stepped_pass(frames, live_prices, sector_of, quotes_at, spy_df, now, repo)` and `_load_prior(repo)` for V209-10 to extend |
+| V209-6a | `shock_scan.py`: `run_shock_pass`, `current_label` | 2 | opus | M `swingbot/core/scanning/shock_scan.py`; C `tests/scanning/test_shock_pass.py` | `run_shock_pass` and `current_label` with the signatures in Global Constraints (`current_label()` returns `None` when the store cannot be read, so that pass stamps no key); private `_stepped_pass(frames, live_prices, sector_of, quotes_at, spy_df, now, repo)` and `_load_prior(repo)` for plan v210's V210-2b to extend |
 | V209-6b | Scan wiring: `run_scan(step_shock=)`, `quotes_at`, `loops.py:252`, read-only callers | 3 | opus | M `swingbot/core/scanning/scan_run.py` (`run_scan`, `_run_scan_in_context`, `_sync_run_scan`: one `quotes_at` line + one `shock_state = shock_scan.run_shock_pass(...)` line); M `swingbot/commands/scanning/loops.py` (line 252 call adds `step_shock=True`); M `tests/scanning/test_run_scan_scan_id.py` (fake accepts `step_shock`); C `tests/commands/test_shock_step_gate.py` | `run_scan(..., *, step_shock: bool = False)`; `_sync_run_scan(..., step_shock: bool = False)` binds local `shock_state: str \| None` before the plan builders run; `!check`, recap and admin-UI scan pinned to `step_shock=False` |
 | V209-7 | Stamp `shock_state` on confluence, requote and strategy plans | 3 | opus | M `swingbot/core/planning/params.py` (`stamp_entry_context` merge); M `swingbot/core/scanning/analyze.py` (`attach_plan_v2(..., shock_state=None)`); M `swingbot/core/scanning/scan_run.py` (`_attach_item_plan`, `_rebuild_item`, the `functools.partial`, `_maybe_run_strategy_pass` + its `asof_of`); C `tests/scanning/test_shock_state_stamp.py`; C `tests/planning/test_stamp_entry_context_shock.py` | `attach_plan_v2(..., shock_state: str \| None = None)` (adds `"shock_state"` to the asof dict only when not `None`); `_attach_item_plan(item, scenario, df, regimes, regime, shock_state=None)`; `_rebuild_item(..., shock_state=None)`; `_maybe_run_strategy_pass(..., shock_state: str \| None = None)`; `stamp_entry_context` writes `plan.entry_context["shock_state"]` when `asof.get("shock_state") is not None`, after the feature dict and after the failure fallback |
 | V209-8 | SHORT lane reads the label via the lane dict | 3 | opus | M `swingbot/core/scanning/qualify.py` (`QualifyContext.shock_state`, `_attach_plan`); M `swingbot/core/scanning/short_run.py` (`_lane_state`, `_qualify_context`, `_bare_context`); C `tests/scanning/test_shock_short_lane.py` | `QualifyContext.shock_state: str \| None = None` (last field); `short_run._lane_state(reference, snapshot, regime)` dict gains `"shock_state": shock_scan.current_label()` (the only `current_label()` call per SHORT run); `_qualify_context(require_confirmation, frames, lane)` passes `lane.get("shock_state")`; `_bare_context(..., shock_state=None)` |
 | V209-8b | Byte-identical long/short plan pins under `off` and `shadow` | 3 | opus | C `tests/scanning/test_shock_plans_byte_identical.py` | none (regression pins only; six lanes × no-arg/`off`/`shadow`) |
-| V209-9 | `market_shock` notify-queue kind end to end | 4 | sonnet | M `swingbot/core/infra/lifecycle_events.py`; M `swingbot/core/scanning/lifecycle_notifications.py` (dispatch on kind); C `swingbot/core/scanning/shock_notices.py` (renderer half); C `tests/infra/test_lifecycle_events_market_shock.py`; C `tests/scanning/test_shock_notice_render.py` | `lifecycle_events.KINDS = ("trade_closed", "plan_transition", "market_shock")`; `_validate_shock_payload(payload)` requires `label` and `prior_label` in `shock.LABELS`, aware ISO `occurred_at`, dict `reading` (a `ShockReading.as_row()`), list `open_longs`, bool `entry_into_shock`; `shock_notices.build_shock_embed(event: dict) -> discord.Embed`; `shock_notices.long_line(row: dict) -> str` where `row = {"ticker", "entry", "stop", "last" (float \| None), "open_r" (float \| None), "age_min" (int), "through_stop" (bool)}`; `shock_notices.FOOTER` (exact copy in Global Constraints) |
-| V209-10 | Notice payload, open longs, rate limit, enqueue in the stepped pass | 4 | sonnet | M `swingbot/core/scanning/shock_notices.py`; M `swingbot/core/scanning/shock_scan.py` (`run_shock_pass` builds and passes `notice_event`); C `tests/scanning/test_shock_notice_payload.py` | `open_long_rows(trades: list[dict], last_prices: Mapping[str, float], now: datetime) -> list[dict]` (open trades with `direction == "bullish"`, sorted by ticker); `should_notify(prior_label: str, new_label: str, last_notice_at: datetime \| None, now: datetime, min_dwell_min: int) -> bool`; `notice_payload(prior: ShockState, new: ShockState, reading: ShockReading, open_longs: list[dict], now: datetime) -> dict`; `notice_event(payload: dict, *, as_of: datetime) -> dict` (`make_event(transition_id=f"market_shock:{as_of.isoformat()}", kind="market_shock", target_channel_id=config.DISCORD_CHANNEL_OPS_ID or config.DISCORD_CHANNEL_TRADES_ID, ...)`) |
-| V209-11 | Admin tape `shock` object + SPA badge at three widths | 4 | sonnet | M `swingbot/admin/api_v1/market.py` (`_shock_block()`, both returns of `tape()`); C `tests/admin/test_api_v1_tape_shock.py`; M `frontend/src/app/api/models.ts`; M `frontend/src/app/stores/tape-feed.ts` (+ spec); M `frontend/src/app/shell/tape/tape.ts`, `tape.css`, `tape.spec.ts` | API: `"shock": null` under `off` or no state row, else `{"label", "since", "as_of", "breadth_pct", "sectors_down", "sectors_total", "spy_atr_move", "qqq_atr_move", "vix_level", "vix_chg_pct", "vix_missing": bool}`; TS `TapeShock` with those keys, `TapeResponse.shock?: TapeShock \| null`; `TapeFeed.shock: Signal<TapeShock \| null>`; badge element `.shock-badge[data-label]` |
-| V209-12 | 2026-11-05 replay fixture (Alpaca, synthetic fallback) + replay test | 5 | sonnet | C `scripts/data/build_shock_replay_fixture.py`; C `tests/fixtures/shock_replay_2026_11_05.json`; C `tests/market/test_shock_replay_2026_11_05.py`; C `tests/scripts/test_build_shock_replay_fixture.py` | fixture JSON `{"source": "alpaca" \| "synthetic", "vix_interpolated": true, "note": str, "steps": [{"as_of", "minutes_since_open", "vix": {"level", "chg_pct"}, "spy": NameRow-dict, "qqq": NameRow-dict \| null, "names": [NameRow-dict]}]}`; replay asserts first SHOCK `as_of ≤ 2026-11-05T15:00:00Z` (earliest the settle + two-reading rules allow; reports how many of the 18 post-14:36 longs opened before it) |
-| V209-13 | Release: prod checks, rollback line, bump, deploy in `shadow` | 5 | opus | M `docs/deploy/DEPLOY_HETZNER.md` (image-only rollback line + `### v209: market shock tables` section); M `VERSION.json`; M `swingbot/admin/version_history.json` | production `MARKET_SHOCK_MODE=shadow`; verified `TAPE_SHARED_ENABLED`, `MARKETDATA_LAYER`, `DAILY_DELTA_FETCH`, live-price path; release commit `release(bot): <version> -- v209 market-shock detector (shadow)` (+ the `ui` line per `Bump:`) and its `chore(...)` regeneration commit, which V209-14 detects to skip a second bump |
-| V209-14 | `/panel` (staff-engineer, quant-researcher, veteran-trader) + `/close-out` without a second bump | 5 | sonnet | M (moved by `/close-out`) every v209 plan file (index + parts 1, 1b, 2, 3, 4, 5) `docs/superpowers/plans/2026-11-05-v209-market-shock-detector_*.md` → `docs/superpowers/plans/implemented/`; the spec stays in `specs/` (Track 2's plan is still live and closes it); `VERSION.json` and `version_history.json` **not** modified | none (last task). Double-bump guard: before `/close-out` Step 3, run `git log --oneline -- VERSION.json` and confirm the V209-13 `release(bot): ... -- v209` commit is present and `VERSION.json` still holds that version; if so, tell the close-out that the bump is already released (Steps 3–4 skipped, Step 5's prediction check still runs) and record `bump released in V209-13 (<sha>)` in the close-out commit message. If the release commit is missing, stop and report — never bump here |
+| V209-12 | 2026-11-05 replay fixture (Alpaca, synthetic fallback) + replay test | 5 | sonnet | C `scripts/data/build_shock_replay_fixture.py`; C `tests/fixtures/shock_replay_2026_11_05.json`; C `tests/scripts/test_build_shock_replay_fixture.py` | fixture JSON `{"source": "alpaca" \| "synthetic", "vix_interpolated": true, "note": str, "steps": [{"as_of", "minutes_since_open", "vix": {"level", "chg_pct"}, "spy": NameRow-dict, "qqq": NameRow-dict \| null, "names": [NameRow-dict]}]}`; replay asserts first SHOCK `as_of ≤ 2026-11-05T15:00:00Z` (earliest the settle + two-reading rules allow; reports how many of the 18 post-14:36 longs opened before it) |
+| V209-12b | Replay test over the 2026-11-05 fixture | 5 | sonnet | C `tests/market/test_shock_replay_2026_11_05.py` | none (asserts first SHOCK `as_of ≤ 2026-11-05T15:00:00Z`; reports longs opened before it from the fixture's `long_entries`) |
+| V209-13 | Release: prod checks, rollback line, bump, deploy in `shadow` | 5 | opus | M `docs/deploy/DEPLOY_HETZNER.md` (image-only rollback line + `### v209: market shock tables` section); M `VERSION.json`; M `swingbot/admin/version_history.json` | production `MARKET_SHOCK_MODE=shadow`; verified `TAPE_SHARED_ENABLED`, `MARKETDATA_LAYER`, `DAILY_DELTA_FETCH`, live-price path; release commit `release(bot): <version> -- v209 market-shock detector (shadow)` and its `chore(...)` regeneration commit, which V209-14 detects to skip a second bump |
+| V209-14 | `/panel` (staff-engineer, quant-researcher, veteran-trader) + `/close-out` without a second bump | 5 | sonnet | M (moved by `/close-out`) every v209 plan file (index + parts 1, 1b, 2, 3, 5) `docs/superpowers/plans/2026-11-05-v209-market-shock-detector_*.md` → `docs/superpowers/plans/implemented/`; the spec stays in `specs/` (Track 2's plan is still live and closes it); `VERSION.json` and `version_history.json` **not** modified | none (last task). Double-bump guard: before `/close-out` Step 3, run `git log --oneline -- VERSION.json` and confirm the V209-13 `release(bot): ... -- v209` commit is present and `VERSION.json` still holds that version; if so, tell the close-out that the bump is already released (Steps 3–4 skipped, Step 5's prediction check still runs) and record `bump released in V209-13 (<sha>)` in the close-out commit message. If the release commit is missing, stop and report — never bump here |
 
 ## Parts
 
@@ -187,11 +178,10 @@ in either order or side by side on separate worktrees.
 | 1b | `2026-11-05-v209-market-shock-detector_1b-detector-exit.md` | V209-4 | `step` exit and carry rules (split from part 1 at the 1500-line cap) — written, committed |
 | 2 | `2026-11-05-v209-market-shock-detector_2-storage-and-wiring.md` | V209-5, V209-5b, V209-6, V209-6a | `v209_001` tables + migration; repository + nightly prune; the `shock_scan.py` pass module |
 | 3 | `2026-11-05-v209-market-shock-detector_3-scan-wiring-and-stamp.md` | V209-6b, V209-7, V209-8, V209-8b | `run_scan(step_shock=)` wiring; label threading through every lane; byte-identical pins |
-| 4 | `2026-11-05-v209-market-shock-detector_4-notices-and-admin.md` | V209-9, V209-10, V209-11 | `market_shock` queue kind; notice content and rate limit; admin badge |
-| 5 | `2026-11-05-v209-market-shock-detector_5-replay-release-closeout.md` | V209-12, V209-13, V209-14 | 2026-11-05 replay; release in `shadow`; `/panel` + `/close-out` |
+| 5 | `2026-11-05-v209-market-shock-detector_5-replay-release-closeout.md` | V209-12, V209-12b, V209-13, V209-14 | 2026-11-05 replay; release in `shadow`; `/panel` + `/close-out` |
 
-17 ledger rows (`b` rows included); the 20-task cap leaves 3 spare slots for any `b` split a
-part writer reports.
+16 ledger rows (`b` rows included). Notices and admin badge (old V209-9..V209-11,
+part 4) moved to plan v210 (`2026-11-06-v210-market-shock-notices-and-badge_0-index.md`).
 
 ## Notes for part writers
 
@@ -217,16 +207,7 @@ part writer reports.
 - **`loops.py` is edited by V209-5b (prune) and V209-6b (line 252)**: the
   6b writer re-reads the line number after 5b's insertion rather than
   trusting `252`.
-- **Open longs** (V209-10) come from `singletons.trade_log.get_trades(status="open", limit=None)`
-  (rows with `entry`, `stop_loss`, `direction`, `opened_at`), last price from
-  the pass's `live_prices`. `open_r = (last − entry) / (entry − stop)`;
-  `through_stop = last <= stop`.
-- **Notice line format** (V209-9), one per open long:
-  `<TICKER> · entry <e:.2f> · stop <s:.2f> · last <l:.2f> · <r:+.2f>R · <age> · <marker>`,
-  age as `<h>h<mm>m` (or `<m>m` under an hour); marker per Global Constraints.
-  The transition headline: `Market state: <prior> → <new>` and a numbers
-  line `breadth <pct>% · sectors <down>/<total> · speed <+pp> · SPY <x:+.2f> ATR · QQQ <x:+.2f> ATR · VIX <lvl:.2f> (<chg:+.1f>%)`,
-  with `n/a` for any `None`.
+- **Open longs and the notice line format** moved with the notices to plan v210.
 - **The bump** is released in V209-13 (the deploy needs it); V209-14's
   `/close-out` reads `VERSION.json` and must not bump a second time — the
   task carries the guard in its ledger row.
