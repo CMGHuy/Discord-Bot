@@ -45,6 +45,9 @@ def no_network(monkeypatch):
                         lambda tickers, period="6mo": {})
     monkeypatch.setattr("swingbot.core.marketdata.backtest_cache.ensure_cached_background",
                         lambda t: None)
+    from swingbot.core.marketdata.backtest_cache import CacheResult
+    monkeypatch.setattr("swingbot.core.marketdata.backtest_cache.ensure_cached",
+                        lambda t, force=False: CacheResult(t, "ok", bars=500))
 
 
 @pytest.fixture(autouse=True)
@@ -216,6 +219,33 @@ def test_add_a_single_ticker(watchlist, logged_in):
     assert r.status_code == 200
     assert r.get_json()["added"] == ["AAPL"]
     assert watchlist.read() == ["AAPL"]
+
+
+def test_add_reports_the_found_company_and_history(watchlist, logged_in):
+    body = logged_in.post("/api/v1/watchlist/tickers", json={"tickers": ["NVDA"]}).get_json()
+    assert body["details"] == [{"symbol": "NVDA", "company_name": "NVDA Inc.", "bars": 500}]
+    assert body["not_found"] == []
+
+
+def test_a_symbol_with_no_market_data_is_not_added(watchlist, logged_in, monkeypatch):
+    from swingbot.core.marketdata.backtest_cache import CacheResult
+    monkeypatch.setattr(
+        "swingbot.core.marketdata.backtest_cache.ensure_cached",
+        lambda t, force=False: CacheResult(t, "failed", note="no data") if t == "ZZZZ"
+        else CacheResult(t, "ok", bars=300))
+    body = logged_in.post("/api/v1/watchlist/tickers",
+                          json={"tickers": ["AAPL", "ZZZZ"]}).get_json()
+    assert body["added"] == ["AAPL"]
+    assert body["not_found"] == ["ZZZZ"]
+    assert watchlist.read() == ["AAPL"]
+
+
+def test_a_lookup_crash_still_adds_the_symbol(watchlist, logged_in, monkeypatch):
+    def boom(t, force=False):
+        raise RuntimeError("network down")
+    monkeypatch.setattr("swingbot.core.marketdata.backtest_cache.ensure_cached", boom)
+    body = logged_in.post("/api/v1/watchlist/tickers", json={"tickers": ["AAPL"]}).get_json()
+    assert body["added"] == ["AAPL"]
 
 
 def test_one_endpoint_handles_bulk(watchlist, logged_in):

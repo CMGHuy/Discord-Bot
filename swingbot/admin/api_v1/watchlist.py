@@ -127,6 +127,34 @@ def _next_earnings(tickers: list[str]) -> dict[str, tuple[str | None, str | None
     return result
 
 
+def _lookup_new_symbols(tickers: list[str]) -> dict[str, int]:
+    """{symbol: bars cached} for every symbol the market-data provider knows.
+
+    Only a definite "no data" answer drops a symbol. Any other failure (a
+    thread that would not start, an unexpected exception) keeps it, since a
+    transient fault must not reject a real ticker; its history then warms on
+    the next scan instead.
+    """
+    from swingbot.core.marketdata.backtest_cache import ensure_cached
+
+    if not tickers:
+        return {}
+    found: dict[str, int] = {}
+    with ThreadPoolExecutor(max_workers=min(5, len(tickers))) as pool:
+        futures = {pool.submit(ensure_cached, t): t for t in tickers}
+        for fut in as_completed(futures):
+            ticker = futures[fut]
+            try:
+                result = fut.result()
+            except Exception:
+                found[ticker] = 0
+                continue
+            if result.status == "failed" and result.note == "no data":
+                continue
+            found[ticker] = result.bars
+    return found
+
+
 @api_v1.route("/watchlist/tickers", methods=["GET"])
 @require_auth
 def list_tickers():
@@ -167,7 +195,6 @@ def add_tickers():
     Reports per-symbol outcomes instead of failing the batch, so pasting
     thirty symbols with one typo adds twenty-nine and names the one.
     """
-    from swingbot.core.marketdata.backtest_cache import ensure_cached_background
     from swingbot.core.marketdata.watchlist import add_ticker, load_watchlist
 
     payload = request.get_json(silent=True) or {}
@@ -181,23 +208,34 @@ def add_tickers():
     candidates = [str(t).strip().upper() for t in raw if str(t).strip()]
     existing = set(load_watchlist())
 
-    added, already, invalid = [], [], []
-    for ticker in candidates:
+    already, invalid, fresh = [], [], []
+    for ticker in dict.fromkeys(candidates):
         if not _is_valid(ticker):
             invalid.append(ticker)
         elif ticker in existing:
             already.append(ticker)
         else:
-            add_ticker(ticker)
-            added.append(ticker)
+            fresh.append(ticker)
 
-    # Non-blocking history warm-up for genuinely new symbols; cached ones
-    # return instantly, so a re-import does not refetch.
+    # Look every new symbol up BEFORE adding it: this fetches and caches its
+    # price history (so the next scan has data), and a symbol Yahoo has no
+    # bars for is reported instead of joining the list as a dead row.
+    found = _lookup_new_symbols(fresh)
+    added = [t for t in fresh if t in found]
+    not_found = [t for t in fresh if t not in found]
     for ticker in added:
-        ensure_cached_background(ticker)
+        add_ticker(ticker)
+
+    # The company name resolves now (it is cached for the reload that follows);
+    # earnings dates warm on a daemon thread, exactly as the list endpoint does.
+    names = _company_names(added)
+    _next_earnings(added)
 
     return jsonify({
         "added": added, "already_present": already, "invalid": invalid,
+        "not_found": not_found,
+        "details": [{"symbol": t, "company_name": names.get(t), "bars": found[t]}
+                    for t in added],
         "total": len(load_watchlist()),
     })
 
