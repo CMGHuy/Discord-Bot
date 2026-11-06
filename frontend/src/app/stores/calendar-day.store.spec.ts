@@ -260,3 +260,134 @@ describe('CalendarDayStore', () => {
     expect(store.month()).toBeNull();
   });
 });
+
+/* v217 V217-4 (v205 P3-b): the day route carries prev_day / next_day, so the
+ * day page asks for no neighbouring month. The month lookup (`loadEdge`) is
+ * kept only for a field the route did not send (an older backend) and for a
+ * 404 day, whose body carries no fields. The existing edge specs above use
+ * `dayBody()` without the fields and stay as the fallback path. */
+describe('CalendarDayStore server neighbours (v217)', () => {
+  let store: InstanceType<typeof CalendarDayStore>;
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor])),
+        provideHttpClientTesting(),
+        CalendarDayStore,
+      ],
+    });
+    store = TestBed.inject(CalendarDayStore);
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  const open = (date: string) => {
+    store.setRoute(date, null, null);
+    store.resolve().subscribe();
+  };
+  const dayReq = () => backend.expectOne((r) => r.url === DAY_URL);
+  const monthReq = (month: string) =>
+    backend.expectOne((r) => r.url === MONTH_URL && r.params.get('month') === month);
+  const noMonth = (month: string) =>
+    backend.expectNone((r) => r.url === MONTH_URL && r.params.get('month') === month);
+  const withEdges = (prev: string | null, next: string | null): CalendarDayTrades =>
+    ({ ...dayBody([trade()]), prev_day: prev, next_day: next });
+  const NOT_FOUND = { error: { code: 'not_found', message: 'no closed trades' } };
+
+  it('takes both neighbours from the day response and asks for no adjacent month', () => {
+    open('2026-08-03');                                // first trading day of AUGUST
+    dayReq().flush(withEdges('2026-07-28', '2026-08-05'));
+    monthReq('2026-08').flush(AUGUST);
+    expect(store.prevDay()).toBe('2026-07-28');
+    expect(store.nextDay()).toBe('2026-08-05');
+    noMonth('2026-07');
+    noMonth('2026-09');
+    backend.expectOne((r) => r.url === SPARK_URL);     // the day still gets its sparklines
+    backend.verify();
+  });
+
+  it('finds a neighbour more than a month away from the server field alone', () => {
+    open('2026-08-10');                                // last trading day of AUGUST
+    dayReq().flush(withEdges('2026-08-05', '2026-11-02'));
+    monthReq('2026-08').flush(AUGUST);
+    expect(store.nextDay()).toBe('2026-11-02');        // the one-month lookup would have said null
+    expect(store.prevDay()).toBe('2026-08-05');
+    noMonth('2026-09');
+    noMonth('2026-07');
+  });
+
+  it('treats null at both ends as measured: no month lookup, no neighbour', () => {
+    open('2026-08-05');
+    dayReq().flush(withEdges(null, null));
+    monthReq('2026-08').flush(monthBody('2026-08', [cell('2026-08-05', 30)]));
+    expect(store.prevDay()).toBeNull();
+    expect(store.nextDay()).toBeNull();
+    expect(store.prevEdge()).toBeNull();
+    expect(store.nextEdge()).toBeNull();
+    noMonth('2026-07');
+    noMonth('2026-09');
+  });
+
+  it('lets the month grid neighbour win over the server field, as before', () => {
+    open('2026-08-05');
+    dayReq().flush(withEdges('2026-07-01', '2026-09-30'));
+    monthReq('2026-08').flush(AUGUST);
+    expect(store.prevDay()).toBe('2026-08-03');
+    expect(store.nextDay()).toBe('2026-08-10');
+    noMonth('2026-07');
+    noMonth('2026-09');
+  });
+
+  it('looks up the adjacent month only for the side the response did not send', () => {
+    open('2026-08-10');
+    dayReq().flush({ ...dayBody([trade()]), prev_day: '2026-08-05' });   // no next_day: older backend
+    monthReq('2026-08').flush(AUGUST);
+    monthReq('2026-09').flush(monthBody('2026-09', [cell('2026-09-02', 15)]));
+    expect(store.nextDay()).toBe('2026-09-02');
+    expect(store.prevDay()).toBe('2026-08-05');
+    noMonth('2026-07');
+  });
+
+  it('decides after both answers when the month answers first: fields present, no lookup', () => {
+    open('2026-08-03');
+    monthReq('2026-08').flush(AUGUST);
+    noMonth('2026-07');                                // nothing decided before the day answers
+    dayReq().flush(withEdges('2026-07-28', '2026-08-05'));
+    noMonth('2026-07');
+    expect(store.prevDay()).toBe('2026-07-28');
+  });
+
+  it('decides after both answers when the month answers first: fields missing, one lookup', () => {
+    open('2026-08-03');
+    monthReq('2026-08').flush(AUGUST);
+    noMonth('2026-07');
+    dayReq().flush(dayBody([trade()]));                // no fields at all
+    monthReq('2026-07').flush(monthBody('2026-07', [cell('2026-07-28', 10)]));
+    expect(store.prevDay()).toBe('2026-07-28');
+    noMonth('2026-09');
+  });
+
+  it('keeps the month lookup for a 404 day at a month edge', () => {
+    open('2026-08-01');
+    dayReq().flush(NOT_FOUND, { status: 404, statusText: 'Not Found' });
+    monthReq('2026-08').flush(AUGUST);
+    monthReq('2026-07').flush(monthBody('2026-07', [cell('2026-07-28', 10)]));
+    expect(store.empty()).toBe(true);
+    expect(store.prevDay()).toBe('2026-07-28');
+    expect(store.nextDay()).toBe('2026-08-03');
+    noMonth('2026-09');
+  });
+
+  it('decides nothing for a route the page has already left', () => {
+    open('2026-08-03');
+    const day = dayReq();
+    const month = monthReq('2026-08');
+    store.setRoute('2026-09-02', null, null);
+    day.flush(dayBody([trade()]));                     // would have needed a July lookup
+    month.flush(AUGUST);
+    noMonth('2026-07');
+    expect(store.prevEdge()).toBeNull();
+  });
+});
