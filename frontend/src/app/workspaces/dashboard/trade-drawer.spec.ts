@@ -58,6 +58,14 @@ describe('tradeDrawerFields (v179 §3.2)', () => {
     ]);
   });
 
+  it('shows where a closed trade or leg closed, and nothing for an open one', () => {
+    const closed = tradeRow({ status: 'CLOSED', exit_price: 25.66, leg_index: 1, leg_total: 2 });
+    const byKey = Object.fromEntries(tradeDrawerFields(closed, '€', NOW).map((f) => [f.key, f.value]));
+    expect(byKey['closed_at_price']).toBe('25.66');
+    const open = tradeRow({ status: 'ACTIVE', exit_price: null });
+    expect(tradeDrawerFields(open, '€', NOW).map((f) => f.key)).not.toContain('closed_at_price');
+  });
+
   it('shows the planned TP1 and stop once PARTIAL, with the working stop beside them', () => {
     // `target` is the live target (TP2) after TP1 banks; `target1` / `risk_stop` are the plan's own.
     const row = tradeRow({ status: 'PARTIAL', target: 120, target1: 110, target2: 120, risk_stop: 95, stop_loss: 104 });

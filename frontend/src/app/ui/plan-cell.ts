@@ -309,6 +309,8 @@ export class PlanCell {
       ? `TP1 banked · floor ${formatR(this.floorR())} · price ${formatR(this.priceR())} · headroom ${formatR(this.headroomR())}`
       : `Target ${this.fmt(this.target())}`;
     let out = `${lead} · ${targetPart} · ${stopWord} ${this.fmt(this.stop())}`;
+    const closed = this.closedAt();
+    if (closed !== null) out += ` · Closed at ${this.fmt(closed)}`;
     const fraction = this.bankedFraction();
     const r = this.bankedR();
     const entry = this.bankedEntry();

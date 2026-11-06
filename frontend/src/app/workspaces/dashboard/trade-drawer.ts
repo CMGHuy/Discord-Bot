@@ -83,6 +83,14 @@ function legFields(row: TradeRow): TradeDrawerField[] {
   return leg ? [field('leg', 'Leg', leg)] : [];
 }
 
+/** Where a closed trade (or closed leg) actually exited -- the same price the
+ *  Plan cell ends with. Not shown for anything still open. */
+function closedField(row: TradeRow): TradeDrawerField[] {
+  return row.status === 'CLOSED' && row.exit_price !== null && row.exit_price !== undefined
+    ? [field('closed_at_price', 'Closed at', num(row.exit_price), true)]
+    : [];
+}
+
 /** Everything the drawer shows, from the loaded row alone (spec §3.2: no
  *  fetch). Absent values are the em dash, never NaN or an empty cell. */
 export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number): TradeDrawerField[] {
@@ -95,6 +103,7 @@ export function tradeDrawerFields(row: TradeRow, currency: string, nowMs: number
     ...stopFields(row),
     field('tp1', 'TP1', num(row.target1 ?? row.target), true),
     field('tp2', 'TP2', num(row.target2), true),
+    ...closedField(row),
     field('rr', 'R:R', num(row.risk_reward), true),
     field('opened', 'Opened', dateTime(row.opened_at)),
     field('held', 'Held', held(row.held_hours ?? elapsedHours(row.opened_at, nowMs)), true),

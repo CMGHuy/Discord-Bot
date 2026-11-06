@@ -59,6 +59,11 @@ describe('PlanCell', () => {
     expect(el.querySelector('.closed')!.getAttribute('aria-label')).toBe('Closed out at 190.50');
   });
 
+  it('names the closed-out price in the tooltip too', () => {
+    expect(renderClosed(178, 195, 170, 190.5).querySelector('.plan')!.getAttribute('title'))
+      .toContain('Closed at 190.50');
+  });
+
   it('shows nothing extra for an open trade', () => {
     const el = renderClosed(178, 195, 170, null);
     expect(el.querySelector('.closed')).toBeNull();
