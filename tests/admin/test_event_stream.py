@@ -52,7 +52,7 @@ def broker(monkeypatch):
     The real listener would open a Postgres connection against the test's
     tmp_path for the life of every connection these tests open.
     """
-    made = b.EventBroker(watcher_factory=lambda emit: FakeWatcher(emit))
+    made = b.EventBroker(watcher_factory=lambda emit: FakeWatcher(emit), progress_reader=lambda: None)
     monkeypatch.setattr(b, "_BROKER", made)
     monkeypatch.setattr(s, "get_broker", lambda: made)
     return made
@@ -176,6 +176,21 @@ def test_every_connection_gets_its_own_stream(client, admin_app, auth, broker):
 
     assert first["name"] == other["name"] == "scan"
     assert first["id"] == other["id"], "one change, one id, on every tab"
+
+
+def test_a_scan_event_carries_its_progress_on_the_wire(client, auth, monkeypatch):
+    """v206 P1-b: the frame part 2's client parses. Other events stay {seq, at}."""
+    progress = {"running": True, "progress": None}
+    made = b.EventBroker(watcher_factory=lambda emit: FakeWatcher(emit), progress_reader=lambda: progress)
+    monkeypatch.setattr(b, "_BROKER", made)
+    monkeypatch.setattr(s, "get_broker", lambda: made)
+
+    response = client.get("/api/v1/events", headers=auth)
+    made.publish("scan")
+    event = take(response, 2)[1]
+
+    assert event["name"] == "scan"
+    assert event["data"] == {"seq": made.seq, "at": event["data"]["at"], "progress": progress}
 
 
 # --------------------------------------------------------------------------

@@ -12,12 +12,18 @@ against real files, and re-testing it here would only make these tests slow
 and coupled to the filesystem -- what NG21 owns is the fan-out, the
 counter, and the cap, none of which care where an event came from.
 """
+import json
+import logging
 import threading
+from contextlib import contextmanager
 
 import pytest
+from sqlalchemy import exc as sa_exc
 
 from swingbot.admin.api_v1 import ApiError
 from swingbot.admin.events import broker as b
+from swingbot.core.db.engine import DatabaseUnavailable
+from swingbot.core.infra.swallowed import reset, snapshot
 
 
 class FakeWatcher:
@@ -54,6 +60,8 @@ def make_broker(watchers):
             watchers.append(watcher)
             return watcher
 
+        # v206: no database here. Tests of the progress read inject their own.
+        kwargs.setdefault("progress_reader", lambda: None)
         return b.EventBroker(watcher_factory=build, **kwargs)
 
     return factory
@@ -387,3 +395,167 @@ def test_the_default_broker_listens_to_postgres(monkeypatch):
         finally:
             pass
     assert broker.connection_count == 0
+
+
+# --------------------------------------------------------------------------
+# v206 P1-b: scan events carry the progress the strip reads
+# --------------------------------------------------------------------------
+
+PROGRESS = {"running": True, "progress": {
+    "at": "2026-11-05T15:20:00+00:00", "pct": 40, "stage": "crawling data",
+    "current_ticker": "NVDA", "done": 12, "total": 30, "qualifying_found": 1}}
+
+
+class CountingReader:
+    def __init__(self, result=PROGRESS, error=None):
+        self.result, self.error, self.calls = result, error, 0
+
+    def __call__(self):
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
+def test_a_scan_event_carries_the_progress_it_read(make_broker, watchers):
+    broker = make_broker(progress_reader=CountingReader())
+    with broker.subscribe() as subscription:
+        watchers[0].emit("scan")
+        event = subscription.get(timeout=0)
+
+    assert event.data() == {"seq": event.seq, "at": event.at, "progress": PROGRESS}
+    json.dumps(event.data())  # the stream json-dumps it
+
+
+def test_other_events_stay_byte_identical_and_never_read(make_broker, watchers):
+    reader = CountingReader()
+    broker = make_broker(progress_reader=reader)
+    with broker.subscribe() as subscription:
+        for name in ("trades", "bot", "risk"):
+            watchers[0].emit(name)
+        events = [subscription.get(timeout=0) for _ in range(3)]
+
+    assert reader.calls == 0
+    for event in events:
+        assert json.dumps(event.data()) == json.dumps({"seq": event.seq, "at": event.at})
+
+
+def test_one_publish_reads_once_whatever_the_number_of_connections(make_broker, watchers):
+    reader = CountingReader()
+    broker = make_broker(progress_reader=reader)
+    with broker.subscribe() as one, broker.subscribe() as two, broker.subscribe() as three:
+        watchers[0].emit("scan")
+        events = [s.get(timeout=0) for s in (one, two, three)]
+
+    assert reader.calls == 1
+    assert all(event.progress == PROGRESS for event in events)
+    assert len({event.seq for event in events}) == 1
+
+
+def test_nobody_listening_means_no_read(make_broker):
+    reader = CountingReader()
+    broker = make_broker(progress_reader=reader)
+    broker.publish("scan")
+    assert reader.calls == 0
+
+
+def test_the_read_runs_outside_the_broker_lock(make_broker, watchers):
+    held = []
+    box = {}
+
+    def reader():
+        held.append(box["broker"]._lock.locked())
+        return PROGRESS
+
+    box["broker"] = broker = make_broker(progress_reader=reader)
+    with broker.subscribe():
+        watchers[0].emit("scan")
+    assert held == [False]
+
+
+@pytest.mark.parametrize("error", [
+    RuntimeError("boom"),
+    DatabaseUnavailable("side engine backing off"),
+    sa_exc.OperationalError("SELECT 1", {}, Exception("canceling statement due to statement timeout")),
+])
+def test_a_failed_read_sends_a_thin_event_and_counts_it(make_broker, watchers, error):
+    reset()
+    broker = make_broker(progress_reader=CountingReader(error=error))
+    with broker.subscribe() as subscription:
+        watchers[0].emit("scan")
+        event = subscription.get(timeout=0)
+
+    assert event.event == "scan"
+    assert event.data() == {"seq": event.seq, "at": event.at}  # thin, never "progress": None
+    assert snapshot()[b.SCAN_PROGRESS_TAG]["count"] == 1
+
+
+def test_a_failing_read_logs_at_most_once_a_minute(make_broker, watchers, caplog):
+    reset()
+    now = [1000.0]
+    broker = make_broker(progress_reader=CountingReader(error=RuntimeError("boom")), clock=lambda: now[0])
+    caplog.set_level(logging.DEBUG, logger=b.log.name)
+    with broker.subscribe() as subscription:
+        for t in (1000.0, 1030.0, 1059.9, 1060.0, 1100.0):
+            now[0] = t
+            watchers[0].emit("scan")
+        assert len(drain(subscription)) == 5
+
+    loud = [r for r in caplog.records if r.name == b.log.name and r.levelno >= logging.WARNING]
+    assert len(loud) == 2  # 1000.0 and 1060.0
+    assert snapshot()[b.SCAN_PROGRESS_TAG]["count"] == 5
+
+
+def test_the_backlog_collapse_is_still_a_bare_resync(make_broker, watchers):
+    broker = make_broker(progress_reader=CountingReader(), queue_limit=1)
+    with broker.subscribe() as subscription:
+        watchers[0].emit("scan")
+        watchers[0].emit("scan")  # queue full: collapse
+        event = subscription.get(timeout=0)
+
+    assert event.event == "resync"
+    assert event.data() == {"seq": event.seq, "at": event.at}
+
+
+def test_a_reader_returning_none_sends_the_event_thin(make_broker, watchers):
+    broker = make_broker(progress_reader=lambda: None)
+    with broker.subscribe() as subscription:
+        watchers[0].emit("scan")
+        assert "progress" not in subscription.get(timeout=0).data()
+
+
+def test_the_default_reader_reads_both_facts_on_one_side_connection(monkeypatch):
+    from swingbot.core.db import side_engine
+    from swingbot.core.scanning import progress_store, runstate
+
+    conn, seen = object(), []
+
+    @contextmanager
+    def fake_side_connection():
+        yield conn
+
+    monkeypatch.setattr(side_engine, "side_connection", fake_side_connection)
+    monkeypatch.setattr(runstate, "is_scan_running",
+                        lambda *, conn=None: seen.append(("running", conn)) or True)
+    monkeypatch.setattr(progress_store, "read_strict",
+                        lambda *, conn=None: seen.append(("progress", conn)) or PROGRESS["progress"])
+
+    assert b._default_progress_reader() == PROGRESS
+    assert seen == [("running", conn), ("progress", conn)]
+
+
+def test_the_default_reader_raises_when_the_side_engine_is_down(monkeypatch):
+    from swingbot.core.db import side_engine
+
+    @contextmanager
+    def down():
+        raise DatabaseUnavailable("side engine backing off")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(side_engine, "side_connection", down)
+    with pytest.raises(DatabaseUnavailable):
+        b._default_progress_reader()
+
+
+def test_production_brokers_use_the_default_reader():
+    assert b.EventBroker()._progress_reader is b._default_progress_reader

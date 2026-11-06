@@ -16,6 +16,7 @@ import { Router, provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../../api/event-stream';
+import { ScanEventProgress } from '../../api/models';
 import {
   authInterceptor,
   errorInterceptor,
@@ -70,6 +71,11 @@ class FakeEventStream {
       this.counters.set(name, counter);
     }
     return counter.asReadonly();
+  }
+
+  /** v206: ConnectionStore patches the strip from this; null = fetch instead. */
+  payload(_name: 'scan'): Signal<ScanEventProgress | null> {
+    return signal<ScanEventProgress | null>(null).asReadonly();
   }
 }
 

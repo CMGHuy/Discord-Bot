@@ -508,3 +508,29 @@ Filled in by each plan after its production probe run.
 The table in `## Why`. Throwaway probe, 2 rounds × 12 pages, scan
 running, settle cap 90 s. Nearly every page hit the cap, so none ever went
 quiet.
+
+### Plan 1 baseline (committed probe)
+
+**Not evidence yet.** One run so far, and it is labelled `quiet`, so it does
+not count toward the Goal (only `scan` runs do). The `scan` baseline is still
+owed: rerun the probe during a US-session scan (`--date 2026-11-03`, same
+flags) before V206-13 pushes, then replace this note with that run's table.
+
+| Run | Label | When | Image | Pages | Idle tab |
+|---|---|---|---|---|---|
+| `v206-baseline-quiet-1` | quiet (not evidence) | 2026-11-05 22:03 UTC, no scan running | `ghcr.io/cmghuy/discord-bot:sha-d0500efab0cc` | 36 | 17 requests in 120 s = 8.5/min |
+| `v206-baseline-mixed-1` | mixed (not evidence) | 2026-11-06 12:39 Berlin, scan ended mid-run | `ghcr.io/cmghuy/discord-bot:sha-d5f56464e217` | 36 | 79 requests in 120 s = 39.5/min |
+
+The mixed run (scan stopped partway) still shows the load: `/cancel-precision`
+43.0 s max, `/analytics/performance` 35.6 s, `/dashboard` median 10.8 s /
+p90 23.9 s over 27 samples, `/market/tape` 169 calls (median 4.3 s, max 51.8 s)
+and an idle tab at 39.5 requests/min. The `scan` baseline is still owed.
+
+Worth knowing from the quiet run: with no scan running the idle tab already
+sits near the Plan 1 target (under 10/min), as expected since the polling
+under repair is scan-driven. Heavy calls were still slow with the scan off
+(p90 / max: `/dashboard` 11.9 s / 12.7 s, `/live` 9.9 s / 25.5 s,
+`/market/tape` 6.4 s / 23.4 s; `/versions` max 56.7 s), so scan polling is
+not the only load on the single admin worker. Plans 2-4 own those calls. The
+probe's `/health` had no `sse_streams` yet (it ships in V206-4), so the
+stream count reads `-`.

@@ -18,6 +18,7 @@ import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
+import { ScanEventProgress } from '../api/models';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { PreferencesStore } from '../stores/preferences.store';
 import { LiveValuesStore } from '../stores/live-values.store';
@@ -52,6 +53,11 @@ class FakeEventStream {
 
   changes(name: string): Signal<number> {
     return this.counterFor(name).asReadonly();
+  }
+
+  /** v206: ConnectionStore patches the strip from this; null = fetch instead. */
+  payload(_name: 'scan'): Signal<ScanEventProgress | null> {
+    return signal<ScanEventProgress | null>(null).asReadonly();
   }
 
   state(): 'connecting' | 'live' | 'degraded' {

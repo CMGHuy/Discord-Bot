@@ -62,9 +62,20 @@ describe('LiveStore (v203)', () => {
     vi.useRealTimers();
   });
 
-  it('refreshes on exactly the trades, scan, bot and risk events, 2 s apart', () => {
-    expect(LIVE_REFRESH_EVENTS).toEqual(['trades', 'scan', 'bot', 'risk']);
+  it('refreshes on exactly the trades, bot and risk events, 2 s apart (v206: never scan)', () => {
+    expect(LIVE_REFRESH_EVENTS).toEqual(['trades', 'bot', 'risk']);
     expect(LIVE_REFRESH_DEBOUNCE_MS).toBe(2000);
+  });
+
+  it('sends no /live request for a scan event, however many arrive', () => {
+    tick();
+    backend.expectOne('/api/v1/live').flush(SNAPSHOT);
+    for (let second = 0; second < 10; second += 1) {
+      events.raise('scan');
+      tick();
+      vi.advanceTimersByTime(1000);
+    }
+    expect(pending()).toHaveLength(0);
   });
 
   it('reads nothing before the first answer, and says it is loading', () => {
@@ -97,7 +108,7 @@ describe('LiveStore (v203)', () => {
     events.raise('trades');
     tick();
     vi.advanceTimersByTime(1000);
-    events.raise('scan');
+    events.raise('bot');
     events.raise('risk');
     tick();
     vi.advanceTimersByTime(999);
@@ -108,11 +119,11 @@ describe('LiveStore (v203)', () => {
     expect(pending()).toHaveLength(0);
   });
 
-  it('still refreshes every 2 s while a scan raises scan every second', () => {
+  it('still refreshes every 2 s while trades events arrive every second', () => {
     tick();
     backend.expectOne('/api/v1/live').flush(SNAPSHOT);
     for (let second = 0; second < 4; second += 1) {
-      events.raise('scan');
+      events.raise('trades');
       tick();
       vi.advanceTimersByTime(1000);
     }
@@ -128,6 +139,7 @@ describe('LiveStore (v203)', () => {
     backend.expectOne('/api/v1/live').flush(SNAPSHOT);
     events.raise('jobs');
     events.raise('watchlist');
+    events.raise('scan');
     tick();
     vi.advanceTimersByTime(LIVE_REFRESH_DEBOUNCE_MS * 2);
     expect(pending()).toHaveLength(0);
