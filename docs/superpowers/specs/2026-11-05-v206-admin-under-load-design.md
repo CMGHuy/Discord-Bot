@@ -534,3 +534,38 @@ under repair is scan-driven. Heavy calls were still slow with the scan off
 not the only load on the single admin worker. Plans 2-4 own those calls. The
 probe's `/health` had no `sse_streams` yet (it ships in V206-4), so the
 stream count reads `-`.
+
+### Plan 2 boot merge (V217-1)
+
+**Verdict: no merge. Both boot `/trades` calls stay.** Pinned by
+`frontend/src/app/workspaces/dashboard/dashboard.spec.ts` ("Dashboard boot
+/trades calls (v217 V217-1)") and
+`frontend/src/app/workspaces/dashboard/panels/exposure-by-horizon.spec.ts`
+("exposure by horizon vs the Open tab (v217 V217-1)").
+
+The Dashboard boot sends two `/trades` requests, as § Plan 2 says:
+
+| Caller | Query | Feeds |
+|---|---|---|
+| `dashboard.ts` `recent` (activity feed) | `sort=-opened_at&page=1&per_page=20`, no status | `deriveActivity` (at most 6 events), `liveSymbols` for Refresh, the trade drawer's lookups, the `recentSettled` redirect rule |
+| `positions-table.ts` own `TradesStore` | `status=ACTIVE&sort=-opened_at&page=1&per_page=<10 desktop, 5 tablet/phone, or saved>` | the Open tab, its server pager, its own `trades`-event refetch |
+
+Why they cannot merge under this section's rule ("the same rows in the same
+order, asserted by a spec"):
+
+1. The feed is not a superset of the Open tab. It holds the 20 newest rows of
+   every status, so an ACTIVE position opened before those 20 is rendered by
+   the table and missing from the feed (the spec seeds exactly that case).
+2. The page sizes differ (20 vs 10/5/saved), and the table pages on the
+   server and refetches on its own events. A shared response would have to
+   carry both windows.
+
+The brief behind plan v217 counted a third call, `sb-exposure-by-horizon`
+(`status=open&per_page=200`). That panel is not mounted. It left the
+Dashboard template in `d9fef9eb` (2026-09-12), and the boot spec asserts no
+such element and no such tag in `dashboard.ts`. Had it been mounted, it still
+could not share the Open tab's call: `status=open` is ACTIVE plus PARTIAL at
+200 rows unpaged, `status=ACTIVE` is ACTIVE only and paged, so a PARTIAL
+runner lands in one and not the other. Deleting the unmounted panel
+(`panels/exposure-by-horizon.ts`, its spec and its `PANEL_HELP` entry) is a
+follow-up outside plan v217.
