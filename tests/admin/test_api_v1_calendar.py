@@ -184,6 +184,8 @@ def test_day_trade_shape_carries_the_journal_join(seed, logged_in):
         "detractors": list, "fx_missing_count": int,
         # v165 D2 / D3.
         "context": dict, "breakdown": dict,
+        # v217 P3-b -- nearest trading days under the same filter, null at the ends.
+        "prev_day": NULLABLE_STR, "next_day": NULLABLE_STR,
     })
     assert_shape(body["context"], {
         "percentile": NULLABLE_NUMBER, "history_days": int,
@@ -490,3 +492,63 @@ def test_sparklines_reject_a_bad_date_or_an_unknown_parameter(seed, logged_in, b
     assert_error(logged_in.get(f"{_SPARK}?date=2026-08"), "invalid", 400)
     assert_error(logged_in.get(f"{_SPARK}?date=2026-02-30"), "invalid", 400)
     assert_error(logged_in.get(f"{_SPARK}?date=2026-08-03&tickr=AAPL"), "invalid", 400)
+
+
+# ---- v217 V217-2: prev_day / next_day on the day route ----------------------
+
+
+def test_day_carries_its_neighbouring_trading_days(seed, logged_in):
+    seed(trades=_context_book())
+    body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-04").get_json()
+    assert body["prev_day"] == "2026-08-03"
+    assert body["next_day"] == "2026-08-05"
+
+
+def test_the_first_and_last_day_neighbours_are_null_not_missing(seed, logged_in):
+    seed(trades=_context_book())
+    first = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03").get_json()
+    last = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-05").get_json()
+    assert "prev_day" in first and first["prev_day"] is None
+    assert first["next_day"] == "2026-08-04"
+    assert last["prev_day"] == "2026-08-04"
+    assert "next_day" in last and last["next_day"] is None
+
+
+def test_neighbours_respect_the_strategy_filter(seed, logged_in):
+    """VWAP closed on 08-03 and 08-05 only, so under strategy=VWAP the
+    EMA20-only 08-04 is not a trading day."""
+    seed(trades=_context_book())
+    body = logged_in.get(
+        "/api/v1/calendar/pnl/day?date=2026-08-05&strategy=VWAP").get_json()
+    assert body["prev_day"] == "2026-08-03"
+    assert body["next_day"] is None
+
+
+def test_neighbours_respect_the_horizon_filter(seed, logged_in):
+    seed(trades=[
+        _trade("a" * 16, closed_at="2026-08-03T20:00:00+00:00", horizon="4w"),
+        _trade("b" * 16, closed_at="2026-08-04T20:00:00+00:00", horizon="1m"),
+        _trade("c" * 16, closed_at="2026-08-05T20:00:00+00:00", horizon="4w"),
+    ])
+    body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03&horizon=4w").get_json()
+    assert body["prev_day"] is None
+    assert body["next_day"] == "2026-08-05"
+
+
+def test_neighbours_span_a_gap_longer_than_a_month(seed, logged_in):
+    """Behaviour change v217 makes on purpose: the SPA used to look only one
+    month either way, so this day showed no previous day at all."""
+    seed(trades=[
+        _trade("a" * 16, closed_at="2026-05-04T20:00:00+00:00"),
+        _trade("b" * 16, closed_at="2026-08-03T20:00:00+00:00"),
+    ])
+    body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03").get_json()
+    assert body["prev_day"] == "2026-05-04"
+    assert body["next_day"] is None
+
+
+def test_a_404_day_body_is_unchanged_and_carries_no_neighbours(seed, logged_in):
+    seed(trades=[_trade("a" * 16)])
+    response = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-09")
+    assert_error(response, "not_found", 404)
+    assert set(response.get_json()) == {"error"}

@@ -573,6 +573,28 @@ def day_context(rows: list[dict], date: str) -> dict:
     }
 
 
+def adjacent_trading_days(rows: list[dict], date: str) -> dict[str, str | None]:
+    """v217 P3-b -- the nearest trading days before and after `date`.
+
+    `rows` is the filtered ALL-HISTORY row set the day route already holds
+    (the same scope `day_context` reads), so the neighbours honour the
+    strategy/horizon filter and cost no second read. A trading day is any day
+    with at least one row, the grid's own rule (days with no close are
+    omitted). Days are `YYYY-MM-DD` strings, so string order is date order.
+
+    `None` at either end of the book: "no earlier day" is a measured answer,
+    and the key is always present so a client can tell it from an older
+    server that sends neither key.
+    """
+    days = {row.get("day") for row in rows} - {None}
+    earlier = [day for day in days if day < date]
+    later = [day for day in days if day > date]
+    return {
+        "prev_day": max(earlier) if earlier else None,
+        "next_day": min(later) if later else None,
+    }
+
+
 # --- v165 D3: what drove one day --------------------------------------------
 
 # The four ways the day page splits a day. Order is the page's tab order.

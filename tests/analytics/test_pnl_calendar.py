@@ -876,3 +876,51 @@ def test_joined_rows_no_trades_never_calls_convert():
     from swingbot.core.analytics.pnl_calendar import joined_rows
 
     assert joined_rows([], [], convert=lambda parts: 1 / 0) == []
+
+
+# ---- v217 V217-2: the nearest trading days around a date -------------------
+
+from swingbot.core.analytics.pnl_calendar import adjacent_trading_days
+
+
+def _on(*days):
+    """Rows reduced to the one key the helper reads."""
+    return [{"day": day} for day in days]
+
+
+def test_adjacent_trading_days_finds_both_neighbours():
+    rows = _on("2026-08-05", "2026-08-03", "2026-08-04", "2026-08-03")
+    assert adjacent_trading_days(rows, "2026-08-04") == {
+        "prev_day": "2026-08-03", "next_day": "2026-08-05"}
+
+
+def test_the_first_and_last_trading_day_have_a_null_neighbour():
+    rows = _on("2026-08-03", "2026-08-04", "2026-08-05")
+    assert adjacent_trading_days(rows, "2026-08-03") == {
+        "prev_day": None, "next_day": "2026-08-04"}
+    assert adjacent_trading_days(rows, "2026-08-05") == {
+        "prev_day": "2026-08-04", "next_day": None}
+
+
+def test_an_empty_book_has_no_neighbours_rather_than_an_error():
+    assert adjacent_trading_days([], "2026-08-03") == {"prev_day": None, "next_day": None}
+
+
+def test_a_gap_longer_than_a_month_still_resolves():
+    """The SPA's month-grid fallback looks one month either way; this helper
+    looks across all history, so a two-month quiet spell still has a neighbour."""
+    rows = _on("2026-05-04", "2026-08-03", "2026-11-02")
+    assert adjacent_trading_days(rows, "2026-08-03") == {
+        "prev_day": "2026-05-04", "next_day": "2026-11-02"}
+
+
+def test_a_date_with_no_rows_of_its_own_still_finds_its_neighbours():
+    rows = _on("2026-08-03", "2026-08-05")
+    assert adjacent_trading_days(rows, "2026-08-04") == {
+        "prev_day": "2026-08-03", "next_day": "2026-08-05"}
+
+
+def test_a_row_without_a_day_is_ignored():
+    rows = [{"day": None}, {"day": "2026-08-03"}, {}]
+    assert adjacent_trading_days(rows, "2026-08-04") == {
+        "prev_day": "2026-08-03", "next_day": None}

@@ -539,8 +539,9 @@ describe('DashboardStore', () => {
     const TO = '2026-10-22T04:00:00.000Z';
     const W1 = { from: '2026-09-03T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
     const W2 = { from: '2026-09-10T04:00:00.000Z', to: '2026-10-19T04:00:00.000Z' };
-    // The today-only fetch (mode=today, the Realised today card) is covered by its own describe below;
-    // these helpers see the scoped requests only.
+    // The today-only fetch (mode=today, the Realised today card) is, since v217, only a fallback
+    // after a wider answer without a `today` block; its own describe below covers it. These
+    // helpers see the scoped requests only.
     const scoped = (req: { url: string; params: { get(k: string): string | null; has(k: string): boolean } }) =>
       req.url === '/api/v1/dashboard' && !(req.params.get('mode') === 'today' && !req.params.has('from') && lastIsWider());
     const lastIsWider = () => store.selection().kind === 'range' || store.preset() !== '1D';
@@ -726,8 +727,13 @@ describe('DashboardStore', () => {
     const SCOPED = { amount: 480, pct: 3.1, n: 18, wins: 11, losses: 7 };
     const requests = () => backend.match((req) => req.url === '/api/v1/dashboard');
     const modeOf = (req: { request: { params: { get(k: string): string | null } } }) => req.request.params.get('mode');
-    const flushScoped = (reqs: ReturnType<typeof requests>) => {
-      reqs.filter((r) => modeOf(r) !== 'today').forEach((r) => r.flush({ ...RESPONSE, scope: { mode: 'range' }, realized: SCOPED }));
+    const FRESH = { amount: 30, pct: 1, n: 3, wins: 2, losses: 1 };
+    const closed = (rows: { status: string; count: number }[]) => rows.find((row) => row.status === 'CLOSED')?.count;
+    const block = (realized: Dashboard['realized'], closedToday = 3) =>
+      ({ today: { realized, lifecycle: { ...RESPONSE.lifecycle, CLOSED: closedToday } } });
+    const flushScoped = (reqs: ReturnType<typeof requests>, extra: Partial<Dashboard> = {}) => {
+      reqs.filter((r) => modeOf(r) !== 'today')
+        .forEach((r) => r.flush({ ...RESPONSE, scope: { mode: 'range' }, realized: SCOPED, ...extra }));
     };
     const flushToday = (reqs: ReturnType<typeof requests>, realized = TODAY) => {
       reqs.filter((r) => modeOf(r) === 'today').forEach((r) => r.flush({ ...RESPONSE, realized }));
@@ -761,6 +767,8 @@ describe('DashboardStore', () => {
       flushScoped(reqs);
       expect(store.realized()).toEqual(SCOPED);
       expect(store.todayRealized()).toEqual(TODAY);
+      expect(requests()).toHaveLength(0);                // no block, but today was not owed
+      expect(store.todayLoading()).toBe(false);
     });
 
     /** 1D first (today lands), then a wider preset, then a trades push. */
@@ -775,25 +783,77 @@ describe('DashboardStore', () => {
       return requests();
     };
 
-    it('fetches today beside the scoped figures when the scope is wider', () => {
+    it('lands today from the wider response: one request, no today fetch', () => {
       const reqs = widenThenPush();
-      expect(reqs.map(modeOf).sort()).toEqual(['range', 'today']);
+      expect(reqs.map(modeOf)).toEqual(['range']);
       expect(store.todayLoading()).toBe(true);
-      expect(store.loading()).toBe(true);
+      flushScoped(reqs, block(FRESH, 5));
+      expect(store.todayLoading()).toBe(false);
+      expect(store.todayRealized()).toEqual(FRESH);
+      expect(closed(store.todayLifecycle())).toBe(5);
+      expect(store.realized()).toEqual(SCOPED);
+      expect(requests()).toHaveLength(0);
+    });
+
+    it('lands a zero-close today block as a measured zero, with no fetch', () => {
+      const zero = { amount: null, pct: null, n: 0, wins: 0, losses: 0 };
+      flushScoped(widenThenPush(), block(zero, 0));
+      expect(store.todayRealized()).toEqual(zero);
+      expect(closed(store.todayLifecycle())).toBe(0);
+      expect(store.todayLoading()).toBe(false);
+      expect(requests()).toHaveLength(0);
+    });
+
+    it('lands the block of an All pick after 1D, one request', () => {
+      tick();
+      requests()[0].flush({ ...RESPONSE, realized: TODAY });
+      store.setPreset('All');
+      const reqs = requests();
+      expect(reqs.map(modeOf)).toEqual(['all']);
+      flushScoped(reqs, block(FRESH));
+      expect(store.todayRealized()).toEqual(FRESH);
+      expect(requests()).toHaveLength(0);
+    });
+
+    it('falls back to the today request when the wider response has no block (older backend)', () => {
+      const reqs = widenThenPush();
+      expect(reqs.map(modeOf)).toEqual(['range']);
       flushScoped(reqs);
       expect(store.todayLoading()).toBe(true);
-      flushToday(reqs, { amount: 30, pct: 1, n: 3, wins: 2, losses: 1 });
+      const fallback = requests();
+      expect(fallback.map(modeOf)).toEqual(['today']);
+      flushToday(fallback, FRESH);
       expect(store.todayLoading()).toBe(false);
-      expect(store.todayRealized()).toEqual({ amount: 30, pct: 1, n: 3, wins: 2, losses: 1 });
+      expect(store.todayRealized()).toEqual(FRESH);
       expect(store.realized()).toEqual(SCOPED);
     });
 
-    it('keeps the previous today figures and stops loading when the today fetch fails', () => {
-      const reqs = widenThenPush();
-      flushScoped(reqs);
-      reqs.filter((r) => modeOf(r) === 'today').forEach((r) => r.flush('boom', { status: 500, statusText: 'Server Error' }));
+    it('keeps the previous today figures and stops loading when the fallback today fetch fails', () => {
+      flushScoped(widenThenPush());
+      requests().filter((r) => modeOf(r) === 'today')
+        .forEach((r) => r.flush('boom', { status: 500, statusText: 'Server Error' }));
       expect(store.todayLoading()).toBe(false);
       expect(store.todayRealized()).toEqual(TODAY);
+    });
+
+    it('keeps the previous today figures, sending no fallback, when the wider request fails', () => {
+      const [scopedReq] = widenThenPush();
+      scopedReq.flush('boom', { status: 500, statusText: 'Server Error' });
+      expect(store.todayLoading()).toBe(false);
+      expect(store.todayError()).not.toBeNull();
+      expect(store.todayRealized()).toEqual(TODAY);
+      expect(requests()).toHaveLength(0);
+    });
+
+    it('stops today loading when a wider request is cancelled before it answered', () => {
+      tick();
+      requests()[0].flush({ ...RESPONSE, realized: TODAY });
+      store.setPreset('1M');
+      flushScoped(requests());
+      const subscription = store.resolve().subscribe();  // a full load's rules: today owed
+      expect(store.todayLoading()).toBe(true);
+      subscription.unsubscribe();
+      expect(store.todayLoading()).toBe(false);
     });
 
     it("keeps today's lifecycle counts while a wider scope's counts differ", () => {
@@ -801,7 +861,6 @@ describe('DashboardStore', () => {
       requests()[0].flush(RESPONSE);
       store.setPreset('1M');
       requests().forEach((r) => r.flush({ ...RESPONSE, lifecycle: { PENDING: 4, ACTIVE: 2, PARTIAL: 1, CLOSED: 40, CANCELLED: 9 } }));
-      const closed = (rows: { status: string; count: number }[]) => rows.find((row) => row.status === 'CLOSED')?.count;
       expect(closed(store.lifecycle())).toBe(40);
       expect(closed(store.todayLifecycle())).toBe(3);
       expect(store.todayLifecycle().map((row) => row.status)).toEqual(['PENDING', 'ACTIVE', 'PARTIAL', 'CLOSED', 'CANCELLED']);
@@ -887,20 +946,34 @@ describe('DashboardStore', () => {
       expect(store.data()).toBeNull();
     });
 
-    it('keeps the newest today answer when an older one lands after it', () => {
-      const older = widenThenPush();
-      // A second push issues a newer today fetch while the older is in flight.
+    it('keeps the newest today answer when an older fallback lands after it', () => {
+      flushScoped(widenThenPush());                      // no block: fallback 1 goes out
+      const older = requests();
+      expect(older.map(modeOf)).toEqual(['today']);
       events.raise('trades');
       tick();
       vi.advanceTimersByTime(300);
+      flushScoped(requests());                           // no block again: fallback 2
       const newer = requests();
-      expect(older.filter((r) => modeOf(r) === 'today')).toHaveLength(1);
-      expect(newer.filter((r) => modeOf(r) === 'today')).toHaveLength(1);
+      expect(newer.map(modeOf)).toEqual(['today']);
       const newerFigures = { amount: 45, pct: 1.5, n: 4, wins: 3, losses: 1 };
       flushToday(newer, newerFigures);
-      flushToday(older, { amount: 30, pct: 1, n: 3, wins: 2, losses: 1 });
-      flushScoped(older);
-      flushScoped(newer);
+      flushToday(older, FRESH);
+      expect(store.todayRealized()).toEqual(newerFigures);
+      expect(store.todayLoading()).toBe(false);
+    });
+
+    it('never lets an older today fetch overwrite a newer block', () => {
+      flushScoped(widenThenPush());                      // no block: a fallback goes out, left in flight
+      const older = requests();
+      expect(older.map(modeOf)).toEqual(['today']);
+      events.raise('trades');
+      tick();
+      vi.advanceTimersByTime(300);
+      const newerFigures = { amount: 45, pct: 1.5, n: 4, wins: 3, losses: 1 };
+      flushScoped(requests(), block(newerFigures));      // the newer wider answer carries the block
+      expect(store.todayRealized()).toEqual(newerFigures);
+      flushToday(older, FRESH);                          // the older fetch answers last
       expect(store.todayRealized()).toEqual(newerFigures);
       expect(store.todayLoading()).toBe(false);
     });
@@ -908,11 +981,12 @@ describe('DashboardStore', () => {
     it('reports a failed today fetch instead of loading forever', () => {
       tick();
       const [first] = requests();
-      store.setPreset('1M');
+      store.setPreset('1M');                             // before any today answer: today owed
       fail(first);
-      const reqs = requests();
-      reqs.filter((r) => modeOf(r) === 'today').forEach(fail);
-      flushScoped(reqs);
+      flushScoped(requests());                           // no block: the fallback goes out now
+      const fallback = requests();
+      expect(fallback.map(modeOf)).toEqual(['today']);
+      fallback.forEach(fail);
       expect(store.todayLoading()).toBe(false);
       expect(store.todayError()).not.toBeNull();
       expect(store.todayLifecycle()).toEqual([]);
@@ -920,18 +994,16 @@ describe('DashboardStore', () => {
     });
 
     it('clears the today error once a today answer lands', () => {
-      const reqs = widenThenPush();
-      flushScoped(reqs);
-      reqs.filter((r) => modeOf(r) === 'today').forEach(fail);
+      flushScoped(widenThenPush());
+      requests().filter((r) => modeOf(r) === 'today').forEach(fail);
       expect(store.todayError()).not.toBeNull();
       events.raise('trades');
       tick();
       vi.advanceTimersByTime(300);
-      const again = requests();
-      flushScoped(again);
-      flushToday(again);
+      flushScoped(requests(), block(TODAY));             // a block clears it like a fetch would
       expect(store.todayError()).toBeNull();
       expect(store.todayLoading()).toBe(false);
+      expect(requests()).toHaveLength(0);
     });
 
     it('ends a request cancelled before it answered with an error, never an endless skeleton', () => {

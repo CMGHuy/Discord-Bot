@@ -54,7 +54,10 @@ interface CalendarDaySlice {
   error: string | null;
   /** True for a malformed date or a day with no rows under the filter. */
   empty: boolean;
-  /** Nearest trading day in the adjacent month, looked up only at the edge. */
+  /** Nearest trading day beyond this month's grid: the day route's
+   *  `prev_day` / `next_day` (v217), or one adjacent-month lookup when the
+   *  route did not send the field (older backend) or the day was a 404.
+   *  The month grid's own neighbour still wins (`prevDay`/`nextDay`). */
   prevEdge: string | null;
   nextEdge: string | null;
   sort: DaySort;
@@ -131,6 +134,23 @@ export const CalendarDayStore = signalStore(
       });
     };
 
+    /** v217: one side's neighbour from the day route, decided once both the
+     *  day and its month have answered. A field the route did not send
+     *  (`undefined`: older backend, or a 404 day with no body) falls back to
+     *  one adjacent-month lookup. `null` is a measured "no trading day on
+     *  that side" and is never looked up. */
+    const landEdge = (
+      date: string, day: CalendarDayTrades | null, month: PnlCalendar,
+      step: 1 | -1, token: number,
+    ): void => {
+      const served = step === 1 ? day?.next_day : day?.prev_day;
+      if (served === undefined) {
+        loadEdge(date, month, step, token);
+        return;
+      }
+      patchState(store, step === 1 ? { nextEdge: served } : { prevEdge: served });
+    };
+
     const resolve = (): Observable<unknown> => {
       const date = store.date();
       const token = routeToken;
@@ -150,14 +170,18 @@ export const CalendarDayStore = signalStore(
         tap((month) => {
           if (token !== routeToken) return;
           patchState(store, { month });
-          loadEdge(date, month, -1, token);
-          loadEdge(date, month, 1, token);
         }),
       );
+      // The edges are decided here, once BOTH answered: `forkJoin` has no
+      // defined order between its members' taps, and whether the month
+      // lookup is needed depends on the day response.
       return routeRequest(forkJoin([day$, month$]), {
         start: () => patchState(store, { loading: true, error: null }),
-        next: () => {
-          if (token === routeToken) patchState(store, { loading: false });
+        next: ([day, month]) => {
+          if (token !== routeToken) return;
+          patchState(store, { loading: false });
+          landEdge(date, day, month, -1, token);
+          landEdge(date, day, month, 1, token);
         },
         error: (error) => {
           if (token !== routeToken) return;

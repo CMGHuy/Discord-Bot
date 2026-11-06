@@ -727,12 +727,16 @@ def _noted_ids() -> set:
     """
     try:
         from swingbot.core.analytics.journal import JournalStore
+        from swingbot.core.infra import read_memo
         from swingbot.core.tracking.origin import ALL
-        return {
-            e.get("trade_id")
-            for e in JournalStore().entries(cohort=ALL)
-            if e.get("note")
-        }
+
+        def load() -> list[dict]:
+            return [{"trade_id": e.get("trade_id")}
+                    for e in JournalStore().entries(cohort=ALL) if e.get("note")]
+
+        # v217 V217-3: memoised per request, so a second build_rows pass (the
+        # dashboard's today block) does not read the journal again.
+        return {e["trade_id"] for e in read_memo.records(read_memo.NOTED_IDS, load)}
     except Exception:
         return set()
 

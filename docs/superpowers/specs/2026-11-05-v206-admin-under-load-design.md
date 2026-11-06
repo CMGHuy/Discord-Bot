@@ -520,11 +520,23 @@ flags) before V206-13 pushes, then replace this note with that run's table.
 |---|---|---|---|---|---|
 | `v206-baseline-quiet-1` | quiet (not evidence) | 2026-11-05 22:03 UTC, no scan running | `ghcr.io/cmghuy/discord-bot:sha-d0500efab0cc` | 36 | 17 requests in 120 s = 8.5/min |
 | `v206-baseline-mixed-1` | mixed (not evidence) | 2026-11-06 12:39 Berlin, scan ended mid-run | `ghcr.io/cmghuy/discord-bot:sha-d5f56464e217` | 36 | 79 requests in 120 s = 39.5/min |
+| `v206-baseline-scan-1` (labelled mixed) | mixed (not evidence) | 2026-11-06 15:44 Berlin, session scans every 5 min (~286 s each), gaps between them hit some samples | `ghcr.io/cmghuy/discord-bot:sha-68927fbd8cc2` (ui 1.40.0 / bot 2.17.0, pre-Plan-1), probe `92d2b3f7` | 36 | 38 requests in 120 s = 19.0/min |
 
 The mixed run (scan stopped partway) still shows the load: `/cancel-precision`
 43.0 s max, `/analytics/performance` 35.6 s, `/dashboard` median 10.8 s /
 p90 23.9 s over 27 samples, `/market/tape` 169 calls (median 4.3 s, max 51.8 s)
 and an idle tab at 39.5 requests/min. The `scan` baseline is still owed.
+
+The second mixed run (15:44 Berlin, mostly inside scans) is worse: 27 of 36
+pages hit the 90 s cap in round 1. `/system/scan` 289 calls (median 1.1 s,
+p90 34.7 s, max 50.4 s), `/health` 351 calls (p90 32.8 s, max 50.2 s),
+`/dashboard` median 17.0 s / p90 33.1 s over 15 samples, `/market/tape` 76
+calls (median 10.7 s, p90 23.3 s, max 49.1 s), `/trades` median 13.8 s, and
+`/insights/*`, `/risk`, `/system/versions` page loads timed out. A strict
+`scan` label looks unreachable with back-to-back 5-minute session scans: the
+few seconds between scans catch at least one sample per hour-long run. The
+Plan 1 after-run (V206-13) should be compared against this run with that
+caveat, using the same flags.
 
 Worth knowing from the quiet run: with no scan running the idle tab already
 sits near the Plan 1 target (under 10/min), as expected since the polling
@@ -534,6 +546,41 @@ under repair is scan-driven. Heavy calls were still slow with the scan off
 not the only load on the single admin worker. Plans 2-4 own those calls. The
 probe's `/health` had no `sse_streams` yet (it ships in V206-4), so the
 stream count reads `-`.
+
+### Plan 2 boot merge (V217-1)
+
+**Verdict: no merge. Both boot `/trades` calls stay.** Pinned by
+`frontend/src/app/workspaces/dashboard/dashboard.spec.ts` ("Dashboard boot
+/trades calls (v217 V217-1)") and
+`frontend/src/app/workspaces/dashboard/panels/exposure-by-horizon.spec.ts`
+("exposure by horizon vs the Open tab (v217 V217-1)").
+
+The Dashboard boot sends two `/trades` requests, as § Plan 2 says:
+
+| Caller | Query | Feeds |
+|---|---|---|
+| `dashboard.ts` `recent` (activity feed) | `sort=-opened_at&page=1&per_page=20`, no status | `deriveActivity` (at most 6 events), `liveSymbols` for Refresh, the trade drawer's lookups, the `recentSettled` redirect rule |
+| `positions-table.ts` own `TradesStore` | `status=ACTIVE&sort=-opened_at&page=1&per_page=<10 desktop, 5 tablet/phone, or saved>` | the Open tab, its server pager, its own `trades`-event refetch |
+
+Why they cannot merge under this section's rule ("the same rows in the same
+order, asserted by a spec"):
+
+1. The feed is not a superset of the Open tab. It holds the 20 newest rows of
+   every status, so an ACTIVE position opened before those 20 is rendered by
+   the table and missing from the feed (the spec seeds exactly that case).
+2. The page sizes differ (20 vs 10/5/saved), and the table pages on the
+   server and refetches on its own events. A shared response would have to
+   carry both windows.
+
+The brief behind plan v217 counted a third call, `sb-exposure-by-horizon`
+(`status=open&per_page=200`). That panel is not mounted. It left the
+Dashboard template in `d9fef9eb` (2026-09-12), and the boot spec asserts no
+such element and no such tag in `dashboard.ts`. Had it been mounted, it still
+could not share the Open tab's call: `status=open` is ACTIVE plus PARTIAL at
+200 rows unpaged, `status=ACTIVE` is ACTIVE only and paged, so a PARTIAL
+runner lands in one and not the other. Deleting the unmounted panel
+(`panels/exposure-by-horizon.ts`, its spec and its `PANEL_HELP` entry) is a
+follow-up outside plan v217.
 
 ### Plan 1 after (committed probe)
 
