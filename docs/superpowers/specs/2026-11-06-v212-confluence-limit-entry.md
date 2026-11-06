@@ -5,6 +5,7 @@
 **Edge:** expectancy — on confluence plans whose stop today is clamped into empty air above the support, the long rests a limit partway down towards the support with its stop just under the support. A dip fills at a better price under real structure; a straight runner is missed. Prediction: ExpR up on the filled trades, fewer trades, and noise stop-outs down.
 **Screen:** exempt (post-signal)
 **Panel:** quant-researcher, veteran-trader, risk-manager
+**Split:** live path (G4) in [v216](2026-11-06-v216-confluence-limit-live-path.md), cut 2026-11-06 when the plan reached 22 tasks against the 20-task cap; v216 is implemented only after a Stage 3 pass here.
 
 ## Why
 
@@ -275,42 +276,15 @@ gate, § Funnel stages):
 - **G3.** Run Stages −1..3 through `backtest-runner`, chunked and
   checkpointed per unit, with a flushed percent print. Record the result
   and one ledger row per look.
-- **G4. Live path, inert.** The alert and the admin plan view must work
-  for someone resting orders before the open. Each limit alert states all
-  of these, as prices rounded to the tick:
-  - "Buy limit L" ("sell" for shorts);
-  - "on fill: stop S′, TP1 T1 (TP2 T2)" (bracket/OCO wording);
-  - "cancel the order if price trades at T1 before it fills";
-  - "valid through the close of <date>".
-
-  The bot then posts a **follow-up for every state change**:
-  - filled, with "place the stop at S′ now";
-  - expired;
-  - cancelled because TP1 traded first;
-  - filled-and-stopped on a gap.
-
-  The existing `cancelled_limit` event already reaches Discord: it is in
-  `PENDING_CANCEL_EVENTS` and `NOTICE_EVENTS`, with execution-feed,
-  lifecycle-embed and follow_notify mappings. Two events are new: the
-  `heat_at_fill` cancel and a filled-and-stopped-on-gap event.
-  - **Registration.** Each joins every event table that `cancelled_limit`
-    is in. The brief lists about 8 tables.
-  - **A test enforces it:** every cancel or close event appears in each
-    table, so a placeholder paper trade is never left open (the 2026-09-11
-    incident).
-  - **Alert text is new code.** Today a limit plan prints "BUY AT MARKET" /
-    "Entry: market ~X" (`presentation/instructions.py:ticket_for`,
-    `scanning/plan_table.py:entry_line`), so those gain limit wording. The
-    admin SPA already prints "Buy limit" (`trade-figures.ts:51`), and
-    `why/levels-block.ts` gains the limit mapping.
-  - **Live fill price.** For this arm only, `_fill_pending`'s `risk_cap`
-    check reads the planned `|L − stop|`, not the gap fill price. A long
-    fill below L only shrinks the loss; a gap below the stop takes the
-    filled-and-stopped path.
-
-  The extra alert volume is reported: limit alerts plus follow-ups per
-  day, estimated from replay. Nothing is switched on: `.env.example`
-  documents the knob at 0.
+- **G4. Live path — moved to v216.** The live fill branch, heat at fill
+  in `plan_manager`, the two new events and their routing tables, the
+  alert and follow-up text and the admin pin are specified in
+  [v216](2026-11-06-v216-confluence-limit-live-path.md), implemented only
+  after a Stage 3 pass here. This spec ships the knob (inert, `.env.example`
+  at 0), the geometry helper, the shared fill rule `bar_outcome` that v216's
+  live branch will call, the replay and the measurement. The extra alert
+  volume (limit alerts plus follow-ups per day, estimated from replay) is
+  still reported here, in the disclosures.
 
 ## Non-goals
 
@@ -359,9 +333,10 @@ gate, § Funnel stages):
 
 ## What follows
 
-- **Stage 3 pass:** the partner decides whether to set the knob live (via
-  `mirror-prod`).
-- **No pass:** a closed row in `backtest-methodology.md`. The daily-close
+- **Stage 3 pass:** implement v216 (the live path), then the partner
+  decides whether to set the knob live (via `mirror-prod`).
+- **No pass:** a closed row in `backtest-methodology.md`; v216 moves to
+  `no-lift/` unimplemented. The daily-close
   stop from the same review stays available as a separate mechanism.
 
 ## Panel review
