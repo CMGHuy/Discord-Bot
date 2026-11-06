@@ -30,10 +30,16 @@ fetch_backtest_data.load_cached.
     python scripts/data/backfill_equity_samples.py --apply --replace     # rewrite every backfill row
     python scripts/data/backfill_equity_samples.py --apply --allow-gaps  # write despite missing bars
     python scripts/data/backfill_equity_samples.py --recompute-realized [--apply]
+    python scripts/data/backfill_equity_samples.py --open-notional [--apply]   # v208: fill open_notional (approx = TRUE)
 
 Production (after the v172 deploy):
     bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python scripts/data/backfill_equity_samples.py"
     bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python scripts/data/backfill_equity_samples.py --apply"
+
+For the v208 fill, dry-run on the replica first and verify the PITR drill before applying.
+    bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python scripts/data/backfill_equity_samples.py --open-notional --apply"
+To roll back approximate values while keeping recorder values:
+    UPDATE equity_samples SET open_notional = NULL, open_notional_approx = NULL WHERE open_notional_approx IS TRUE
 """
 from __future__ import annotations
 
@@ -81,6 +87,14 @@ class Skip(NamedTuple):
     trade_id: object
     ticker: str
     reason: str
+
+
+class OpenNotionalReport(NamedTuple):
+    seen: int
+    filled: int
+    backfill_rows: int
+    live_rows: int
+    unpriced: int
 
 
 class CoverageGap(Exception):
@@ -189,6 +203,14 @@ def position_day(pos: dict, bar: Bar, day: date) -> dict:
             "close_u": ZERO if close_price is None else pnl(close_price)}
 
 
+def position_notional(pos: dict, bar: Bar, day: date) -> tuple[Decimal, Decimal]:
+    """Gross position value at the open and close of a backfilled session."""
+    shares = equity.to_decimal(pos["shares"])
+    at_open = ZERO if pos["entry_day"] == day else abs(shares * equity.to_decimal(bar.open))
+    at_close = ZERO if pos["exit_day"] == day else abs(shares * equity.to_decimal(bar.close))
+    return at_open, at_close
+
+
 def _unpriceable(pos: dict, day: date) -> str | None:
     if not pos["shares"]:
         return "no size"
@@ -224,7 +246,7 @@ def _priceable(pos: dict, frame: pd.DataFrame | None, day: date) -> tuple[str | 
 
 def _price_positions(day: date, positions: list[dict], bars: dict, *,
                      allow_gaps: bool) -> tuple[dict, int, list[Skip]]:
-    totals = dict.fromkeys(("open_u", "high_u", "low_u", "close_u"), ZERO)
+    totals = dict.fromkeys(("open_u", "high_u", "low_u", "close_u", "open_x", "close_x"), ZERO)
     counted, skips = 0, []
     for pos in positions:
         reason, bar = _priceable(pos, bars.get(pos["ticker"]), day)
@@ -235,15 +257,19 @@ def _price_positions(day: date, positions: list[dict], bars: dict, *,
             continue
         for key, value in position_day(pos, bar, day).items():
             totals[key] += value
+        at_open, at_close = position_notional(pos, bar, day)
+        totals["open_x"] += at_open
+        totals["close_x"] += at_close
         counted += 1
     return totals, counted, skips
 
 
 def _row(at: datetime, kind: str, realized: Decimal, unrealized: Decimal, counted: int,
-         skipped: int, run_tag: str) -> dict:
+         skipped: int, run_tag: str, *, notional: Decimal | None = None) -> dict:
     return {"at": at, "realized_balance": realized, "unrealized_pnl": unrealized,
             "equity": realized + unrealized, "open_n": counted, "skipped_n": skipped,
-            "source": "backfill", "kind": kind, "backfill_run": run_tag}
+            "source": "backfill", "kind": kind, "backfill_run": run_tag,
+            "open_notional": notional, "open_notional_approx": None if notional is None else True}
 
 
 def build_day_rows(day: date, positions: list[dict], bars: dict[str, pd.DataFrame],
@@ -255,11 +281,12 @@ def build_day_rows(day: date, positions: list[dict], bars: dict[str, pd.DataFram
     before = equity.realized_balance_at(start, legs, _day_end(day - timedelta(days=1)))
     after = equity.realized_balance_at(start, legs, _day_end(day))
     common = (counted, len(skips), run_tag)
+    at_open, at_close = (None, None) if skips else (totals["open_x"], totals["close_x"])
     return [
-        _row(open_at, "point", before, totals["open_u"], *common),
+        _row(open_at, "point", before, totals["open_u"], *common, notional=at_open),
         _row(open_at, "day_high", after, totals["high_u"], *common),
         _row(open_at, "day_low", after, totals["low_u"], *common),
-        _row(close_at, "point", after, totals["close_u"], *common),
+        _row(close_at, "point", after, totals["close_u"], *common, notional=at_close),
     ], skips
 
 
@@ -361,6 +388,82 @@ def recompute_realized(repo, trades: list[dict], *, apply: bool) -> int:
     return changed
 
 
+def rows_to_fill(repo) -> list[dict]:
+    """Point samples from either source that still lack open notional."""
+    return [row for row in repo.list_rows()
+            if row["kind"] == "point" and row.get("open_notional") is None]
+
+
+def _held_at(trades: list[dict], at: datetime) -> list[dict]:
+    held = []
+    for trade in equity.main_book(trades):
+        opened = equity.parse_ts(trade.get("opened_at"))
+        if opened is None or opened > at:
+            continue
+        for row in expand_trade_legs(trade):
+            status = row.get("status")
+            if status not in _HELD_STATUSES:
+                continue
+            closed = None if status == "open" else equity.parse_ts(row.get("closed_at"))
+            if status == "open" or (closed is not None and closed > at):
+                held.append({"ticker": trade["ticker"], "shares": row.get("shares")})
+    return held
+
+
+def _row_notional(row: dict, trades: list[dict], bars: dict) -> Decimal | None:
+    at = row["at"]
+    day = ny_day(at)
+    use_open = at == session_bounds(day)[0]
+    value = ZERO
+    for piece in _held_at(trades, at):
+        bar = bar_for(bars.get(piece["ticker"]), day)
+        shares = equity.to_decimal(piece["shares"])
+        if bar is None or not shares:
+            return None
+        price = bar.open if use_open else bar.close
+        value += abs(shares * equity.to_decimal(price))
+    return value
+
+
+def fill_open_notional(repo, trades: list[dict], bars: dict, *, apply: bool) -> OpenNotionalReport:
+    """Approximate missing point values from daily bars for the slices held at each sample."""
+    rows = rows_to_fill(repo)
+    counts = {"backfill": 0, "live": 0}
+    for row in rows:
+        value = _row_notional(row, trades, bars)
+        if value is None:
+            continue
+        if apply:
+            repo.update_open_notional(row["id"], value, True)
+        counts[row["source"]] += 1
+    filled = counts["backfill"] + counts["live"]
+    return OpenNotionalReport(len(rows), filled, counts["backfill"], counts["live"], len(rows) - filled)
+
+
+def _notional_spans(trades: list[dict], rows: list[dict]) -> dict[str, tuple[date, date]]:
+    spans: dict[str, tuple[date, date]] = {}
+    for row in rows:
+        at = row["at"]
+        day = ny_day(at)
+        for piece in _held_at(trades, at):
+            ticker = piece["ticker"]
+            first, last = spans.get(ticker, (day, day))
+            spans[ticker] = (min(first, day), max(last, day))
+    return spans
+
+
+def _run_open_notional(args, repo, trades, bars_fn, out_dir) -> OpenNotionalReport:
+    rows = rows_to_fill(repo)
+    frames = _fetch_all(_notional_spans(trades, rows), bars_fn, out_dir)
+    report = fill_open_notional(repo, trades, frames, apply=args.apply)
+    action = "filled" if args.apply else "would fill"
+    print(f"open_notional: {action} {report.filled} rows "
+          f"({report.backfill_rows} backfill, {report.live_rows} live), {report.unpriced} unpriced")
+    if not args.apply:
+        print(DRY_RUN_NOTE)
+    return report
+
+
 def _parse(argv):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -370,8 +473,13 @@ def _parse(argv):
                         help="With --apply: delete every backfill row and rewrite them, one transaction.")
     parser.add_argument("--allow-gaps", action="store_true",
                         help="With --apply: write despite missing bars (left out, counted in skipped_n).")
-    parser.add_argument("--recompute-realized", action="store_true",
-                        help="Rewrite realized_balance/equity on live rows from the current trade log.")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--recompute-realized", action="store_true",
+                       help="Rewrite realized_balance/equity on live rows from the current trade log.")
+    modes.add_argument("--open-notional", action="store_true",
+                       help="Fill open_notional on point rows that lack it "
+                            "(re-derived from daily bars, open_notional_approx = TRUE). "
+                            "Touches no other column.")
     return parser.parse_args(argv)
 
 
@@ -420,6 +528,15 @@ def _finish(args, repo, summary: dict, rows: list[dict]) -> dict:
     return summary
 
 
+def _backfill_summary(run_id: str, bars_asof: str, days: list[date],
+                      rows: list[dict], skips: list[Skip]) -> dict:
+    gaps = sum(1 for skip in skips if skip.reason in GAP_REASONS)
+    summary = _summary(run_id, bars_asof=bars_asof, days=len(days), rows=len(rows),
+                       gaps=gaps, skipped=len(skips))
+    _report(summary, days, skips)
+    return summary
+
+
 def main(argv: list[str] | None = None, *, bars_fn=None, repo=None, trades_fn=None,
          plans_fn=None, today: date | None = None, out_dir: Path | None = None) -> dict:
     args = _parse(argv)
@@ -429,16 +546,17 @@ def main(argv: list[str] | None = None, *, bars_fn=None, repo=None, trades_fn=No
     if args.recompute_realized:
         return _run_recompute(args, repo, trades, run_id)
     filled = filled_trades(trades, (plans_fn or equity.load_plans_by_id)())   # drops PENDING placeholders
+    bars_fn = bars_fn or fetch_raw_bars
+    out_dir = out_dir or ROOT / "data" / "backfill_equity_samples" / run_id
+    if args.open_notional:
+        report = _run_open_notional(args, repo, filled, bars_fn, out_dir)
+        return _summary(run_id, open_notional=report._asdict())
     days = backfill_days(filled, repo, today or datetime.now(US_MARKET_TZ).date())
-    frames = _fetch_all(_spans(filled, days), bars_fn or fetch_raw_bars,
-                        out_dir or ROOT / "data" / "backfill_equity_samples" / run_id)
+    frames = _fetch_all(_spans(filled, days), bars_fn, out_dir)
     bars_asof = _bars_asof(frames)
     rows, skips = _build_all(days, filled, frames, equity.realized_legs(trades),
                              equity.starting_balance(), f"{run_id}@bars-asof-{bars_asof}")
-    gaps = sum(1 for skip in skips if skip.reason in GAP_REASONS)
-    summary = _summary(run_id, bars_asof=bars_asof, days=len(days), rows=len(rows),
-                       gaps=gaps, skipped=len(skips))
-    _report(summary, days, skips)
+    summary = _backfill_summary(run_id, bars_asof, days, rows, skips)
     return _finish(args, repo, summary, rows)
 
 

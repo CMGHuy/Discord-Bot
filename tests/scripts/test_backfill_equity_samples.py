@@ -167,6 +167,27 @@ def test_bar_for_matches_by_date_and_rejects_nan():
     assert bes.bar_for(None, MON) is None
 
 
+
+# --- V208-4: open notional ------------------------------------------------------
+
+@pytest.mark.parametrize("day, at_open, at_close", [
+    (MON, 0, 1020),
+    (TUE, 1020, 2040),
+    (WED, 2040, 975),
+])
+def test_day_rows_carry_open_notional_on_the_two_points(day, at_open, at_close):
+    rows, _ = _rows(day)
+    assert [(r["kind"], r["open_notional"]) for r in rows] == [
+        ("point", at_open), ("day_high", None), ("day_low", None), ("point", at_close)]
+    assert [r["open_notional_approx"] for r in rows] == [True, None, None, True]
+
+
+def test_a_day_with_a_skipped_slice_has_no_open_notional():
+    rows, skips = _rows(TUE, bars={"AAPL": BARS["AAPL"]}, allow_gaps=True)
+    assert [s.ticker for s in skips] == ["MSFT"]
+    assert {(r["open_notional"], r["open_notional_approx"]) for r in rows} == {(None, None)}
+
+
 # --- V172-7: the CLI -------------------------------------------------------------
 from swingbot.core.db.repositories.equity_samples import EquitySampleRepository  # noqa: E402
 from tests.store_seed import seed_store  # noqa: E402
@@ -355,3 +376,92 @@ def test_the_coverage_gate_refuses_a_split_mismatch_unless_allowed(
     assert "bar mismatch (split?)" in capsys.readouterr().out
     assert _main(monkeypatch, ["--apply", "--allow-gaps"], repo, tmp_path,
                  frames=SPLIT_BARS)["written"] == 12
+
+
+UTC = timezone.utc
+MON_LIVE = datetime(2026, 10, 5, 14, 30, tzinfo=UTC)    # AAPL held
+TUE_LIVE = datetime(2026, 10, 6, 16, 0, tzinfo=UTC)     # AAPL and MSFT held
+WED_LIVE = datetime(2026, 10, 7, 19, 0, tzinfo=UTC)     # AAPL closed at 18:00 UTC
+FILLED_AT = datetime(2026, 10, 6, 17, 0, tzinfo=UTC)    # already valued by the recorder
+
+
+def _seed_unfilled(repo):
+    for at in (MON_LIVE, TUE_LIVE, WED_LIVE):
+        repo.insert_sample(_live(at, 10000, 0))
+    old = {"source": "backfill", "backfill_run": "old@bars-asof-x"}
+    repo.upsert_many([{**_live(bes.session_bounds(MON)[0], 10000, 0), **old},
+                      {**_live(bes.session_bounds(TUE)[0], 10000, 0), **old},
+                      {**_live(bes.session_bounds(MON)[0], 10000, 0), **old, "kind": "day_high"}])
+    repo.insert_sample({**_live(FILLED_AT, 10000, 0), "open_notional": Decimal("1"),
+                        "open_notional_approx": False})
+
+
+def _notional_by_at(repo):
+    return {(r["at"], r["kind"]): (r.get("open_notional"), r.get("open_notional_approx"))
+            for r in repo.list_rows()}
+
+
+def test_fill_prices_what_was_held_at_each_instant(repo, account):
+    _seed_unfilled(repo)
+    report = bes.fill_open_notional(repo, TRADES, BARS, apply=True)
+    assert report == bes.OpenNotionalReport(seen=5, filled=5, backfill_rows=2, live_rows=3,
+                                            unpriced=0)
+    got = _notional_by_at(repo)
+    assert got[(MON_LIVE, "point")] == (1020.0, True)
+    assert got[(TUE_LIVE, "point")] == (2040.0, True)
+    assert got[(WED_LIVE, "point")] == (975.0, True)
+    assert got[(bes.session_bounds(MON)[0], "point")] == (0.0, True)
+    assert got[(bes.session_bounds(TUE)[0], "point")] == (1020.0, True)
+    assert got[(bes.session_bounds(MON)[0], "day_high")] == (None, None)
+    assert got[(FILLED_AT, "point")] == (1.0, False)
+
+
+@pytest.mark.parametrize("missing", ["bar", "size"])
+def test_a_row_with_an_unpriced_held_slice_stays_null(repo, account, missing):
+    _seed_unfilled(repo)
+    trades = TRADES if missing == "bar" else [AAPL, {**MSFT, "shares": None}]
+    bars = {"AAPL": BARS["AAPL"]} if missing == "bar" else BARS
+    report = bes.fill_open_notional(repo, trades, bars, apply=True)
+    assert (report.filled, report.backfill_rows, report.live_rows, report.unpriced) == (3, 2, 1, 2)
+    got = _notional_by_at(repo)
+    assert got[(TUE_LIVE, "point")] == (None, None)
+    assert got[(WED_LIVE, "point")] == (None, None)
+
+
+def test_the_fill_never_touches_the_equity_columns(repo, account):
+    _seed_unfilled(repo)
+    before = {(r["at"], r["kind"]): (r["equity"], r["realized_balance"], r["unrealized_pnl"])
+              for r in repo.list_rows()}
+    bes.fill_open_notional(repo, TRADES, BARS, apply=True)
+    after = {(r["at"], r["kind"]): (r["equity"], r["realized_balance"], r["unrealized_pnl"])
+             for r in repo.list_rows()}
+    assert after == before
+
+
+def test_open_notional_dry_run_counts_and_writes_nothing(monkeypatch, repo, account, tmp_path, capsys):
+    _seed_unfilled(repo)
+    before = repo.list_rows()
+    calls = []
+    summary = _main(monkeypatch, ["--open-notional"], repo, tmp_path, calls=calls)
+    assert summary["open_notional"] == {"seen": 5, "filled": 5, "backfill_rows": 2,
+                                        "live_rows": 3, "unpriced": 0}
+    out = capsys.readouterr().out
+    assert "open_notional: would fill 5 rows (2 backfill, 3 live), 0 unpriced" in out
+    assert "Dry run only -- pass --apply to write." in out
+    assert sorted(calls) == [("AAPL", MON, TUE), ("MSFT", TUE, WED)]
+    assert repo.list_rows() == before
+
+
+def test_open_notional_apply_then_a_rerun_finds_nothing(monkeypatch, repo, account, tmp_path, capsys):
+    _seed_unfilled(repo)
+    _main(monkeypatch, ["--open-notional", "--apply"], repo, tmp_path)
+    assert "open_notional: filled 5 rows (2 backfill, 3 live), 0 unpriced" in capsys.readouterr().out
+    again = _main(monkeypatch, ["--open-notional", "--apply"], repo, tmp_path)
+    assert again["open_notional"]["seen"] == 0 and again["open_notional"]["filled"] == 0
+
+
+def test_open_notional_and_recompute_realized_are_exclusive(monkeypatch, repo, tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        _main(monkeypatch, ["--open-notional", "--recompute-realized"], repo, tmp_path)
+    assert exc.value.code == 2
+    assert "not allowed with argument" in capsys.readouterr().err
