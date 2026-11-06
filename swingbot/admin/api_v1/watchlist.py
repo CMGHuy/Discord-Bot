@@ -13,14 +13,19 @@ working around; the SPA gets the structured version.
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from flask import jsonify, request
 
+from swingbot.core.infra.swallowed import swallowed
+
 from . import api_v1, error
 from .auth import require_auth
 
+
+log = logging.getLogger(__name__)
 
 # Same shape the Jinja bulk-add applies: length cap plus an alphanumeric
 # test that tolerates the punctuation real symbols use (BRK.B, RDS-A, EURUSD=X).
@@ -146,7 +151,9 @@ def _lookup_new_symbols(tickers: list[str]) -> dict[str, int]:
             ticker = futures[fut]
             try:
                 result = fut.result()
-            except Exception:
+            except Exception as exc:
+                swallowed(log, "marketdata.admin.watchlist_lookup", exc,
+                          "watchlist lookup of %s failed", ticker)
                 found[ticker] = 0
                 continue
             if result.status == "failed" and result.note == "no data":
@@ -187,6 +194,20 @@ def list_tickers():
     ]})
 
 
+def _classify(raw: list, existing: set[str]) -> tuple[list[str], list[str], list[str]]:
+    """(already on the list, invalid, new) for the posted symbols, de-duplicated."""
+    candidates = [str(t).strip().upper() for t in raw if str(t).strip()]
+    already, invalid, fresh = [], [], []
+    for ticker in dict.fromkeys(candidates):
+        if not _is_valid(ticker):
+            invalid.append(ticker)
+        elif ticker in existing:
+            already.append(ticker)
+        else:
+            fresh.append(ticker)
+    return already, invalid, fresh
+
+
 @api_v1.route("/watchlist/tickers", methods=["POST"])
 @require_auth
 def add_tickers():
@@ -205,17 +226,7 @@ def add_tickers():
     if not isinstance(raw, list):
         return error("invalid", "Body must contain a 'tickers' list.", 400)
 
-    candidates = [str(t).strip().upper() for t in raw if str(t).strip()]
-    existing = set(load_watchlist())
-
-    already, invalid, fresh = [], [], []
-    for ticker in dict.fromkeys(candidates):
-        if not _is_valid(ticker):
-            invalid.append(ticker)
-        elif ticker in existing:
-            already.append(ticker)
-        else:
-            fresh.append(ticker)
+    already, invalid, fresh = _classify(raw, set(load_watchlist()))
 
     # Look every new symbol up BEFORE adding it: this fetches and caches its
     # price history (so the next scan has data), and a symbol Yahoo has no
