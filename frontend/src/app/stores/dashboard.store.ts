@@ -17,7 +17,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { routeRequest } from '../routing/route-request';
 import { LiveValuesStore } from './live-values.store';
 import { followSnapshot, snapshotMeta } from './snapshot-follow';
-import { Dashboard, DashboardScope } from '../api/models';
+import { Dashboard, DashboardScope, DashboardToday } from '../api/models';
 import {
   ChartTarget,
   ScopePreset,
@@ -42,10 +42,13 @@ interface DashboardSlice {
   /** Bumped on every programmatic chart move (a preset click, a reset); the
    *  chart moves when it changes. 0 = nothing asked yet. */
   targetSeq: number;
-  /** Today's whole response, kept beside the scoped one: the Realised today
-   *  card and the Open positions tabs read today in every mode. Under 1D it
-   *  is the scoped response itself. Null until a today fetch lands. */
-  todayData: Dashboard | null;
+  /** Today's realised block and lifecycle counts, kept beside the scoped
+   *  response: the Realised today card and the Open positions tabs read
+   *  today in every mode. Under 1D it is the scoped response itself; under
+   *  a wider scope it is that response's `today` block (v217), or a
+   *  today-only fetch's answer when the block is missing (older backend).
+   *  Null until one lands. */
+  todayData: DashboardToday | null;
   /** A today-only fetch is in flight (the scoped fetch is `loading`). */
   todayLoading: boolean;
   /** The last today fetch failed and no newer one has answered. Kept beside
@@ -72,7 +75,16 @@ function isPreset(selection: ScopeSelection, preset: ScopePreset): boolean {
   return selection.kind === 'preset' && selection.preset === preset;
 }
 
-const isDay = (selection: ScopeSelection): boolean => isPreset(selection, '1D');
+/** Whether a wider answer without a `today` block (older backend) sends the
+ *  today-only fetch: always on a load, only while nothing landed on a pick. */
+type TodayFallback = 'always' | 'when-empty';
+
+/** How one scoped request serves today's figures. */
+interface TodayRoad {
+  next(data: Dashboard): void;
+  error(error: ApiError): void;
+  cancel(): void;
+}
 
 /**
  * The five plan-lifecycle counts — SR53.
@@ -90,7 +102,7 @@ const isDay = (selection: ScopeSelection): boolean => isPreset(selection, '1D');
  * a strip that shed its empty entries would change width as the session
  * went on.
  */
-function lifecycleOf(data: Dashboard | null): { status: string; count: number }[] {
+function lifecycleOf(data: Pick<Dashboard, 'lifecycle'> | null): { status: string; count: number }[] {
   const raw = data?.lifecycle;
   // An EMPTY object, not just a missing one. `_lifecycle_counts` returns
   // {} rather than raising, because the Dashboard is the landing page and
@@ -329,7 +341,7 @@ export const DashboardStore = signalStore(
     // newest stamp has settled.
     let todayIssued = 0;
     let todayLanded = 0;
-    const landToday = (stamp: number, data: Dashboard): void => {
+    const landToday = (stamp: number, data: DashboardToday): void => {
       if (stamp < todayLanded) return;
       todayLanded = stamp;
       patchState(store, {
@@ -346,40 +358,8 @@ export const DashboardStore = signalStore(
     let rangeGeneration = 0;
     const ranges = new Subject<{ window: TimeWindow; generation: number }>();
 
-    // `defer`: the request number and the window are taken when the route
-    // resolver or a method subscribes. `untracked`: `load()` runs inside the
-    // onInit effect, and a tracked read would refetch on every selection
-    // change on top of the method's own refetch.
-    const resolve = (): Observable<void> => defer(() => {
-      const request = ++latestRequest;
-      const current = (): boolean => request === latestRequest;
-      const { mode, window } = scopeToRequest(untracked(() => store.selection()), new Date());
-      // Under 1D the scoped response is today's: stamped like a today fetch.
-      const todayStamp = mode === 'today' ? ++todayIssued : 0;
-      let settled = false;
-      return routeRequest(api.dashboard(mode, window), {
-        start: () => patchState(store, { loading: true }),
-        next: (data) => {
-          settled = true;
-          if (todayStamp) landToday(todayStamp, data);
-          if (current()) patchState(store, { data, loading: false, error: null, stale: false });
-        },
-        error: (error) => {
-          settled = true;
-          if (todayStamp) failToday(todayStamp, error);
-          if (current()) patchState(store, failure(untracked(() => store.data()) !== null, error));
-        },
-      }).pipe(finalize(() => {
-        if (settled || !current()) return;
-        patchState(store, unfinished(untracked(() => store.data()) !== null));
-        if (todayStamp === todayIssued) patchState(store, { todayLoading: false });
-      }));
-    });
-
-    const refetch = (): void => { resolve().subscribe({ error: () => undefined }); };
-
-    /** Today's response alone, for the today-only figures when the scope is
-     *  wider. A failure keeps the previous figures and says so. */
+    /** Today's response alone: the fallback when a wider answer carries no
+     *  `today` block. A failure keeps the previous figures and says so. */
     const loadToday = (): void => {
       const stamp = ++todayIssued;
       patchState(store, { todayLoading: true });
@@ -389,16 +369,86 @@ export const DashboardStore = signalStore(
       });
     };
 
-    /** `untracked`: this runs inside the onInit effect, like `resolve`. */
-    const load = (): void => {
-      refetch();
-      if (!untracked(() => isDay(store.selection()))) loadToday();
+    /** Under 1D the scoped response is today's: stamped like a today fetch. */
+    const dayRoad = (): TodayRoad => {
+      const stamp = ++todayIssued;
+      return {
+        next: (data) => landToday(stamp, data),
+        error: (error) => failToday(stamp, error),
+        cancel: () => {
+          if (stamp === todayIssued) patchState(store, { todayLoading: false });
+        },
+      };
     };
+
+    /** v217 (v205 P3-a): a wider answer carries today's figures as its
+     *  `today` block, so no second request goes out. The stamp is taken at
+     *  issue: a today fetch issued earlier never lands on top of the block.
+     *  Without a block (older backend) the today-only fetch follows, but
+     *  only where today was owed before v217 (see `TodayFallback`). */
+    const widerRoad = (fallback: TodayFallback): TodayRoad => {
+      const owed = fallback === 'always' || untracked(() => store.todayData()) === null;
+      const stamp = ++todayIssued;
+      if (owed) patchState(store, { todayLoading: true });
+      const settle = (): void => {
+        if (stamp === todayIssued) patchState(store, { todayLoading: false });
+      };
+      return {
+        next: (data) => {
+          if (data.today !== undefined) landToday(stamp, data.today);
+          else if (owed) loadToday();
+          else settle();
+        },
+        error: (error) => {
+          if (owed) failToday(stamp, error);
+          else settle();
+        },
+        cancel: settle,
+      };
+    };
+
+    // `defer`: the request number and the window are taken when a method
+    // subscribes. `untracked`: `load()` runs inside the onInit effect, and a
+    // tracked read would refetch on every selection change on top of the
+    // method's own refetch.
+    const resolveScoped = (fallback: TodayFallback): Observable<void> => defer(() => {
+      const request = ++latestRequest;
+      const current = (): boolean => request === latestRequest;
+      const { mode, window } = scopeToRequest(untracked(() => store.selection()), new Date());
+      const today = mode === 'today' ? dayRoad() : widerRoad(fallback);
+      let settled = false;
+      return routeRequest(api.dashboard(mode, window), {
+        start: () => patchState(store, { loading: true }),
+        next: (data) => {
+          settled = true;
+          today.next(data);
+          if (current()) patchState(store, { data, loading: false, error: null, stale: false });
+        },
+        error: (error) => {
+          settled = true;
+          today.error(error);
+          if (current()) patchState(store, failure(untracked(() => store.data()) !== null, error));
+        },
+      }).pipe(finalize(() => {
+        if (settled || !current()) return;
+        patchState(store, unfinished(untracked(() => store.data()) !== null));
+        today.cancel();
+      }));
+    });
+
+    /** Public: a full load's rules (today owed). */
+    const resolve = (): Observable<void> => resolveScoped('always');
+
+    const refetch = (fallback: TodayFallback): void => {
+      resolveScoped(fallback).subscribe({ error: () => undefined });
+    };
+
+    /** First load and every event refresh. One request in every scope. */
+    const load = (): void => refetch('always');
 
     const select = (selection: ScopeSelection): void => {
       patchState(store, { selection });
-      refetch();
-      if (!isDay(selection) && store.todayData() === null) loadToday();
+      refetch('when-empty');
     };
 
     /** Never persisted: every visit opens on 1D (Today). */

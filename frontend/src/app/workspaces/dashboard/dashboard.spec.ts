@@ -993,6 +993,9 @@ describe('Dashboard lifecycle tab counts (v194 B1)', () => {
       if (req.request.params.get('mode') === 'today') fail(req);
       else req.flush(payload({ scope: { mode: 'range' }, lifecycle: { ...LIFECYCLE, CLOSED: 40 } as never }));
     }
+    // v217: the 1M answer has no `today` block (an older backend) and no today
+    // answer has landed, so the store falls back to a today request: it fails too.
+    for (const req of backend.match('/api/v1/dashboard?mode=today')) fail(req);
     await fixture.whenStable();
     fixture.detectChanges();
     return fixture;
