@@ -310,12 +310,44 @@ pages only read what it stored.
 - Health: the admin's `/system` page `refresher` line (`ok` / `stalled` / `off`).
 - Kill switch: `python3 scripts/ops/env_set.py ADMIN_REFRESHER off`, then
   `docker compose restart admin refresher`. The admin pages go back to
-  request-time fetching exactly as before v201.
+  request-time fetching as before v201, and (from v204) Risk, Analytics,
+  Calendar and the dashboard sparkline go back to request-time compute: their
+  pre-v204 cost was 30 s+ page loads under load
+  (`docs/superpowers/results/2026-10-29-v204-page-timing.md`, Before).
   `MARKETDATA_LAYER=off` does the same. The refresher process stays up, holds its
   lock and keeps beating, but fetches nothing and drains no queue; it picks a
   flip back to `on` up from `.env` within one poll tick, with no restart needed.
 - `scripts/ops/rollback_to.sh` stops it with the other writers and starts it only
   when the target image has `swingbot.refresher`.
+
+### v204: admin snapshots (`admin_snapshots`)
+
+The refresher also builds the Risk, Analytics, Calendar and dashboard-sparkline
+payloads in a snapshot worker thread and stores one row per key in
+`admin_snapshots` (revision `v204_001`); those pages read the stored row and
+never compute on the request.
+
+- No manual step on deploy; the worker fills every key within a few cycles.
+- Cadence and staleness (`.env`, hot-reloaded): `ADMIN_SNAPSHOT_REGULAR_S`,
+  `ADMIN_SNAPSHOT_EXTENDED_S`, `ADMIN_SNAPSHOT_CLOSED_S` (rebuild interval per
+  session), `ADMIN_SNAPSHOT_BUDGET_S` (a build past it is abandoned, its thread
+  left to finish and its late write rejected unless newer),
+  `ADMIN_STALE_SNAPSHOT_REGULAR_S`, `ADMIN_STALE_SNAPSHOT_EXTENDED_S`.
+- It reads daily bars read-only from the `./market_data` mount; with that
+  mount missing, Risk shows clusters/correlation unavailable rather than
+  fetching.
+- Check: `docker compose exec -T bot python -c "..."` over
+  `select key, computed_at, stale_inputs from admin_snapshots`.
+
+Rollback: an image-only rollback to a pre-v204 image is **not** safe once
+`v204_001` is applied: that image does not know the revision, so `deploy.sh`
+aborts before `up` with bot, admin and refresher stopped (§ Rolling back).
+In this order: (1) with the writers stopped, run the downgrade from the
+**v204** image: `docker compose run --rm --no-deps bot alembic downgrade v207_001`
+(the revision `v204_001` revises). It drops only `admin_snapshots` (rebuilt
+on roll-forward) and keeps `admin_users`; check `alembic history` first for
+revisions stacked on top. (2) Then redeploy the previous image (§ Rolling back).
+Rolling back past v207 as well is the v207 step below, run after this one.
 
 ### v205: daily FX rates (`fx_daily_rates`)
 
