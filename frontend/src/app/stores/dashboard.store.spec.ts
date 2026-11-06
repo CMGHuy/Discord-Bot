@@ -795,6 +795,26 @@ describe('DashboardStore', () => {
       expect(requests()).toHaveLength(0);
     });
 
+    it('lands a zero-close today block as a measured zero, with no fetch', () => {
+      const zero = { amount: null, pct: null, n: 0, wins: 0, losses: 0 };
+      flushScoped(widenThenPush(), block(zero, 0));
+      expect(store.todayRealized()).toEqual(zero);
+      expect(closed(store.todayLifecycle())).toBe(0);
+      expect(store.todayLoading()).toBe(false);
+      expect(requests()).toHaveLength(0);
+    });
+
+    it('lands the block of an All pick after 1D, one request', () => {
+      tick();
+      requests()[0].flush({ ...RESPONSE, realized: TODAY });
+      store.setPreset('All');
+      const reqs = requests();
+      expect(reqs.map(modeOf)).toEqual(['all']);
+      flushScoped(reqs, block(FRESH));
+      expect(store.todayRealized()).toEqual(FRESH);
+      expect(requests()).toHaveLength(0);
+    });
+
     it('falls back to the today request when the wider response has no block (older backend)', () => {
       const reqs = widenThenPush();
       expect(reqs.map(modeOf)).toEqual(['range']);
@@ -814,6 +834,26 @@ describe('DashboardStore', () => {
         .forEach((r) => r.flush('boom', { status: 500, statusText: 'Server Error' }));
       expect(store.todayLoading()).toBe(false);
       expect(store.todayRealized()).toEqual(TODAY);
+    });
+
+    it('keeps the previous today figures, sending no fallback, when the wider request fails', () => {
+      const [scopedReq] = widenThenPush();
+      scopedReq.flush('boom', { status: 500, statusText: 'Server Error' });
+      expect(store.todayLoading()).toBe(false);
+      expect(store.todayError()).not.toBeNull();
+      expect(store.todayRealized()).toEqual(TODAY);
+      expect(requests()).toHaveLength(0);
+    });
+
+    it('stops today loading when a wider request is cancelled before it answered', () => {
+      tick();
+      requests()[0].flush({ ...RESPONSE, realized: TODAY });
+      store.setPreset('1M');
+      flushScoped(requests());
+      const subscription = store.resolve().subscribe();  // a full load's rules: today owed
+      expect(store.todayLoading()).toBe(true);
+      subscription.unsubscribe();
+      expect(store.todayLoading()).toBe(false);
     });
 
     it("keeps today's lifecycle counts while a wider scope's counts differ", () => {
@@ -919,6 +959,21 @@ describe('DashboardStore', () => {
       const newerFigures = { amount: 45, pct: 1.5, n: 4, wins: 3, losses: 1 };
       flushToday(newer, newerFigures);
       flushToday(older, FRESH);
+      expect(store.todayRealized()).toEqual(newerFigures);
+      expect(store.todayLoading()).toBe(false);
+    });
+
+    it('never lets an older today fetch overwrite a newer block', () => {
+      flushScoped(widenThenPush());                      // no block: a fallback goes out, left in flight
+      const older = requests();
+      expect(older.map(modeOf)).toEqual(['today']);
+      events.raise('trades');
+      tick();
+      vi.advanceTimersByTime(300);
+      const newerFigures = { amount: 45, pct: 1.5, n: 4, wins: 3, losses: 1 };
+      flushScoped(requests(), block(newerFigures));      // the newer wider answer carries the block
+      expect(store.todayRealized()).toEqual(newerFigures);
+      flushToday(older, FRESH);                          // the older fetch answers last
       expect(store.todayRealized()).toEqual(newerFigures);
       expect(store.todayLoading()).toBe(false);
     });
