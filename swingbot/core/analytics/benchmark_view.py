@@ -6,12 +6,16 @@ completed chart days.
 """
 
 from bisect import bisect_left, bisect_right
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime
+from typing import Sequence
 
+from swingbot.core.analytics import benchmark as bm
 from swingbot.core.analytics import benchmark_series as bs
 from swingbot.core.analytics.benchmark_series import AlignedDay, Deployed, Exposure
-from swingbot.core.market.session import is_nyse_regular_session, now_et, nyse_calendar, session_close
+from swingbot.core.market.session import (
+    US_MARKET_TZ, is_nyse_regular_session, now_et, nyse_calendar, session_close,
+)
 from swingbot.core.marketdata.benchmarks import BENCHMARK_SYMBOLS, TOTAL_RETURN
 from swingbot.core.tracking.equity import RealizedLeg
 
@@ -262,3 +266,208 @@ def build_series(frame: Frame) -> tuple[list[dict], list[dict], list[dict]]:
         for sym in BENCHMARK_SYMBOLS
     )
     return series, _markers(frame), _exposure_rows(frame)
+
+
+def stat(value: float | None, n: int, reason: str | None = None) -> dict:
+    return {'value': value, 'n': n, 'reason': reason}
+
+
+def _r4(value: float | None) -> float | None:
+    return None if value is None else round(value, 4)
+
+
+def _account_returns(frame: Frame) -> list[tuple[AlignedDay, float]]:
+    return [(day, day.bot_ret) for day in frame.days if day.bot_ret is not None and not day.base_break]
+
+
+def _deployed_in_range(frame: Frame) -> list[tuple[AlignedDay, Deployed]]:
+    return [(day, frame.deployed[day.session]) for day in frame.days
+            if deployed_counts(day, frame.deployed.get(day.session))]
+
+
+def _index_returns(frame: Frame, sym: str) -> list[float]:
+    sessions = frame.rng.sessions if frame.rng.base is not None else frame.rng.sessions[1:]
+    returns = [frame.pct[sym].get(session, (None, False))[0] for session in sessions]
+    return [ret for ret in returns if ret is not None]
+
+
+def _estimate(est: bm.Estimate) -> dict:
+    return stat(_r4(est.value), est.n, est.reason)
+
+
+def _line_stats(r: list[float], one: list[float]) -> dict:
+    return {
+        'total_pct': stat(pct(bm.total_return(r)), len(r)),
+        'max_dd_pct': stat(pct(bm.max_drawdown(r)), len(r)),
+        'sharpe': _estimate(bm.sharpe(one)),
+    }
+
+
+def _account_stats(frame: Frame) -> dict:
+    counted = _account_returns(frame)
+    returns = [ret for _, ret in counted]
+    result = _line_stats(returns, [ret for day, ret in counted if day.one_session])
+    anchor = frame.base_close
+    if anchor is None:
+        anchor = next((day.bot_close for day in frame.days if day.bot_close is not None), None)
+    money_dd = None
+    if anchor is not None:
+        closes = [anchor * (1 + cumulative) for cumulative in [0.0] + bm.cumulative(returns)]
+        money_dd = round(bm.money_drawdown(closes), 2)
+    result.update(money_dd=stat(money_dd, len(returns)),
+                  losing_streak=bm.losing_streak(returns), approx_share=None)
+    return result
+
+
+def _deployed_stats(frame: Frame) -> dict:
+    counted = _deployed_in_range(frame)
+    returns = [dep.ret for _, dep in counted]
+    result = _line_stats(returns, [dep.ret for day, dep in counted if day.span == 1])
+    approx_n = sum(frame.deployed[session].approx for session in frame.rng.sessions
+                   if session in frame.deployed)
+    share = pct(approx_n / len(frame.rng.sessions)) if frame.rng.sessions else None
+    result.update(money_dd=stat(None, len(returns), 'account line only'),
+                  losing_streak=bm.losing_streak(returns), approx_share=share)
+    return result
+
+
+def build_stats(frame: Frame) -> dict:
+    result = {'bot_account': _account_stats(frame), 'bot_deployed': _deployed_stats(frame)}
+    for symbol in BENCHMARK_SYMBOLS:
+        returns = _index_returns(frame, symbol)
+        result[symbol] = _line_stats(returns, returns)
+    return result
+
+
+def _pairs(frame: Frame, sym: str) -> tuple[list[float], list[float]]:
+    paired = [day for day in frame.days if day.one_session and day.index_ret.get(sym) is not None]
+    return [day.bot_ret for day in paired], [day.index_ret[sym] for day in paired]
+
+
+def build_vs(frame: Frame) -> dict:
+    returns = [ret for _, ret in _account_returns(frame)]
+    bot_total = pct(bm.total_return(returns))
+    result = {}
+    for symbol in BENCHMARK_SYMBOLS:
+        bot, index = _pairs(frame, symbol)
+        beta, alpha = bm.beta(bot, index), bm.alpha(bot, index)
+        idx_total = pct(bm.total_return(_index_returns(frame, symbol)))
+        lead = None if bot_total is None or idx_total is None else _r4(bot_total - idx_total)
+        result[symbol] = {
+            'lead_pp': stat(lead, len(returns)),
+            'beta': {**_estimate(beta), 'se': _r4(beta.se)},
+            'alpha': {**stat(pct(alpha.value), alpha.n, alpha.reason), 't': _r4(alpha.t),
+                      'headline': frame.rng.is_all and symbol == 'SPY'},
+        }
+    return result
+
+
+def build_capture(frame: Frame, capture: str) -> dict:
+    bot, index = _pairs(frame, capture)
+    estimate = bm.capture(bot, index)
+    return {
+        'index': capture,
+        'up_pct': stat(pct(estimate.up), estimate.up_n, estimate.reason),
+        'down_pct': stat(pct(estimate.down), estimate.down_n, estimate.reason),
+        'ratio': stat(_r4(estimate.ratio), estimate.up_n + estimate.down_n, estimate.reason),
+        'up_n': estimate.up_n, 'down_n': estimate.down_n,
+        'beat': asdict(bm.beat_count(bot, index)),
+    }
+
+
+def _daily_row(frame: Frame, day: AlignedDay, capture: str) -> dict:
+    dep = frame.deployed.get(day.session)
+    exposure = frame.exposure.get(day.session, Exposure(None, 0, False))
+    lines = {
+        'bot_account': pct(day.bot_ret) if not day.base_break else None,
+        'bot_deployed': pct(dep.ret) if deployed_counts(day, dep) else None,
+    }
+    lines.update({sym: pct(frame.pct[sym].get(day.session, (None, False))[0]) for sym in BENCHMARK_SYMBOLS})
+    beat = None
+    if day.one_session and day.index_ret.get(capture) is not None:
+        beat = day.bot_ret > day.index_ret[capture]
+    return {
+        'date': day.session.isoformat(), 'lines': lines, 'exposure_pct': pct(exposure.pct),
+        'open_n': exposure.open_n, 'beat': beat, 'span': day.span, 'missing': day.missing,
+    }
+
+
+def build_daily(frame: Frame, capture: str) -> list[dict]:
+    return [_daily_row(frame, day, capture) for day in reversed(frame.days)]
+
+
+def _card_session(inputs: BenchmarkInputs, state: str, completed: list[date]) -> date | None:
+    today = _today(inputs.now)
+    if state != 'pre' and today in inputs.sessions:
+        return today
+    return completed[-1] if completed else None
+
+
+def _card_account_return(frame: Frame, session: date) -> float | None:
+    close = frame.closes.get(session)
+    previous = max((day for day in frame.closes if day < session), default=None)
+    prior_close = frame.closes.get(previous)
+    if close is None or prior_close in (None, 0.0):
+        return None
+    return close / prior_close - 1
+
+
+def build_today(inputs: BenchmarkInputs, frame: Frame, state: str, completed: list[date]) -> dict:
+    session = _card_session(inputs, state, completed)
+    if session is None:
+        return {'session': None, 'final': False, 'lines': {}}
+    final = session in completed
+    dep = frame.deployed.get(session)
+    lines = {
+        'bot_account': {'pct': pct(_card_account_return(frame, session)), 'final': final},
+        'bot_deployed': {'pct': pct(dep.ret) if dep is not None else None, 'final': final},
+    }
+    bars = {bar['symbol']: bar for bar in inputs.bars if bar['session'] == session}
+    for symbol in BENCHMARK_SYMBOLS:
+        bar = bars.get(symbol)
+        lines[symbol] = {'pct': pct(bar['day_pct']), 'final': bar['final']} if bar else {'pct': None, 'final': False}
+    return {'session': session.isoformat(), 'final': final, 'lines': lines}
+
+
+def last_closed_session(sessions: Sequence[date], now: datetime) -> date | None:
+    return max((day for day in sessions
+                if datetime.combine(day, session_close(day), US_MARKET_TZ) <= now), default=None)
+
+
+def benchmarks_status(bars: list[dict], last_closed: date | None, refresher_on: bool) -> tuple[str, date | None]:
+    if not bars:
+        return 'empty', None
+    last = max((bar['session'] for bar in bars if bar['final']), default=None)
+    behind = last is None or (last_closed is not None and last < last_closed)
+    return ('stale' if not refresher_on and behind else 'ok'), last
+
+
+def _range(rng: RangeSpec) -> dict:
+    return {
+        'from': rng.sessions[0].isoformat() if rng.sessions else None,
+        'to': rng.sessions[-1].isoformat() if rng.sessions else None,
+        'live_since': rng.live_since.isoformat() if rng.live_since is not None else None,
+        'sessions_n': len(rng.sessions), 'clamped': rng.clamped, 'is_all': rng.is_all,
+    }
+
+
+def build_benchmark(inputs: BenchmarkInputs, *, start: date | None, end: date | None, capture: str) -> dict:
+    """Assemble the complete benchmark response; paging belongs to the route."""
+    if capture not in BENCHMARK_SYMBOLS:
+        raise ValueError(f"capture must be one of {', '.join(BENCHMARK_SYMBOLS)}")
+    state = view_session_state(inputs.now)
+    completed = completed_sessions(inputs, state)
+    rng = clamp_range(completed, live_since_of(inputs.rows), start, end)
+    frame = build_frame(inputs, rng)
+    series, markers, exposure = build_series(frame)
+    status, last = benchmarks_status(
+        inputs.bars, last_closed_session(inputs.sessions, inputs.now), inputs.refresher_on,
+    )
+    return {
+        'range': _range(rng), 'as_of': inputs.now.isoformat(), 'session_state': state,
+        'account_currency': inputs.account_currency, 'mixed_tickers': list(inputs.mixed_tickers),
+        'benchmarks_status': status, 'benchmarks_last_session': last.isoformat() if last is not None else None,
+        'today': build_today(inputs, frame, state, completed),
+        'series': series, 'markers': markers, 'exposure': exposure, 'stats': build_stats(frame),
+        'vs': build_vs(frame), 'capture': build_capture(frame, capture), 'daily': build_daily(frame, capture),
+    }
