@@ -11,7 +11,7 @@ import { ApiClient, BenchmarkParams } from '../api/api-client';
 import { StrategyRow } from '../api/models';
 import { ApiError } from '../api/api-error';
 import { routeRequest } from '../routing/route-request';
-import { Observable } from 'rxjs';
+import { EMPTY, Observable, catchError, defer, filter, throwError } from 'rxjs';
 import {
   AnalyticsBenchmark, BenchmarkRange,
   AnalyticsByDimension,
@@ -780,8 +780,22 @@ export const AnalyticsStore = signalStore(
         : benchmarkRangeDates(store.benchmarkRange(), nyToday());
       return { ...dates, capture: store.benchmarkCapture() };
     };
+    let benchmarkGeneration = 0;
+    /** Every full load and poll belongs to one selection and request generation.
+     * Late successes and errors must not replace the newer request's state. */
+    const benchmarkRequest = (limit?: number): Observable<AnalyticsBenchmark> => defer(() => {
+      const generation = ++benchmarkGeneration;
+      const params = benchmarkParams();
+      const key = JSON.stringify(params);
+      const current = (): boolean => generation === benchmarkGeneration
+        && key === JSON.stringify(benchmarkParams());
+      return api.analyticsBenchmark({ ...params, limit }).pipe(
+        filter(() => current()),
+        catchError((error: ApiError) => current() ? throwError(() => error) : EMPTY),
+      );
+    });
     const loadBenchmark = (): void =>
-      fetchPanel(api.analyticsBenchmark(benchmarkParams()), 'benchmark', 'benchmarkError');
+      fetchPanel(benchmarkRequest(), 'benchmark', 'benchmarkError');
 
     /** The registry list the Tuning launcher offers. Sourced from the server
      *  rather than hardcoded: it whitelists the strategy against
@@ -945,7 +959,7 @@ export const AnalyticsStore = signalStore(
     });
 
     const resolveBenchmark = (): Observable<void> =>
-      resolveOne(api.analyticsBenchmark(benchmarkParams()), 'benchmark', 'benchmarkError');
+      resolveOne(benchmarkRequest(), 'benchmark', 'benchmarkError');
 
     const RESOLVERS: Record<AnalyticsTab, () => Observable<void>> = {
       overview: resolveOverview, attribution: resolveAttribution, execution: resolveExecution,
@@ -1011,7 +1025,7 @@ export const AnalyticsStore = signalStore(
       /** Refresh as many daily rows as the reader has already loaded. */
       refreshBenchmark(): void {
         const limit = Math.min(500, Math.max(120, store.benchmark()?.daily.length ?? 0));
-        fetchPanel(api.analyticsBenchmark({ ...benchmarkParams(), limit }), 'benchmark', 'benchmarkError');
+        fetchPanel(benchmarkRequest(limit), 'benchmark', 'benchmarkError');
       },
       loadMoreBenchmarkDaily(): void {
         const current = store.benchmark();

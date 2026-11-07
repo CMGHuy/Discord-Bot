@@ -355,6 +355,62 @@ describe('AnalyticsStore', () => {
       expect(store.benchmarkLoadingMore()).toBe(false);
     });
 
+    it('keeps the newer range when full responses arrive in reverse order', () => {
+      open();
+      store.setBenchmarkRange('1M');
+      const old = backend.expectOne(isBench);
+      store.setBenchmarkRange('1W');
+      const fresh = backend.expectOne(isBench);
+      fresh.flush({ ...BENCHMARK, daily: [row('2026-11-02')] });
+      old.flush({ ...BENCHMARK, daily: [row('2026-09-01')] });
+      expect(store.benchmark()?.daily.map((r) => r.date)).toEqual(['2026-11-02']);
+      expect(store.benchmarkError()).toBeNull();
+    });
+
+    it('ignores an error for the previous capture selection', () => {
+      open();
+      store.setBenchmarkCapture('QQQ');
+      const old = backend.expectOne(isBench);
+      store.setBenchmarkCapture('^DJI');
+      const fresh = backend.expectOne(isBench);
+      fresh.flush({ ...BENCHMARK, capture: { ...BENCHMARK.capture, index: '^DJI' } });
+      old.flush('old failure', { status: 500, statusText: 'Server Error' });
+      expect(store.benchmark()?.capture.index).toBe('^DJI');
+      expect(store.benchmarkError()).toBeNull();
+    });
+
+    it('ignores a poll response after the range changes', () => {
+      open();
+      store.refreshBenchmark();
+      const poll = backend.expectOne(isBench);
+      store.setBenchmarkRange('1M');
+      backend.expectOne(isBench).flush({ ...BENCHMARK, daily: [row('2026-11-02')] });
+      poll.flush({ ...BENCHMARK, daily: [row('2026-08-01')] });
+      expect(store.benchmark()?.daily.map((r) => r.date)).toEqual(['2026-11-02']);
+    });
+
+    it('keeps the latest poll when same-selection responses arrive in reverse order', () => {
+      open();
+      store.refreshBenchmark();
+      const old = backend.expectOne(isBench);
+      store.refreshBenchmark();
+      const fresh = backend.expectOne(isBench);
+      fresh.flush({ ...BENCHMARK, daily: [row('2026-11-02')] });
+      old.flush({ ...BENCHMARK, daily: [row('2026-11-01')] });
+      expect(store.benchmark()?.daily.map((r) => r.date)).toEqual(['2026-11-02']);
+    });
+
+    it('ignores a poll error after a newer full load succeeds', () => {
+      open();
+      store.refreshBenchmark();
+      const poll = backend.expectOne(isBench);
+      store.setBenchmarkCapture('QQQ');
+      backend.expectOne(isBench).flush({ ...BENCHMARK, capture: { ...BENCHMARK.capture, index: 'QQQ' } });
+      poll.flush('old failure', { status: 500, statusText: 'Server Error' });
+      expect(store.benchmark()?.capture.index).toBe('QQQ');
+      expect(store.benchmarkError()).toBeNull();
+    });
+
     it('a poll refresh keeps the loaded rows and a failed one keeps the data', () => {
       open();
       store.refreshBenchmark();
