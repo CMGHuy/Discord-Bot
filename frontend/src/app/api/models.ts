@@ -671,6 +671,48 @@ export interface AnalyticsEquityCurve extends Scoped {
   fx_missing_count?: number;
 }
 
+/* -- v208: the Benchmark tab. Percentages (1.02 = +1.02 %), never fractions. -- */
+export type BenchmarkRange = '1W' | '1M' | '3M' | 'YTD' | '1Y' | 'All';
+export type BenchmarkIndexKey = 'SPY' | 'QQQ' | '^IXIC' | '^DJI';
+export type BenchmarkKey = 'bot_account' | 'bot_deployed' | BenchmarkIndexKey;
+/** `reason` is shown verbatim when `value` is null ("needs ≥ 20 sessions", "no variance", ...). */
+export interface BenchmarkStat { value: number | null; n: number; reason: string | null; }
+export interface BenchmarkEstimate extends BenchmarkStat { se?: number | null; t?: number | null; headline?: boolean; }
+export interface BenchmarkPoint {
+  date: string; cum_pct: number | null; day_pct: number | null; span: number;
+  missing: boolean; proxy: boolean; approx: boolean; clipped: boolean;
+}
+export interface BenchmarkSeries {
+  key: BenchmarkKey; label: string; kind: 'bot' | 'index'; total_return: boolean; points: BenchmarkPoint[];
+}
+export interface BenchmarkTodayLine { pct: number | null; final: boolean; }
+export interface BenchmarkToday { session: string; final: boolean; lines: Partial<Record<BenchmarkKey, BenchmarkTodayLine>>; }
+export interface BenchmarkSeriesStats {
+  total_pct: BenchmarkStat; max_dd_pct: BenchmarkStat; sharpe: BenchmarkStat;
+  money_dd?: BenchmarkStat; losing_streak?: number; approx_share?: number | null;
+}
+export interface BenchmarkVs { lead_pp: BenchmarkStat; beta: BenchmarkEstimate; alpha: BenchmarkEstimate; }
+export interface BenchmarkCapture {
+  index: BenchmarkIndexKey; up_pct: BenchmarkStat; down_pct: BenchmarkStat; ratio: BenchmarkStat;
+  up_n: number; down_n: number;
+  beat: { up_days: number; up_beat: number; down_days: number; down_beat: number };
+}
+export interface BenchmarkDailyRow {
+  date: string; lines: Partial<Record<BenchmarkKey, number | null>>; exposure_pct: number | null;
+  open_n: number | null; beat: boolean | null; span: number; missing: boolean;
+}
+export interface BenchmarkExposure { date: string; pct: number | null; open_n: number; approx: boolean; }
+export interface AnalyticsBenchmark {
+  range: { from: string | null; to: string | null; live_since: string | null; sessions_n: number; clamped: boolean; is_all: boolean };
+  as_of: string; session_state: 'pre' | 'open' | 'closed';
+  account_currency: string; mixed_tickers: string[];
+  benchmarks_status: 'ok' | 'stale' | 'empty'; benchmarks_last_session: string | null;
+  today: BenchmarkToday | null;
+  series: BenchmarkSeries[]; markers: { date: string; kind: 'base_balance' }[]; exposure: BenchmarkExposure[];
+  stats: Partial<Record<BenchmarkKey, BenchmarkSeriesStats>>; vs: Partial<Record<BenchmarkIndexKey, BenchmarkVs>>;
+  capture: BenchmarkCapture; daily: BenchmarkDailyRow[]; daily_has_more: boolean;
+}
+
 /** One strategy or horizon's aggregate (v85 D40, R9-02). `total_r` is a
  *  true sum, never `exp_r * n` -- a trade `r_multiple()` cannot compute is
  *  skipped from both, and deriving one from the other would print a number

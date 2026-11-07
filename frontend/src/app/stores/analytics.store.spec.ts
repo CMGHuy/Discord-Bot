@@ -11,7 +11,7 @@ import {
   signal,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { convertToParamMap } from '@angular/router';
 
@@ -22,9 +22,10 @@ import {
   loadingInterceptor,
 } from '../api/interceptors';
 import { AnalyticsPerformance, Preferences } from '../api/models';
-import { scopePatchFromParams } from '../workspaces/analytics/scope-url';
+import { scopeFromParams, scopePatchFromParams } from '../workspaces/analytics/scope-url';
 import {
   AnalyticsStore,
+  ANALYTICS_TABS, BENCHMARK_RANGES, benchmarkRangeDates, nyToday,
   BREAKDOWN_DIMENSIONS,
   presetRange,
   RELOCATED_METRICS,
@@ -183,6 +184,29 @@ const FINISHED_JOB = {
 
 const TUNE_DEFAULTS = { data_source: 'alpaca', choices: ['alpaca', 'yfinance'] };
 
+describe('benchmark range dates (v208)', () => {
+  it('resolves every preset against a New York calendar day', () => {
+    expect(BENCHMARK_RANGES).toEqual(['1W', '1M', '3M', 'YTD', '1Y', 'All']);
+    expect(benchmarkRangeDates('1W', '2026-11-05')).toEqual({ from: '2026-10-29' });
+    expect(benchmarkRangeDates('1M', '2026-11-05')).toEqual({ from: '2026-10-05' });
+    expect(benchmarkRangeDates('3M', '2026-11-05')).toEqual({ from: '2026-08-05' });
+    expect(benchmarkRangeDates('YTD', '2026-11-05')).toEqual({ from: '2026-01-01' });
+    expect(benchmarkRangeDates('1Y', '2026-11-05')).toEqual({ from: '2025-11-05' });
+    expect(benchmarkRangeDates('All', '2026-11-05')).toEqual({});
+  });
+  it('clamps to the last day of a shorter month and crosses the year', () => {
+    expect(benchmarkRangeDates('3M', '2026-05-31')).toEqual({ from: '2026-02-28' });
+    expect(benchmarkRangeDates('1M', '2026-03-31')).toEqual({ from: '2026-02-28' });
+    expect(benchmarkRangeDates('1Y', '2028-02-29')).toEqual({ from: '2027-02-28' });
+    expect(benchmarkRangeDates('3M', '2026-01-15')).toEqual({ from: '2025-10-15' });
+    expect(benchmarkRangeDates('1W', '2026-01-03')).toEqual({ from: '2025-12-27' });
+  });
+  it('takes today in New York, not UTC', () => {
+    expect(nyToday(new Date('2026-11-06T03:00:00Z'))).toBe('2026-11-05');
+    expect(nyToday(new Date('2026-11-06T06:00:00Z'))).toBe('2026-11-06');
+  });
+});
+
 describe('AnalyticsStore', () => {
   let store: InstanceType<typeof AnalyticsStore>;
   let backend: HttpTestingController;
@@ -240,6 +264,110 @@ describe('AnalyticsStore', () => {
       .expectOne((req) => req.url === '/api/v1/analytics/variance-band')
       .flush(VARIANCE_BAND);
   };
+
+  describe('the Benchmark tab (v208)', () => {
+    const STAT = { value: null, n: 0, reason: 'needs ≥ 10 index-up and ≥ 10 index-down sessions' };
+    const row = (date: string) => ({ date, lines: { bot_account: 0.1, SPY: 0.2 }, exposure_pct: 40,
+      open_n: 2, beat: false, span: 1, missing: false });
+    const BENCHMARK = {
+      range: { from: '2026-08-05', to: '2026-11-04', live_since: '2026-08-07', sessions_n: 2, clamped: true, is_all: false },
+      as_of: '2026-11-05T15:00:00+00:00', session_state: 'open', account_currency: 'USD', mixed_tickers: [],
+      benchmarks_status: 'ok', benchmarks_last_session: '2026-11-04', today: null,
+      series: [], markers: [], exposure: [], stats: {}, vs: {},
+      capture: { index: 'SPY', up_pct: STAT, down_pct: STAT, ratio: STAT, up_n: 0, down_n: 0,
+                 beat: { up_days: 0, up_beat: 0, down_days: 0, down_beat: 0 } },
+      daily: [row('2026-11-04'), row('2026-11-03')], daily_has_more: true,
+    };
+    const isBench = (req: { url: string }) => req.url === '/api/v1/analytics/benchmark';
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-05T15:00:00Z'));
+      tick();
+      respondOverview();
+    });
+    afterEach(() => vi.useRealTimers());
+
+    const open = () => {
+      store.setTab('benchmark');
+      tick();
+      const req = backend.expectOne(isBench);
+      req.flush(BENCHMARK);
+      return req;
+    };
+
+    it('is the last tab, routes from ?tab=benchmark, and is fetched only while open', () => {
+      expect(ANALYTICS_TABS.at(-1)).toBe('benchmark');
+      expect(scopeFromParams(convertToParamMap({ tab: 'benchmark' })).tab).toBe('benchmark');
+      backend.expectNone(isBench);
+      const req = open();
+      expect(req.request.params.get('from')).toBe('2026-08-05');
+      expect(req.request.params.get('capture')).toBe('SPY');
+      for (const key of ['to', 'ledger', 'strategy', 'horizon', 'direction']) expect(req.request.params.has(key)).toBe(false);
+      expect(store.benchmark()?.daily.length).toBe(2);
+      expect(store.benchmarkRange()).toBe('3M');
+      backend.verify();
+    });
+
+    it('refetches on a range or capture change, and All sends no dates', () => {
+      open();
+      store.setBenchmarkRange('All');
+      const all = backend.expectOne(isBench);
+      expect(all.request.params.has('from')).toBe(false);
+      all.flush(BENCHMARK);
+      store.setBenchmarkCapture('QQQ');
+      expect(backend.expectOne(isBench).request.params.get('capture')).toBe('QQQ');
+    });
+
+    it('lets a custom scope-bar date win over the preset', () => {
+      open();
+      store.setScope({ from: '2026-09-01' });
+      const req = backend.expectOne(isBench);
+      expect(req.request.params.get('from')).toBe('2026-09-01');
+      expect(req.request.params.has('ledger')).toBe(false);
+    });
+
+    it('appends older daily rows and stops when the server has no more', () => {
+      open();
+      store.loadMoreBenchmarkDaily();
+      expect(store.benchmarkLoadingMore()).toBe(true);
+      const more = backend.expectOne(isBench);
+      expect(more.request.params.get('before')).toBe('2026-11-03');
+      more.flush({ ...BENCHMARK, daily: [row('2026-10-31')], daily_has_more: false });
+      expect(store.benchmark()?.daily.map((r) => r.date)).toEqual(['2026-11-04', '2026-11-03', '2026-10-31']);
+      expect(store.benchmark()?.daily_has_more).toBe(false);
+      expect(store.benchmarkLoadingMore()).toBe(false);
+      store.loadMoreBenchmarkDaily();
+      backend.expectNone(isBench);
+    });
+
+    it('drops an older page that lands after the range changed', () => {
+      open();
+      store.loadMoreBenchmarkDaily();
+      store.setBenchmarkRange('1M');
+      const [more, fresh] = [
+        backend.expectOne((r) => isBench(r) && r.params.has('before')),
+        backend.expectOne((r) => isBench(r) && !r.params.has('before')),
+      ];
+      fresh.flush({ ...BENCHMARK, daily: [row('2026-11-04')], daily_has_more: false });
+      more.flush({ ...BENCHMARK, daily: [row('2026-08-01')], daily_has_more: true });
+      expect(store.benchmark()?.daily.map((r) => r.date)).toEqual(['2026-11-04']);
+      expect(store.benchmarkLoadingMore()).toBe(false);
+    });
+
+    it('a poll refresh keeps the loaded rows and a failed one keeps the data', () => {
+      open();
+      store.refreshBenchmark();
+      const poll = backend.expectOne(isBench);
+      expect(poll.request.params.get('limit')).toBe('120');
+      poll.flush('boom', { status: 500, statusText: 'Server Error' });
+      expect(store.benchmark()?.daily.length).toBe(2);
+      expect(store.benchmarkError()).not.toBeNull();
+      store.reload('benchmark');
+      backend.expectOne(isBench).flush(BENCHMARK);
+      expect(store.benchmarkError()).toBeNull();
+    });
+  });
 
   const respondStrategies = (body: Record<string, unknown> = {}) =>
     backend.expectOne((req) => req.url === '/api/v1/analytics/strategies').flush({ ...STRATEGIES, ...body });

@@ -7,12 +7,13 @@ import {
   withState,
 } from '@ngrx/signals';
 
-import { ApiClient } from '../api/api-client';
+import { ApiClient, BenchmarkParams } from '../api/api-client';
 import { StrategyRow } from '../api/models';
 import { ApiError } from '../api/api-error';
 import { routeRequest } from '../routing/route-request';
 import { Observable } from 'rxjs';
 import {
+  AnalyticsBenchmark, BenchmarkRange,
   AnalyticsByDimension,
   AnalyticsCalibration,
   AnalyticsEquityCurve,
@@ -188,10 +189,10 @@ function numberOrNull(record: Record<string, unknown> | undefined, key: string):
  *  Attribution and Execution. Tabs, not sub-navigation: a second level of
  *  nav inside one of six workspaces reintroduces exactly the depth the IA
  *  change removed. */
-export type AnalyticsTab = 'overview' | 'attribution' | 'execution' | 'edge' | 'pipeline' | 'tuning' | 'partials';
+export type AnalyticsTab = 'overview' | 'attribution' | 'execution' | 'edge' | 'pipeline' | 'tuning' | 'partials' | 'benchmark';
 
 export const ANALYTICS_TABS: readonly AnalyticsTab[] =
-  ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials'] as const;
+  ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials', 'benchmark'] as const;
 
 /** Old `?tab=` values keep working (spec D1). A bookmark or a Discord link
  *  posted before v94 lands on the tab that now answers its question rather
@@ -205,11 +206,32 @@ export const LEGACY_TABS: Record<string, AnalyticsTab> = {
 export type PanelKey =
   | 'performance' | 'equityCurve' | 'byDimension' | 'heatGrid' | 'exitQuality'
   | 'journal' | 'strategies' | 'calibration' | 'plans'
-  | 'byHorizon' | 'byDirection' | 'byDow' | 'partials' | 'overrideFidelity' | 'varianceBand';
+  | 'byHorizon' | 'byDirection' | 'byDow' | 'partials' | 'overrideFidelity' | 'varianceBand' | 'benchmark';
 
 export const DEFAULT_SCOPE: BookScope = {
   from: null, to: null, ledger: 'main', strategy: null, horizon: null, direction: null,
 };
+
+export const BENCHMARK_RANGES: readonly BenchmarkRange[] = ['1W', '1M', '3M', 'YTD', '1Y', 'All'];
+
+/** The account's trading day follows New York, including around midnight UTC. */
+export function nyToday(now = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(now);
+}
+
+/** Calendar presets clamp month ends rather than spilling into the next month. */
+export function benchmarkRangeDates(range: BenchmarkRange, today: string): { from?: string; to?: string } {
+  if (range === 'All') return {};
+  const [y, m, d] = today.split('-').map(Number);
+  if (range === 'YTD') return { from: `${y}-01-01` };
+  if (range === '1W') return { from: isoDate(new Date(Date.UTC(y, m - 1, d - 7))) };
+  const back = range === '1M' ? 1 : range === '3M' ? 3 : 12;
+  const month = new Date(Date.UTC(y, m - 1 - back, 1));
+  const lastDay = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)).getUTCDate();
+  return { from: isoDate(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), Math.min(d, lastDay)))) };
+}
 
 /** Common range shortcuts used by the v94 scope bar.  The value, rather than
  * the label, is deliberately what the URL control persists. */
@@ -359,6 +381,11 @@ interface AnalyticsSlice {
   /** Which panels' underlying tables the user has opened, by panel key. */
   tableOpen: Record<string, boolean>;
 
+  benchmark: AnalyticsBenchmark | null; benchmarkError: string | null;
+  benchmarkRange: BenchmarkRange;
+  benchmarkCapture: string;
+  benchmarkLoadingMore: boolean;
+
   /* Every panel is its own payload and its own error (spec v94 H4): a failed
    * fetch may never blank, or warn about, a neighbour that arrived fine. */
   performance: AnalyticsPerformance | null;   performanceError: string | null;
@@ -418,7 +445,7 @@ interface AnalyticsSlice {
 }
 
 /**
- * Analytics — Overview, Attribution, Execution, Edge, Pipeline and Tuning
+ * Analytics — eight tabs covering the book, execution and benchmarks
  * behind one `TabBar` (spec v94 D1).
  *
  * Follows `DashboardStore`'s shape: one server response per concern in, all
@@ -474,6 +501,8 @@ export const AnalyticsStore = signalStore(
       calibration: null, calibrationError: null,
       plans: null, plansError: null,
       partials: null, partialsError: null,
+      benchmark: null, benchmarkError: null, benchmarkRange: '3M',
+      benchmarkCapture: 'SPY', benchmarkLoadingMore: false,
       varianceBand: null, varianceBandError: null,
       overrideFidelity: null, overrideFidelityError: null,
       gridStrategy: null,
@@ -744,6 +773,16 @@ export const AnalyticsStore = signalStore(
     const loadPartials = (): void =>
       fetchPanel(api.analyticsPartials(s()), 'partials', 'partialsError');
 
+    const benchmarkParams = (): BenchmarkParams => {
+      const scope = store.scope();
+      const dates = scope.from || scope.to
+        ? { from: scope.from ?? undefined, to: scope.to ?? undefined }
+        : benchmarkRangeDates(store.benchmarkRange(), nyToday());
+      return { ...dates, capture: store.benchmarkCapture() };
+    };
+    const loadBenchmark = (): void =>
+      fetchPanel(api.analyticsBenchmark(benchmarkParams()), 'benchmark', 'benchmarkError');
+
     /** The registry list the Tuning launcher offers. Sourced from the server
      *  rather than hardcoded: it whitelists the strategy against
      *  `ALL_STRATEGIES` and 400s on anything else. */
@@ -905,9 +944,12 @@ export const AnalyticsStore = signalStore(
       error: fail,
     });
 
+    const resolveBenchmark = (): Observable<void> =>
+      resolveOne(api.analyticsBenchmark(benchmarkParams()), 'benchmark', 'benchmarkError');
+
     const RESOLVERS: Record<AnalyticsTab, () => Observable<void>> = {
       overview: resolveOverview, attribution: resolveAttribution, execution: resolveExecution,
-      edge: resolveEdge, pipeline: resolvePipeline, tuning: resolveTuning, partials: resolvePartials,
+      edge: resolveEdge, pipeline: resolvePipeline, tuning: resolveTuning, partials: resolvePartials, benchmark: resolveBenchmark,
     };
 
     const resolveTab = (tab: AnalyticsTab): Observable<void> => {
@@ -917,7 +959,7 @@ export const AnalyticsStore = signalStore(
 
     const LOADERS: Record<AnalyticsTab, () => void> = {
       overview: loadOverview, attribution: loadAttribution, execution: loadExecution,
-      edge: loadEdge, pipeline: loadPipeline, tuning: loadTuning, partials: loadPartials,
+      edge: loadEdge, pipeline: loadPipeline, tuning: loadTuning, partials: loadPartials, benchmark: loadBenchmark,
     };
 
     const load = (): void => LOADERS[store.tab()]();
@@ -953,8 +995,44 @@ export const AnalyticsStore = signalStore(
           partials: () => fetchPanel(api.analyticsPartials(s()), 'partials', 'partialsError'),
           varianceBand: () => fetchPanel(api.analyticsVarianceBand(), 'varianceBand', 'varianceBandError'),
           overrideFidelity: loadOverrideFidelity,
+          benchmark: loadBenchmark,
         };
         one[panel]?.();
+      },
+
+      setBenchmarkRange(range: BenchmarkRange): void {
+        patchState(store, { benchmarkRange: range });
+        loadBenchmark();
+      },
+      setBenchmarkCapture(symbol: string): void {
+        patchState(store, { benchmarkCapture: symbol });
+        loadBenchmark();
+      },
+      /** Refresh as many daily rows as the reader has already loaded. */
+      refreshBenchmark(): void {
+        const limit = Math.min(500, Math.max(120, store.benchmark()?.daily.length ?? 0));
+        fetchPanel(api.analyticsBenchmark({ ...benchmarkParams(), limit }), 'benchmark', 'benchmarkError');
+      },
+      loadMoreBenchmarkDaily(): void {
+        const current = store.benchmark();
+        if (!current?.daily_has_more || !current.daily.length || store.benchmarkLoadingMore()) return;
+        const params = benchmarkParams();
+        const key = JSON.stringify(params);
+        patchState(store, { benchmarkLoadingMore: true });
+        api.analyticsBenchmark({ ...params, before: current.daily.at(-1)!.date }).subscribe({
+          next: (page) => {
+            patchState(store, { benchmarkLoadingMore: false });
+            const latest = store.benchmark();
+            if (JSON.stringify(benchmarkParams()) !== key || !latest) return;
+            patchState(store, { benchmark: {
+              ...latest, daily: [...latest.daily, ...page.daily], daily_has_more: page.daily_has_more,
+            } });
+          },
+          error: (error: ApiError) => {
+            patchState(store, { benchmarkLoadingMore: false });
+            panelFail('benchmarkError')(error);
+          },
+        });
       },
 
       /** Which dimension the Attribution breakdown groups by. Unlike v85's

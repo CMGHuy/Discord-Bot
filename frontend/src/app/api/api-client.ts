@@ -7,6 +7,7 @@ import type { TimeWindow } from '../workspaces/dashboard/panels/equity-range.mod
 
 import {
   AdminUser,
+  AnalyticsBenchmark,
   AnalyticsByDimension,
   AnalyticsCalibration,
   AnalyticsEquityCurve,
@@ -77,6 +78,8 @@ import {
   VersionHistory,
   LiveSnapshot,
 } from './models';
+
+export interface BenchmarkParams { from?: string; to?: string; capture?: string; limit?: number; before?: string }
 
 /** Omits unset scope fields so one state has one request URL (v94 D2/D5). */
 export function scopeParams(scope?: Partial<BookScope> | null, extra?: Record<string, string>): HttpParams {
@@ -334,6 +337,15 @@ export class ApiClient {
   /** v142 — the Partials tab: TP1->TP2 conversion and runner counterfactuals. */
   analyticsPartials(scope?: Partial<BookScope> | null): Observable<AnalyticsPartials> {
     return this.http.get<AnalyticsPartials>(`${this.base}/analytics/partials`, { params: scopeParams(scope) });
+  }
+
+  /** v208 — account-wide benchmark data, without BookScope fields. */
+  analyticsBenchmark(params: BenchmarkParams = {}): Observable<AnalyticsBenchmark> {
+    let query = new HttpParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null && value !== '') query = query.set(key, String(value));
+    }
+    return this.http.get<AnalyticsBenchmark>(`${this.base}/analytics/benchmark`, { params: query });
   }
 
   /** v175 — the whole-book losing-run band. Unscoped on purpose: the route

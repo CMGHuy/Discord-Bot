@@ -267,3 +267,43 @@ describe('ApiClient — live (v203)', () => {
     expect(http.expectOne((r) => r.url === '/api/v1/live').request.params.get('limit')).toBe('20');
   });
 });
+
+describe('ApiClient — benchmark (v208)', () => {
+  let api: ApiClient;
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(
+          withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor, routeRefreshInterceptor]),
+        ),
+        provideHttpClientTesting(),
+        { provide: RouteRefreshService, useValue: { requestMutationRefresh: () => undefined } },
+      ],
+    });
+    api = TestBed.inject(ApiClient);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    http.verify();
+  });
+
+  it('sends only the params it is given and never a BookScope field', () => {
+    api.analyticsBenchmark().subscribe();
+    const bare = http.expectOne((r) => r.url.endsWith('/api/v1/analytics/benchmark'));
+    expect(bare.request.params.keys()).toEqual([]);
+    bare.flush({});
+
+    api.analyticsBenchmark({ from: '2026-08-05', capture: 'QQQ', limit: 2, before: '2026-11-03' }).subscribe();
+    const full = http.expectOne((r) => r.url.endsWith('/api/v1/analytics/benchmark'));
+    expect(full.request.params.get('from')).toBe('2026-08-05');
+    expect(full.request.params.get('capture')).toBe('QQQ');
+    expect(full.request.params.get('limit')).toBe('2');
+    expect(full.request.params.get('before')).toBe('2026-11-03');
+    for (const key of ['to', 'ledger', 'strategy', 'horizon', 'direction']) expect(full.request.params.has(key)).toBe(false);
+    full.flush({});
+  });
+});
