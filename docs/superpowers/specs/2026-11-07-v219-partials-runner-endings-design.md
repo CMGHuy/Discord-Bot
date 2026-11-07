@@ -181,8 +181,10 @@ screened change can be argued from numbers. It is not that change.
 - The existing **Giveback** strip panel stays, and keeps its name. It
   shows the distribution of `mfe_r − r_runner` over pathed runners. The
   new "Gave back" column uses the same unclamped formula, so the two
-  agree. The strip adopts the same path filter (manual closes out) so
-  both read one population. *(Panel: quant-researcher 4, staff-engineer
+  agree. The strip adopts the same path filter as the section (manual
+  closes, no-TP2 runners and runners with no TP2 distance all out;
+  partner call 2026-11-08) so both read one population, and a
+  `giveback_excluded` count says how many it dropped. *(Panel: quant-researcher 4, staff-engineer
   4.)*
 - Ending colours reuse the tab's existing outcome tones (`tp2` pos,
   `trail` accent, and so on) so the cards, table and odds bars agree with
