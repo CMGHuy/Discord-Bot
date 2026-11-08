@@ -1,0 +1,48 @@
+# v213 citation-lint allowlist (scripts/dev/skill_citations.py; spec § A).
+#
+# One line per skill and token:  skill|token|reason
+#   skill  = the skill folder, or the agent file stem
+#   token  = the finding's token exactly as the lint prints it
+#   reason = why the mention stays: deleted on purpose and named as history,
+#            uncommitted by design, vendored, an eval hypothetical, a runtime path
+# One line covers every occurrence in that skill. A line that matches no
+# finding is a dead line and fails tests/hooks/test_skill_citations.py.
+# Never add a line for real drift: fix the skill instead.
+
+# --- uncommitted by design: the WSL-key SSH wrapper never enters git (root CLAUDE.md)
+prod-inspector|scripts/ops/ssh-hetzner.sh|uncommitted by design; the only way to reach the VM
+backup-pull|scripts/ops/ssh-hetzner.sh|uncommitted by design; the only way to reach the VM
+replicate-prod-db|scripts/ops/ssh-hetzner.sh|uncommitted by design; the only way to reach the VM
+stable-snapshot|scripts/ops/ssh-hetzner.sh|uncommitted by design; the only way to reach the VM
+trade-scout|scripts/ops/ssh-hetzner.sh|uncommitted by design; the only way to reach the VM
+
+# --- deleted shims named on purpose (v27 restructure removed them 2026-08-15)
+symbol-verifier|core/scan_engine.py|deleted shim, listed so a brief naming it is caught
+symbol-verifier|core/scan_embeds.py|deleted shim, listed so a brief naming it is caught
+symbol-verifier|core/confidence.py|deleted shim, listed so a brief naming it is caught
+symbol-verifier|core/regime.py|deleted shim, listed so a brief naming it is caught
+symbol-verifier|core/trade_plan.py|deleted shim, listed so a brief naming it is caught
+alert-surface|core/scan_embeds.py|deleted shim, named as the trap it was
+alert-surface|core/scan_engine.py|deleted shim, named as the trap it was
+task-brief|core/scan_engine.py|trap 3e lists the deleted shims verbatim
+task-brief|core/scan_embeds.py|trap 3e lists the deleted shims verbatim
+task-brief|core/confidence.py|trap 3e lists the deleted shims verbatim
+task-brief|core/regime.py|trap 3e lists the deleted shims verbatim
+task-brief|core/trade_plan.py|trap 3e lists the deleted shims verbatim
+
+# --- vendored skill: MCP client config paths on the user's machine, not in this repo
+etoro-public-api-operations|~/.claude.json|vendored; a client config path outside the repo
+etoro-public-api-operations|~/.cursor/mcp.json|vendored; a client config path outside the repo
+etoro-public-api-operations|.cursor/mcp.json|vendored; a client config path outside the repo
+etoro-public-api-operations|.vscode/mcp.json|vendored; a client config path outside the repo
+etoro-public-api-operations|~/.codeium/windsurf/mcp_config.json|vendored; a client config path outside the repo
+
+# --- eval hypotheticals: a prompt about a file or knob that does not exist
+edge-module|swingbot/core/edge/vwap_reclaim.py|eval prompt proposes a new module
+replicate-prod-db|tests/charts/test_render.py|eval prompt names a hypothetical unit test
+mirror-prod|SCAN_INTERVAL_SECONDS|eval prompt names a hypothetical .env knob
+no-lookahead|SCAN_INTERVAL_SECONDS|eval prompt names a hypothetical knob
+no-lookahead|SCAN_INTERVAL_SECS|eval prompt names a hypothetical knob
+
+# --- runtime output on the VM, never tracked
+stable-snapshot|backups/deploys.jsonl|runtime log written on the VM, never tracked

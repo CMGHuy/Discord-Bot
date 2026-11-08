@@ -219,5 +219,5 @@ exist in the plan file it labels active (a different prefix, e.g. `U34`).
 Verify with `grep -n "^### Task" <plan>` first.
 
 **Repo tooling (`.claude/`):** `/task-brief <id>` extracts one plan task, `/gate` is the
-pre-commit gate, `guardrails.py` denies what this file forbids (this file wins on
+pre-push gate, `guardrails.py` denies what this file forbids (this file wins on
 disagreement), skills self-trigger off `description`. Detail: `docs/claude/skills-tools.md`.

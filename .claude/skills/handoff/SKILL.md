@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 This runs in the main context on purpose: the decisions it records live in
 this conversation, which a forked context cannot see. The convention is
-`docs/claude/skills-tools.md` § Plan writing, the paragraph
+`docs/claude/skills-tools.md` § Plan writing (two phases), the paragraph
 "Handing a plan to another session or account"; read that paragraph first
 (`grep -n "Handing a plan to another session" -A 16 docs/claude/skills-tools.md`),
 never the whole file.

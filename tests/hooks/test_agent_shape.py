@@ -114,10 +114,12 @@ def test_prod_inspector_is_read_only():
     for forbidden in ("restart", ".env", "docker compose up", "sed -i"):
         assert forbidden in body, f"body must name {forbidden!r} as forbidden"
 
-# v145: the nine role skills expert-reviewer must name (spec § 1).
+# v145: the ten role skills expert-reviewer must name (spec § 1; v213 adds
+# ux-designer).
 EXPERT_ROLES = ("quant-researcher", "staff-engineer", "veteran-trader",
                 "risk-manager", "financial-advisor", "technical-analyst",
-                "fundamental-analyst", "quant-engineer", "senior-engineer")
+                "fundamental-analyst", "quant-engineer", "senior-engineer",
+                "ux-designer")
 
 
 def test_expert_reviewer_is_read_only_and_knows_every_role():

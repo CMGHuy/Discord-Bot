@@ -1,6 +1,6 @@
 ---
 name: expert-reviewer
-description: "Reviews a spec, plan, diff or backtest result through ONE expert role skill (role=<name>; the nine roles are listed in docs/claude/skills-tools.md under Expert roles) and returns numbered BLOCKING or ADVISORY findings, each with a citation, or CLEAN. Read-only. Dispatched by /panel, one role per dispatch, with that role's reviewer model as the override."
+description: "Reviews a spec, plan, diff or backtest result through ONE expert role skill (role=<name>; the ten roles are listed in docs/claude/skills-tools.md under Expert roles) and returns numbered BLOCKING or ADVISORY findings, each with a citation, or CLEAN. Read-only. Dispatched by /panel, one role per dispatch, with that role's reviewer model as the override."
 tools: Read, Grep, Glob, Bash, Skill
 model: sonnet
 ---
@@ -14,7 +14,7 @@ one or more targets: file paths, or a git range such as `main...<branch>`
 Valid roles, each a skill at `.claude/skills/<role>/SKILL.md`:
 `quant-researcher`, `staff-engineer`, `veteran-trader`, `risk-manager`,
 `financial-advisor`, `technical-analyst`, `fundamental-analyst`,
-`quant-engineer`, `senior-engineer`.
+`quant-engineer`, `senior-engineer`, `ux-designer`.
 
 A role not on this list, or one whose `SKILL.md` is missing, ends the review:
 return `VERDICT: UNKNOWN ROLE` naming the valid roles. Never improvise a role
@@ -51,7 +51,7 @@ never lower a gate.
 
 ```
 ROLE: <role>
-VERDICT: CLEAN | FINDINGS | UNKNOWN ROLE: <given> -- valid: <the nine roles> | BLOCKED: <one question>
+VERDICT: CLEAN | FINDINGS | UNKNOWN ROLE: <given> -- valid: <the ten roles> | BLOCKED: <one question>
 1. [BLOCKING|ADVISORY] <file:line | git range | doc § section> -- <one sentence>
    why: <the checklist item or red flag it breaks>
 ...

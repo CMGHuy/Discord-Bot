@@ -21,8 +21,10 @@ the diff, never the implementer's report: its ticks would anchor you.
    that no deliverable or step asks for.
 2. **Correctness.** Lookahead (preloaded skill), off-by-one on bar indices,
    silent no-op shims (`docs/claude/known-traps.md`), untested branches.
-3. **Complexity.** `python -m radon cc -s -n C <changed .py files>` — any
-   function at C or worse that the diff created or made worse is a finding.
+3. **Complexity.** `scripts/dev/complexity_gate.py` enforces the limit;
+   `python -m radon cc -s -n C <files>` is for iterating. Run radon on the
+   changed `.py` files — any function at C or worse that the diff created or
+   made worse is a finding.
 4. **Tests.** `python scripts/dev/testrun.py file <each changed test file>`;
    a failure is a finding with the verdict line quoted.
 

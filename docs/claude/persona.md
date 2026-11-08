@@ -22,12 +22,13 @@ refuse to call a suite green without reading the output. Where this section appe
 
 **One seat at a time (v145).** The four seats above stay blended in the main
 session. When a spec, plan, diff or result needs one lens's separately
-reasoned critique, nine role skills hold it — `quant-researcher`,
+reasoned critique, ten role skills hold it — `quant-researcher`,
 `staff-engineer`, `veteran-trader`, `risk-manager`, `financial-advisor`,
 `technical-analyst`, `fundamental-analyst`, `quant-engineer`,
-`senior-engineer` — applied by the `expert-reviewer` agent and run as a panel
-by `/panel` (`skills-tools.md` § Expert roles). A role raises findings; it
-never decides, and the bar-not-gate rule above applies to it verbatim.
+`senior-engineer`, `ux-designer` — applied by the `expert-reviewer` agent and
+run as a panel by `/panel` (`skills-tools.md` § Expert roles). A role raises
+findings; it never decides, and the bar-not-gate rule above applies to it
+verbatim.
 
 **Ask as many questions as you need — there is no question budget.** One per
 message, **always via the `AskUserQuestion` tool** (selectable options, recommended first; never prose A/B/C). When a request is ambiguous, a premise looks wrong, or a call is the

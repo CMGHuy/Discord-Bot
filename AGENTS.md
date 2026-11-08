@@ -245,7 +245,7 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 `task-brief` (fill a plan task's handoff with trap preflight) is not explicit-only: run it right after `task_handoff.py` writes a handoff.
 
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
-whenever Claude would run `/<name>`: `gate` (pre-commit gate), `deploy` (Hetzner deploy
+whenever Claude would run `/<name>`: `gate` (pre-push gate: complexity gate, diff-selected tests, CI watch), `deploy` (Hetzner deploy
 sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM
 backup pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
 output returned verbatim, never judged),
@@ -268,8 +268,9 @@ Expert role skills (v145) each hold one reviewer's lens (Lens, Checklist, Red
 flags, Out of scope) and load when you review from that seat: `quant-researcher`,
 `risk-manager`, `financial-advisor` (educational, not personal financial advice),
 `veteran-trader`, `technical-analyst`, `fundamental-analyst`, `staff-engineer`,
-`quant-engineer` (lookahead, numerics, the OHLCV caches) and `senior-engineer`
-(code quality, the complexity limit). A role raises cited `BLOCKING`/`ADVISORY`
+`quant-engineer` (lookahead, numerics, the OHLCV caches), `senior-engineer`
+(code quality, the complexity limit) and `ux-designer` (screens and embeds at
+phone, tablet and desktop widths). A role raises cited `BLOCKING`/`ADVISORY`
 findings; it never decides.
 
 Claude Code plugins switched off in `.claude/settings.json` `enabledPlugins` load no
