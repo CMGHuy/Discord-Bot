@@ -4,12 +4,17 @@ import { CHART_CHROME, token } from './chart/chart-frame';
 
 export interface LineChartPoint {
   date: string;
-  value: number;
+  /** null = no observation, drawn as a gap. */
+  value: number | null;
+  day?: number | null;
+  flag?: string;
 }
 
 export interface LineChartSeries {
   name: string;
   points: LineChartPoint[];
+  color?: string;
+  dashed?: boolean;
 }
 
 /** Maps an ISO date string to 0-1, linear in TIME, not in array index --
@@ -47,20 +52,19 @@ export function seriesPath(
   xScale: (date: string) => number,
   yScale: (value: number) => number,
 ): string {
-  const points = series.points;
-  if (points.length === 0) return '';
-  if (points.length === 1) {
-    const x = xScale(points[0].date);
-    const y = 1 - yScale(points[0].value);
-    return `M ${x.toFixed(4)} ${y.toFixed(4)}`;
+  const commands: string[] = [];
+  let pen = false;
+  for (const point of series.points) {
+    if (point.value === null) {
+      pen = false;
+      continue;
+    }
+    const x = xScale(point.date).toFixed(4);
+    const y = (1 - yScale(point.value)).toFixed(4); // SVG y grows downward
+    commands.push(`${pen ? 'L' : 'M'} ${x} ${y}`);
+    pen = true;
   }
-  return points
-    .map((p, i) => {
-      const x = xScale(p.date).toFixed(4);
-      const y = (1 - yScale(p.value)).toFixed(4); // SVG y grows downward
-      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-    })
-    .join(' ');
+  return commands.join(' ');
 }
 
 /**
@@ -100,21 +104,21 @@ function seriesColour(index: number): string {
   template: `
     @if (hasData()) {
       <svg viewBox="0 0 600 220" preserveAspectRatio="none" role="img"
-           (pointermove)="onPointerMove($event)" (pointerleave)="onPointerLeave()">
+           (pointermove)="onPointerMove($event)" (pointerdown)="onPointerMove($event)" (pointerleave)="onPointerLeave()">
         @if (referenceLine(); as ref) {
           <line class="reference" [attr.x1]="0" [attr.x2]="600"
                 [attr.y1]="refY(ref)" [attr.y2]="refY(ref)" />
         }
         @for (series of series(); track series.name; let i = $index) {
           <path class="series" [attr.d]="pathFor(series)"
-                [attr.stroke]="colorFor(i)" fill="none" />
+                [attr.stroke]="colorOf(series, i)" [attr.stroke-dasharray]="series.dashed ? '6 4' : null" fill="none" />
         }
       </svg>
       @if (tooltipRows().length) {
         <div class="tooltip">
           <strong>{{ tooltipDate() }}</strong>
           @for (row of tooltipRows(); track row.name) {
-            <div>{{ row.name }}: {{ valueFormat()(row.point.value) }}</div>
+            <div>{{ row.text }}</div>
           }
         </div>
       }
@@ -122,7 +126,9 @@ function seriesColour(index: number): string {
         <div class="legend">
           @for (series of series(); track series.name; let i = $index) {
             <span class="entry">
-              <i [style.background]="colorFor(i)"></i>{{ series.name }}
+              <i [class.dashed]="!!series.dashed"
+                  [style.background]="series.dashed ? null : colorOf(series, i)"
+                  [style.border-top-color]="colorOf(series, i)"></i>{{ series.name }}
             </span>
           }
         </div>
@@ -145,6 +151,7 @@ function seriesColour(index: number): string {
               font-size: var(--text-chip); color: var(--text-secondary); }
     .entry { display: inline-flex; align-items: center; gap: var(--space-4); }
     .entry i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+    .entry i.dashed { width: 14px; height: 0; border-radius: 0; border-top: 2px dashed; }
     .empty { color: var(--text-muted); font-size: var(--text-table); }
     .tooltip {
       position: absolute;
@@ -163,15 +170,17 @@ export class LineChart {
   readonly referenceLine = input<number | null>(null);
   readonly valueFormat = input<(value: number) => string>((v) => v.toFixed(2));
 
+  readonly hoverDetail = input(false);
+
   protected readonly hasData = computed(() =>
-    this.series().some((s) => s.points.length > 0),
+    this.series().some((s) => s.points.some((p) => p.value !== null)),
   );
 
   private readonly allDates = computed(() =>
     this.series().flatMap((s) => s.points.map((p) => p.date)),
   );
   private readonly allValues = computed(() =>
-    this.series().flatMap((s) => s.points.map((p) => p.value)),
+    this.series().flatMap((s) => s.points.flatMap((p) => p.value === null ? [] : [p.value])),
   );
 
   private readonly xScale = computed(() => lineChartXScale(this.allDates()));
@@ -190,8 +199,8 @@ export class LineChart {
     return (1 - this.yScale()(value)) * 220;
   }
 
-  protected colorFor(index: number): string {
-    return seriesColour(index);
+  protected colorOf(series: LineChartSeries, index: number): string {
+    return series.color ? token(series.color) : seriesColour(index);
   }
 
   protected readonly hoverIndex = signal<number | null>(null);
@@ -230,8 +239,14 @@ export class LineChart {
   protected readonly tooltipRows = computed(() => {
     const date = this.tooltipDate();
     if (date === null) return [];
-    return this.series()
-      .map((s) => ({ name: s.name, point: s.points.find((p) => p.date === date) }))
-      .filter((row): row is { name: string; point: LineChartPoint } => row.point !== undefined);
+    const detail = this.hoverDetail();
+    return this.series().flatMap((series) => {
+      const point = series.points.find((p) => p.date === date);
+      if (!detail && (point === undefined || point.value === null)) return [];
+      let text = `${series.name}: ${point?.value == null ? '—' : this.valueFormat()(point.value)}`;
+      if (detail && typeof point?.day === 'number') text += ` (day ${this.valueFormat()(point.day)})`;
+      if (detail && point?.flag) text += ` · ${point.flag}`;
+      return [{ name: series.name, text }];
+    });
   });
 }
