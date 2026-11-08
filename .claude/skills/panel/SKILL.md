@@ -18,6 +18,16 @@ runs this itself. Every role must be a row of the roles table; an unknown role
 stops the panel and names the valid ones -- never substitute a near match. The
 target is one or more paths, or a git range (`main...<branch>`).
 
+With neither (an on-demand panel Claude convenes itself), suggest seats from
+the target's type and say which you picked; an argument always wins.
+
+| Target | Suggested seats |
+|---|---|
+| Spec | its `**Panel:**` line; with none, the default for its `Edge:` (`document-conventions.md` § The header block) |
+| Backtest result, grid or screen verdict | `quant-researcher`, `quant-engineer` |
+| Diff touching `frontend/` or a Discord embed | `ux-designer`, `senior-engineer` |
+| Diff touching `swingbot/core/market/` | `technical-analyst`, `quant-engineer` |
+
 ## Step 3 — Dispatch serially
 
 For each role, in the order given, dispatch the `expert-reviewer` agent with

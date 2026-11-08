@@ -7,6 +7,7 @@ docs/claude/skills-tools.md, which /panel reads. See
 docs/superpowers/specs/2026-10-09-v145-expert-roles-model-routing.md
 """
 import pathlib
+import re
 import sys
 
 import pytest
@@ -290,3 +291,35 @@ def test_dropped_items_stay_with_their_owners():
     """v213 § C: these checks moved to the skill that owns them."""
     assert "`Bump:`" not in "\n".join(_checklist("staff-engineer"))      # /close-out
     assert "Every symbol the brief names" not in "\n".join(_checklist("senior-engineer"))  # task-brief
+
+
+# v213 § D: /panel suggests seats from the target's type, so the area seats
+# (technical-analyst, ux-designer) are picked when their area is touched.
+PANEL_STEP_2 = "## Step 2 — Resolve the roles and the target"
+
+
+def _panel_seat_rows():
+    """Target cell -> seats cell of the seat-picking table in /panel Step 2."""
+    rows = {}
+    for line in _section(_body("panel"), PANEL_STEP_2).splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if line.startswith("|") and len(cells) == 2 and set(cells[0]) - set("-: "):
+            rows[cells[0]] = cells[1]
+    rows.pop("Target", None)
+    return rows
+
+
+def test_panel_seat_table_names_area_seats():
+    rows = _panel_seat_rows()
+    named = {seat for cell in rows.values()
+             for seat in re.findall(r"`([a-z-]+)`", cell)}
+    assert named and named <= set(ROLES), sorted(named - set(ROLES))
+
+    def seats_for(area):
+        return " ".join(cell for target, cell in rows.items() if area in target)
+
+    assert "`ux-designer`" in seats_for("`frontend/`")
+    assert "`ux-designer`" in seats_for("embed")
+    assert "`technical-analyst`" in seats_for("`swingbot/core/market/`")
+    assert "`quant-researcher`" in seats_for("Backtest")
+    assert "**Panel:**" in seats_for("Spec") and "`Edge:`" in seats_for("Spec")
