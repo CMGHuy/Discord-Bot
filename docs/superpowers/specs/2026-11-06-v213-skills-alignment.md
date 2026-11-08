@@ -336,3 +336,14 @@ Spec review, 2026-11-06, on `c097d09e`.
 - senior-engineer: test cases weak, "red on 090eed23" not a test -- applied (`scan()` module, `tmp_path` cases listed, output format asserted).
 - senior-engineer: cross-cutting items worded differently across seats; ux bullet carries four claims -- applied (shared leads; one claim per bullet).
 - senior-engineer: gate test is a brittle substring pin -- applied (structural step-order test).
+
+Implementation review, 2026-11-08, on `main...2026-11-06-v213-skills-alignment` at `827a8bdc`.
+
+- staff-engineer: `/gate` Step 7 watches CI on any branch, but CI runs only on `main`; no rollback pointer -- applied (watch scoped to `main`, rollback cites `docs/deploy/DEPLOY_HETZNER.md`; two commits, last `91a840d0`).
+- staff-engineer: `skill_citation_allowlist.txt` has no `DATA_READERS` row -- rejected: `test_select_tests.py` passes (60 tests) and the index authorises that row only if it fails; follow-up.
+- staff-engineer: citation test missing from the `docs/claude/` reader rows in `select_tests.py` -- rejected: `select_tests.py` is outside the Global Constraints list, CI catches it; follow-up.
+- staff-engineer: `financial-advisor` still hands admin UI design to `staff-engineer` -- applied (design goes to `ux-designer`, operations stay with `staff-engineer`).
+- senior-engineer: `_cite_matches` prefix match is lax and an empty cite matches every heading -- rejected: the two-way prefix rule is the spec's pinned design; follow-up for an empty-cite guard.
+- senior-engineer: any backticked UPPER_SNAKE must exist in tracked Python -- rejected: deliberate (spec A); the allowlist covers non-config tokens.
+- senior-engineer: lint reads `git ls-files`, so an unstaged new file reads as missing -- rejected: intended, and the plan already says new files are `git add`ed first.
+- senior-engineer: no defect in the rewritten `gate` -- no change.
