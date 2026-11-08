@@ -65,6 +65,7 @@ CROSS_CUTTING: dict[str, frozenset[str]] = {
     "risk-manager": frozenset({"Shorts:", "eToro:"}),
     "veteran-trader": frozenset({"Shorts:", "eToro:"}),
     "quant-researcher": frozenset({"Shorts:"}),
+    "staff-engineer": frozenset({"eToro:"}),
 }
 
 # v213 § C: the anchors each seat's new checklist items must carry -- words
@@ -82,6 +83,10 @@ COVERAGE: dict[str, tuple[str, ...]] = {
     "quant-engineer": ("§ Long runs must checkpoint", "skips finished units on restart",
                        "`swingbot/core/marketdata/providers/router.py`",
                        "`swingbot/core/marketdata/training_data.py`"),
+    "staff-engineer": ("`deploy/gunicorn.conf.py`", "`tests/suites.toml`",
+                       "`scripts/ops/pitr_backup.sh`", "§ Scheduling far-off work",
+                       "idempotent"),
+    "senior-engineer": ("`tests/suites.toml`", "Vitest", "Mutating the fix"),
 }
 
 
@@ -271,3 +276,9 @@ def test_cross_cutting_seats_carry_their_leads():
 def test_seat_names_its_coverage_items(role):
     checklist = "\n".join(_checklist(role))
     assert [a for a in COVERAGE[role] if a not in checklist] == []
+
+
+def test_dropped_items_stay_with_their_owners():
+    """v213 § C: these checks moved to the skill that owns them."""
+    assert "`Bump:`" not in "\n".join(_checklist("staff-engineer"))      # /close-out
+    assert "Every symbol the brief names" not in "\n".join(_checklist("senior-engineer"))  # task-brief

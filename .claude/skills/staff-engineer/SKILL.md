@@ -26,13 +26,15 @@ what it costs to keep for a year.
 - A production change is mirrored back per the `mirror-prod` skill and `docs/claude/working-conventions.md` § Mirroring production changes back.
 - A new `.env` field is declared in `swingbot/config.py`'s schema and survives the SIGHUP hot reload; nothing reads `os.environ` directly.
 - A store write that can fail at alert issuance halts scanning rather than half-writing (`StoreWriteHalt` in `swingbot/core/db/write_failure.py`).
+- A change to the database, its volume or its crons keeps point-in-time recovery and the backups working (`scripts/ops/pitr_backup.sh`, `scripts/ops/backup_db.sh`).
 - The three containers off the one image (`bot`, `admin`, `refresher`) still start, and `docs/deploy/DEPLOY_HETZNER.md` needs no undocumented step.
+- An admin endpoint that is added or slowed down is weighed against the worker budget in `deploy/gunicorn.conf.py`, so one polling screen cannot starve every other request (v206).
 - Blast radius is named: what breaks, who sees it (alert channel, admin UI, backtests) and how it rolls back (`scripts/ops/rollback_to.sh`, `DEPLOY_HETZNER.md`).
 - A Claude setup change ships its Codex mirror in the same commit (`working-conventions.md` § Codex mirror).
-- Far-off scheduled work runs as a cron on the VM, never on the laptop (`working-conventions.md` § Scheduling far-off work).
 - A new data file that tests read has a `DATA_READERS` row in `scripts/dev/select_tests.py`.
-- The `Bump:` level matches the observable difference (`working-conventions.md` § The three levels).
-- Long-run cost is stated: a new cache, cron, table or flag names its owner and when it can be removed.
+- CI runs one job per suite in `tests/suites.toml`; a suite past its cap is split by feature, never the cap raised (`docs/claude/testing-cost.md` § Test suites).
+- Long-run cost is stated: a new cache, cron, table or flag names its owner and when it can be removed, and far-off scheduled work runs as a cron on the VM, never on the laptop (`working-conventions.md` § Scheduling far-off work).
+- eToro: demo only, never `account: real`; an order send is idempotent, so a retried scan never places a second order.
 
 ## Red flags
 
@@ -52,6 +54,7 @@ what it costs to keep for a year.
 Should fire: reviewing a spec that adds a Postgres table and a new cron on the VM.
 Should fire: asking whether moving code between `swingbot/core/scanning` and `swingbot/core/planning` is safe to ship.
 Should fire: reviewing the rollback story of a deploy plan.
+Should fire: reviewing how a plan that sends trade plans to the eToro demo account handles a retried send.
 Should not fire: checking one function's cyclomatic complexity in a task diff.
 Should not fire: checking whether a backtest script reads the right OHLCV cache.
 Should not fire: judging whether a strategy's ExpR lift is overfit.
