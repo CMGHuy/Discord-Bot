@@ -31,9 +31,11 @@ three roles.
 ## Step 4 — Merge
 
 Drop every finding that cites no `file:line`, git range or doc section. Merge
-duplicates across roles, keeping the stricter tag. List `BLOCKING` first, then
-`ADVISORY`, each line naming its role. A role that returned `CLEAN` is listed
-as clean, not omitted.
+duplicates across roles, keeping the stricter tag. Findings that open with the
+same shared lead (`Shorts:`, `eToro:`) and cite the same evidence are
+duplicates: one line naming every seat that raised them. List `BLOCKING`
+first, then `ADVISORY`, each line naming its role. A role that returned
+`CLEAN` is listed as clean, not omitted.
 
 ## Step 5 — Record the outcome
 

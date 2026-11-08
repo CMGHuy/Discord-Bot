@@ -42,6 +42,27 @@ CASE_FILES = ("prompt.md", "graders/skill-fired.md")
 # Characters of the parsed description value -- the text inside the quotes.
 MAX_ROLE_DESCRIPTION = 260
 
+# v213 § C: the boundary paragraph every seat opens with, pinned whole. It
+# stays inside each skill because a role skill also loads on its own, without
+# expert-reviewer. Wrapped in the files exactly as these six lines.
+BOUNDARY = " ".join((
+    "You are one seat on a review panel. You raise findings; you never decide, and",
+    "you never lower a gate (`docs/claude/persona.md`). No seat's intuition",
+    "overrides the `backtest-gate` skill, the `pooled-numbers` skill or a closed",
+    "pre-registration, and you quote no pooled figure you did not re-derive. Every",
+    "finding cites `file:line`, a git range or a doc section, and is tagged",
+    "`BLOCKING` (it matches a red flag below) or `ADVISORY`.",
+))
+
+# v213 § C: a cross-cutting checklist item opens with one shared lead, then
+# the seat's own angle, so /panel can merge the same concern across seats.
+LEADS = {
+    "Shorts:": "Shorts: long plans stay byte-identical; ",
+    "eToro:": "eToro: demo only, never `account: real`; ",
+}
+# role -> the LEADS keys its checklist must carry (one item each).
+CROSS_CUTTING: dict[str, frozenset[str]] = {}
+
 
 def _text(path):
     return path.read_text(encoding="utf-8").replace("\r\n", "\n")
@@ -59,6 +80,38 @@ def _section(body, heading):
     start = body.index(heading + "\n") + len(heading)
     end = body.find("\n## ", start)
     return body[start:] if end == -1 else body[start:end]
+
+
+def _boundary(role):
+    """The first paragraph after the `# ` title line, lines joined by spaces."""
+    lines = _body(role).splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("# ")) + 1
+    while start < len(lines) and not lines[start].strip():
+        start += 1
+    paragraph = []
+    for line in lines[start:]:
+        if not line.strip():
+            break
+        paragraph.append(line.strip())
+    return " ".join(paragraph)
+
+
+def _checklist(role):
+    return [line for line in _section(_body(role), "## Checklist").splitlines()
+            if line.startswith("- ")]
+
+
+def _lead_problems(item):
+    """Why a checklist item that opens with a lead word misuses the lead."""
+    for key, lead in LEADS.items():
+        if not item.startswith("- " + key.rstrip(":")):
+            continue
+        if not item.startswith("- " + lead):
+            return [f"lead not exact: {item[:60]!r}"]
+        angle = item[len("- " + lead):]
+        if not angle.strip() or not item.endswith("."):
+            return [f"no angle or no full stop: {item[:60]!r}"]
+    return []
 
 
 def lens_skills(skills_dir=SKILLS_DIR):
@@ -130,7 +183,7 @@ def test_reviewer_model_is_recorded_in_the_roles_table(role):
 
 PANEL_PHRASES = ("expert-reviewer", "serially", "skills-tools.md", "BLOCKING",
                  "## Panel review", "applied", "rejected: <why>", "/close-out",
-                 "Model tiers")
+                 "Model tiers", "`Shorts:`", "`eToro:`")
 
 
 def test_panel_dispatches_the_expert_reviewer_serially():
@@ -169,3 +222,25 @@ def test_role_description_keeps_its_seat_and_a_hand_off(role):
     assert [other for other in ROLES if other != role and f"({other})" in value]
     # expert-reviewer invokes the skill by name; the clause bought nothing.
     assert "expert-reviewer" not in value
+
+
+@pytest.mark.parametrize("role", sorted(ROLES))
+def test_boundary_paragraph_is_canonical(role):
+    assert _boundary(role) == BOUNDARY
+
+
+@pytest.mark.parametrize("role", sorted(ROLES))
+def test_cross_cutting_items_use_the_shared_lead(role):
+    assert [p for item in _checklist(role) for p in _lead_problems(item)] == []
+
+
+def test_cross_cutting_seats_carry_their_leads():
+    assert set(CROSS_CUTTING) <= set(ROLES)
+    wrong = {}
+    for role, keys in sorted(CROSS_CUTTING.items()):
+        assert keys <= set(LEADS), (role, keys)
+        for key in sorted(keys):
+            hits = [i for i in _checklist(role) if i.startswith("- " + LEADS[key])]
+            if len(hits) != 1:
+                wrong[f"{role} {key}"] = len(hits)
+    assert wrong == {}, "each listed seat carries each lead exactly once"
