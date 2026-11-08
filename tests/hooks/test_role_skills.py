@@ -66,6 +66,7 @@ CROSS_CUTTING: dict[str, frozenset[str]] = {
     "veteran-trader": frozenset({"Shorts:", "eToro:"}),
     "quant-researcher": frozenset({"Shorts:"}),
     "staff-engineer": frozenset({"eToro:"}),
+    "financial-advisor": frozenset({"eToro:"}),
 }
 
 # v213 § C: the anchors each seat's new checklist items must carry -- words
@@ -87,6 +88,12 @@ COVERAGE: dict[str, tuple[str, ...]] = {
                        "`scripts/ops/pitr_backup.sh`", "§ Scheduling far-off work",
                        "idempotent"),
     "senior-engineer": ("`tests/suites.toml`", "Vitest", "Mutating the fix"),
+    "financial-advisor": ("overnight fees", "minimum position size"),
+    "technical-analyst": ("`confirmed_pivots`", "BOS/CHoCH", "significance tier",
+                          "`swingbot/core/market/turtle_soup.py`",
+                          "`swingbot/core/market/atr_band.py`",
+                          "Volume counts as confirmation",
+                          "`swingbot/core/market/explain.py`"),
 }
 
 

@@ -30,6 +30,7 @@ frequency and risk match what one person with a day job can follow.
 - Total capital at risk across open plans is shown against the account (`PORTFOLIO_HEAT_CAP_PCT`); enforcing it belongs to `risk-manager`.
 - Turnover and short holds are named as tax drag; a claimed ExpR is pre-tax and says so.
 - Frictions in `swingbot/core/edge/frictions.py` include the commissions a retail broker actually charges.
+- eToro: demo only, never `account: real`; eToro's spread, overnight fees and minimum position size are counted in the frictions and the account fit.
 - Drawdown is shown in units a retail trader feels -- dollars and losing streaks, not only R (`swingbot/core/analytics/risk_metrics.py`).
 - Expectancy leads and win rate is a constraint, in copy as well as in ranking (`docs/claude/edge-priorities.md`).
 - Embeds and the admin UI show staleness and badge tier, so a WEAK or unvalidated strategy never reads as validated (`docs/claude/known-traps.md` § Live plans are almost never VALIDATED).
@@ -55,6 +56,7 @@ frequency and risk match what one person with a day job can follow.
 Should fire: reviewing an alert-volume spec for whether a retail trader can keep up.
 Should fire: asking whether the growth projection on the admin dashboard misleads a retail account holder.
 Should fire: asking how swing turnover affects the after-tax result of following the alerts.
+Should fire: asking whether eToro's spreads, overnight fees and minimum position size change what a small account can follow.
 Should not fire: checking whether a stop in `edge/stops.py` breaches the cap.
 Should not fire: checking an indicator's formula against its textbook definition.
 Should not fire: checking a grid result for overfitting.
