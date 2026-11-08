@@ -44,6 +44,14 @@ export function toChartTime(t: string, tf: EquityTimeframe): Time {
   return Math.floor(Date.parse(`${t.slice(0, 19)}Z`) / 1000) as UTCTimestamp;
 }
 
+/** A candle with no movement at all (O = H = L = C) draws nothing useful. */
+export const isFlatCandle = (c: EquityCandle): boolean => c.o === c.h && c.h === c.l && c.l === c.c;
+
+/** The candles worth drawing, in every view: flat ones are dropped. */
+export function changedCandles(candles: readonly EquityCandle[]): EquityCandle[] {
+  return candles.filter((c) => !isFlatCandle(c));
+}
+
 export function toSeriesData(
   candles: readonly EquityCandle[],
   tf: EquityTimeframe,

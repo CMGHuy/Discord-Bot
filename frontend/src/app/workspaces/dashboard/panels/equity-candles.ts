@@ -49,6 +49,7 @@ import {
   isAtLiveEdge,
   rangeReadoutParts,
   seamIndex,
+  changedCandles,
   toSeriesData,
 } from './equity-candles.model';
 
@@ -341,18 +342,19 @@ export class EquityCandles {
   protected readonly showReset = computed(() =>
     this.state() === 'chart' && (this.moved() || this.priceMoved() || !this.store.atLiveEdge()));
 
-  protected readonly candles = computed(() => this.store.data()?.candles ?? []);
+  /** Flat candles (no change at all) are never shown or indexed. */
+  protected readonly candles = computed(() => changedCandles(this.store.data()?.candles ?? []));
 
   protected readonly state = computed<ChartState>(() => {
     if (this.store.error()) return 'error';
     const data = this.store.data();
     if (!data) return 'loading';
-    return data.candles.length ? 'chart' : 'empty';
+    return this.candles().length ? 'chart' : 'empty';
   });
 
   protected readonly seriesData = computed<CandlestickData<Time>[]>(() => {
     const data = this.store.data();
-    return data ? toSeriesData(data.candles, data.tf, this.colors) : [];
+    return data ? toSeriesData(this.candles(), data.tf, this.colors) : [];
   });
 
   /** The whole buckets in view (spec v181 §4): readout, baseline and, in
@@ -515,20 +517,20 @@ export class EquityCandles {
     this.appliedSeq = target.seq;
     this.pendingSpan = null;
     this.moved.set(false);
-    const range = target.window ? targetLogicalRange(target.window, data.candles, data.tf) : null;
+    const range = target.window ? targetLogicalRange(target.window, this.candles(), data.tf) : null;
     this.moveProgrammatically(() => this.moveTo(range, target.window !== null));
   }
 
   /** Not yet: already shown, nothing loaded, no chart, hidden, or a page in flight. */
   private readyFor(target: ChartTarget, data: EquityCandlesResponse): boolean {
-    return target.seq !== this.appliedSeq && data.candles.length > 0 && this.chart !== null
+    return target.seq !== this.appliedSeq && this.candles().length > 0 && this.chart !== null
       && this.host().nativeElement.clientWidth > 0 && !this.store.pageLoading();
   }
 
   /** More history is needed and can come; after a failed page the move shows what is loaded. */
   private needsOlderFor(target: ChartTarget, data: EquityCandlesResponse): boolean {
     return this.store.hasMore() && !this.store.pageError()
-      && targetNeedsOlder(target.window, data.candles, data.tf);
+      && targetNeedsOlder(target.window, this.candles(), data.tf);
   }
 
   /** A window with candles in it is shown whole; one with none falls back to
@@ -615,7 +617,7 @@ export class EquityCandles {
     this.hoverIndex.set(null);
     this.moveProgrammatically(() => series.setData(points));
     chart.applyOptions({ timeScale: { timeVisible: data ? isIntraday(data.tf) : false, secondsVisible: false } });
-    const seam = data ? seamIndex(data.candles) : -1;
+    const seam = data ? seamIndex(this.candles()) : -1;
     this.seam?.setLine(seam >= 0
       ? { time: points[seam].time, label: SEAM_LABEL, color: this.colors.faint, textColor: this.colors.muted }
       : null);
@@ -646,7 +648,7 @@ export class EquityCandles {
   private restorableRange(): { from: Time; to: Time } | null {
     const pending = this.pendingSpan;
     const data = this.store.data();
-    if (!pending || !data || data.tf !== pending.tf || !data.candles.length) return null;
+    if (!pending || !data || data.tf !== pending.tf || !this.candles().length) return null;
     return chartRangeFor(pending.span, pending.tf);
   }
 }
