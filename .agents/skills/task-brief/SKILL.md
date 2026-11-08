@@ -6,10 +6,11 @@ description: "Fill one task's handoff file with this repo's known traps pre-corr
 
 # Task brief with trap preflight
 
-Plan files here are 358-822 KB design documents. **A plan file is not ground truth
-about the current code.** Briefs generated from them have shipped the same wrong
-assumptions in E7, E8, E17, E18, E30, E35, E45, E46, E48 and E49 — every one caught
-by hand before dispatch. This skill does that pass mechanically, and writes it into the task's handoff file.
+**A plan file is not ground truth about the current code.** It was written
+against an older tree, and briefs built from plans have shipped wrong module
+paths, invented symbols and wiring that was a silent no-op — every one caught
+by hand before dispatch. This skill does that pass mechanically, and writes it
+into the task's handoff file.
 
 ## Step 1 — Read the handoff
 
@@ -54,7 +55,7 @@ Run every check. Report each as CONFIRMED / CORRECTED / NA in the brief.
 
 **3a. Every symbol the brief names must exist.** Plans guess wrong constantly:
 
-```powershell
+```bash
 git grep -n "def <symbol>" -- "swingbot/**/*.py"
 ```
 
@@ -64,18 +65,22 @@ inventing:
 
 | Plan says | Reality |
 |---|---|
-| `market_events.days_to_earnings` | `events.get_next_earnings_date` / `earnings_within_window` |
-| `jsonio.write_json` | `atomic_write_json` |
-| `TradeLog().all_trades()` | `get_trades(limit=None)` |
+| `market_events.days_to_earnings` | `events.get_next_earnings_date` / `earnings_within_window` in `swingbot/core/market/events.py` |
 
 **3b. Wiring target.** If the task wires sizing, embeds or alert fields, the brief
-will likely say `swingbot/commands/scanning.py`. **That is a silent no-op** — that
-module only posts already-built tuples. Sizing and embed-building happen in
-`swingbot/core/scanning/engine.py`'s alert-building loop, right before
-`build_embed()`. Correct the brief before dispatch and say so.
+will likely name the posting package `swingbot/commands/scanning/` (`alerts.py`,
+`loops.py`). **That is a silent no-op** — it only posts and re-renders alerts
+that are already built. Sizing and embed-building happen in the alert loops,
+right before `build_embed()`: `swingbot/core/scanning/scan_run.py` (long scan),
+`swingbot/core/scanning/short_run.py` (shorts) and
+`swingbot/core/scanning/outlook_run.py` (outlook). `build_embed` itself lives in
+`swingbot/core/scanning/alert_embeds.py`. Find today's call sites with
+`git grep -n "build_embed(" -- swingbot/core/scanning` rather than trusting a
+line number. Correct the brief before dispatch and say so.
 
 **3c. Embed fields** go through the `sections["headline"]` accumulator in
-`scanning/embeds.py`, never a raw `embed.add_field()` (breaks `SECTION_ORDER`).
+`swingbot/core/scanning/alert_embeds.py`, never a raw `embed.add_field()`
+(breaks `SECTION_ORDER`).
 
 **3d. Which OHLCV cache?** Two unrelated subsystems:
 `backtest_cache.py` -> `data/backtest_cache/` (flat `TICKER.csv`, daily only, ~77
@@ -102,13 +107,39 @@ real module instead (`core/scanning/engine.py`, `core/scanning/embeds.py`,
 deliberately unwired, wired in a later task. Grep the plan for the wiring task
 before treating an unused function as a bug.
 
-**3g. Scan-loop ordering.** Ticker screens go *after*
-`update_open_trades`/`_check_near_close`, *before* the new-signal horizon loop.
+**3g. Scan-loop ordering.** Ticker screens go *after* the open-trade monitor and
+*before* the new-signal horizon loop, all inside `_scan_one` in
+`swingbot/core/scanning/analyze.py`: first `io.monitor_scan` (live:
+`_live_monitor_scan`, which runs `trade_log.update_open_trades` then
+`_check_near_close`), then the screens (`universe.liquidity_reason`,
+`universe.data_quality_issues`), then `for horizon_key in horizons_to_scan:`.
+`swingbot/core/scanning/scan_run.py` only maps `_scan_one` over the tickers
+(`fetch.map_tickers`); a screen placed there runs outside that order.
 
 **3h. No-lookahead law.** New entry gates may reference only the current bar and
 earlier, must be `.fillna(False)`, and need a truncation test
 (`full.iloc[:-1] == trunc`).
+**3i. Stores are Postgres-only.** Every store reads and writes Postgres; a task
+that writes a JSON file under `data/` as a store writes to nothing the bot
+reads. A shape change follows `docs/claude/schema-evolution.md` (the
+`schema-change` skill). A task whose tests reach the database runs
+`/replicate-prod-db` first, against the one shared `swing-db` container, never
+a per-task container or database.
 
+**3j. Test placement.** A new `tests/` directory joins exactly one suite in
+`tests/suites.toml` in the same commit. A new data file a test reads gets a
+`DATA_READERS` row in `scripts/dev/select_tests.py`. Pytest admin-login
+fixtures never use the main-tree `.env` admin credentials: those override the
+fixture's own and the login returns 401 (V177). A Playwright or local-instance
+check still logs in with the `.env` values (root `CLAUDE.md`).
+
+**3k. Short work never downgrades longs.** A SHORT-targeted task keeps long
+plans byte-identical and pins that with a regression test (the same input gives
+the same long plan before and after the change).
+
+**3l. UI tasks are checked at three widths.** A task that changes a screen is
+checked with Playwright at 390, 768 and 1440 px (`docs/claude/ui-design.md`),
+never with claude-in-chrome.
 ## Step 4 — Check the tree is safe to work in
 
 Concurrent sessions share this working tree.
@@ -117,6 +148,14 @@ Concurrent sessions share this working tree.
 git log --oneline -3
 git status --porcelain
 Get-Process python -ErrorAction SilentlyContinue | Where-Object CPU -gt 300
+```
+
+From Git Bash (no `cd`; point `git -C` at the worktree):
+
+```bash
+git -C <wt> log --oneline -3
+git -C <wt> status --porcelain
+powershell -NoProfile -Command "Get-Process python -ErrorAction SilentlyContinue | Where-Object CPU -gt 300"
 ```
 
 If HEAD moved since the session started, or a multi-hour python run is live, say so
@@ -129,7 +168,7 @@ marker line as the `old_string`:
 
 - the line `<!-- task-brief: fill Preflight -->` becomes the Preflight: the
   task's `**Model:**` line check (plans above v145 — if it is missing, say
-  so rather than guessing a tier), every 3a-3h result as CONFIRMED /
+  so rather than guessing a tier), every 3a-3l result as CONFIRMED /
   CORRECTED / NA with the correction made, and the Step 4 tree check;
 - the line `<!-- task-brief: fill Code -->` becomes the Code from Step 2,
   each excerpt headed by its `path:start-end`.
