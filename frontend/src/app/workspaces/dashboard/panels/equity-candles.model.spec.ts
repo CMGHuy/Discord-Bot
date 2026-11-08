@@ -18,6 +18,8 @@ import {
   seamIndex,
   toChartTime,
   toSeriesData,
+  changedCandles,
+  isFlatCandle,
 } from './equity-candles.model';
 
 function candle(overrides: Partial<EquityCandle> = {}): EquityCandle {
@@ -26,6 +28,27 @@ function candle(overrides: Partial<EquityCandle> = {}): EquityCandle {
 }
 
 const COLORS = { up: 'UP', down: 'DOWN', faint: 'FAINT' };
+
+describe('flat candles are dropped', () => {
+  const flat = (t: string) => candle({ t, o: 100, h: 100, l: 100, c: 100, change: 0, change_pct: 0 });
+
+  it('detects only O=H=L=C as flat', () => {
+    expect(isFlatCandle(flat('2026-10-16'))).toBe(true);
+    expect(isFlatCandle(candle({ o: 100, h: 101, l: 100, c: 100 }))).toBe(false);
+    expect(isFlatCandle(candle())).toBe(false);
+  });
+
+  it('keeps changed candles in order and drops flat ones', () => {
+    const a = candle({ t: '2026-10-14' });
+    const b = candle({ t: '2026-10-16' });
+    expect(changedCandles([a, flat('2026-10-15'), b]).map((c) => c.t)).toEqual(['2026-10-14', '2026-10-16']);
+  });
+
+  it('handles empty and all-flat input', () => {
+    expect(changedCandles([])).toEqual([]);
+    expect(changedCandles([flat('2026-10-15'), flat('2026-10-16')])).toEqual([]);
+  });
+});
 
 describe('equity candles model', () => {
   it('keeps daily and weekly times as business-day strings', () => {

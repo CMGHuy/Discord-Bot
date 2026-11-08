@@ -390,6 +390,22 @@ describe('sb-equity-candles', () => {
     });
   });
 
+  it('never shows a flat candle, and hover indexes only the drawn ones', () => {
+    const flatBar = candle('2026-10-19', { o: 110, h: 110, l: 110, c: 110, change: 0, change_pct: 0 });
+    const { fixture, el } = render(response([MIXED[0], flatBar, MIXED[2]]));
+    const shown = fixture.componentInstance['candles']();
+    expect(shown.map((c) => c.t)).toEqual(['2026-10-16', '2026-10-20']);
+    fixture.componentInstance['onCrosshair']({ logical: 1 });
+    fixture.detectChanges();
+    expect(readout(el)[0]).toBe('Oct 20, 2026');
+  });
+
+  it('shows the empty state when every candle is flat', () => {
+    const flatBar = candle('2026-10-19', { o: 110, h: 110, l: 110, c: 110, change: 0, change_pct: 0 });
+    const { fixture } = render(response([flatBar]));
+    expect(fixture.componentInstance['state']()).toBe('empty');
+  });
+
   it('reads out the hovered candle, its change toned by sign', () => {
     const { fixture, el } = render(response(MIXED));
     fixture.componentInstance['onCrosshair']({ logical: 2 });
