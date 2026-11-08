@@ -61,7 +61,22 @@ LEADS = {
     "eToro:": "eToro: demo only, never `account: real`; ",
 }
 # role -> the LEADS keys its checklist must carry (one item each).
-CROSS_CUTTING: dict[str, frozenset[str]] = {}
+CROSS_CUTTING: dict[str, frozenset[str]] = {
+    "risk-manager": frozenset({"Shorts:", "eToro:"}),
+    "veteran-trader": frozenset({"Shorts:", "eToro:"}),
+}
+
+# v213 § C: the anchors each seat's new checklist items must carry -- words
+# and paths, never whole sentences, so a reword inside the item still passes.
+COVERAGE: dict[str, tuple[str, ...]] = {
+    "risk-manager": ("level-lifecycle", "current stop",
+                     "`swingbot/core/planning/gap_sizing.py`",
+                     "squeeze notice", "`swingbot/core/market/short_interest.py`",
+                     "without its stop"),
+    "veteran-trader": ("act on before the open", "half-days",
+                       "frozen weekend bar", "partial fill", "hard-to-borrow",
+                       "CFD"),
+}
 
 
 def _text(path):
@@ -244,3 +259,9 @@ def test_cross_cutting_seats_carry_their_leads():
             if len(hits) != 1:
                 wrong[f"{role} {key}"] = len(hits)
     assert wrong == {}, "each listed seat carries each lead exactly once"
+
+
+@pytest.mark.parametrize("role", sorted(COVERAGE))
+def test_seat_names_its_coverage_items(role):
+    checklist = "\n".join(_checklist(role))
+    assert [a for a in COVERAGE[role] if a not in checklist] == []
