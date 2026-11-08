@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -11,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BENCHMARK_FIXTURE, benchmarkWith } from './benchmark.fixture';
 import {
+  dailyColumns, dailyVisible, captureTiles, beatLine, CAPTURE_FORMULA, TAX_LINE, FOOTNOTE,
   statGroups, chartSeries, chartDates, pointFlag, markerNotes, stripLine, ALPHA_CELLS_HINT,
   CHIP_LABELS, PAPER_LINE, SERIES_ORDER, etClock, isMixedCurrency, signedPct, stateStamp, statusNote, todayCells,
 } from './benchmark';
@@ -281,5 +284,98 @@ describe('BenchmarkTab strip and chart (v208)', () => {
     const { el } = renderTab(stubStore(benchmarkWith({ benchmarks_status: 'empty' })));
     expect(el.querySelector('.stats')).toBeNull();
     expect(el.querySelector('.chart')).toBeNull();
+    expect(el.querySelector('.daily')).toBeNull();
+    expect(el.querySelector('.capture')).toBeNull();
+    expect(el.querySelector('.footnote')).toBeNull();
+  });
+});
+
+describe('benchmark daily table and capture (v208)', () => {
+  const cols = dailyColumns('SPY');
+  const cell = (key: string, i: number) => cols.find((c) => c.key === key)!.value!(BENCHMARK_FIXTURE.daily[i]);
+
+  it('shows a missing session as — and a spanning row as covering N sessions', () => {
+    expect([cell('date', 0), cell('bot_account', 0), cell('SPY', 0), cell('exposure', 0), cell('open', 0), cell('beat', 0)])
+      .toEqual(['2026-11-04', '−0.12%', '+0.40%', '38.0%', 2, 'No']);
+    expect([cell('date', 3), cell('bot_account', 3), cell('SPY', 3), cell('exposure', 3), cell('beat', 3)])
+      .toEqual(['2026-10-30 · no bot sample', '—', '+0.30%', '—', '—']);
+    expect([cell('date', 2), cell('beat', 2)]).toEqual(['2026-11-02 · covers 2 sessions', '—']);
+    expect(cell('bot_deployed', 1)).toBe('—');
+  });
+  it('names the Beat? column after the capture index and follows the chips', () => {
+    expect(cols.find((c) => c.key === 'beat')!.header).toBe('Beat? (vs SPY)');
+    expect(dailyColumns('^DJI').find((c) => c.key === 'beat')!.header).toBe('Beat? (vs Dow (price))');
+    expect(cols[0].key).toBe('date');
+    expect(dailyVisible(new Set(['bot_account', 'SPY']))).toEqual(['date', 'bot_account', 'SPY', 'exposure', 'open', 'beat']);
+  });
+  it('shows capture as — with the 10+10 reason below the guard, and the formula in the tooltip', () => {
+    const [up, down, ratio] = captureTiles(BENCHMARK_FIXTURE);
+    expect([up.label, up.value, up.sample, up.secondary]).toEqual(
+      ['Up capture', '—', 2, 'needs ≥ 10 index-up and ≥ 10 index-down sessions']);
+    expect(up.hint).toBe(CAPTURE_FORMULA);
+    expect(CAPTURE_FORMULA).toBe('Σ bot return on index-up days ÷ Σ index return on those days (sum ratio, not the geometric form)');
+    expect([down.sample, ratio.sample]).toEqual([1, 3]);
+  });
+  it('formats computed capture and keeps "index flat" verbatim', () => {
+    const p = benchmarkWith({ capture: { ...BENCHMARK_FIXTURE.capture,
+      up_pct: { value: 85.24, n: 12, reason: null }, down_pct: { value: 61.0, n: 11, reason: null },
+      ratio: { value: 1.3974, n: 23, reason: null } } });
+    expect(captureTiles(p).map((t) => t.value)).toEqual(['85.2%', '61.0%', '1.40×']);
+    const flat = benchmarkWith({ capture: { ...BENCHMARK_FIXTURE.capture,
+      down_pct: { value: null, n: 0, reason: 'index flat' } } });
+    expect(captureTiles(flat)[1].secondary).toBe('index flat');
+  });
+  it('counts beats as description, not edge', () => {
+    expect(beatLine(BENCHMARK_FIXTURE)).toBe(
+      'Bot · account beat SPY on 1 of 2 up days and 1 of 1 down days — descriptive, not evidence of edge.');
+  });
+  it('carries the tax sentence and the price-only note in the footnote', () => {
+    expect(TAX_LINE).toBe('Swing turnover is taxed as short-term gains, so after-tax results would differ from this chart.');
+    expect(FOOTNOTE).toContain(TAX_LINE);
+    expect(FOOTNOTE[0]).toContain('price indexes');
+  });
+});
+
+describe('BenchmarkTab table, capture and layout (v208)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+  afterEach(() => vi.restoreAllMocks());
+
+  for (const width of [390, 820, 1440]) {
+    it(`keeps the approved order and pins the date column at ${width}px`, () => {
+      vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(width);
+      const { el } = renderTab(stubStore(BENCHMARK_FIXTURE));
+      const order = [...el.querySelectorAll('.today, .range, .chips, .stats, .chart, .daily, .capture, .footnote')]
+        .map((n) => n.classList[0]);
+      expect(order).toEqual(['today', 'range', 'chips', 'stats', 'chart', 'daily', 'capture', 'footnote']);
+      expect(el.querySelector('.daily sb-data-table .compact-list')).toBeNull();
+      expect(text(el.querySelector('.daily sb-data-table th.pin'))).toContain('Date');
+      expect(el.querySelector('.daily sb-data-table .wrap')!.classList.contains('phone')).toBe(width < 640);
+    });
+  }
+  it('loads older sessions from the server, and says nothing when there are none', () => {
+    const store = stubStore(BENCHMARK_FIXTURE);
+    const { el } = renderTab(store);
+    el.querySelector<HTMLButtonElement>('.daily button.more')!.click();
+    expect(store.loadMoreBenchmarkDaily).toHaveBeenCalledTimes(1);
+    TestBed.resetTestingModule();
+    expect(renderTab(stubStore(benchmarkWith({ daily_has_more: false }))).el.querySelector('.daily button.more')).toBeNull();
+  });
+  it('disables the button while a page is loading', () => {
+    const { el } = renderTab(stubStore(BENCHMARK_FIXTURE, { benchmarkLoadingMore: signal(true) }));
+    expect(el.querySelector<HTMLButtonElement>('.daily button.more')!.disabled).toBe(true);
+  });
+  it('switches the capture index through the store', () => {
+    const store = stubStore(BENCHMARK_FIXTURE);
+    const { fixture, el } = renderTab(store);
+    const qqq = [...el.querySelectorAll<HTMLButtonElement>('.capture button')].find((b) => text(b) === 'QQQ')!;
+    qqq.click();
+    fixture.detectChanges();
+    expect(store.setBenchmarkCapture).toHaveBeenCalledWith('QQQ');
+    expect(text(el.querySelector('.capture .beat'))).toContain('not evidence of edge');
+  });
+  it('sizes the controls for touch and stacks the tiles in two columns on phone', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/analytics/tabs/benchmark.ts'), 'utf8');
+    expect(src).toMatch(/\.more\{[^}]*min-height:44px/);
+    expect(src).toMatch(/@media \(max-width:639px\)\{[^@]*\.tiles\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
   });
 });

@@ -7,7 +7,7 @@ import { AnalyticsStore, BENCHMARK_RANGES } from '../../../stores/analytics.stor
 import { EmptyStateComponent } from '../../../ui/empty-state';
 import { PanelError } from '../../../ui/panel-error';
 import { Segmented } from '../../../ui/segmented';
-import { AnalyticsBenchmark, BenchmarkEstimate, BenchmarkIndexKey, BenchmarkKey, BenchmarkPoint, BenchmarkRange, BenchmarkSeriesStats, BenchmarkStat, BenchmarkVs } from '../../../api/models';
+import { AnalyticsBenchmark, BenchmarkDailyRow, BenchmarkEstimate, BenchmarkIndexKey, BenchmarkKey, BenchmarkPoint, BenchmarkRange, BenchmarkSeriesStats, BenchmarkStat, BenchmarkVs } from '../../../api/models';
 import { MINUS } from '../../../ui/format';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { LineChart, LineChartSeries } from '../../../ui/line-chart';
@@ -15,6 +15,8 @@ import { ExposureStrip } from '../../../ui/exposure-strip';
 import { StatTile, StatTone } from '../../../ui/stat-tile';
 import { Panel } from '../../../ui/layout';
 import { PanelHeader } from '../../../ui/panel-header';
+import { DataTable } from '../../../ui/data-table/data-table';
+import { ColumnDef } from '../../../ui/data-table/data-table.types';
 
 export const SERIES_ORDER: readonly BenchmarkKey[] = ['bot_account', 'bot_deployed', 'SPY', 'QQQ', '^IXIC', '^DJI'];
 export const CHIP_LABELS: Record<BenchmarkKey, string> = {
@@ -193,10 +195,60 @@ export function stripLine(p: AnalyticsBenchmark): string {
   return `${p.range.sessions_n} sessions, paper book — beta/alpha are indicative, not evidence of edge.`;
 }
 
+export const INDEX_KEYS: readonly BenchmarkIndexKey[] = ['SPY', 'QQQ', '^IXIC', '^DJI'];
+export const CAPTURE_FORMULA = 'Σ bot return on index-up days ÷ Σ index return on those days (sum ratio, not the geometric form)';
+export const DOWN_FORMULA = 'Σ bot return on index-down days ÷ Σ index return on those days (sum ratio, not the geometric form); flat days excluded';
+export const TAX_LINE = 'Swing turnover is taxed as short-term gains, so after-tax results would differ from this chart.';
+export const FOOTNOTE: readonly string[] = [
+  'SPY and QQQ are total return (dividends reinvested); Nasdaq Comp. and Dow are price indexes without dividends.',
+  'Bot · account is the main-ledger paper equity, cash included: the Dashboard’s daily close. '
+    + 'Bot · deployed is trade P&L on capital in trades — not account return.',
+  'A missing bot session shows —, never 0%: the index is compounded over the same span and the pair is left out of '
+    + 'beta, alpha, Sharpe, capture and Beat?.',
+  'Days sourced from a proxy ETF (ONEQ, DIA) are marked in the chart tooltip.',
+  TAX_LINE,
+];
+
+function dailyDate(row: BenchmarkDailyRow): string {
+  if (row.missing) return `${row.date} · no bot sample`;
+  return row.span > 1 ? `${row.date} · covers ${row.span} sessions` : row.date;
+}
+
+export function dailyColumns(capture: string): ColumnDef<BenchmarkDailyRow>[] {
+  return [
+    { key: 'date', header: 'Date', value: dailyDate },
+    ...SERIES_ORDER.map((key) => ({ key, header: CHIP_LABELS[key], numeric: true,
+      value: (row: BenchmarkDailyRow) => signedPct(row.lines[key] ?? null) })),
+    { key: 'exposure', header: 'Exposure', numeric: true,
+      value: (row) => row.exposure_pct === null ? '—' : `${row.exposure_pct.toFixed(1)}%` },
+    { key: 'open', header: 'Open', numeric: true, value: (row) => row.open_n ?? '—' },
+    { key: 'beat', header: `Beat? (vs ${CHIP_LABELS[capture as BenchmarkIndexKey]})`,
+      value: (row) => row.beat === null ? '—' : row.beat ? 'Yes' : 'No' },
+  ];
+}
+
+export function dailyVisible(visible: ReadonlySet<string>): string[] {
+  return ['date', ...SERIES_ORDER.filter((key) => visible.has(key)), 'exposure', 'open', 'beat'];
+}
+
+export function captureTiles(p: AnalyticsBenchmark): BenchmarkTile[] {
+  const c = p.capture;
+  return [
+    { ...tile('Up capture', c.up_pct, (v) => `${v.toFixed(1)}%`, CAPTURE_FORMULA), sample: c.up_n },
+    { ...tile('Down capture', c.down_pct, (v) => `${v.toFixed(1)}%`, DOWN_FORMULA), sample: c.down_n },
+    { ...tile('Capture ratio', c.ratio, (v) => `${v.toFixed(2)}×`, 'Up capture ÷ down capture.'), sample: c.up_n + c.down_n },
+  ];
+}
+
+export function beatLine(p: AnalyticsBenchmark): string {
+  const { index, beat } = p.capture;
+  return `Bot · account beat ${CHIP_LABELS[index]} on ${beat.up_beat} of ${beat.up_days} up days and ${beat.down_beat} of ${beat.down_days} down days — descriptive, not evidence of edge.`;
+}
+
 @Component({
   selector: 'sb-benchmark-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Segmented, PanelError, EmptyStateComponent, LineChart, ExposureStrip, StatTile, Panel, PanelHeader],
+  imports: [Segmented, PanelError, EmptyStateComponent, LineChart, ExposureStrip, StatTile, Panel, PanelHeader, DataTable],
   template: `
     @if (store.benchmarkError(); as error) {
       <sb-panel-error [message]="error" (retry)="store.reload('benchmark')" />
@@ -259,8 +311,26 @@ export function stripLine(p: AnalyticsBenchmark): string {
   <p class="exposure-caption">Exposure: share of equity in open trades per session (faded bars: approximate).</p>
   @if (markerNotes(p).length) { <ul class="markers">@for (m of markerNotes(p); track m) { <li>{{ m }}</li> }</ul> }
 </sb-panel>
+<sb-panel class="daily">
+  <sb-panel-header title="Daily comparison" [n]="p.range.sessions_n"
+    hint="Newest first. Beat?: this session's return was higher, not evidence of edge. A row covering several sessions compares the same span on both sides; a missing bot session shows —." />
+  <sb-data-table [rows]="p.daily" [columns]="dailyCols()" [visible]="dailyShown()" [rowKey]="dailyKey"
+    clientPaging="analytics.benchmark.daily" [emptyState]="{ title: 'No sessions in this range' }" />
+  @if (p.daily_has_more) {
+    <button type="button" class="more" [disabled]="store.benchmarkLoadingMore()" (click)="store.loadMoreBenchmarkDaily()">Load older sessions</button>
+  }
+</sb-panel>
+<sb-panel class="capture">
+  <sb-panel-header title="Up/down capture" [n]="p.capture.up_n + p.capture.down_n" [hint]="captureFormula" />
+  <sb-segmented label="Capture vs" [options]="captureOptions" [value]="store.benchmarkCapture()"
+    (valueChange)="store.setBenchmarkCapture($event)" />
+  <div class="tiles">@for (t of captureTiles(p); track t.label) {
+    <sb-stat-tile [label]="t.label" [value]="t.value" [sample]="t.sample" [tone]="t.tone" [hint]="t.hint" [secondary]="t.secondary" />
+  }</div>
+  <p class="beat">{{ beatLine(p) }}</p>
+</sb-panel>
+<footer class="footnote">@for (line of footnote; track line) { <p>{{ line }}</p> }</footer>
       }
-      <!-- V208-17: .daily, .capture, .footnote -->
     }
   `,
   styles: `
@@ -286,7 +356,11 @@ export function stripLine(p: AnalyticsBenchmark): string {
     .tile.bold { outline: 1px solid var(--accent); border-radius: var(--panel-radius); --figure-weight: 700; }
     .strip-line, .exposure-caption, .markers { margin: 0; font-size: var(--text-micro); color: var(--text-faint); }
     .markers { padding-left: var(--space-14); }
-    @media (max-width: 639px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .today .cells { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .more{min-height:44px;margin-top:var(--space-10);padding:0 var(--space-14);border:1px solid var(--border);border-radius:var(--panel-radius);background:var(--surface);color:var(--text)}
+    .beat{margin:var(--space-10) 0 0;font-size:var(--text-chip);color:var(--text-secondary)}
+    .footnote{display:grid;gap:var(--space-4)}
+    .footnote p{margin:0;font-size:var(--text-micro);color:var(--text-faint)}
+    @media (max-width:639px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.today .cells{grid-template-columns:repeat(2,minmax(0,1fr))}}
   `,
 })
 export class BenchmarkTab {
@@ -314,6 +388,14 @@ export class BenchmarkTab {
   readonly chart = computed(() => { const p = this.data(); return p ? chartSeries(p, this.visible()) : []; });
   readonly dates = computed(() => chartDates(this.chart()));
   readonly bars = computed(() => (this.data()?.exposure ?? []).map(({ date, pct, approx }) => ({ date, pct, approx })));
+  readonly dailyCols = computed(() => dailyColumns(this.store.benchmarkCapture()));
+  readonly dailyShown = computed(() => dailyVisible(this.visible()));
+  readonly dailyKey = (row: BenchmarkDailyRow) => row.date;
+  readonly captureOptions = INDEX_KEYS.map((key) => ({ value: key, label: CHIP_LABELS[key] }));
+  readonly captureFormula = CAPTURE_FORMULA;
+  readonly captureTiles = captureTiles;
+  readonly beatLine = beatLine;
+  readonly footnote = FOOTNOTE;
   readonly pctFmt = (v: number) => signedPct(v);
   readonly stripLine = stripLine;
   readonly markerNotes = markerNotes;
