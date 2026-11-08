@@ -64,6 +64,7 @@ LEADS = {
 CROSS_CUTTING: dict[str, frozenset[str]] = {
     "risk-manager": frozenset({"Shorts:", "eToro:"}),
     "veteran-trader": frozenset({"Shorts:", "eToro:"}),
+    "quant-researcher": frozenset({"Shorts:"}),
 }
 
 # v213 § C: the anchors each seat's new checklist items must carry -- words
@@ -76,6 +77,11 @@ COVERAGE: dict[str, tuple[str, ...]] = {
     "veteran-trader": ("act on before the open", "half-days",
                        "frozen weekend bar", "partial fill", "hard-to-borrow",
                        "CFD"),
+    "quant-researcher": ("badge tier", "`swingbot/core/backtesting/validation_registry.json`",
+                         "Total R", "trade count", "live-book gap"),
+    "quant-engineer": ("§ Long runs must checkpoint", "skips finished units on restart",
+                       "`swingbot/core/marketdata/providers/router.py`",
+                       "`swingbot/core/marketdata/training_data.py`"),
 }
 
 
