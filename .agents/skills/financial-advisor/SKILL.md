@@ -48,7 +48,7 @@ frequency and risk match what one person with a day job can follow.
 
 - Enforcing caps, stops and sizing in code: `risk-manager`.
 - Statistical validity of any performance shown: `quant-researcher`.
-- Design and operations of the admin UI itself: `staff-engineer`.
+- Design of the admin UI itself: `ux-designer`; its operations: `staff-engineer`.
 - The partner's own finances: no role reviews them.
 
 ## Trigger table

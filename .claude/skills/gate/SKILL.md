@@ -101,8 +101,10 @@ skill, agent or `docs/claude/` change ships its Codex mirror
 
 ## Step 7 — Push, then watch CI until green
 
-Push, then follow the run it started
-(`docs/claude/working-conventions.md` § Pipeline watch):
+CI runs only on pushes to `main`, so on a worktree branch the push starts no
+run: stop after the push and watch after the merge. On `main`, push, then
+follow the run it started (`docs/claude/working-conventions.md` § Pipeline
+watch):
 
 ```bash
 git push
@@ -112,5 +114,6 @@ gh run watch <id> --exit-status
 
 Red: `gh run view <id> --log-failed`, fix each failing test, re-run it alone,
 commit scoped, push, and watch the new run; repeat until green. A deploy-job
-failure touches production: stop and tell the partner. Never state PASS
+failure touches production (rollback: `docs/deploy/DEPLOY_HETZNER.md`): stop
+and tell the partner. Never state PASS
 without pasting the run's conclusion.
