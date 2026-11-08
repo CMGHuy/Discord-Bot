@@ -138,11 +138,15 @@ or above the compatibility floor; "Other" accepts any form above.
    `docker-compose.yml` at the target must equal HEAD's; otherwise refuse
    (Compose would recreate Postgres under the old definition).
 6. **Market-data writer unchanged.** If any path in the constant
-   `MARKET_DATA_WRITER_PATHS` (the refresher package plus the module that
-   writes `market_data/daily`, named in the plan from the code brief) differs
-   between target and HEAD, the dry-run report warns and the refresher stays stopped
-   during the hold unless the partner confirms otherwise (the live cache never
-   self-heals — `known-traps.md`).
+   `MARKET_DATA_WRITER_PATHS` (the refresher package plus the functions that
+   write `market_data/<interval>/` — `data_store.save_to_disk` and
+   `data_refresh.refresh_symbol`, named in the plan from the code brief)
+   differs between target and HEAD, the rollback is **refused** unless the
+   partner passes `--allow-writer-drift`; stopping the refresher alone is not
+   enough, because the admin container's freshness refresh
+   (`swingbot/admin/freshness.py`) calls the same writers. With the override
+   the refresher stays stopped and the report says the admin may still write
+   (the live cache never self-heals — `known-traps.md`).
 7. **Image exists** (`docker manifest inspect`) and **VM tree is clean**
    (`git status --porcelain` as `deploy` prints nothing — an unmirrored live
    edit refuses).
@@ -314,7 +318,7 @@ those rows in analytics is out of scope for v220 (see Out of scope).
 - quant-engineer: no check that old lifecycle code can manage open trades written by newer exit logic -- applied: check 4 (vocabulary) for every target, plus a write-free lifecycle evaluation in `rollback_smoke` for v220+ images.
 - quant-engineer: smoke reads but never evaluates, and must not write -- applied: Execution step 6.
 - quant-engineer (advisory): rollback-window rows carry old semantics -- applied as record only (`rollback`/`release` lines); analytics tagging out of scope.
-- quant-engineer (advisory): old refresher may write `market_data/` in an old format -- applied: check 6.
+- quant-engineer (advisory): old refresher may write `market_data/` in an old format -- applied: check 6 (tightened to a refusal after the part-1b writer found the admin's freshness refresh uses the same writers).
 - quant-engineer (advisory): v162 history store and cron during a hold -- applied: no research jobs while held; cron checked after rollback and release.
 - quant-engineer (advisory): rows re-saved during the hold read by new code after release -- applied: Release step 5 report.
 - quant-engineer (advisory): manifest should record config/registry state -- applied in part: `config_keys_sha256`; registry version rejected: the target sha already pins the registry code exactly.
