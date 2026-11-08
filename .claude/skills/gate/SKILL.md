@@ -103,8 +103,8 @@ skill, agent or `docs/claude/` change ships its Codex mirror
 
 CI runs only on pushes to `main`, so on a worktree branch the push starts no
 run: stop after the push and watch after the merge. On `main`, push, then
-follow the run it started (`docs/claude/working-conventions.md` § Pipeline
-watch):
+follow the run it started
+(`docs/claude/working-conventions.md` § Pipeline watch):
 
 ```bash
 git push
