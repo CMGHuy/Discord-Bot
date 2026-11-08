@@ -7,7 +7,7 @@ description: "Dispatch expert role reviewers (/panel role[,role...] target) over
 
 ## Step 1 — Read the authority
 
-`docs/claude/skills-tools.md` § Expert roles holds the roster and each role's
+`docs/claude/skills-tools.md` § Expert roles (v145) holds the roster and each role's
 reviewer model. `docs/claude/document-conventions.md` § The header block holds
 the `**Panel:**` line. This skill is the checklist; the reasoning lives there.
 

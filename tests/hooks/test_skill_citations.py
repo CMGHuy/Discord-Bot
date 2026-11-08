@@ -376,3 +376,18 @@ def test_main_exits_one_and_prints_each_finding(tmp_path, capsys):
     _git_repo(tmp_path, {".claude/skills/x/SKILL.md": "`scripts/gone.py`\n"})
     assert sc.main(["--root", str(tmp_path)]) == 1
     assert ".claude/skills/x/SKILL.md:1: scripts/gone.py -- missing" in capsys.readouterr().out
+
+
+
+# --- the repository --------------------------------------------------------
+
+def test_repo_has_no_stale_citations():
+    """Every skill, agent and eval prompt cites what exists today (v213 § A).
+
+    A failure line reads `<file>:<line>: <token> -- <reason>`. Fix the skill;
+    allowlist (tests/hooks/skill_citation_allowlist.txt) only a deliberate
+    mention of something removed, uncommitted, vendored or hypothetical. A
+    `dead allowlist line` means the mention is gone: delete that line.
+    """
+    report = sc.repo_report(ROOT)
+    assert not report, "\n".join(report)

@@ -28,7 +28,7 @@ named for, and is that setup the one traders actually trade?
 - A setup runs only on horizons in `swingbot/core/market/strategy_types.py:HORIZONS` that it was measured on.
 - Confluence counts independent evidence: two signals derived from the same moving average are one confirmation, not two.
 - The chart overlay (`swingbot/core/charts/chart_strategy_overlay.py`) draws the same levels the plan uses.
-- Closed ideas in `docs/claude/backtest-methodology.md` § Closed pre-registrations (FVG modes, Fibonacci stops, S/R touch gates) do not return as a new pattern under a new name.
+- Closed ideas (FVG modes, Fibonacci stops, S/R touch gates) do not return as a new pattern under a new name: `docs/claude/backtest-methodology.md` § Closed pre-registrations — do not re-run these.
 - The strategy explanation (`swingbot/core/market/explain.py`) describes the rule that fired, not a generic setup.
 - A new indicator or pattern goes through the `edge-module` skill for its registry entry and wiring.
 
