@@ -1,4 +1,4 @@
-"""v145 § 1: the expert role skills -- one shape for nine lenses.
+"""v145 § 1: the expert role skills -- one shape for ten lenses (v213 adds ux-designer).
 
 Each role skill carries Lens, Checklist, Red flags and Out of scope in that
 order, states the hard boundaries every seat shares, and ships trigger cases
@@ -31,6 +31,7 @@ ROLES = {
     "staff-engineer": "opus",
     "quant-engineer": "sonnet",
     "senior-engineer": "sonnet",
+    "ux-designer": "sonnet",
 }
 
 SECTIONS = ("## Lens", "## Checklist", "## Red flags", "## Out of scope")

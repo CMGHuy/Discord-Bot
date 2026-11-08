@@ -229,7 +229,7 @@ default, and `.mcp.json`'s context7 provider: `docs/claude/skills-tools.md`.
 
 ## Expert roles (v145)
 
-Nine role skills each hold one reviewer's lens, in four sections -- Lens,
+Ten role skills each hold one reviewer's lens, in four sections -- Lens,
 Checklist, Red flags, Out of scope -- and are model-invocable, so a review
 from one seat loads its checklist. The `expert-reviewer` agent applies one
 role to a target; `/panel` dispatches several, serially, and merges their
@@ -250,6 +250,7 @@ haiku -- reviewing means judging.
 | `staff-engineer` | opus | Cross-cutting design: seams, migrations, VM ops, blast radius, long-run cost |
 | `quant-engineer` | sonnet | Backtest and data plumbing: lookahead (loads `no-lookahead`), numerics, the OHLCV caches and the v162 training-data store, reproducibility |
 | `senior-engineer` | sonnet | Code-level quality, the complexity limit, reads like its surroundings; `task-reviewer` preloads it |
+| `ux-designer` | sonnet | The admin UI and Discord embeds as a person reads them on phone, tablet and desktop: layout at the three widths, pagers, empty states, embed truncation |
 
 ## Generator roles (v161)
 

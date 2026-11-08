@@ -268,8 +268,9 @@ Expert role skills (v145) each hold one reviewer's lens (Lens, Checklist, Red
 flags, Out of scope) and load when you review from that seat: `quant-researcher`,
 `risk-manager`, `financial-advisor` (educational, not personal financial advice),
 `veteran-trader`, `technical-analyst`, `fundamental-analyst`, `staff-engineer`,
-`quant-engineer` (lookahead, numerics, the OHLCV caches) and `senior-engineer`
-(code quality, the complexity limit). A role raises cited `BLOCKING`/`ADVISORY`
+`quant-engineer` (lookahead, numerics, the OHLCV caches), `senior-engineer`
+(code quality, the complexity limit) and `ux-designer` (screens and embeds at
+phone, tablet and desktop widths). A role raises cited `BLOCKING`/`ADVISORY`
 findings; it never decides.
 
 Claude Code plugins switched off in `.claude/settings.json` `enabledPlugins` load no
