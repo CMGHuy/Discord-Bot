@@ -1,11 +1,11 @@
-# v220 — Code-only rollback, Part 1: planner (V220-1..V220-4)
+# v220 — Code-only rollback, Part 1: planner (V220-1, V220-1b, V220-2, V220-2b)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Spec:** [v220 — Code-only rollback](../specs/2026-11-08-v220-code-only-rollback-design.md)
 **Index:** [`2026-11-08-v220-code-only-rollback_0-index.md`](2026-11-08-v220-code-only-rollback_0-index.md) — Goal, Architecture, **Global Constraints**, CLI contract, Parallelisation and the task ledger live there; every task below implicitly includes the Global Constraints.
 
-Scope of this part: target resolution (every form in the spec's table), the compatibility floor and the picker's candidate list (`scripts/ops/rollback_plan.py`), the AST migration scanner with its tree-built revision graph and the one-time `ROLLBACK_SAFE` audit (`scripts/ops/rollback_migrations.py`), and the config-key, compose `db` block and market-data-writer checks (`scripts/ops/rollback_checks.py`).
+Scope of this part: target resolution (every form in the spec's table), the compatibility floor and the picker's candidate list (`scripts/ops/rollback_plan.py`). The migration scanner and the config/compose/writer checks are in Part 1b (`_1b-scanner-and-checks.md`).
 
 Shared rules for these four tasks:
 
