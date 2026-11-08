@@ -5,7 +5,7 @@
 **Bump:** bot patch
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
-**Spec:** [v220 — Code-only rollback](../specs/2026-11-08-v220-code-only-rollback-design.md), **Section 2 (`/stable-snapshot` extension)** and the "Code-brief corrections" section. Moved out of the v220 plan (formerly V220-13/V220-14) so v220 stays inside the 20-task cap; v220's own plan is [`2026-11-08-v220-code-only-rollback_0-index.md`](2026-11-08-v220-code-only-rollback_0-index.md).
+**Spec:** [v220 — Code-only rollback](../specs/2026-11-08-v220-code-only-rollback-design.md), **Section 2 (`/stable-snapshot` extension)** and the "Code-brief corrections" section. Moved out of the v220 plan (formerly V220-13/V220-14, plus the spec's "Repo bookkeeping" docs, formerly V220-16, now V221-4) so v220 stays inside the 20-task cap; v220's own plan is [`2026-11-08-v220-code-only-rollback_0-index.md`](2026-11-08-v220-code-only-rollback_0-index.md).
 
 ## Goal
 
@@ -84,7 +84,8 @@ At most 2 implementers at once.
 
 - **V221-1** (`backup_manifest.py`, `stable_snapshot.sh`, their tests) and **V221-2** (`pin-stable-image.yml`, `registry-retention.yml`, `tests/dev/test_pin_stable_image.py`) touch disjoint files and share no contract: run them side by side.
 - **V221-3** (skill) waits for both: it documents V221-1's manifest fields and V221-2's workflow name, inputs and `run-name`.
-- **V221-4** (release) runs last, after V221-1..3 are merged into the worktree: the bump describes the whole change.
+- **V221-4** (rollback docs, moved from v220's V220-16) waits for V221-3: both edit `AGENTS.md` and regenerate the Codex mirror (`sync_codex.py`). It also needs v220's drill (V220-18) on `main`, which creates the `DB_RESTORE.md` heading it fills.
+- **V221-5** (release) runs last, after V221-1..4 are merged into the worktree: the bump describes the whole change.
 - The whole plan waits for v220 to merge (Global Constraints). v220 does not wait for v221: its drill (V220-18) never takes a stable snapshot, and its `/rollback` skill resolves stable targets without the new fields.
 
 ## Task ledger
@@ -94,7 +95,8 @@ At most 2 implementers at once.
 | V221-1 | Manifest rollback fields, pre-v220 verify note, snapshot script feeds them | sonnet — additive fields in one stdlib module plus its shell caller | M `scripts/ops/backup_manifest.py`, M `scripts/ops/stable_snapshot.sh`, M `tests/scripts/test_backup_manifest.py`, M `tests/scripts/test_stable_snapshot_shape.py` | `ROLLBACK_FIELDS`; `config_keys_sha256(config_source: str) -> str`; `features_from_log(lines: list[str]) -> list[dict]`; `previous_stable_sha(stable_dir: Path, exclude: str = "") -> str \| None`; `manifest_era(manifest: dict) -> str` (`"v220"`/`"pre-v220"`); `build_manifest(..., rollback: dict \| None = None)`; CLI `build --alembic-head --version-json --config-source --features-log`, `prev-sha DIR [--exclude NAME]` |
 | V221-2 | `pin-stable-image.yml` and the retention exclusion | sonnet — new workflow plus one action input, README-verified | C `.github/workflows/pin-stable-image.yml`, M `.github/workflows/registry-retention.yml`, C `tests/dev/test_pin_stable_image.py` | workflow `pin-stable-image.yml`: inputs `name`, `bot_image`, `db_image`; `run-name: pin <name>`; retention `image-tags: "!latest,!stable-*"` |
 | V221-3 | `/stable-snapshot` pins images and reports rollback fields | haiku — fixed skill text from this plan | M `.claude/skills/stable-snapshot/SKILL.md`, M `.agents/skills/stable-snapshot/SKILL.md` (generated), M `tests/hooks/test_skill_shape.py`, M `AGENTS.md` | — |
-| V221-4 | Release: bot patch, version history | haiku — fixed `VERSION.json` bump and regeneration | M `VERSION.json`, M `swingbot/admin/version_history.json` | — |
+| V221-4 | Rollback docs: `DB_RESTORE.md` comparison, `schema-evolution.md`, `schema-change` skill | haiku — fixed doc text from the v220 spec (moved from v220 V220-16) | M `docs/deploy/DB_RESTORE.md`, M `docs/claude/schema-evolution.md`, M `.claude/skills/schema-change/SKILL.md`, M `AGENTS.md`, M `.agents/skills/schema-change/SKILL.md` (generated), C `tests/scripts/test_rollback_docs.py` | `schema-evolution.md` section `## Rollback safety (v220)` |
+| V221-5 | Release: bot patch, version history | haiku — fixed `VERSION.json` bump and regeneration | M `VERSION.json`, M `swingbot/admin/version_history.json` | — |
 
 # Phase 1 — Manifest, workflow, skill, release
 
@@ -902,7 +904,169 @@ git add .claude/skills/stable-snapshot/SKILL.md .agents/skills/stable-snapshot/S
 git commit -m "docs(v221): /stable-snapshot pins both images and reports rollback fields, floor and /rollback command"
 ```
 
-### Task V221-4: Release: bot patch, version history
+### Task V221-4: Rollback docs: `DB_RESTORE.md` comparison, `schema-evolution.md`, `schema-change` skill
+
+**Model:** haiku — fixed doc text from the v220 spec's "Repo bookkeeping" section
+
+Moved here from the v220 plan (formerly V220-16) when V220-9 split into V220-9/V220-9b and v220 had to stay inside the 20-task cap.
+
+**Files:**
+- Modify: `docs/deploy/DB_RESTORE.md` (comparison table under the heading V220-18 created)
+- Modify: `docs/claude/schema-evolution.md` (new last section)
+- Modify: `.claude/skills/schema-change/SKILL.md` (gate line, one wrong-turn row)
+- Modify: `AGENTS.md` (condensed `schema-evolution.md` line)
+- Modify: `.agents/skills/schema-change/SKILL.md` (generated by `python scripts/dev/sync_codex.py`)
+- Test: `tests/scripts/test_rollback_docs.py` (new, suite `tooling`)
+
+**Interfaces:**
+- Consumes: v220 merged on `main`, including V220-18's `## Code-only rollback (v220)` heading and drill record in `docs/deploy/DB_RESTORE.md` (`git grep -n "^## Code-only rollback (v220)" docs/deploy/DB_RESTORE.md`; missing means stop); `ROLLBACK_SAFE` (v220 V220-3) and `INCOMPATIBLE_BOUNDARIES` (v220 V220-2), named only.
+- Produces: nothing a later task consumes.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `tests/scripts/test_rollback_docs.py`:
+
+```python
+"""The rollback rules are written where a migration author and an operator look
+(v220 spec, Repo bookkeeping; moved to v221 V221-4)."""
+import pathlib
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+def _read(rel):
+    return (ROOT / rel).read_text(encoding="utf-8")
+
+
+def test_schema_evolution_states_the_rollback_rules():
+    text = _read("docs/claude/schema-evolution.md")
+    section = text[text.index("## Rollback safety (v220)"):]
+    for needle in ("ROLLBACK_SAFE", "INCOMPATIBLE_BOUNDARIES", "scripts/ops/rollback_migrations.py",
+                   "scripts/ops/rollback_plan.py", "op.get_bind()"):
+        assert needle in section
+
+
+def test_the_schema_change_gate_names_both_rollback_markers():
+    text = _read(".claude/skills/schema-change/SKILL.md")
+    gate = text[text.index("## The gate"):text.index("## Known wrong turns")]
+    assert "ROLLBACK_SAFE" in gate and "INCOMPATIBLE_BOUNDARIES" in gate
+    assert "Older code just ignores the new field" in text
+
+
+def test_db_restore_compares_the_three_rollback_paths_above_the_drill():
+    text = _read("docs/deploy/DB_RESTORE.md")
+    section = text[text.index("## Code-only rollback (v220)"):]
+    table = section[:section.index("### Drill")]
+    for needle in ("`rollback_to.sh", "`restore_stable.sh", "`/rollback", "untouched", "/rollback --release"):
+        assert needle in table
+    assert "rollback_code.sh" in text[:text.index("## Commands")]
+
+
+def test_agents_md_carries_the_condensed_rule():
+    assert "ROLLBACK_SAFE" in _read("AGENTS.md")
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `python scripts/dev/testrun.py file tests/scripts/test_rollback_docs.py`
+Expected: FAIL (`ValueError: substring not found` for `## Rollback safety (v220)`).
+
+- [ ] **Step 3: Write the docs**
+
+Append to `docs/claude/schema-evolution.md`:
+
+```markdown
+
+## Rollback safety (v220)
+
+`/rollback` (`scripts/ops/rollback_code.sh`) runs older code on today's
+database, so every revision says whether older code survives it:
+
+- `scripts/ops/rollback_migrations.py` reads each revision's `upgrade()` with
+  `ast`. Safe without a note: `op.create_table`, `op.create_index`,
+  `op.add_column` with `nullable=True` or a `server_default`, and literal
+  `op.execute` SQL that only creates tables or indexes, inserts or comments.
+  Anything else refuses a rollback across the revision: drops, `alter_column`,
+  renames, `rename_doc_field`/`drop_doc_field`, `CREATE OR REPLACE` of a
+  function, trigger or view, `op.get_bind()`, `conn.execute`, non-literal SQL,
+  any helper call.
+- A revision unsafe by that rule but harmless to older code declares
+  `ROLLBACK_SAFE = "<reason>"` at module level. The reason says what older code
+  does with the new shape, never "reviewed" or "fine"; the `/rollback` report
+  prints it.
+- A change that makes older code unsafe against new data without a schema
+  change (a stored field older code strips on re-save, a queue older code
+  drains destructively, a heartbeat key it misreads) adds an
+  `INCOMPATIBLE_BOUNDARIES` entry `(sha, plan, reason)` to
+  `scripts/ops/rollback_plan.py` in the same plan. No rollback reaches below it.
+```
+
+In `.claude/skills/schema-change/SKILL.md`, append to the end of `## The gate` (after the `scripts/ops/rollback_to.sh` sentence):
+
+```markdown
+Every new revision states its rollback safety: `ROLLBACK_SAFE = "<reason>"`
+only with a real reason, and an `INCOMPATIBLE_BOUNDARIES` entry in
+`scripts/ops/rollback_plan.py` when older code would mishandle the new data
+(`docs/claude/schema-evolution.md` § Rollback safety).
+```
+
+and add this row at the end of the `## Known wrong turns` table:
+
+```markdown
+| "Older code just ignores the new field" | Pre-v116 code strips unknown JSONB fields on re-save; such a break is an `INCOMPATIBLE_BOUNDARIES` entry, or `/rollback` lets old code damage new rows. |
+```
+
+In `AGENTS.md`, replace the line `- \`schema-evolution.md\`: changing a table's shape or a stored record's fields.` with:
+
+```markdown
+- `schema-evolution.md`: changing a table's shape or a stored record's fields;
+  every revision states rollback safety (`ROLLBACK_SAFE`, `INCOMPATIBLE_BOUNDARIES`).
+```
+
+In `docs/deploy/DB_RESTORE.md`, add after the opening `**Rollback is …**` paragraph (before the blank lines above "An unexercised restore"):
+
+```markdown
+**To put back only the code and keep every trade:** `/rollback <target>`
+(`scripts/ops/rollback_code.sh`, v220), compared below in "Code-only rollback (v220)".
+```
+
+and insert directly under the `## Code-only rollback (v220)` heading, above V220-18's `### Drill` record:
+
+```markdown
+Three ways back, for different damage:
+
+| | `rollback_to.sh "<UTC>"` (v116) | `restore_stable.sh <name>` (v120) | `/rollback <target>` (`rollback_code.sh`, v220) |
+|---|---|---|---|
+| Postgres | restored to the second (pgBackRest PITR) | restored from the point's dump | untouched: every trade, plan and journal row stays |
+| Code and bot image | of the target | of the point | of the target |
+| db image | of the target | of the point | unchanged |
+| `.env` | of the target | of the point | current; only the `SWING_BOT_IMAGE` pin moves |
+| `market_data/` | restic, at the target | restic, of the point | untouched |
+| Targets | any second in the last 30 days | one stable point | stable point, sha, `vNNN[-before\|-after]`, `bot-A.B.C`, UTC date, at or above the compatibility floor |
+| Refuses when | the second is outside the PITR history | the manifest fails verify, an image is gone | any of the eight safety checks fails |
+| Afterwards | scanning paused | scanning paused | scanning keeps running; every deploy is held until `/rollback --release` |
+
+Use `/rollback` when a release misbehaves and the data is sound; use the other two when the data itself is damaged.
+```
+
+- [ ] **Step 4: Regenerate the Codex mirror**
+
+Run: `python scripts/dev/sync_codex.py` then `python scripts/dev/sync_codex.py --check`
+Expected: `.agents/skills/schema-change/SKILL.md` updated; `--check` exits 0.
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+Run: `python scripts/dev/testrun.py file tests/scripts/test_rollback_docs.py`, then `python scripts/dev/testrun.py file tests/hooks/test_skill_shape.py` and `python scripts/dev/testrun.py file tests/hooks/test_codex_mirror.py`
+Expected: `0 failed` each (the skill stays under its 80-line budget; no bare threshold added).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add docs/deploy/DB_RESTORE.md docs/claude/schema-evolution.md .claude/skills/schema-change/SKILL.md .agents/skills/schema-change/SKILL.md AGENTS.md tests/scripts/test_rollback_docs.py
+git commit -m "docs(v221): rollback docs -- three-way comparison in DB_RESTORE.md, ROLLBACK_SAFE and INCOMPATIBLE_BOUNDARIES rules (moved from v220)"
+```
+
+### Task V221-5: Release: bot patch, version history
 
 **Model:** haiku — fixed `VERSION.json` bump and regeneration
 
@@ -911,11 +1075,11 @@ git commit -m "docs(v221): /stable-snapshot pins both images and reports rollbac
 - Modify: `swingbot/admin/version_history.json` (regenerated, never hand-edited)
 
 **Interfaces:**
-- Consumes: V221-1..V221-3 merged into the worktree.
+- Consumes: V221-1..V221-4 merged into the worktree.
 - Produces: nothing.
 
 Decisions (header `**Bump:** bot patch`; `.claude/skills/close-out/SKILL.md` Step 4):
-- Only the `bot` line moves: the change touches ops scripts, a workflow and a skill, no admin UI. Bump the patch number of whatever `bot` is on the branch at this moment (v220's own release lands first, so expect one patch above it); `ui` and `ui_updated` stay.
+- Only the `bot` line moves: the change touches ops scripts, a workflow, skills and docs, no admin UI. Bump the patch number of whatever `bot` is on the branch at this moment (v220's own release lands first, so expect one patch above it); `ui` and `ui_updated` stay.
 - Two commits, bump then regenerate, in that order.
 
 - [ ] **Step 1: Read the current versions**
