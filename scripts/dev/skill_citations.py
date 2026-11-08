@@ -9,16 +9,35 @@ tests/hooks/test_skill_citations.py runs it on tmp_path fixtures.
 What it cannot see (facades that still exist, bare file names, function
 names, drifted file:line numbers, fenced commands) stays with /close-out
 Step 5b.
+
+CLI: python scripts/dev/skill_citations.py [--root <repo>] prints every
+finding the allowlist does not cover, then every dead allowlist line, then a
+summary; exit 1 when anything is listed.
 """
 from __future__ import annotations
 
+import argparse
 import re
-from dataclasses import dataclass
+import subprocess
+import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
 
 REASON_MISSING = "missing"
 REASON_AMBIGUOUS = "ambiguous"
+REASON_UNKNOWN_NAME = "unknown name"
+REASON_MISSING_DOC = "missing doc"
+REASON_MISSING_HEADING = "missing heading"
+
+ALLOWLIST_REL = "tests/hooks/skill_citation_allowlist.txt"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CODE_ROOTS = ("swingbot/", "scripts/", "tests/")
+DOC_ROOT = "docs/claude/"
+CITE_TRAILING = ".,;:) "
+CONFIG_NAME_RE = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
+SECTION_RE = re.compile(r"`?(?P<doc>[\w./-]+\.md)`?\s*§\s*(?P<cite>[^`]+)")
+HEADING_RE = re.compile(r"^#{2,4}\s+(?P<text>.*\S)\s*$")
 
 PATH_SUFFIXES = (".py", ".md", ".json", ".jsonl", ".sh", ".toml", ".ts", ".mjs", ".html")
 RUNTIME_PREFIXES = (".superpowers/", "logs/", "data/", "market_data/")
@@ -61,6 +80,8 @@ class _Context:
     root: Path
     tracked: set[str]
     code_text: str
+    names: dict[str, bool] = field(default_factory=dict)       # word -> found in code
+    headings: dict[str, list[str]] = field(default_factory=dict)  # doc rel -> headings
 
 
 def scan_set(root: Path, tracked: set[str]) -> list[Path]:
@@ -125,9 +146,17 @@ def _path_reason(word: str, tracked: set[str]) -> str | None:
     return REASON_AMBIGUOUS if hits else REASON_MISSING
 
 
+def _name_reason(word: str, ctx: _Context) -> str | None:
+    if word not in ctx.names:
+        ctx.names[word] = re.search(rf"\b{re.escape(word)}\b", ctx.code_text) is not None
+    return None if ctx.names[word] else REASON_UNKNOWN_NAME
+
+
 def _word_reason(word: str, ctx: _Context) -> str | None:
     if _is_path(word):
         return _path_reason(word, ctx.tracked)
+    if CONFIG_NAME_RE.match(word):
+        return _name_reason(word, ctx)
     return None
 
 
@@ -140,12 +169,76 @@ def _line_findings(rel: str, number: int, line: str, ctx: _Context) -> list[Find
     return found
 
 
+def doc_headings(text: str) -> list[str]:
+    """``##``-``####`` headings outside fenced blocks, ``#``s stripped, lower-cased."""
+    headings = []
+    for _, line in prose_lines(text.splitlines()):
+        match = HEADING_RE.match(line)
+        if match:
+            headings.append(match.group("text").lower())
+    return headings
+
+
+def paragraphs(lines: list[str]) -> Iterator[tuple[int, str]]:
+    """(first line, joined text) per paragraph; blank, fence and ``- `` items break it."""
+    buffer: list[str] = []
+    first = last = 0
+    for number, line in prose_lines(lines):
+        stripped = line.strip()
+        if buffer and (not stripped or number != last + 1 or stripped.startswith("- ")):
+            yield first, " ".join(buffer)
+            buffer = []
+        if stripped:
+            first = first if buffer else number
+            buffer.append(stripped)
+        last = number
+    if buffer:
+        yield first, " ".join(buffer)
+
+
+def _doc_rel(doc: str) -> str:
+    return doc if "/" in doc else DOC_ROOT + doc
+
+
+def _headings_of(rel: str, ctx: _Context) -> list[str]:
+    if rel not in ctx.headings:
+        ctx.headings[rel] = doc_headings((ctx.root / rel).read_text(encoding="utf-8"))
+    return ctx.headings[rel]
+
+
+def _cite_matches(cite: str, headings: list[str]) -> bool:
+    wanted = cite.lower()
+    return any(wanted.startswith(h) or h.startswith(wanted) for h in headings)
+
+
+def _section_finding(rel: str, first: int, match: re.Match, ctx: _Context) -> Finding | None:
+    doc = match.group("doc")
+    doc_rel = _doc_rel(doc)
+    if doc_rel not in ctx.tracked or not (ctx.root / doc_rel).is_file():
+        return Finding(rel, first, doc, REASON_MISSING_DOC)
+    cite = match.group("cite").strip().rstrip(CITE_TRAILING)
+    if _cite_matches(cite, _headings_of(doc_rel, ctx)):
+        return None
+    return Finding(rel, first, f"{doc} § {cite}", REASON_MISSING_HEADING)
+
+
+def _section_findings(rel: str, lines: list[str], ctx: _Context) -> list[Finding]:
+    found = []
+    for first, text in paragraphs(lines):
+        for match in SECTION_RE.finditer(text):
+            finding = _section_finding(rel, first, match, ctx)
+            if finding:
+                found.append(finding)
+    return found
+
+
 def _file_findings(path: Path, ctx: _Context) -> list[Finding]:
     rel = path.relative_to(ctx.root).as_posix()
     lines = path.read_text(encoding="utf-8").splitlines()
     found: list[Finding] = []
     for number, line in prose_lines(lines):
         found.extend(_line_findings(rel, number, line, ctx))
+    found.extend(_section_findings(rel, lines, ctx))
     return sorted(found, key=lambda finding: finding.line)
 
 
@@ -193,3 +286,57 @@ def apply_allowlist(findings: list[Finding],
     remaining = [f for f in findings if (skill_of(f.file), f.token) not in allowed]
     dead = [entry for entry in entries if (entry.skill, entry.token) not in seen]
     return remaining, dead
+
+
+def tracked_paths(root: Path) -> set[str]:
+    """``git ls-files`` of ``root`` (forward slashes; ``-z`` so no path is quoted)."""
+    out = subprocess.run(["git", "ls-files", "-z"], cwd=root,
+                         capture_output=True, check=True).stdout
+    return {rel for rel in out.decode("utf-8").split("\0") if rel}
+
+
+def read_code_text(root: Path, tracked: set[str]) -> str:
+    """Every tracked ``*.py`` under swingbot/, scripts/ and tests/, joined."""
+    parts = []
+    for rel in sorted(tracked):
+        path = root / rel
+        if rel.endswith(".py") and rel.startswith(CODE_ROOTS) and path.is_file():
+            parts.append(path.read_text(encoding="utf-8", errors="replace"))
+    return "\n".join(parts)
+
+
+def repo_report(root: Path) -> list[str]:
+    """Findings the allowlist does not cover, then its dead lines, formatted."""
+    tracked = tracked_paths(root)
+    findings = scan(root, scan_set(root, tracked), tracked, read_code_text(root, tracked))
+    remaining, dead = apply_allowlist(findings, load_allowlist(root / ALLOWLIST_REL))
+    lines = [finding.format() for finding in remaining]
+    lines += [f"{ALLOWLIST_REL}:{entry.line}: {entry.skill}|{entry.token} -- dead allowlist line"
+              for entry in dead]
+    return lines
+
+
+def _utf8_stdout() -> None:
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is None:
+        return
+    try:
+        reconfigure(encoding="utf-8", errors="replace")
+    except (ValueError, OSError):
+        pass
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Lint what skills, agents and eval prompts cite.")
+    parser.add_argument("--root", type=Path, default=REPO_ROOT, help="repository root")
+    args = parser.parse_args(argv)
+    _utf8_stdout()   # findings carry § and em dashes; a cp1252 console would raise
+    report = repo_report(args.root.resolve())
+    for line in report:
+        print(line)
+    print(f"skill citations: {len(report)} problem(s)" if report else "skill citations: clean")
+    return 1 if report else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

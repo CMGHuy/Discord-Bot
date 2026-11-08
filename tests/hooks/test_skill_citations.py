@@ -7,6 +7,7 @@ code text the config-name rule searches.
 """
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -216,3 +217,162 @@ def test_allowlist_matches_the_skill_exactly(tmp_path):
 def test_output_format_is_exact(tmp_path):
     (finding,) = _scan(tmp_path, "x\n\nsee `scripts/gone.py`\n")
     assert finding.format() == ".claude/skills/demo/SKILL.md:3: scripts/gone.py -- missing"
+
+
+# --- config names ----------------------------------------------------------
+
+def test_unknown_config_name_is_reported(tmp_path):
+    findings = _scan(tmp_path, "set `NOT_A_REAL_KNOB`\n", code_text="OTHER_FIXTURE_KNOB = 1")
+    assert _rows(findings) == [(1, "NOT_A_REAL_KNOB", sc.REASON_UNKNOWN_NAME)]
+
+
+def test_known_config_name_passes(tmp_path):
+    code = "DEMO_FIXTURE_KNOB: int = 3\n"
+    assert _scan(tmp_path, "set `DEMO_FIXTURE_KNOB`.\n", code_text=code) == []
+
+
+def test_config_name_matches_a_whole_word_only(tmp_path):
+    findings = _scan(tmp_path, "`DEMO_KNOB`\n", code_text="DEMO_KNOB_EXTRA = 1")
+    assert _rows(findings) == [(1, "DEMO_KNOB", sc.REASON_UNKNOWN_NAME)]
+
+
+@pytest.mark.parametrize("word", ["README", "ExpR", "A_b", "_PRIVATE", "HTTP2"])
+def test_words_that_are_not_config_names_are_ignored(tmp_path, word):
+    assert _scan(tmp_path, f"`{word}`\n") == []
+
+
+def test_config_name_found_only_in_a_scripts_file_passes(tmp_path):
+    _write(tmp_path, "scripts/dev/tool.py", "DEMO_SCRIPT_TABLE = ()\n")
+    tracked = {"scripts/dev/tool.py"}
+    code = sc.read_code_text(tmp_path, tracked)
+    assert _scan(tmp_path, "`DEMO_SCRIPT_TABLE`\n", tracked, code) == []
+
+
+def test_read_code_text_reads_only_tracked_python_under_the_code_roots(tmp_path):
+    files = {"swingbot/a.py": "IN_SWINGBOT_X = 1", "tests/b.py": "IN_TESTS_X = 1",
+             "scripts/c.py": "IN_SCRIPTS_X = 1", "frontend/d.py": "OUT_FRONTEND_X = 1",
+             "swingbot/e.md": "OUT_MD_X", "swingbot/untracked.py": "OUT_UNTRACKED_X"}
+    for rel, text in files.items():
+        _write(tmp_path, rel, text)
+    tracked = (set(files) - {"swingbot/untracked.py"}) | {"swingbot/deleted.py"}
+    code = sc.read_code_text(tmp_path, tracked)
+    for name in ("IN_SWINGBOT_X", "IN_TESTS_X", "IN_SCRIPTS_X"):
+        assert name in code
+    for name in ("OUT_FRONTEND_X", "OUT_MD_X", "OUT_UNTRACKED_X"):
+        assert name not in code
+
+
+# --- doc sections ----------------------------------------------------------
+
+FENCE = "`" * 3   # built, so no bare fence line sits inside this plan or file
+DOC = (
+    "# Title\n\n## Funnel stages\n\ntext\n\n"
+    "### Closed pre-registrations — do not re-run these\n\n#### Deep heading\n\n"
+    f"{FENCE}md\n## Fenced heading\n{FENCE}\n"
+)
+DOC_REL = "docs/claude/methods.md"
+
+
+def _doc_scan(tmp_path, text):
+    _write(tmp_path, DOC_REL, DOC)
+    return _scan(tmp_path, text, {DOC_REL})
+
+
+def test_doc_headings_are_levels_two_to_four_outside_fences():
+    assert sc.doc_headings(DOC) == [
+        "funnel stages", "closed pre-registrations — do not re-run these", "deep heading"]
+
+
+@pytest.mark.parametrize("text", [
+    "see `docs/claude/methods.md` § Funnel stages, stage two.\n",
+    "see `methods.md` § Funnel stages\n",
+    "see `methods.md` § Closed pre-registrations\n",
+    "see `methods.md` § Closed pre-registrations — do not re-run these lists it.\n",
+    "see `methods.md` § Deep heading).\n",
+    "see `methods.md` § FUNNEL STAGES\n"])
+def test_section_citation_to_a_real_heading_passes(tmp_path, text):
+    assert _doc_scan(tmp_path, text) == []
+
+
+def test_section_cite_wrapped_across_two_lines_passes(tmp_path):
+    text = "see `methods.md` § Closed\npre-registrations — do not re-run these.\n"
+    assert _doc_scan(tmp_path, text) == []
+
+
+def test_missing_heading_is_reported_on_the_paragraphs_first_line(tmp_path):
+    text = "intro\n\nfirst line\nsee `methods.md` § Stage two of the funnel.\n"
+    assert _rows(_doc_scan(tmp_path, text)) == [
+        (3, "methods.md § Stage two of the funnel", sc.REASON_MISSING_HEADING)]
+
+
+@pytest.mark.parametrize("cite", ["Fenced heading", "Title"])
+def test_fenced_and_level_one_headings_are_not_headings(tmp_path, cite):
+    findings = _doc_scan(tmp_path, f"`methods.md` § {cite}\n")
+    assert [f.reason for f in findings] == [sc.REASON_MISSING_HEADING]
+
+
+def test_list_item_starts_a_new_paragraph(tmp_path):
+    text = "- see `methods.md` § Closed pre-registrations\n- a second bullet\n"
+    assert _doc_scan(tmp_path, text) == []
+
+
+def test_missing_doc_with_a_slash_is_reported_by_both_rules(tmp_path):
+    findings = _scan(tmp_path, "`docs/claude/gone.md` § Anything\n")
+    assert _rows(findings) == [(1, "docs/claude/gone.md", sc.REASON_MISSING),
+                               (1, "docs/claude/gone.md", sc.REASON_MISSING_DOC)]
+
+
+def test_bare_doc_resolves_from_docs_claude(tmp_path):
+    assert _rows(_scan(tmp_path, "`gone.md` § Anything\n")) == [
+        (1, "gone.md", sc.REASON_MISSING_DOC)]
+
+
+def test_paragraphs_break_on_blank_fence_and_list_item():
+    lines = ["a", "b", "", "- c", "  d", "- e", "```", "f", "```", "g"]
+    assert list(sc.paragraphs(lines)) == [(1, "a b"), (4, "- c d"), (6, "- e"), (10, "g")]
+
+
+def test_eval_prompt_is_in_the_scan_set_and_scanned(tmp_path):
+    rel = ".claude/skills/demo/evals/fire-x/prompt.md"
+    _write(tmp_path, rel, "---\nmax_turns: 4\n---\n\nReview `swingbot/core/edge/imaginary.py`.\n")
+    files = sc.scan_set(tmp_path, {rel})
+    assert _rows(sc.scan(tmp_path, files, {rel}, "")) == [
+        (5, "swingbot/core/edge/imaginary.py", sc.REASON_MISSING)]
+
+
+# --- repo helpers and CLI --------------------------------------------------
+
+def _git_repo(root: Path, files: dict[str, str]) -> Path:
+    for rel, text in files.items():
+        _write(root, rel, text)
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    return root
+
+
+def test_tracked_paths_reads_the_git_index(tmp_path):
+    _git_repo(tmp_path, {"a/b.py": "x\n", ".claude/skills/x/SKILL.md": "x\n", "docs/ü.md": "x\n"})
+    _write(tmp_path, "untracked.py", "x\n")
+    assert sc.tracked_paths(tmp_path) == {"a/b.py", ".claude/skills/x/SKILL.md", "docs/ü.md"}
+
+
+def test_repo_report_lists_findings_then_dead_lines(tmp_path):
+    allow = "# header\nx|scripts/kept.py|named on purpose\nx|scripts/never.py|stale\n"
+    _git_repo(tmp_path, {".claude/skills/x/SKILL.md": "`scripts/gone.py` `scripts/kept.py`\n",
+                         sc.ALLOWLIST_REL: allow})
+    assert sc.repo_report(tmp_path) == [
+        ".claude/skills/x/SKILL.md:1: scripts/gone.py -- missing",
+        "tests/hooks/skill_citation_allowlist.txt:3: x|scripts/never.py -- dead allowlist line"]
+
+
+def test_main_exits_zero_on_a_clean_repo(tmp_path, capsys):
+    _git_repo(tmp_path, {".claude/skills/x/SKILL.md": "`scripts/here.py`\n",
+                         "scripts/here.py": "x = 1\n"})
+    assert sc.main(["--root", str(tmp_path)]) == 0
+    assert "clean" in capsys.readouterr().out
+
+
+def test_main_exits_one_and_prints_each_finding(tmp_path, capsys):
+    _git_repo(tmp_path, {".claude/skills/x/SKILL.md": "`scripts/gone.py`\n"})
+    assert sc.main(["--root", str(tmp_path)]) == 1
+    assert ".claude/skills/x/SKILL.md:1: scripts/gone.py -- missing" in capsys.readouterr().out

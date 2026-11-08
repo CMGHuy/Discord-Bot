@@ -1,0 +1,10 @@
+# v213 citation-lint allowlist (scripts/dev/skill_citations.py; spec § A).
+#
+# One line per skill and token:  skill|token|reason
+#   skill  = the skill folder, or the agent file stem
+#   token  = the finding's token exactly as the lint prints it
+#   reason = why the mention stays: deleted on purpose and named as history,
+#            uncommitted by design, vendored, an eval hypothetical, a runtime path
+# One line covers every occurrence in that skill. A line that matches no
+# finding is a dead line and fails tests/hooks/test_skill_citations.py.
+# Never add a line for real drift: fix the skill instead.
