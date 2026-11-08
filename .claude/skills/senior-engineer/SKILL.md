@@ -20,12 +20,12 @@ code around it.
 
 ## Checklist
 
-- Every function the diff writes or changes is under the limit in `docs/claude/code-complexity.md` (`python -m radon cc -s -n C <files>`); a legacy function already over it got no worse.
+- Every function the diff writes or changes is under the limit in `docs/claude/code-complexity.md` (`scripts/dev/complexity_gate.py` enforces the limit; `python -m radon cc -s -n C <files>` is for iterating); a legacy function already over it got no worse.
 - A refactor changes no behaviour (`code-complexity.md` § A refactor must not change behaviour).
 - Tests came first and failed for the right reason; each asserts behaviour, not implementation.
 - The narrow run (`python scripts/dev/testrun.py file <test>`) passes and its verdict line is quoted; "should pass" is not evidence.
-- Wiring lands where it takes effect: sizing and embed fields in `swingbot/core/scanning/engine.py`, not the posting path in `swingbot/commands/scanning.py` (`.claude/skills/task-brief/SKILL.md` step 3b).
-- Embed fields go through the `sections["headline"]` accumulator in `swingbot/core/scanning/embeds.py`, never a raw `add_field`.
+- Wiring lands where it takes effect: sizing and embed fields in the alert loops before `build_embed()` (`swingbot/core/scanning/scan_run.py`, `short_run.py`, `outlook_run.py`), not the posting package `swingbot/commands/scanning/` (`.claude/skills/task-brief/SKILL.md` step 3b).
+- Embed fields go through the `sections["headline"]` accumulator in `swingbot/core/scanning/alert_embeds.py`, never a raw `add_field`.
 - No silent no-op: no call into a removed shim or an unwired function (`docs/claude/known-traps.md`).
 - Names, error handling and structure match the surrounding module; an existing helper is reused rather than re-written.
 - A stored record changes shape only per `docs/claude/schema-evolution.md`, with no read-time upcasting.
