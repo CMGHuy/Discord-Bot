@@ -92,10 +92,14 @@ or above the compatibility floor; "Other" accepts any form above.
 
 1. **Compatibility floor.** `rollback_plan.py` keeps a maintained list
    `INCOMPATIBLE_BOUNDARIES`, each entry `(sha, plan, reason)`; the floor is
-   the newest entry. Initial entries: the v116 Phase 2 unknown-field
-   round-trip commit (older code can strip JSONB fields on re-save), the v184
-   heartbeat-key change, and the v197 lifecycle-queue change. A target below
-   the floor is refused, naming the boundary. Any future plan that makes old
+   the newest entry, and a target passes only when every boundary sha is an
+   ancestor of it (`git merge-base --is-ancestor`; these commits landed via
+   merges, so `--first-parent` order is not used). Initial entries:
+   `66e67c00` (v116 Phase 2 unknown-field round-trip, merged in `14551c3c`;
+   older code can strip JSONB fields on re-save), `2d672bab` (v184 `monitor`
+   heartbeat key, merged in `b37c6e44`), and `8562c35a` (v197 lifecycle queue;
+   migration `a47f9ebc`). A target below the floor is refused, naming the
+   boundary. Any future plan that makes old
    code unsafe against new data adds an entry (rule added to
    `schema-evolution.md` and the `schema-change` skill).
 2. **Migrations are provably additive.** Walk Alembic's revision graph from
@@ -113,22 +117,30 @@ or above the compatibility floor; "Other" accepts any form above.
    which overrides an unsafe verdict and is printed in the report. A one-time
    audit task marks the existing migrations above the floor where the reason
    is real. Remaining unsafe: refuse, naming revision and call.
-3. **Config keys exist.** Read the target's `swingbot/config.py` (via `git
-   show`) with `ast` — never import it — and collect required fields without
-   defaults; each must be a key of the current `.env` (names only, values
-   never read into output). Missing: refuse. Extra: info.
+3. **Config keys exist.** `swingbot/config.py` has no "required" notion
+   (every `Field` defaults to `""` or omits `default=` for optional values),
+   so: read the target's `config.py` (via `git show`) with `ast` — never
+   import it — and collect every declared field name. A name in the constant
+   `CRITICAL_KEYS` (initially `DISCORD_TOKEN`, `POSTGRES_PASSWORD`,
+   `DATABASE_URL`) missing from the current `.env`: refuse. Any other target
+   field absent from `.env` and no longer declared at HEAD (a key the old code
+   used that was since removed): warn in the dry-run report. Names only;
+   values are never read into output.
 4. **Open-trade vocabulary is known to the target.** A read-only query over
-   open plans and journal rows collects distinct `status`, `exit_model`,
-   `strategy`, lifecycle `kind` and scale-out/partial markers; each value must
-   occur in the target tree's enums or registry (`git grep` on the target
-   sha). Unknown value: refuse (old lifecycle code would mis-manage the
+   open plans and journal rows collects the distinct values of the stored
+   vocabularies — `PlanStatus` values, strategy names (`ALL_STRATEGIES`,
+   `backtest.py`), lifecycle event kinds (`lifecycle_events.py`), and the plan
+   fields `source`, `entry_type` and `ledger`; each value must occur as a
+   literal in the target tree (`git grep` on the target sha). (`exit_model` is
+   a backtest parameter, never stored, so it is not checked.) Unknown value: refuse (old lifecycle code would mis-manage the
    trade).
 5. **Compose `db` service unchanged.** The `db` service block of
    `docker-compose.yml` at the target must equal HEAD's; otherwise refuse
    (Compose would recreate Postgres under the old definition).
-6. **Market-data writer unchanged.** If the refresher's write path
-   (`swingbot/refresher*` and the daily-cache writer module) differs between
-   target and HEAD, the dry-run report warns and the refresher stays stopped
+6. **Market-data writer unchanged.** If any path in the constant
+   `MARKET_DATA_WRITER_PATHS` (the refresher package plus the module that
+   writes `market_data/daily`, named in the plan from the code brief) differs
+   between target and HEAD, the dry-run report warns and the refresher stays stopped
    during the hold unless the partner confirms otherwise (the live cache never
    self-heals — `known-traps.md`).
 7. **Image exists** (`docker manifest inspect`) and **VM tree is clean**
@@ -141,7 +153,8 @@ or above the compatibility floor; "Other" accepts any form above.
 
 The script is not present in older trees, so its first act is to copy itself
 to the run's temp directory and re-exec from there; everything lives in
-`main()` with one call line. Then:
+`main()` with one call line (the `restore_stable.sh` pattern, which has
+`main()` but no self-copy). Then:
 
 1. Re-run the image and clean-tree checks; log the plan to `logs/rollback.log`.
 2. Safety net: `pgbackrest --type=diff backup` (no restore, ever).
@@ -183,12 +196,17 @@ to the run's temp directory and re-exec from there; everything lives in
 
 ### Deploy hold
 
-- **Primary:** a step in `.github/workflows/deploy.yml`, before it invokes
-  `deploy.sh`, reads `backups/deploy_hold.json` over SSH; when present it logs
-  `deploy held by rollback to <sha> (<reason>, since <at>)`, posts one ops
-  notice through the existing deploy notification path, and skips the deploy
-  and the `cleanup` image prune (which would otherwise delete `from_image`
-  locally). The job stays green.
+- **Primary:** a new first job `hold` in `.github/workflows/deploy.yml`
+  reads `backups/deploy_hold.json` over SSH and outputs `held`. When held it
+  logs `deploy held by rollback to <sha> (<reason>, since <at>)` and runs
+  `scripts/ops/hold_notice.sh` on the VM, which posts one ops notice to
+  `OPS_ALERT_WEBHOOK_URL` (the existing VM-side alert path,
+  `heartbeat_watch.sh`; the workflow has no notification step of its own).
+  `cleanup` (whose image prune would delete `from_image` locally) and `deploy`
+  both depend on `hold` and run only when `held != 'true'`; `deploy`'s
+  condition must also tolerate `cleanup` being skipped. The run stays green.
+  Existing tests pinning `deploy.needs`/`steps[0]`
+  (`tests/dev/test_ci_db_image.py`) are updated.
 - **Secondary:** `deploy.sh` checks the hold in phase 1, before `git reset
   --hard origin/main`, and exits 0 when it is present (covers manual runs of a
   post-v220 `deploy.sh`).
@@ -219,8 +237,11 @@ those rows in analytics is out of scope for v220 (see Out of scope).
   field names), and `features`: the plan ids `(vNNN)` and commit subjects on
   `main` since the previous stable point. `verify` accepts manifests without
   these fields (older points) and reports them as "pre-v220".
-- `stable_snapshot.sh` additionally tags the bot and db images as
-  `stable-YYYY-MM-DD[-N]` on GHCR; `registry-retention.yml` excludes
+- The VM's GHCR login is a read-only PAT, so the images are tagged
+  `stable-YYYY-MM-DD[-N]` by a new `workflow_dispatch` workflow
+  `pin-stable-image.yml` (`packages: write` via `GITHUB_TOKEN`, inputs: name,
+  bot image, db image), which the skill triggers with `gh workflow run` after
+  the VM snapshot and waits for; `registry-retention.yml` excludes
   `stable-*` tags. The plan verifies that the retention action keeps a
   version carrying both a `sha-` and a `stable-` tag.
 - The skill's report adds the feature list and the matching `/rollback
@@ -285,7 +306,7 @@ those rows in analytics is out of scope for v220 (see Out of scope).
 - staff-engineer: v116 floor misses v197 queue and v184 heartbeat breaks -- applied: maintained `INCOMPATIBLE_BOUNDARIES` list.
 - staff-engineer: `compose up` may recreate `db` from the target's compose file -- applied: `--no-deps` and check 5.
 - staff-engineer (advisory): rollback line must carry `pitr_resolve` fields and be written only after smoke -- applied: Execution step 7.
-- staff-engineer (advisory): no `main()`/checkout precedent; script deletes itself on checkout -- applied: self-copy and re-exec.
+- staff-engineer (advisory): no `main()`/checkout precedent; script deletes itself on checkout -- applied: self-copy and re-exec (`restore_stable.sh` does have `main()`, per the code brief).
 - staff-engineer (advisory): dirty tree and detached HEAD after release -- applied: check 7 and Release step 2.
 - staff-engineer (advisory): confirm retention exclusion with dual tags; held image may age out -- applied: verification in Section 2; ageing-out accepted (a hold is meant to be short; the re-pull failure is reported).
 - staff-engineer (advisory): `cleanup` prune removes `from_image` during a hold -- applied: the hold step skips cleanup.
@@ -297,3 +318,12 @@ those rows in analytics is out of scope for v220 (see Out of scope).
 - quant-engineer (advisory): v162 history store and cron during a hold -- applied: no research jobs while held; cron checked after rollback and release.
 - quant-engineer (advisory): rows re-saved during the hold read by new code after release -- applied: Release step 5 report.
 - quant-engineer (advisory): manifest should record config/registry state -- applied in part: `config_keys_sha256`; registry version rejected: the target sha already pins the registry code exactly.
+
+## Code-brief corrections (2026-11-08)
+
+The plan brief found gaps, fixed above: config has no required fields (now
+`CRITICAL_KEYS` plus a removed-key warning); `exit_model` is not stored
+(vocabulary list corrected); the workflow has no notification step (VM-side
+`OPS_ALERT_WEBHOOK_URL`); `deploy` needs `cleanup` (new `hold` job and
+conditions); the VM cannot push GHCR tags (`pin-stable-image.yml`); boundary
+shas named and tested by ancestry.
