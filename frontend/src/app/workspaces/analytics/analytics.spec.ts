@@ -34,9 +34,9 @@ function signInAs(as: Role): void {
   });
 }
 
-/* v94 — the Analytics shell.
+/* v94 â€” the Analytics shell.
  *
- * This file covers exactly what the shell owns: the seven tabs in the order
+ * This file covers exactly what the shell owns: the eight tabs in the order
  * the spec names them, the one scope bar above them, and the fact that a
  * scope change is written into the URL rather than kept in component state.
  * Every panel's own behaviour is tested beside it in `tabs/`, which is the
@@ -75,16 +75,26 @@ function tabLabels(el: HTMLElement): string[] {
 describe('Analytics shell', () => {
   beforeEach(() => TestBed.resetTestingModule());
 
-  it('renders the seven tabs and puts the scope in the URL', async () => {
+  it('renders the eight tabs and puts the scope in the URL', async () => {
     const { fixture } = create();
     fixture.detectChanges();
     const text = fixture.nativeElement.textContent as string;
-    for (const label of ['Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Tuning', 'Partials']) {
+    for (const label of ['Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Tuning', 'Partials', 'Benchmark']) {
       expect(text).toContain(label);
     }
     expect(tabLabels(fixture.nativeElement as HTMLElement)).toEqual([
-      'Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Tuning', 'Partials',
+      'Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Tuning', 'Partials', 'Benchmark',
     ]);
+  });
+
+  it('mounts the Benchmark tab and puts the scope bar in benchmark mode', () => {
+    const { fixture } = create();
+    TestBed.inject(AnalyticsStore).setTab('benchmark', false);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('sb-benchmark-tab')).not.toBeNull();
+    expect(el.querySelector('sb-scope-bar')!.textContent)
+      .toContain('Equity is account-wide: ledger, strategy, horizon and direction filters do not apply.');
   });
 
   it('shows one scope bar above whichever tab is open', () => {
@@ -158,10 +168,10 @@ describe('Analytics for a viewer (v207)', () => {
   it('lists Tuning for the admin and not for a viewer, order otherwise kept', () => {
     expect(visibleAnalyticsTabs(true).map((t) => t.id)).toEqual(ANALYTICS_TAB_LIST.map((t) => t.id));
     expect(visibleAnalyticsTabs(false).map((t) => t.id)).toEqual(
-      ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'partials']);
+      ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'partials', 'benchmark']);
   });
 
-  it('renders six tabs for a viewer and seven for the admin', () => {
+  it('renders seven tabs for a viewer and eight for the admin', () => {
     const asAdmin = create().fixture;
     asAdmin.detectChanges();
     expect(tabLabels(asAdmin.nativeElement as HTMLElement)).toContain('Tuning');
@@ -169,13 +179,13 @@ describe('Analytics for a viewer (v207)', () => {
     const asViewer = create().fixture;
     asViewer.detectChanges();
     expect(tabLabels(asViewer.nativeElement as HTMLElement)).toEqual(
-      ['Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Partials']);
+      ['Overview', 'Attribution', 'Execution', 'Edge', 'Pipeline', 'Partials', 'Benchmark']);
   });
 
   it('resolves Overview for a viewer asking for tuning, and nothing else changes', () => {
     expect(analyticsTabFor('tuning', false)).toBe('overview');
     expect(analyticsTabFor('tuning', true)).toBe('tuning');
-    for (const tab of ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'partials'] as const) {
+    for (const tab of ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'partials', 'benchmark'] as const) {
       expect(analyticsTabFor(tab, false)).toBe(tab);
     }
   });

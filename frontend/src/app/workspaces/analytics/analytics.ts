@@ -9,6 +9,7 @@ import { Tab, TabBar } from '../../ui/layout';
 import { Page } from '../../ui/page';
 import { ScopeBar, fxMissingOf } from './scope-bar';
 import { scopeToQueryParams } from './scope-url';
+import { BenchmarkTab } from './tabs/benchmark';
 import { AttributionTab } from './tabs/attribution';
 import { EdgeTab } from './tabs/edge';
 import { ExecutionTab } from './tabs/execution';
@@ -28,18 +29,18 @@ export const ANALYTICS_TAB_LIST: readonly Tab[] = [
   { id: 'overview', label: 'Overview' }, { id: 'attribution', label: 'Attribution' },
   { id: 'execution', label: 'Execution' }, { id: 'edge', label: 'Edge' },
   { id: 'pipeline', label: 'Pipeline' }, { id: 'tuning', label: 'Tuning' },
-  { id: 'partials', label: 'Partials' },
+  { id: 'partials', label: 'Partials' }, { id: 'benchmark', label: 'Benchmark' },
 ];
 
 /** v207: Tuning runs tune jobs and saves proposals, an admin tool (spec
- *  Decision 3); a viewer gets the other six, in the same order. */
+ *  Decision 3); a viewer gets the other seven, in the same order. */
 export function visibleAnalyticsTabs(isAdmin: boolean): readonly Tab[] {
   return isAdmin ? ANALYTICS_TAB_LIST : ANALYTICS_TAB_LIST.filter((tab) => tab.id !== 'tuning');
 }
 
 /**
- * Analytics — seven tabs in the order a trader asks (spec v94 D1; v142 adds
- * Partials last), one scope
+ * Analytics — eight tabs in the order a trader asks (spec v94 D1; v142 adds
+ * Partials, v208 adds Benchmark last), one scope
  * bar above them (D2). This file is a shell: the tab strip and the bar (the page's scope bar since v195), and a
  * switch. Every panel lives in `tabs/`, so no file here grows back into the
  * 2,233-line component v94 replaced.
@@ -55,7 +56,7 @@ export function visibleAnalyticsTabs(isAdmin: boolean): readonly Tab[] {
   // the tabs are projected into this host, and a register declared six times
   // is six chances for two tabs to disagree about their own density.
   host: { class: 'register-instrument' },
-  imports: [Page, TabBar, ScopeBar, OverviewTab, AttributionTab, ExecutionTab, EdgeTab, PipelineTab, TuningTab, PartialsTab, IfAdminDirective],
+  imports: [Page, TabBar, ScopeBar, OverviewTab, AttributionTab, ExecutionTab, EdgeTab, PipelineTab, TuningTab, PartialsTab, BenchmarkTab, IfAdminDirective],
   template: `
     <!-- v195 Phase 4: the route title is the page's one h1. The tab strip
          and the one scope bar are the page's scope (filters and tabs only);
@@ -64,7 +65,7 @@ export function visibleAnalyticsTabs(isAdmin: boolean): readonly Tab[] {
       <div page-scope class="scope">
         <sb-tab-bar [tabs]="tabs()" [active]="store.tab()" (activeChange)="goToTab($event)" />
         <sb-scope-bar
-          [scope]="store.scope()" [unit]="store.unit()" [n]="store.scopeN()"
+          [benchmark]="store.tab() === 'benchmark'" [scope]="store.scope()" [unit]="store.unit()" [n]="store.scopeN()"
           [allTimePanels]="store.allTimePanelCount()" [strategies]="strategyNames()"
           [horizons]="horizons()" [asOf]="store.asOf()" [fxMissing]="fxMissing()" [tuning]="store.tab() === 'tuning' && session.isAdmin()"
           (scopeChange)="onScope($event)" (unitChange)="onUnit($event)" (cleared)="store.clearScope()" />
@@ -78,6 +79,7 @@ export function visibleAnalyticsTabs(isAdmin: boolean): readonly Tab[] {
           @case ('pipeline') { <sb-pipeline-tab /> }
           @case ('tuning') { <sb-tuning-tab *sbIfAdmin /> }
           @case ('partials') { <sb-partials-tab /> }
+          @case ('benchmark') { <sb-benchmark-tab /> }
         }
       </div>
     </sb-page>

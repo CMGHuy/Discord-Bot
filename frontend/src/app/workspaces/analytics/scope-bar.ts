@@ -9,6 +9,8 @@ import { Select } from '../../ui/form-controls';
 import { Freshness } from '../../ui/freshness';
 import { Segmented } from '../../ui/segmented';
 
+export const ACCOUNT_WIDE_NOTE = 'Equity is account-wide: ledger, strategy, horizon and direction filters do not apply.';
+
 /**
  * One bar, every panel below it (spec v94 D2). It also REPORTS: the
  * closed-trade count the scope produced, when the figures were built, and
@@ -29,7 +31,9 @@ import { Segmented } from '../../ui/segmented';
            (NG8011), and a filter that vanishes is the failure this bar
            exists to prevent. -->
       <ng-container filters>
-        @if (!tuning()) {
+        @if (benchmark()) {
+          <sb-date-range [from]="scope().from" [to]="scope().to" (changed)="scopeChange.emit($event)" />
+        } @else if (!tuning()) {
           <sb-select label="Range" [value]="preset()" [options]="presetOptions"
                      (valueChange)="onPreset($event)" />
           @if (preset() === 'custom') {
@@ -50,6 +54,9 @@ import { Segmented } from '../../ui/segmented';
            .scope centres its children, which put the population text and the
            unit toggle's labels at two heights. -->
       <div ngProjectAs="[scope]" class="scope-line">
+        @if (benchmark()) {
+          <span class="account-wide" role="note">{{ accountWideNote }}</span>
+        } @else {
         <sb-segmented label="Unit" [options]="unitOptions()" [value]="unit()"
                       (valueChange)="unitChange.emit($any($event))" />
         @if (!tuning()) {
@@ -62,11 +69,13 @@ import { Segmented } from '../../ui/segmented';
             <span class="fx-caveat" role="note">{{ fxText() }}</span>
           }
         }
+        }
       </div>
     </sb-control-bar>
   `,
   styles: `
     .scope-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-10); min-width: 0; }
+    .account-wide { font-size: var(--text-chip); color: var(--text-secondary); min-width: 0; overflow-wrap: anywhere; }
     .population { font-size: var(--text-chip); color: var(--text-secondary); }
     .fx-caveat { font-size: var(--text-micro); color: var(--warn); min-width: 0; overflow-wrap: anywhere; }
     .all-time { font-size: var(--text-micro); text-transform: uppercase; letter-spacing: .06em; color: var(--warn); }
@@ -83,6 +92,9 @@ export class ScopeBar {
   /** Tuning has no scoped population of its own, so the bar collapses to the
    *  unit toggle there rather than offering filters nothing below obeys. */
   readonly tuning = input(false);
+  /** v208: equity is account-wide; only the dates apply. */
+  readonly benchmark = input(false);
+  protected readonly accountWideNote = ACCOUNT_WIDE_NOTE;
   /** v194 B7: closed trades the money figures left out for want of an
    *  exchange rate (the payloads' `fx_missing_count`). */
   readonly fxMissing = input(0);
@@ -111,6 +123,7 @@ export class ScopeBar {
 
   protected readonly activeCount = computed(() => {
     const s = this.scope();
+    if (this.benchmark()) return (['from', 'to'] as const).filter((k) => s[k]).length;
     return (['from', 'to', 'strategy', 'horizon', 'direction'] as const).filter((k) => s[k]).length
       + (s.ledger === 'main' ? 0 : 1);
   });

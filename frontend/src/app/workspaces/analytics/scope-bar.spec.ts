@@ -7,9 +7,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DEFAULT_SCOPE } from '../../stores/analytics.store';
 import { ConnectionStore } from '../../stores/connection.store';
-import { ScopeBar, fxMissingOf, fxMissingText } from './scope-bar';
+import { ACCOUNT_WIDE_NOTE, ScopeBar, fxMissingOf, fxMissingText } from './scope-bar';
 
-const connection = { currency: signal('€') };
+const connection = { currency: signal('â‚¬') };
 
 const create = (inputs: Record<string, unknown> = {}) => {
   const fixture = TestBed.createComponent(ScopeBar);
@@ -27,10 +27,23 @@ const create = (inputs: Record<string, unknown> = {}) => {
 describe('ScopeBar', () => {
   beforeEach(() => {
     TestBed.resetTestingModule();
-    connection.currency.set('€');
+    connection.currency.set('â‚¬');
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), { provide: ConnectionStore, useValue: connection }],
     });
+  });
+
+  it('collapses to the date range plus the account-wide note in benchmark mode', () => {
+    const { fixture, el } = create({ benchmark: true,
+      scope: { ...DEFAULT_SCOPE, from: '2026-09-01', ledger: 'weak', strategy: 'MACD' } });
+    expect(el.querySelector('sb-date-range')).not.toBeNull();
+    expect(el.querySelector('sb-select')).toBeNull();
+    expect(el.querySelector('sb-segmented')).toBeNull();
+    expect(el.textContent).not.toContain('N=312');
+    expect(el.querySelector('[role="note"].account-wide')!.textContent!.trim()).toBe(ACCOUNT_WIDE_NOTE);
+    expect(ACCOUNT_WIDE_NOTE).toBe('Equity is account-wide: ledger, strategy, horizon and direction filters do not apply.');
+    // Only the date counts as an active filter: ledger and strategy do not apply on this tab.
+    expect((fixture.componentInstance as unknown as { activeCount(): number }).activeCount()).toBe(1);
   });
 
   it('reports the population the scope produced', () => {
@@ -59,13 +72,13 @@ describe('ScopeBar', () => {
     expect(el.querySelector('.clear')!.textContent).toContain('2');
   });
 
-  it('says "no closed trades" for an empty sample, never "N=—" (v179 §3.4)', () => {
+  it('says "no closed trades" for an empty sample, never "N=â€”" (v179 Â§3.4)', () => {
     for (const n of [null, 0]) {
       const { el } = create({ n });
       const line = el.querySelector('.population')!;
       expect(line.textContent!.trim()).toBe('no closed trades');
       expect(line.classList).not.toContain('num');
-      expect(el.textContent).not.toContain('N=—');
+      expect(el.textContent).not.toContain('N=â€”');
     }
     const { el } = create({ n: 972 });
     expect(el.querySelector('.population')!.textContent!.trim()).toBe('N=972 closed');
@@ -82,7 +95,7 @@ describe('ScopeBar', () => {
   });
 
   it('labels the money toggle with the account currency, keeping the value key (v194 B7)', () => {
-    for (const symbol of ['€', '$', '£']) {
+    for (const symbol of ['â‚¬', '$', 'Â£']) {
       connection.currency.set(symbol);
       const { el } = create({ unit: 'money' });
       const labels = [...el.querySelectorAll('sb-segmented button')].map((b) => b.textContent!.trim());
