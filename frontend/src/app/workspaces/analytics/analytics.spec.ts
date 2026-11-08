@@ -34,7 +34,7 @@ function signInAs(as: Role): void {
   });
 }
 
-/* v94 â€” the Analytics shell.
+/* v94 — the Analytics shell.
  *
  * This file covers exactly what the shell owns: the eight tabs in the order
  * the spec names them, the one scope bar above them, and the fact that a

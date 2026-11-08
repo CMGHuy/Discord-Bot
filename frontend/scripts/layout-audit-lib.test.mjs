@@ -110,7 +110,7 @@ test('ROUTES visits every destination, section and tab once, on the v202 paths o
     '/system?tab=scan', '/system?tab=providers', '/system/versions', '/ui']) {
     assert.ok(ROUTES.includes(route), route);
   }
-  // The six old names redirect (v202 Â§2): an audit of them would visit the same page twice.
+  // The six old names redirect (v202 §2): an audit of them would visit the same page twice.
   const old = /^\/(analytics|calendar|cancels|research|reports|versions)(\/|\?|$)/;
   assert.deepEqual(ROUTES.filter((route) => old.test(route)), []);
 });
@@ -361,7 +361,7 @@ test('hintVerdict: a popover with no area fails zero-size, whatever else is true
   assert.deepEqual(hintVerdict(box(-500, 100, 0, 60), VIEW, BOTH), { ok: false, reason: 'zero-size' });
 });
 
-// railLabelVerdict (v202 Â§3): a labelled-rail entry's accessible name, its visible .rail-label, and
+// railLabelVerdict (v202 §3): a labelled-rail entry's accessible name, its visible .rail-label, and
 // label-in-name (WCAG 2.5.3): the name a screen reader hears contains the word the eye reads.
 test('railLabelVerdict: a named entry whose label shows and is in its name passes', () => {
   assert.deepEqual(railLabelVerdict({ name: 'Dashboard', label: 'Dashboard', labelVisible: true }), { ok: true, reason: null });
@@ -391,7 +391,7 @@ test('ROUTES: the providers tab sits with the other System tabs', () => {
   assert.equal(ROUTES[ROUTES.indexOf('/system?tab=providers') - 1], '/system?tab=scan');
 });
 
-// dockVerdict (v203, spec v202 Â§8 "Layout"): the docked column beside the workspace from 1024px,
+// dockVerdict (v203, spec v202 §8 "Layout"): the docked column beside the workspace from 1024px,
 // the strip and a sheet inside the viewport below it. Rects are {left, right, top, bottom}.
 const dockBox = (left, right, top = 0, bottom = 900) => ({ left, right, top, bottom });
 const docked = (over = {}) => ({
