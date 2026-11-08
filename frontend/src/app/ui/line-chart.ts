@@ -104,7 +104,7 @@ function seriesColour(index: number): string {
   template: `
     @if (hasData()) {
       <svg viewBox="0 0 600 220" preserveAspectRatio="none" role="img"
-           (pointermove)="onPointerMove($event)" (pointerdown)="onPointerMove($event)" (pointerleave)="onPointerLeave()">
+           (pointermove)="onPointerMove($event)" (pointerdown)="onPointerMove($event)" (pointerleave)="onPointerLeave($event)">
         @if (referenceLine(); as ref) {
           <line class="reference" [attr.x1]="0" [attr.x2]="600"
                 [attr.y1]="refY(ref)" [attr.y2]="refY(ref)" />
@@ -227,8 +227,8 @@ export class LineChart {
     this.hoverIndex.set(Math.max(0, Math.min(dates.length - 1, index)));
   }
 
-  protected onPointerLeave(): void {
-    this.hoverIndex.set(null);
+  protected onPointerLeave(event: PointerEvent): void {
+    if (event.pointerType !== 'touch') this.hoverIndex.set(null);
   }
 
   protected readonly tooltipDate = computed(() => {

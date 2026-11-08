@@ -232,6 +232,25 @@ describe('LineChart v208 options', () => {
     expect(text).toBe('2026-01-01 Bot · account: 1.50% (day 0.25%) SPY: 2.00% (day -0.50%) · proxy Bot · deployed: — · gap');
   });
 
+  it('keeps touch inspection after release and leave, while mouse leave dismisses it', () => {
+    const fixture = render([{ name: 'ui', points: [{ date: '2026-01-01', value: 10 }] }]);
+    const svg = fixture.nativeElement.querySelector('svg');
+    const dispatch = (type: string, pointerType: string) => {
+      const event = new MouseEvent(type, { clientX: 0, bubbles: true });
+      Object.defineProperty(event, 'pointerType', { value: pointerType });
+      svg.dispatchEvent(event);
+      fixture.detectChanges();
+    };
+    dispatch('pointerdown', 'touch');
+    expect(fixture.nativeElement.querySelector('.tooltip')?.textContent ?? '').toContain('ui: 10.00%');
+    dispatch('pointerup', 'touch');
+    dispatch('pointerleave', 'touch');
+    expect(fixture.nativeElement.querySelector('.tooltip')?.textContent ?? '').toContain('ui: 10.00%');
+    dispatch('pointermove', 'mouse');
+    dispatch('pointerleave', 'mouse');
+    expect(fixture.nativeElement.querySelector('.tooltip')).toBeNull();
+  });
+
   it('opens the tooltip on a tap', () => {
     const fixture = render([{ name: 'ui', points: [{ date: '2026-01-01', value: 10 }] }]);
     expect(hover(fixture, 'pointerdown')).toContain('ui: 10.00%');
