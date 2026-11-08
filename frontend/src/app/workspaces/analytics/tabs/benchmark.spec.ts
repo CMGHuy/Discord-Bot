@@ -258,6 +258,18 @@ describe('BenchmarkTab strip and chart (v208)', () => {
     expect(el.querySelector('.chart sb-exposure-strip')).not.toBeNull();
     expect(text(el.querySelector('.chart .markers'))).toContain('2026-11-03');
   });
+  it('increases the figure weight only for the headline alpha tile', () => {
+    const payload = benchmarkWith({ vs: { ...BENCHMARK_FIXTURE.vs,
+      SPY: { ...BENCHMARK_FIXTURE.vs.SPY!,
+        alpha: { value: 4.2, t: 1.1, n: 80, reason: null, headline: true } } } });
+    const { el } = renderTab(stubStore(payload));
+    const tiles = [...el.querySelectorAll<HTMLElement>('.stats .tile')];
+    const emphasized = tiles.filter((tile) => getComputedStyle(tile).getPropertyValue('--figure-weight').trim() === '700');
+    expect(emphasized).toHaveLength(1);
+    expect(text(emphasized[0])).toContain('Alpha (rf = 0)');
+    expect(text(emphasized[0].closest('.group')!.querySelector('h3'))).toBe('SPY total return');
+    expect(emphasized[0].classList.contains('bold')).toBe(true);
+  });
   it('follows the chips: hiding SPY drops its stat group and its line', () => {
     const { fixture, el } = renderTab(stubStore(BENCHMARK_FIXTURE));
     el.querySelector<HTMLButtonElement>('.chips button[data-key="SPY"]')!.click();

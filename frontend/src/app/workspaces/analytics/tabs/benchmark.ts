@@ -283,7 +283,7 @@ export function stripLine(p: AnalyticsBenchmark): string {
     .group h3 { margin: 0; font-size: var(--text-chip); color: var(--text); }
     .note { font-weight: normal; color: var(--text-faint); margin-left: var(--space-6); }
     .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-10); }
-    .tile.bold { outline: 1px solid var(--accent); border-radius: var(--panel-radius); font-weight: 600; }
+    .tile.bold { outline: 1px solid var(--accent); border-radius: var(--panel-radius); --figure-weight: 700; }
     .strip-line, .exposure-caption, .markers { margin: 0; font-size: var(--text-micro); color: var(--text-faint); }
     .markers { padding-left: var(--space-14); }
     @media (max-width: 639px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .today .cells { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
