@@ -109,6 +109,9 @@ function seriesColour(index: number): string {
           <line class="reference" [attr.x1]="0" [attr.x2]="600"
                 [attr.y1]="refY(ref)" [attr.y2]="refY(ref)" />
         }
+        @if (zeroLine()) {
+          <line class="zero" [attr.x1]="0" [attr.x2]="600" [attr.y1]="refY(0)" [attr.y2]="refY(0)" />
+        }
         @for (series of series(); track series.name; let i = $index) {
           <path class="series" [attr.d]="pathFor(series)"
                 [attr.stroke]="colorOf(series, i)" [attr.stroke-dasharray]="series.dashed ? '6 4' : null" fill="none" />
@@ -141,6 +144,7 @@ function seriesColour(index: number): string {
     :host { display: block; }
     svg { width: 100%; height: 140px; }
     path.series { stroke-width: 2; vector-effect: non-scaling-stroke; }
+    line.zero { stroke: var(--text-faint); stroke-width: 1; vector-effect: non-scaling-stroke; }
     line.reference {
       stroke: var(--text-faint);
       stroke-width: 1;
@@ -168,6 +172,8 @@ export class LineChart {
   readonly series = input.required<readonly LineChartSeries[]>();
   readonly yDomain = input<{ min: number; max: number } | null>(null);
   readonly referenceLine = input<number | null>(null);
+  /** v208: opt-in 0 baseline, independent of the existing reference line. */
+  readonly zeroLine = input(false);
   readonly valueFormat = input<(value: number) => string>((v) => v.toFixed(2));
 
   readonly hoverDetail = input(false);

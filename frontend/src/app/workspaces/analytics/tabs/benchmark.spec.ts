@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BENCHMARK_FIXTURE, benchmarkWith } from './benchmark.fixture';
 import {
+  statGroups, chartSeries, chartDates, pointFlag, markerNotes, stripLine, ALPHA_CELLS_HINT,
   CHIP_LABELS, PAPER_LINE, SERIES_ORDER, etClock, isMixedCurrency, signedPct, stateStamp, statusNote, todayCells,
 } from './benchmark';
 
@@ -170,5 +171,103 @@ describe('BenchmarkTab frame (v208)', () => {
     fixture.destroy();
     vi.advanceTimersByTime(POLL_MS);
     expect(store.refreshBenchmark).toHaveBeenCalledTimes(1);
+  });
+});
+describe('benchmark stat strip (v208)', () => {
+  const ALL = new Set(['bot_account', 'bot_deployed', 'SPY', 'QQQ']);
+  const groups = statGroups(BENCHMARK_FIXTURE, ALL, '$');
+  const tile = (key: string, label: string) => groups.find((g) => g.key === key)!.tiles.find((t) => t.label === label)!;
+
+  it('builds one group per visible line, in chip order, with its caveat', () => {
+    expect(groups.map((g) => [g.label, g.note])).toEqual([
+      ['Bot · account', null], ['Bot · deployed', 'on capital in trades — not account return · 38% approx.'],
+      ['SPY', 'total return'], ['QQQ', 'total return']]);
+    expect(statGroups(BENCHMARK_FIXTURE, new Set(['^DJI']), '$').map((g) => [g.label, g.note]))
+      .toEqual([['Dow (price)', 'price only']]);
+  });
+  it('formats every tile with its N, drawdowns negative, money in the account symbol', () => {
+    expect([tile('bot_account', 'Total').value, tile('bot_account', 'Total').sample, tile('bot_account', 'Total').tone])
+      .toEqual(['+0.58%', 4, 'pos']);
+    expect(tile('bot_account', 'Max drawdown').value).toBe('−0.32%');
+    expect(tile('bot_account', 'Drawdown ($)').value).toBe('−$41.50');
+    expect(tile('bot_account', 'Losing streak').value).toBe('2 sessions');
+    expect(tile('SPY', 'Lead vs SPY').value).toBe('−0.82 pp');
+  });
+  it('shows — and the reason verbatim below every guard, never 0', () => {
+    expect([tile('bot_account', 'Sharpe (rf = 0)').value, tile('bot_account', 'Sharpe (rf = 0)').secondary])
+      .toEqual(['—', 'needs ≥ 20 sessions']);
+    expect(tile('QQQ', 'Sharpe (rf = 0)').secondary).toBe('no variance');
+    expect([tile('bot_deployed', 'Drawdown ($)').value, tile('bot_deployed', 'Drawdown ($)').secondary])
+      .toEqual(['—', 'account line only']);
+    expect([tile('SPY', 'Alpha (rf = 0)').value, tile('SPY', 'Alpha (rf = 0)').secondary])
+      .toEqual(['—', 'needs ≥ 60 sessions']);
+  });
+  it('gives beta its SE and alpha its t-stat, plain with "1 of 24 cells" unless it is the headline', () => {
+    expect(tile('QQQ', 'Beta').value).toBe('β 0.42 ± 0.18');
+    const alpha = tile('QQQ', 'Alpha (rf = 0)');
+    expect([alpha.value, alpha.bold, alpha.sample]).toEqual(['α +6.1% (t 0.9)', false, 61]);
+    expect(alpha.hint).toContain(ALPHA_CELLS_HINT);
+    expect(ALPHA_CELLS_HINT).toBe('1 of 24 cells');
+    const headline = statGroups(benchmarkWith({ vs: { ...BENCHMARK_FIXTURE.vs, SPY: { ...BENCHMARK_FIXTURE.vs.SPY!,
+      alpha: { value: 4.2, t: 1.1, n: 80, reason: null, headline: true } } } }), ALL, '$');
+    const spyAlpha = headline.find((g) => g.key === 'SPY')!.tiles.find((t) => t.label === 'Alpha (rf = 0)')!;
+    expect([spyAlpha.value, spyAlpha.bold]).toEqual(['α +4.2% (t 1.1)', true]);
+    expect(spyAlpha.hint).not.toContain(ALPHA_CELLS_HINT);
+  });
+  it('says how many sessions and that beta/alpha are not evidence of edge', () => {
+    expect(stripLine(BENCHMARK_FIXTURE)).toBe('5 sessions, paper book — beta/alpha are indicative, not evidence of edge.');
+  });
+});
+
+describe('benchmark chart (v208)', () => {
+  it('draws only the visible lines, tokens and dash from the line, a missing session as a gap', () => {
+    const series = chartSeries(BENCHMARK_FIXTURE, new Set(['bot_account', 'bot_deployed', 'SPY']));
+    expect(series.map((s) => [s.name, s.color, !!s.dashed])).toEqual([
+      ['Bot · account', '--accent', false], ['Bot · deployed', '--accent', true], ['SPY', '--chart-2', false]]);
+    const acct = series[0].points;
+    expect(acct[0]).toEqual({ date: '2026-10-28', value: 0, day: null, flag: undefined });
+    expect(acct[2].value).toBeNull();
+    expect(acct[2].flag).toBe('missing session');
+    expect(acct[3].flag).toBe('covers 2 sessions');
+  });
+  it('flags proxy, approximate exposure and clipped days in the tooltip', () => {
+    const base = BENCHMARK_FIXTURE.series[0].points[1];
+    expect(pointFlag({ ...base, proxy: true })).toBe('proxy ETF');
+    expect(pointFlag({ ...base, approx: true, clipped: true })).toBe('exposure approximate · clipped at −100%');
+    expect(pointFlag(base)).toBeUndefined();
+  });
+  it('gives the exposure strip the chart’s own sorted, de-duplicated dates', () => {
+    const dates = chartDates(chartSeries(BENCHMARK_FIXTURE, new Set(['SPY', 'QQQ'])));
+    expect(dates).toEqual(['2026-10-28', '2026-10-29', '2026-10-30', '2026-11-02', '2026-11-03', '2026-11-04']);
+    expect(chartDates([])).toEqual([]);
+  });
+  it('names each base_balance break under the chart', () => {
+    expect(markerNotes(BENCHMARK_FIXTURE)).toEqual([
+      'Base balance changed on 2026-11-03: that session is left out of every stat and the account line carries flat.']);
+  });
+});
+
+describe('BenchmarkTab strip and chart (v208)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+  it('puts the strip and the chart after the chips, the headline alpha bold', () => {
+    const { el } = renderTab(stubStore(BENCHMARK_FIXTURE));
+    const order = [...el.querySelectorAll('.today, .range, .chips, .stats, .chart')].map((n) => n.classList[0]);
+    expect(order).toEqual(['today', 'range', 'chips', 'stats', 'chart']);
+    expect(text(el.querySelector('.stats .strip-line'))).toContain('not evidence of edge');
+    expect(el.querySelectorAll('.chart sb-line-chart')).toHaveLength(1);
+    expect(el.querySelector('.chart sb-exposure-strip')).not.toBeNull();
+    expect(text(el.querySelector('.chart .markers'))).toContain('2026-11-03');
+  });
+  it('follows the chips: hiding SPY drops its stat group and its line', () => {
+    const { fixture, el } = renderTab(stubStore(BENCHMARK_FIXTURE));
+    el.querySelector<HTMLButtonElement>('.chips button[data-key="SPY"]')!.click();
+    fixture.detectChanges();
+    expect([...el.querySelectorAll('.stats .group h3')].map((h) => text(h))).not.toContain('SPY');
+    expect(fixture.componentInstance.chart().map((s) => s.name)).not.toContain('SPY');
+  });
+  it('renders no strip or chart when there are no bars', () => {
+    const { el } = renderTab(stubStore(benchmarkWith({ benchmarks_status: 'empty' })));
+    expect(el.querySelector('.stats')).toBeNull();
+    expect(el.querySelector('.chart')).toBeNull();
   });
 });

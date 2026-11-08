@@ -7,8 +7,14 @@ import { AnalyticsStore, BENCHMARK_RANGES } from '../../../stores/analytics.stor
 import { EmptyStateComponent } from '../../../ui/empty-state';
 import { PanelError } from '../../../ui/panel-error';
 import { Segmented } from '../../../ui/segmented';
-import { AnalyticsBenchmark, BenchmarkKey, BenchmarkRange } from '../../../api/models';
+import { AnalyticsBenchmark, BenchmarkEstimate, BenchmarkIndexKey, BenchmarkKey, BenchmarkPoint, BenchmarkRange, BenchmarkSeriesStats, BenchmarkStat, BenchmarkVs } from '../../../api/models';
 import { MINUS } from '../../../ui/format';
+import { ConnectionStore } from '../../../stores/connection.store';
+import { LineChart, LineChartSeries } from '../../../ui/line-chart';
+import { ExposureStrip } from '../../../ui/exposure-strip';
+import { StatTile, StatTone } from '../../../ui/stat-tile';
+import { Panel } from '../../../ui/layout';
+import { PanelHeader } from '../../../ui/panel-header';
 
 export const SERIES_ORDER: readonly BenchmarkKey[] = ['bot_account', 'bot_deployed', 'SPY', 'QQQ', '^IXIC', '^DJI'];
 export const CHIP_LABELS: Record<BenchmarkKey, string> = {
@@ -72,10 +78,125 @@ export function isMixedCurrency(payload: AnalyticsBenchmark): boolean {
 }
 
 
+export const ALPHA_CELLS_HINT = '1 of 24 cells';
+export interface BenchmarkTile {
+  label: string; value: string; sample: number | null; hint: string;
+  secondary: string | null; tone: StatTone; bold: boolean;
+}
+export interface BenchmarkStatGroup {
+  key: BenchmarkKey; label: string; note: string | null; tiles: BenchmarkTile[];
+}
+
+function signTone(value: number | null): StatTone {
+  if (value === null || value === 0) return 'neutral';
+  return value > 0 ? 'pos' : 'neg';
+}
+
+function money(value: number, currency: string): string {
+  return `${value < 0 ? MINUS : ''}${currency}${Math.abs(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  })}`;
+}
+
+function tile(label: string, stat: BenchmarkStat, format: (value: number) => string,
+              hint: string, tone: StatTone = 'neutral'): BenchmarkTile {
+  return { label, value: stat.value === null ? '—' : format(stat.value), sample: stat.n,
+    hint, secondary: stat.value === null ? stat.reason : null, tone, bold: false };
+}
+
+function returnTiles(stats: BenchmarkSeriesStats): BenchmarkTile[] {
+  return [
+    tile('Total', stats.total_pct, signedPct, 'Compounded over the sessions used (N).', signTone(stats.total_pct.value)),
+    tile('Max drawdown', stats.max_dd_pct, signedPct, 'Largest peak-to-trough fall of the cumulative line.',
+      stats.max_dd_pct.value !== null && stats.max_dd_pct.value < 0 ? 'neg' : 'neutral'),
+  ];
+}
+
+function sharpeTile(stats: BenchmarkSeriesStats): BenchmarkTile {
+  return tile('Sharpe (rf = 0)', stats.sharpe, (v) => v.toFixed(2), 'Annualised (252), rf = 0, sample std.');
+}
+
+function botTiles(stats: BenchmarkSeriesStats, currency: string): BenchmarkTile[] {
+  const drawdown = stats.money_dd ?? { value: null, n: stats.total_pct.n, reason: null };
+  const streak = { value: stats.losing_streak ?? null, n: stats.total_pct.n, reason: null };
+  return [...returnTiles(stats),
+    tile(`Drawdown (${currency})`, drawdown, (v) => money(v, currency), 'Largest peak-to-trough fall in account money.',
+      drawdown.value !== null && drawdown.value < 0 ? 'neg' : 'neutral'),
+    tile('Losing streak', streak, (v) => `${v} sessions`, 'Longest run of losing sessions.'), sharpeTile(stats)];
+}
+
+function betaText(value: number, estimate: BenchmarkEstimate): string {
+  return `β ${value.toFixed(2)}${estimate.se == null ? '' : ` ± ${estimate.se.toFixed(2)}`}`;
+}
+
+function alphaTile(alpha: BenchmarkEstimate): BenchmarkTile {
+  const hint = alpha.headline
+    ? 'Headline cell: SPY over the whole live book. Annualised Jensen alpha, rf = 0; indicative, not evidence of edge.'
+    : `${ALPHA_CELLS_HINT}: annualised Jensen alpha, rf = 0; indicative, not evidence of edge.`;
+  return { ...tile('Alpha (rf = 0)', alpha,
+    (v) => `α ${signedPct(v, 1)}${alpha.t == null ? '' : ` (t ${alpha.t.toFixed(1)})`}`, hint), bold: !!alpha.headline };
+}
+
+function indexTiles(stats: BenchmarkSeriesStats, key: BenchmarkIndexKey, vs: BenchmarkVs | undefined): BenchmarkTile[] {
+  const tiles = [...returnTiles(stats), sharpeTile(stats)];
+  if (!vs) return tiles;
+  return [...tiles,
+    tile(`Lead vs ${CHIP_LABELS[key]}`, vs.lead_pp, (v) => signedPct(v).replace('%', ' pp'),
+      "Bot · account total minus this index's total; descriptive, not evidence of edge.", signTone(vs.lead_pp.value)),
+    tile('Beta', vs.beta, (v) => betaText(v, vs.beta),
+      'OLS slope of Bot · account daily returns on this index, ± standard error.'), alphaTile(vs.alpha)];
+}
+
+function groupNote(key: BenchmarkKey, stats: BenchmarkSeriesStats): string | null {
+  if (key === 'bot_account') return null;
+  if (key === 'bot_deployed') {
+    return DEPLOYED_LABEL + (typeof stats.approx_share === 'number' ? ` · ${stats.approx_share.toFixed(0)}% approx.` : '');
+  }
+  return key === 'SPY' || key === 'QQQ' ? 'total return' : 'price only';
+}
+
+export function statGroups(p: AnalyticsBenchmark, visible: ReadonlySet<string>, currency: string): BenchmarkStatGroup[] {
+  return SERIES_ORDER.flatMap((key) => {
+    const stats = p.stats[key];
+    if (!visible.has(key) || !stats) return [];
+    const tiles = key === 'bot_account' || key === 'bot_deployed'
+      ? botTiles(stats, currency) : indexTiles(stats, key, p.vs[key]);
+    return [{ key, label: CHIP_LABELS[key], note: groupNote(key, stats), tiles }];
+  });
+}
+
+export function pointFlag(pt: BenchmarkPoint): string | undefined {
+  const parts = [pt.missing && 'missing session', pt.span > 1 && `covers ${pt.span} sessions`,
+    pt.proxy && 'proxy ETF', pt.approx && 'exposure approximate', pt.clipped && 'clipped at −100%'];
+  return parts.filter(Boolean).join(' · ') || undefined;
+}
+
+export function chartSeries(p: AnalyticsBenchmark, visible: ReadonlySet<string>): LineChartSeries[] {
+  return SERIES_ORDER.flatMap((key) => {
+    const series = p.series.find((s) => s.key === key);
+    if (!visible.has(key) || !series) return [];
+    return [{ name: CHIP_LABELS[key], color: SERIES_TOKENS[key], ...(key === 'bot_deployed' ? { dashed: true } : {}),
+      points: series.points.map((pt) => ({ date: pt.date, value: pt.missing ? null : pt.cum_pct,
+        day: pt.day_pct, flag: pointFlag(pt) })) }];
+  });
+}
+
+export function chartDates(series: LineChartSeries[]): string[] {
+  return [...new Set(series.flatMap((s) => s.points.map((p) => p.date)))].sort();
+}
+
+export function markerNotes(p: AnalyticsBenchmark): string[] {
+  return p.markers.map((m) => `Base balance changed on ${m.date}: that session is left out of every stat and the account line carries flat.`);
+}
+
+export function stripLine(p: AnalyticsBenchmark): string {
+  return `${p.range.sessions_n} sessions, paper book — beta/alpha are indicative, not evidence of edge.`;
+}
+
 @Component({
   selector: 'sb-benchmark-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Segmented, PanelError, EmptyStateComponent],
+  imports: [Segmented, PanelError, EmptyStateComponent, LineChart, ExposureStrip, StatTile, Panel, PanelHeader],
   template: `
     @if (store.benchmarkError(); as error) {
       <sb-panel-error [message]="error" (retry)="store.reload('benchmark')" />
@@ -116,7 +237,29 @@ export function isMixedCurrency(payload: AnalyticsBenchmark): boolean {
       @if (p.benchmarks_status === 'stale') {
         <p class="stale" role="status">{{ staleBars }} · last stored session {{ p.benchmarks_last_session }}</p>
       }
-      <!-- V208-16: .stats, .chart -->
+      @if (p.benchmarks_status !== 'empty') {
+<section class="stats" aria-label="Range statistics">
+  @for (g of statTiles(); track g.key) {
+    <div class="group">
+      <h3>{{ g.label }} @if (g.note) { <span class="note">{{ g.note }}</span> }</h3>
+      <div class="tiles">@for (t of g.tiles; track t.label) {
+        <div class="tile" [class.bold]="t.bold">
+          <sb-stat-tile [label]="t.label" [value]="t.value" [sample]="t.sample" [tone]="t.tone" [hint]="t.hint" [secondary]="t.secondary" />
+        </div>
+      }</div>
+    </div>
+  }
+  <p class="strip-line">{{ stripLine(p) }}</p>
+</section>
+<sb-panel class="chart">
+  <sb-panel-header title="Cumulative return" [n]="p.range.sessions_n"
+    hint="Every line rebased to 0% at the close before the range starts. SPY and QQQ are total return; Nasdaq Comp. and Dow are price only. Tap or hover for each line's cumulative and day %." />
+  <sb-line-chart [series]="chart()" [valueFormat]="pctFmt" [hoverDetail]="true" [zeroLine]="true" />
+  <sb-exposure-strip [dates]="dates()" [bars]="bars()" />
+  <p class="exposure-caption">Exposure: share of equity in open trades per session (faded bars: approximate).</p>
+  @if (markerNotes(p).length) { <ul class="markers">@for (m of markerNotes(p); track m) { <li>{{ m }}</li> }</ul> }
+</sb-panel>
+      }
       <!-- V208-17: .daily, .capture, .footnote -->
     }
   `,
@@ -136,11 +279,19 @@ export function isMixedCurrency(payload: AnalyticsBenchmark): boolean {
     .range { display: grid; gap: var(--space-6); }
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }
-    @media (max-width: 639px) { .today .cells { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .stats { display: grid; gap: var(--space-10); }
+    .group h3 { margin: 0; font-size: var(--text-chip); color: var(--text); }
+    .note { font-weight: normal; color: var(--text-faint); margin-left: var(--space-6); }
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-10); }
+    .tile.bold { outline: 1px solid var(--accent); border-radius: var(--panel-radius); font-weight: 600; }
+    .strip-line, .exposure-caption, .markers { margin: 0; font-size: var(--text-micro); color: var(--text-faint); }
+    .markers { padding-left: var(--space-14); }
+    @media (max-width: 639px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .today .cells { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   `,
 })
 export class BenchmarkTab {
   readonly store = inject(AnalyticsStore);
+  readonly connection = inject(ConnectionStore);
   private readonly router = inject(Router);
   readonly data = computed(() => this.store.benchmark());
   readonly visible = signal(new Set<string>(DEFAULT_VISIBLE));
@@ -156,6 +307,16 @@ export class BenchmarkTab {
   readonly selectedRange = computed(() => this.store.scope().from || this.store.scope().to ? '' : this.store.benchmarkRange());
   readonly mixed = computed(() => { const p = this.data(); return p ? isMixedCurrency(p) : false; });
   readonly stamp = computed(() => { const p = this.data(); return p ? stateStamp(p) : ''; });
+  readonly statTiles = computed(() => {
+    const p = this.data();
+    return p ? statGroups(p, this.visible(), this.connection.currency()) : [];
+  });
+  readonly chart = computed(() => { const p = this.data(); return p ? chartSeries(p, this.visible()) : []; });
+  readonly dates = computed(() => chartDates(this.chart()));
+  readonly bars = computed(() => (this.data()?.exposure ?? []).map(({ date, pct, approx }) => ({ date, pct, approx })));
+  readonly pctFmt = (v: number) => signedPct(v);
+  readonly stripLine = stripLine;
+  readonly markerNotes = markerNotes;
   readonly cells = computed(() => { const p = this.data(); return p ? todayCells(p) : []; });
 
   constructor() {

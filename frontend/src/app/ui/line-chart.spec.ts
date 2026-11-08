@@ -255,4 +255,16 @@ describe('LineChart v208 options', () => {
     const fixture = render([{ name: 'ui', points: [{ date: '2026-01-01', value: 10 }] }]);
     expect(hover(fixture, 'pointerdown')).toContain('ui: 10.00%');
   });
+  it('draws a 0 baseline only when zeroLine is set', () => {
+    const off = render([{ name: 'a', points: [{ date: '2026-01-01', value: -1 }, { date: '2026-01-02', value: 2 }] }]);
+    expect(off.nativeElement.querySelector('line.zero')).toBeNull();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const on = TestBed.createComponent(LineChart);
+    on.componentRef.setInput('series', [{ name: 'a', points: [{ date: '2026-01-01', value: -1 }, { date: '2026-01-02', value: 2 }] }]);
+    on.componentRef.setInput('zeroLine', true);
+    on.detectChanges();
+    expect(on.nativeElement.querySelector('line.zero')).not.toBeNull();
+  });
+
 });
