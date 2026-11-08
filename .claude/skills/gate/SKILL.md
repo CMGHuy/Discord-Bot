@@ -1,23 +1,22 @@
 ---
 name: gate
-description: "Pre-commit verification gate — syntax pass plus the full suite via scripts/dev/testrun.py, where green means literally zero failures."
+description: "Pre-push gate -- CPU check, syntax pass, complexity gate, diff-selected tests, frontend specs when frontend/ changed, scoped commits, then push and watch the CI run until it is green."
 disable-model-invocation: true
 context: fork
 model: sonnet
 ---
 
-# Pre-commit gate
+# Pre-push gate
 
-Green means **`0 failed`**. Nothing subtler.
+Green means **`0 failed`** and **`0 xfailed`**, nothing subtler. A changed
+pass count is not a failure; a new `xfailed` is a quarantine someone added, so
+find out why.
 
-That used to require judgment: the suite carried one wall-clock-dependent
-failure, and every run meant deciding whether the single failure was *that*
-one or a real regression. It was quarantined `xfail(strict=False)` to make the
-comparison mechanical, and **as of 2026-08-14 it is fixed rather than
-quarantined** — the test injects its bar count instead of counting real
-trading days from a fixed 2026-07-11 fixture. The suite now carries **no
-xfail at all**, so `0 failed` and `0 xfailed` are both expected. A new
-`xfailed` is a new quarantine someone added; find out why.
+This gate never runs the whole suite locally: the CI pipeline runs it on every
+push (root `CLAUDE.md`: no plan or merge runs the full suite locally). The gate
+runs what reaches the diff, commits in scoped pieces, pushes, then watches CI
+until it is green. Paste the verdict line of every step; a step with no pasted
+line did not run.
 
 ## Step 1 — Do not fight another session for the CPU
 
@@ -28,8 +27,7 @@ Get-Process python -ErrorAction SilentlyContinue |
 ```
 
 A hit means a multi-hour walk-forward run is live. Wait, or run only the
-touched file. Contention does not change counts, but it wrecks timings: the
-same suite has measured 40s idle and 262s under load.
+touched file. Contention does not change counts, but it wrecks timings.
 
 ## Step 2 — Syntax pass
 
@@ -40,52 +38,79 @@ python -m py_compile bot.py admin_ui.py
 python -c "import compileall,sys; sys.exit(0 if compileall.compile_dir('swingbot', quiet=2) else 1)"
 ```
 
-## Step 3 — Suite
+## Step 3 — Complexity gate
 
-```powershell
-python scripts/dev/testrun.py full
+```bash
+python scripts/dev/complexity_gate.py
 ```
 
-Full output is parked in `.pytest-last-run.log`; stdout is a one-line verdict
-and stderr is progress. Never run bare `pytest` for a gate — `pytest.ini` sets
-`addopts = -q`, and pytest 9.1.1 prints **no summary counts line** under `-q`.
+Every function the diff wrote or changed stays under the limit in
+`docs/claude/code-complexity.md`, and a legacy function already over it got no
+worse. A new offender is a FAIL: split it into named helpers. `--update` only
+ever shrinks the baseline; never use it to admit a new offender.
 
-Iterating rather than gating? `python scripts/dev/testrun.py fast` (~27s, skips
-the render-heavy tier and auto-escalates to `full` if you touched
-charts/templates/static), or `... file tests/test_edge_gates.py` for one file.
-Do not re-run the full suite to check a local change.
+## Step 4 — Diff-selected tests
 
-For a gate run, prefer dispatching the `test-runner` subagent: it returns the
-verdict and nothing else, so ~1150 progress lines never reach your context.
+```bash
+python scripts/dev/testrun.py changed
+```
 
-## Step 4 — Read the verdict
-
-The wrapper prints exactly one of:
+`changed` runs the tests that reach the diff and widens when unsure
+(`--dry-run` prints the selection). While iterating on one file use
+`python scripts/dev/testrun.py file <test>`. Output is parked in
+`.pytest-last-run.log`; stdout is one verdict line:
 
 - `VERDICT: PASS` — proceed.
-- `VERDICT: FAIL` — yours. Do not commit. Load
-  `superpowers:systematic-debugging` before proposing a fix; guessing at
-  numbers and failing gates is expensive here.
-- `VERDICT: UNKNOWN` — the output could not be parsed. A tooling problem, and
-  **never** to be read as success. Investigate the wrapper or the exit code.
+- `VERDICT: FAIL` — yours. Fix it and re-run that test alone
+  (`testrun.py file <test>` or `pytest <path>::<test>`); load
+  `superpowers:systematic-debugging` before proposing a fix.
+- `VERDICT: UNKNOWN` — the output could not be parsed: a tooling problem,
+  **never** a success.
 
-Reference baseline: **1686 passed, 66 skipped, 0 xfailed, 0 failed**
-(1752 collected). The pass count drifts upward as tasks land tests and concurrent
-sessions commit — a changed pass count is not itself a failure. `0 failed` is
-the check. An `xpass` on the quarantined test is also fine.
+Never run bare `pytest` for a gate (`pytest.ini` sets `-q`, which prints no
+summary counts line), and never `testrun.py full` here: that run is CI's.
 
-Never state PASS without pasting the `VERDICT:` line you are basing it on.
+## Step 5 — Frontend specs, when `frontend/` changed
 
-## Step 5 — Stage narrowly
+Skip this step when `git diff --name-only` lists nothing under `frontend/`.
+Otherwise run the spec of every changed component. The wrapper runs
+`ng test --watch=false` from `frontend/` without a `cd`, which the repo hooks
+forbid:
+
+```bash
+node frontend/scripts/ng-test.mjs frontend --include <spec path under frontend/>
+```
+
+A worker start timeout under load is cured by one re-run
+(`docs/claude/testing-cost.md`).
+
+## Step 6 — Stage narrowly, commit in scoped pieces
 
 Concurrent sessions share this tree, and uncommitted generated state has been
 silently wiped before.
 
-```powershell
+```bash
 git add <explicit paths>      # never git add -A
 ```
 
-Commit generated artifacts (especially `validation_registry.json`)
-immediately. Conventional commit, one per task, then update **both**
-`docs/superpowers/plans/<plan>.md` (Progress block) and
-`.superpowers/sdd/progress.md`.
+Several scoped commits, never one large one: each carries one meaningful
+change with its own tests (`docs/claude/working-conventions.md`). Commit
+generated artifacts (especially `validation_registry.json`) at once, and a
+skill, agent or `docs/claude/` change ships its Codex mirror
+(`python scripts/dev/sync_codex.py`) in the same commit.
+
+## Step 7 — Push, then watch CI until green
+
+Push, then follow the run it started
+(`docs/claude/working-conventions.md` § Pipeline watch):
+
+```bash
+git push
+gh run list --branch <branch> --limit 1 --json databaseId,status,conclusion
+gh run watch <id> --exit-status
+```
+
+Red: `gh run view <id> --log-failed`, fix each failing test, re-run it alone,
+commit scoped, push, and watch the new run; repeat until green. A deploy-job
+failure touches production: stop and tell the partner. Never state PASS
+without pasting the run's conclusion.

@@ -119,8 +119,7 @@ exits without running even when the selection widens to the full suite.
   (exit 2) when the full run did not complete, and exits 1 on a miss. One
   clean audit is evidence, not proof.
 
-**It is an inner-loop tool and not a gate.** `/gate` and a plan's final
-verification task still run everything. That boundary is the safety argument:
+**It is an inner-loop tool and not a gate.** The CI pipeline still runs everything on every push, and `/gate` ends by watching that run. That boundary is the safety argument:
 a selection bug costs a slow feedback cycle, never a missed regression.
 
 **Every failure mode widens; none narrows.** Unparseable file, unplaceable

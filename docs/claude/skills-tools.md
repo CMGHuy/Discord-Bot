@@ -215,8 +215,8 @@ refactor questions in the description).
 Moved verbatim from the root `CLAUDE.md` to keep it under 200 lines.
 
 **Repo tooling (`.claude/`):** `/task-brief <id>` extracts one plan task and
-preflights this repo's documented traps. `/gate` is the pre-commit
-verification gate. `.claude/hooks/guardrails.py` is a `PreToolUse` hook that
+preflights this repo's documented traps. `/gate` is the pre-push
+gate: complexity gate, `testrun.py changed`, frontend specs, scoped commits, then a CI watch. `.claude/hooks/guardrails.py` is a `PreToolUse` hook that
 **denies** the patterns this file forbids in prose — now including
 protected-branch deletion, closed-pre-registration knobs, re-runs of a
 screened idea and malformed spec/plan writes — and warns on bare
