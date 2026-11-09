@@ -231,24 +231,23 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 
 | Situation | Read |
 |---|---|
-| About to run, re-run or interpret a backtest, grid, walk-forward or validation, or call a result a pass | `backtest-gate` |
-| Editing entry-signal, feature or indicator code under `swingbot/core/market/`, `edge/`, `scanning/`, `planning/` | `no-lookahead` |
+| About to run or interpret a backtest, grid, walk-forward or validation, or call a result a pass | `backtest-gate` |
+| Editing entry-signal or indicator code under `swingbot/core/market/`, `edge/`, `scanning/`, `planning/` | `no-lookahead` |
 | About to state a pooled ExpR, win rate, N, R-multiple or badge tier | `pooled-numbers` |
 | Editing the scan engine, `scan_embeds`, `embeds.py` or anything rendering an alert | `alert-surface` |
 | Adding or changing a strategy or edge module or its registry entry | `edge-module` |
 | Changing the Postgres schema, a store's read/write path or a migration | `schema-change` |
 | About to change anything on the Hetzner VM | `mirror-prod` |
 | Creating, merging or removing a git worktree | `worktree-lifecycle` |
-| Hypotheses from the live book: `trade-scout` dispatches the `scout` agent per role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
-| Using the eToro Public API MCP (portfolio, instruments, real or demo trades) (not paper-only) | `etoro-public-api-operations` |
+| Live-book hypotheses: `trade-scout` runs the `scout` agent per role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
+| Using the eToro Public API MCP (portfolio, instruments, demo or real trades) | `etoro-public-api-operations` |
 
-`task-brief` (fill a plan task's handoff with trap preflight) is not explicit-only: run it right after `task_handoff.py` writes a handoff.
+`task-brief` (trap preflight for a plan task's handoff) is not explicit-only: run it right after `task_handoff.py` writes one.
 
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
-whenever Claude would run `/<name>`: `gate` (pre-push gate: complexity gate, diff-selected tests, CI watch), `deploy` (Hetzner deploy
-sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM
-backup pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
-output returned verbatim, never judged),
+whenever Claude would run `/<name>`: `gate` (pre-push: complexity gate, changed tests, CI watch), `deploy` (Hetzner deploy
+sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
+output verbatim, never judged),
 `handoff` (write the plan's `## Handoff` block before a session stops),
 `screen` (one real idea-screen run per idea, after the definition, ledger and
 results-doc checks), `prereg` (commit a pre-registration stub before the
@@ -270,7 +269,7 @@ flags, Out of scope) and load when you review from that seat: `quant-researcher`
 `veteran-trader`, `technical-analyst`, `fundamental-analyst`, `staff-engineer`,
 `quant-engineer` (lookahead, numerics, the OHLCV caches), `senior-engineer`
 (code quality, the complexity limit) and `ux-designer` (screens and embeds at
-phone, tablet and desktop widths). A role raises cited `BLOCKING`/`ADVISORY`
+three widths). A role raises cited `BLOCKING`/`ADVISORY`
 findings; it never decides.
 
 Claude Code plugins switched off in `.claude/settings.json` `enabledPlugins` load no
@@ -444,13 +443,13 @@ Detail: `docs/claude/code-complexity.md`.
 
 ## Concurrent sessions and stale checkouts
 
-Other sessions work in this same working tree and commit on their own schedule,
-and other Claude worktrees live under `.claude/worktrees/`.
+Other sessions work in this same working tree and commit on their own schedule;
+other Claude worktrees live under `.claude/worktrees/`.
 
 - Before any status claim or commit, run `git fetch origin && git status -sb`
   (or `git rev-list --left-right --count main...origin/main`). A checkout that is
   behind describes the wrong project; a branch 0 ahead / N behind cannot be
-  "published" by force, since the push only deletes.
+  "published" by force (the push only deletes).
 - Before committing, run `git log --oneline -5` and `git status --porcelain --
   <your paths>`; empty status on files you never committed means someone else
   did. Stage files by name, never `git add -A` or `git commit -a`, and commit
@@ -535,10 +534,10 @@ destructive git commands unless the user clearly authorized the exact action.
 For v74-style parameter searches use `config.searchable_attrs()` only.
 `ScanParams` is frozen and picklable for process-pool safety; replay blind spots
 must be recorded in the observability test, never hidden by a grid change. Live
-scan and replay gating differ through OPEX and manual-scan behaviour, so do not
+scan and replay gating differ through OPEX and manual-scan behaviour; do not
 unify them without a separate behaviour-change decision.
 
 Make focused, isolated changes that preserve module seams and surrounding code
 style. Run proportionate verification and report the command and result;
-do not claim a change works without evidence. For edits, finish with the concise
-file summary your global Codex instructions require.
+never claim a change works without evidence. For edits, end with the file summary
+your global Codex instructions require.
