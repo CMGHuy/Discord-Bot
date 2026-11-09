@@ -218,6 +218,12 @@ def stamp_cohort(plan: TradePlanV2, regime2_state: str | None) -> None:
     }
 
 
+def shock_asof(shock_state: str | None) -> dict:
+    """v209: the asof fragment carrying the market-shock label. Empty for None,
+    so an `off` pass hands stamp_entry_context exactly the pre-v209 dict."""
+    return {} if shock_state is None else {"shock_state": shock_state}
+
+
 def stamp_entry_context(plan: TradePlanV2, df, asof: dict | None) -> None:
     from swingbot.core.edge.context import entry_context
     try:
@@ -226,6 +232,15 @@ def stamp_entry_context(plan: TradePlanV2, df, asof: dict | None) -> None:
                                             entry=getattr(plan, "trigger_price", None))
     except Exception:
         plan.entry_context = {}
+    _merge_shock_state(plan, asof)
+
+
+def _merge_shock_state(plan: TradePlanV2, asof: dict | None) -> None:
+    """v209: shock_state rides beside the feature dict (never in FEATURE_KEYS) and
+    survives a feature-build failure; absent, not None, when the pass stamped none."""
+    label = (asof or {}).get("shock_state")
+    if label is not None:
+        plan.entry_context = {**(plan.entry_context or {}), "shock_state": label}
 
 
 def badge_stats_line(badge: Badge) -> str:

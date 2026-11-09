@@ -32,7 +32,7 @@ from swingbot.core.marketdata import universe
 from swingbot.core.planning.account import load_account_config
 from swingbot.core.planning.plan_engine import build_confluence_plan, primary_strategy_for
 from swingbot.core.planning.quality import atr_percentile as _atr_percentile
-from swingbot.core.planning.params import stamp_entry_context
+from swingbot.core.planning.params import shock_asof, stamp_entry_context
 from swingbot.core.planning.gap_sizing import size_for_plan, stamp_gap_sizing
 from swingbot.core.planning import gap_reclaim
 from swingbot.core.scanning.risk_notice import stamp_risk_notice
@@ -519,7 +519,7 @@ def _stamp_next_open_live(plan, df, now) -> None:
 
 def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
                     regime=None, rs_percentile=None, breadth=None, regime2_state=None,
-                    issued_at=None, now=None):
+                    issued_at=None, now=None, shock_state=None):
     """Construct the v2 plan for a qualifying scan item, flag-gated.
     A v2 construction failure must NEVER break the legacy scan -- log and
     move on (shadow mode exists precisely to surface such failures safely).
@@ -528,7 +528,10 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
     already has in scope (Task E37 wiring) -- see _build_quality_inputs.
 
     `issued_at`/`now` (V118-7) let a historical replay supply the clock; None
-    keeps the live wall clock. Neither changes a plan price."""
+    keeps the live wall clock. Neither changes a plan price.
+
+    `shock_state` (v209) is the scan's market-shock label; None (MARKET_SHOCK_MODE
+    off) leaves entry_context without the key."""
     if config.PLAN_ENGINE_V2 == "off":
         return
     try:
@@ -587,6 +590,7 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             "rs_pctile": rs_percentile,
             "sector_pctile": getattr(item, "sector_rs_percentile", None),
             "rs_combined": getattr(item, "rs_combined", None),
+            **shock_asof(shock_state),
         })
         if plan.stop_moved_by is None:
             _stamp_gap_sizing_live(plan, df, now)
