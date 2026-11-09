@@ -509,7 +509,7 @@ export class EquityCandles {
    *  needs, then move there under the programmatic flag. */
   private applyTarget(target: ChartTarget | null): void {
     const data = this.store.data();
-    if (!target || !data || !this.readyFor(target, data)) return;
+    if (!target || !data || !this.readyFor(target)) return;
     if (this.needsOlderFor(target, data)) {
       this.store.loadOlder();
       return;
@@ -522,7 +522,7 @@ export class EquityCandles {
   }
 
   /** Not yet: already shown, nothing loaded, no chart, hidden, or a page in flight. */
-  private readyFor(target: ChartTarget, data: EquityCandlesResponse): boolean {
+  private readyFor(target: ChartTarget): boolean {
     return target.seq !== this.appliedSeq && this.candles().length > 0 && this.chart !== null
       && this.host().nativeElement.clientWidth > 0 && !this.store.pageLoading();
   }
