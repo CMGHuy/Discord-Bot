@@ -52,10 +52,14 @@ def _write_csv(path, df):
     df.rename_axis("Date").to_csv(path)
 
 
-def _ctx_cache(tmp_path, *, tickers=("AAA", "BBB"), context=("TLT", "UUP")) -> Path:
+def _ctx_cache(tmp_path, *, tickers=("AAA", "BBB"), context=None) -> Path:
     """tmp_path/cache: stock CSVs from 2010-01-04 (as test_screen_idea), and
     SPY plus every context series on one business-day calendar from
-    2009-06-01. Also writes tmp_path/membership.csv listing ``tickers``."""
+    2009-06-01. ``context`` defaults to TLT, UUP and every ticker a registered
+    idea declares (``context_tickers()`` hashes them all, so a newly frozen idea
+    needs its files here too). Also writes tmp_path/membership.csv listing ``tickers``."""
+    if context is None:
+        context = tuple(dict.fromkeys(("TLT", "UUP") + screen_idea.context_tickers()))
     cache = tmp_path / "cache"
     cache.mkdir()
     for seed, ticker in enumerate(tickers, start=1):
@@ -583,7 +587,8 @@ def test_a_context_run_writes_the_diagnostics_section_and_the_scope(tmp_path):
         diagnostics.scope_sentence(IDEAS["bond_spike_rebound"]))
     assert f"-> {rows[0]['verdict']}" in text.splitlines()[0]
     pinned = json.loads((tmp_path / "hashes.json").read_text(encoding="utf-8"))
-    assert set(pinned) == {"TLT", "UUP"}
+    assert set(pinned) == set(screen_idea.context_tickers())
+    assert {"TLT", "UUP"} <= set(pinned)
 
 
 def test_a_context_dry_run_prints_the_diagnostics_and_writes_nothing(tmp_path, capsys):
