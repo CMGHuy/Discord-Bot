@@ -44,7 +44,9 @@ def test_v204_001_sits_on_the_single_prior_head():
     scripts = ScriptDirectory.from_config(Config(str(REPO / "alembic.ini")))
     revision = scripts.get_revision("v204_001")
     assert scripts.get_revision(revision.down_revision) is not None
-    assert scripts.get_heads() == ["v204_001"]
+    heads = scripts.get_heads()
+    assert len(heads) == 1
+    assert "v204_001" in {r.revision for r in scripts.iterate_revisions(heads[0], "base")}
 
 
 def test_downgrade_drops_the_table_and_upgrade_restores_it(db_engine_empty):
