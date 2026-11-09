@@ -45,10 +45,17 @@ sector selloff, and the fast path needs a sustained breadth jump. A
 concentrated, index-dragging crash does neither, while the index and the VIX
 were already showing it. This is one day's lead, not evidence of an edge.
 
-**VIX provenance in the fixture.** The fixture's VIX is a straight line from 0 % at
-14:30 UTC to the 15:20 UTC tape reading (21.13, +27.21 %), then flat. The 15:00
-value therefore uses a later observation and is **not point-in-time**. It is a
-construction aid for the replay, never evidence.
+**VIX provenance in the fixture.** The fixture as first built drew VIX as a straight line from 0 % at
+14:30 UTC to the 15:20 UTC tape reading (21.13, +27.21 %), then flat. That made the 15:00
+value use a later observation (not point-in-time), and it made Stage 3 unpassable by
+construction: the line reads about +8.2 % at 14:45, below the smallest grid value (10), so the
+two-reading rule cannot reach `SHOCK` before 15:15 in any cell. **Amended 2026-11-09 (partner
+decision, before any stage ran):** the 2026-11-05 fixture takes VIX from real one-minute `^VIX`
+bars (yfinance, fetched 2026-11-09, 674 bars 08:15-21:14 UTC, committed as
+`tests/fixtures/vix_2026_11_05_1m.csv`). Each step reads the close of the last bar *finished* by
+the step (bar start + 1 min <= step), against the same prior close as the tape
+(21.13 / 1.2721). That is point-in-time, so the fixture records `vix_interpolated: false`. The
+bars were saved without reading their values; nothing about the outcome was opened.
 
 ## What changes
 
@@ -143,7 +150,8 @@ Alpaca fixtures count; a synthetic one never confirms anything. Report the
 first `SHOCK` time and the per-step table for each day.
 
 **Stage 3 — replay and release.** One cell is frozen from Stages 1 and 2 alone.
-2026-11-05 is then run **once** as pass/fail: the first `SHOCK` must be at or
+2026-11-05 is then run **once** as pass/fail, on the fixture rebuilt from the real one-minute
+VIX bars (VIX provenance above): the first `SHOCK` must be at or
 before 15:00 UTC, which is the earliest the settle and two-reading rules allow.
 If it is later, that is a measured answer: report the table, commit nothing
 that weakens the replay test, and decide with the partner. It is never a reason
@@ -232,6 +240,11 @@ quant-researcher (opus), 3 BLOCKING, 5 advisory:
 veteran-trader (sonnet), 7 advisories, no blockers:
 - veteran-trader: fast-path row described wrongly -- applied (table row: passes one reading, fails persistence; verified against `_from_normal`).
 - veteran-trader: interpolated VIX uses the 15:20 reading, so the 15:00 gate is partly a tuning target -- applied (provenance paragraph, Stage 2, Stage 3 run-once).
+
+Plan-writing finding (2026-11-09): the interpolated VIX made Stage 3 fail in every cell by
+construction (14:45 reads +8.2 % < 10) -- applied: real one-minute `^VIX` bars for the 2026-11-05
+fixture (provenance paragraph, Stage 3); historical Stage 2 days keep the SPY-half-only rule,
+since yfinance holds intraday bars only for recent sessions.
 - veteran-trader: daily budget biased low, a floor only -- applied (Risks, Stage 1 two series).
 - veteran-trader: timeline ambiguity -- applied (UTC/ET and per-row times).
 - veteran-trader: `spy_atr14` redundant -- applied.
