@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import math
 import statistics
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
+from typing import Callable
 from datetime import date, datetime
 
 LABELS = ("NORMAL", "SHOCK", "RECOVERY")
@@ -256,3 +257,111 @@ def measure(snapshot: ShockSnapshot, prev: ShockReading | None,
         n_names=len(contribs),
         insufficient=len(contribs) < th.min_names,
     )
+
+
+# --- the state machine -----------------------------------------------------
+
+@dataclass(frozen=True)
+class ShockState:
+    """The stored state. ``entry_streak``, ``hold_since`` and ``prev_breadth``
+    are the bookkeeping for the two-consecutive rule, the RECOVERY hold and the
+    rising-breadth re-entry; they live in ``market_shock_state.doc["state"]``."""
+    label: str = NORMAL
+    since: datetime | None = None
+    session_date: date | None = None
+    vix_session_high: float | None = None
+    spy_prev_close: float | None = None
+    entry_streak: int = 0
+    hold_since: datetime | None = None
+    prev_breadth: float | None = None
+
+    def __post_init__(self):
+        if self.label not in LABELS:
+            raise ValueError(f"unknown shock label {self.label!r}")
+
+    def as_row(self) -> dict:
+        return _to_row(self)
+
+    @classmethod
+    def from_row(cls, row: dict | None) -> "ShockState":
+        return cls() if not row else _from_row(cls, row)
+
+
+Rule = Callable[[ShockState, ShockReading, ShockThresholds], ShockState]
+
+
+def _settled(reading: ShockReading, th: ShockThresholds) -> bool:
+    """False for readings inside the open-settle window (the opening gap)."""
+    return reading.minutes_since_open + _EPS >= th.open_settle_min
+
+
+def _relief(reading: ShockReading, th: ShockThresholds) -> float:
+    return th.vix_relief if _meets(reading.vix_chg_pct, th.vix_spike_pct) else 0.0
+
+
+def _sectors_needed(reading: ShockReading, th: ShockThresholds) -> int:
+    return math.ceil(round(th.sectors_frac * reading.sectors_total, 9))
+
+
+def _depth_path(reading: ShockReading, th: ShockThresholds, relief: float) -> bool:
+    return (reading.sectors_total >= 1
+            and reading.sectors_down >= _sectors_needed(reading, th)
+            and _meets(reading.breadth_frac, th.breadth_enter - relief))
+
+
+def _fast_path(reading: ShockReading, th: ShockThresholds, relief: float) -> bool:
+    return (_meets(reading.breadth_frac, th.breadth_fast - relief)
+            and _meets(reading.breadth_speed, th.speed_enter))
+
+
+def entry_condition(reading: ShockReading, th: ShockThresholds = ShockThresholds()) -> bool:
+    """NORMAL -> SHOCK on this one reading (breadth+depth or breadth+speed)."""
+    relief = _relief(reading, th)
+    return _depth_path(reading, th, relief) or _fast_path(reading, th, relief)
+
+
+def _enter_shock(state: ShockState, reading: ShockReading) -> ShockState:
+    return replace(state, label=SHOCK, since=reading.as_of, entry_streak=0, hold_since=None)
+
+
+def _from_normal(state: ShockState, reading: ShockReading, th: ShockThresholds) -> ShockState:
+    if not (_settled(reading, th) and entry_condition(reading, th)):
+        return replace(state, entry_streak=0)
+    if state.entry_streak + 1 >= 2:
+        return _enter_shock(state, reading)
+    return replace(state, entry_streak=state.entry_streak + 1)
+
+
+def _hold(state: ShockState, reading: ShockReading, th: ShockThresholds) -> ShockState:
+    return state
+
+
+RULES: dict[str, Rule] = {NORMAL: _from_normal, SHOCK: _hold, RECOVERY: _hold}
+
+
+def _carried_prev_close(state: ShockState, reading: ShockReading, new_session: bool):
+    if reading.spy_prev_close is not None:
+        return reading.spy_prev_close
+    return None if new_session else state.spy_prev_close
+
+
+def _carry(state: ShockState, reading: ShockReading) -> ShockState:
+    """Overnight carry: the reading's session fields; per-session clocks restart."""
+    new_session = state.session_date != reading.session_date
+    return replace(
+        state,
+        session_date=reading.session_date,
+        vix_session_high=reading.vix_session_high,
+        spy_prev_close=_carried_prev_close(state, reading, new_session),
+        prev_breadth=None if new_session else state.prev_breadth,
+        hold_since=None if new_session else state.hold_since,
+    )
+
+
+def step(state: ShockState, reading: ShockReading,
+         th: ShockThresholds = ShockThresholds()) -> ShockState:
+    """Advance the state by one reading; an insufficient reading holds it."""
+    if reading.insufficient:
+        return state
+    stepped = RULES[state.label](_carry(state, reading), reading, th)
+    return replace(stepped, prev_breadth=reading.breadth_frac)
