@@ -320,7 +320,7 @@ Expected: PASS, 0 failed.
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector add scripts/data/fetch_shock_index_daily.py tests/scripts/test_fetch_shock_index_daily.py
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector commit -m "feat(v222): daily SPY and ^VIX fetch for the Stage 1 screen" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector commit -m "feat(v222): daily SPY and ^VIX fetch for the Stage 1 screen"
 ```
 
 - [ ] **Step 6: Fetch once (network) into the main tree's `data/v222/`**
@@ -363,7 +363,7 @@ the stage that wrote it; a later stage adds its own.
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot add docs/superpowers/specs/2026-11-09-v222-shock-index-vix-path-design.md
-git -C E:/Documents/Private/Projects/Discord-Bot commit -m "docs(v222): Results scaffold -- Stage 1 window frozen before any cell is read" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git -C E:/Documents/Private/Projects/Discord-Bot commit -m "docs(v222): Results scaffold -- Stage 1 window frozen before any cell is read"
 ```
 
 ### Task V222-2: Daily series, fire days and episodes (no lookahead)
@@ -652,7 +652,7 @@ Expected: PASS, 0 failed.
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector add scripts/backtest/shock_index_screen.py tests/backtest_scripts/test_shock_index_screen.py
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector commit -m "feat(v222): Stage 1 daily series, fire days and episodes without lookahead" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector commit -m "feat(v222): Stage 1 daily series, fire days and episodes without lookahead"
 ```
 
 ### Task V222-3: Grid, budget, winner rule, Stage 2 day picker, report CLI
@@ -1073,7 +1073,7 @@ Expected: PASS, 0 failed.
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector add scripts/backtest/shock_index_screen.py tests/backtest_scripts/test_shock_index_screen.py
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector commit -m "feat(v222): Stage 1 grid, budget, winner rule and frozen Stage 2 day picker" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector commit -m "feat(v222): Stage 1 grid, budget, winner rule and frozen Stage 2 day picker"
 ```
 
 ### Task V222-4: Forward long-book: prod dump and descriptive forward table
@@ -1431,9 +1431,9 @@ Run the two commands of Step 2 again. Expected: PASS, 0 failed each.
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector add scripts/reports/shock_longbook_dump.py tests/scripts/test_shock_longbook_dump.py
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector commit -m "feat(v222): read-only production long-book dump for the forward table" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector commit -m "feat(v222): read-only production long-book dump for the forward table"
 git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector add scripts/backtest/shock_index_forward.py tests/backtest_scripts/test_shock_index_forward.py
-git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector commit -m "feat(v222): descriptive forward long-book after Stage 1 episodes" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector commit -m "feat(v222): descriptive forward long-book after Stage 1 episodes"
 ```
 
 ### Task V222-5: Run Stage 1, write Results, freeze the Stage 2 day list, gate 1
@@ -1480,7 +1480,7 @@ Add `### Stage 1 — screen` with: the cell table and both per-year tables copie
 
 ```bash
 git -C E:/Documents/Private/Projects/Discord-Bot add docs/superpowers/specs/2026-11-09-v222-shock-index-vix-path-design.md
-git -C E:/Documents/Private/Projects/Discord-Bot commit -m "docs(v222): Stage 1 results and the frozen Stage 2 day list" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git -C E:/Documents/Private/Projects/Discord-Bot commit -m "docs(v222): Stage 1 results and the frozen Stage 2 day list"
 ```
 
 - [ ] **Step 6: Gate 1 (partner, `AskUserQuestion`, recommended option first)**
