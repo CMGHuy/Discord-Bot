@@ -8,8 +8,8 @@
 
 ## Why
 
-v209 (`swingbot/core/market/shock.py`, on the unmerged branch
-`2026-11-05-v209-market-shock-detector`) labels the market `NORMAL` / `SHOCK` /
+v209 (`swingbot/core/market/shock.py` and `swingbot/core/scanning/shock_scan.py`, on the
+unmerged branch `2026-11-05-v209-market-shock-detector`) labels the market `NORMAL` / `SHOCK` /
 `RECOVERY` from breadth and sector depth. Its acceptance test is a replay of
 **2026-11-05**: the first `SHOCK` must come at or before 15:00 UTC. V209-12
 built that fixture from Alpaca (`tests/fixtures/shock_replay_2026_11_05.json`,
@@ -55,7 +55,9 @@ construction aid for the replay, never evidence.
 `shock.entry_condition` gains a third path next to `_depth_path` and
 `_fast_path`:
 
-- `_index_path(reading, th)`: true when `-reading.spy_atr_move >= th.index_atr_k`
+- `_index_path(reading, th)`: false when `th.index_atr_k <= 0` (off; without this
+  guard a calm reading with `-spy_atr_move >= 0.0` and `vix_chg_pct >= 0.0`
+  would fire). Otherwise true when `-reading.spy_atr_move >= th.index_atr_k`
   **and** `reading.vix_chg_pct >= th.index_vix_chg`. `spy_atr_move` already
   exists on `ShockReading` (`shock.py:90`), so **no new stored field**. A
   missing SPY quote or ATR, or a VIX reading older than `vix_max_age_s` or a
@@ -77,14 +79,19 @@ blocks a trade.
 **"Off" is `index_atr_k = 0.0`** (a float sentinel, as `DCB_VOLUME_RATIO` does);
 a `None` default would make `thresholds_from_config` raise on every pass,
 `run_shock_pass` would swallow it, and the whole detector would silently stop
-taking readings. The shipped default is `0.0` until Stage 1 freezes a cell.
+taking readings. The shipped default is `0.0` until Stage 3 sets the frozen cell as the default;
+`SHOCK_INDEX_ATR_K` carries `min=0` (unlike `SHOCK_ATR_K`, `min=0.25`). The
+stage results go in a `## Results` section of this spec.
 
 ## Frozen before any data is read
 
 Nothing in this section is changed after Stage 1 opens its data.
 
-- **Window.** From the first date both SPY and ^VIX daily bars exist in the
-  cache to 2026-11-04 (the day before the replay). Both dates and the year
+- **Window.** From the first date both SPY and ^VIX daily bars exist to
+  2026-11-04 (the day before the replay). The cache does not reach that far
+  today (`data/backtest_cache_ext/^VIX.csv` covers 2009-06-01 to 2019-12-31;
+  SPY daily ends 2025-12-30 there), so Stage 1 first extends both series to
+  2026-11-04. Both dates and the year
   count are written into the results section before any cell is read.
 - **Grid.** `index_atr_k` ∈ {1.0, 1.25, 1.5, 2.0} × `index_vix_chg` (percent) ∈
   {10, 15, 20, 25}. 16 cells.
@@ -140,8 +147,10 @@ first `SHOCK` time and the per-step table for each day.
 before 15:00 UTC, which is the earliest the settle and two-reading rules allow.
 If it is later, that is a measured answer: report the table, commit nothing
 that weakens the replay test, and decide with the partner. It is never a reason
-to move the grid, the rule or the cell. On a pass, the V209-12b replay test is
-committed unchanged.
+to move the grid, the rule or the cell. On a pass, the frozen cell becomes the shipped default (the `ShockThresholds`
+default, the config `Field` default and `CAST_DEFAULTS`), because the V209-12b
+replay test reads default `ShockThresholds()` and would otherwise stay `NORMAL`
+at `index_atr_k = 0.0`. The replay test is then committed unchanged.
 
 ## Acceptance
 
