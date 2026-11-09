@@ -56,7 +56,7 @@ def cycle(monkeypatch):
 def test_failed_symbol_clears_mark_with_error(cycle):
     marks, published, batches, tapes = cycle
     report = loop.run_cycle(REGULAR)
-    assert batches == [(["AAPL", "BAD", "YF"], 25)]
+    assert batches == [(["AAPL", "BAD", "YF"], 150)]
     assert ("clear", ("quote:AAPL", "quote:YF"), None) in marks.events
     assert ("clear", ("quote:BAD",), "no quote") in marks.events
     assert marks.events[0] == ("mark", ("quote:AAPL", "quote:BAD", "quote:YF"), 120.0)

@@ -958,7 +958,7 @@ FIELDS: list[Field] = [
           min=300, max=7200, step=1,
           help="v201. Seconds between refresher quote cycles while the market is closed."),
     Field("ADMIN_REFRESH_YF_FALLBACK_CAP", "ADMIN_REFRESH_YF_FALLBACK_CAP", "Data Sources",
-          "Refresher: yfinance fallback cap per cycle", type="number", default="25",
+          "Refresher: yfinance fallback cap per cycle", type="number", default="150",
           min=0, max=500, step=1,
           help="v201. Most symbols one refresher cycle may fetch from yfinance when Alpaca has no quote."),
     Field("ADMIN_REFRESH_MARK_TIMEOUT_S", "ADMIN_REFRESH_MARK_TIMEOUT_S", "Data Sources",
