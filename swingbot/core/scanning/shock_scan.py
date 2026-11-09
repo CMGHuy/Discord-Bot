@@ -19,6 +19,7 @@ from datetime import date, datetime, timezone
 import pandas as pd
 
 from swingbot import config
+from swingbot.core.db.repositories.market_shock import market_shock_repo
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import indicators, session, shock
 from swingbot.core.marketdata import asset_class
@@ -145,3 +146,57 @@ def build_snapshot(frames, live_prices, sector_of, *, now, quotes_at, vix, th, s
 
 def should_step(step_shock: bool, now: datetime) -> bool:
     return bool(step_shock) and shock_mode() != "off" and session.is_nyse_regular_session(now)
+
+
+def _load_prior(repo) -> tuple[shock.ShockReading | None, shock.ShockState]:
+    row = repo.latest_reading()
+    prev = shock.ShockReading.from_row(row) if row else None
+    stored = repo.current_state() or {}
+    return prev, shock.ShockState.from_row((stored.get("doc") or {}).get("state"))
+
+
+def _stepped_pass(frames, live_prices, sector_of, quotes_at, spy_df, now, repo) -> str:
+    """One reading from the quotes the scan already holds. Never fetches: a
+    benchmark absent from live_prices gives a NameRow with last=None."""
+    th = thresholds_from_config()
+    snapshot = build_snapshot(frames, live_prices, sector_of, now=now, quotes_at=quotes_at,
+                              vix=read_vix(now, th), th=th,
+                              spy_ticker=str(config.MARKET_REGIME_TICKER), spy_df=spy_df)
+    prev, state = _load_prior(repo)
+    reading = shock.measure(snapshot, prev, th)
+    new_state = shock.step(state, reading, th)
+    repo.record(reading.as_row(), new_state.as_row(), state_after=new_state.label)
+    return new_state.label
+
+
+def run_shock_pass(*, step_shock, frames, live_prices, sector_of, quotes_at, spy_df=None,
+                   now=None, repo=None) -> str | None:
+    """The label planning stamps this pass; None under `off`."""
+    if shock_mode() == "off":
+        return None
+    now = now or datetime.now(timezone.utc)
+    if not should_step(step_shock, now):
+        return current_label(repo=repo)
+    try:
+        return _stepped_pass(frames, live_prices, sector_of, quotes_at, spy_df, now,
+                             repo or market_shock_repo())
+    except Exception as exc:
+        swallowed(log, "scan.shock.pass", exc, "shock pass failed; stamping the stored label: %s",
+                  exc, exc_info=True)
+        return current_label(repo=repo)
+
+
+def current_label(*, repo=None) -> str | None:
+    """The stored label: NORMAL before the first reading, None under `off` or when
+    the store cannot be read (the plan then carries no shock_state key)."""
+    if shock_mode() == "off":
+        return None
+    try:
+        stored = (repo or market_shock_repo()).current_state()
+    except Exception as exc:
+        swallowed(log, "scan.shock.label", exc, "shock: stored label unreadable: %s", exc)
+        return None
+    if not stored:
+        return shock.NORMAL
+    label = stored.get("label")
+    return label if label in shock.LABELS else None
