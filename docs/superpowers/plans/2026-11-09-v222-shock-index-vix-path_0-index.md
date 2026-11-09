@@ -26,7 +26,8 @@ in three stages: a daily screen over every year from the first common SPY/VIX
 bar to 2026-11-04 (Stage 1), an intraday confirmation on 5 to 10 frozen
 historical days built from Alpaca bars (Stage 2), then one pass/fail replay of
 2026-11-05 with the frozen cell (Stage 3). A pass makes the frozen cell the
-shipped default and commits v209's replay test unchanged; a fail is a measured
+shipped default and commits v209's replay test (unchanged but for the one
+provenance line V222-6d aligns); a fail is a measured
 answer, reported to the partner, and never a reason to move the grid.
 
 What it leaves alone: the depth, fast, exit, recovery and carry rules, the
@@ -65,10 +66,18 @@ green after the push.
   `scripts/reports/shock_longbook_dump.py` (standalone, prod-side, read-only)
   and `scripts/backtest/shock_index_forward.py` give the descriptive forward
   long-book table with `week_cluster_bootstrap`.
-- **Stage 2 (Part 2).** `scripts/data/build_shock_replay_fixture.py` gains a
+- **Stage 2 (Parts 2a, 2b).** `scripts/data/build_shock_replay_fixture.py` gains a
   `SessionSpec` (DST-aware open/close from America/New_York, optional VIX
-  anchor) and `--session` / `--vix-anchor`; its 2026-11-05 default output stays
-  byte-identical. `scripts/backtest/shock_index_intraday.py` replays each
+  anchor) and `--session` / `--vix-anchor` (V222-6/6b; the 2026-11-05 default
+  stays byte-identical through them). **Spec amendment 2026-11-09:** the
+  interpolated VIX made Stage 3 unpassable (14:45 read about +8.2 %, below every
+  grid value), so V222-6c/6d move the 2026-11-05 default onto real one-minute
+  `^VIX` bars (`tests/fixtures/vix_2026_11_05_1m.csv`, point-in-time: the close of
+  the last bar finished by each step, against the tape's prior close) and rebuild
+  the committed fixture (`vix_interpolated: false`, `vix_source: "yfinance_1m"`);
+  the interpolated mode survives as `INTERPOLATED_SPEC`, which is the one that
+  stays byte-identical. Historical Stage 2 days carry no VIX and stay SPY-half
+  only. `scripts/backtest/shock_index_intraday.py` replays each
   frozen day through `shock.measure` and evaluates the SPY half of the rule on
   two consecutive settled readings; the VIX half is never confirmed by an
   interpolated or absent VIX.
@@ -81,7 +90,9 @@ green after the push.
 - **Stage 3 (Part 3).** One run-once replay of the untracked
   `tests/market/test_shock_replay_2026_11_05.py` helpers with the frozen cell,
   then (on a pass only) the frozen cell becomes the `ShockThresholds`, config
-  `Field` and `CAST_DEFAULTS` default and the replay test is committed unchanged.
+  `Field` and `CAST_DEFAULTS` default and the replay test is committed unchanged
+  apart from V222-6d's provenance line (`vix_interpolated is False`,
+  `vix_source == "yfinance_1m"`). Stage 3 replays the fixture V222-6d rebuilt.
 
 **Tech stack:** Python 3.11, pandas/numpy, yfinance 0.2.66, pytest; no new dependency.
 
@@ -157,6 +168,11 @@ green after the push.
     consecutive readings with `minutes_since_open ≥ 15`); no real intraday VIX
     exists for historical days, so every day reports "VIX half unconfirmed"
     (spec Stage 2). Only `source == "alpaca"` fixtures count.
+  - VIX provenance (spec amendment 2026-11-09): only the 2026-11-05 fixture has
+    VIX, from real one-minute `^VIX` bars (V222-6c/6d). Nothing prints, reads or
+    quotes a VIX value from `tests/fixtures/vix_2026_11_05_1m.csv` or from the
+    rebuilt fixture, and nothing runs the detector over 2026-11-05 before V222-13;
+    V222-6d checks only shape (steps, flags, hashes, equality of non-VIX fields).
   - Forward long-book (descriptive only): closed `bullish` main-ledger regular
     trades whose open session falls within the first 1, 3, 5 sessions of an
     episode (session 1 = the episode's first fire day).
@@ -205,13 +221,17 @@ Sequential by design; the human gates and the stage order forbid most overlap.
   `episodes` only at run time in V222-5, so its tests stub episodes.
 - **V222-6 and V222-7** may run in parallel with Part 1 code tasks (disjoint
   files, no contract dependency), but V222-8 needs V222-5's frozen day list.
+- **V222-6 → V222-6b → V222-6c → V222-6d → V222-13:** one builder script and test
+  file; V222-6d rebuilds the committed 2026-11-05 fixture that V222-13 replays.
+  V222-6c/6d may run any time after V222-6b (before or beside Stage 1/2); V222-8
+  does not need them (Stage 2 fixtures carry no VIX).
 - **V222-9 → V222-10:** V222-10's `THRESHOLD_ATTRS` set-equality test needs the
   two `ShockThresholds` fields from V222-9.
 - **V222-11** needs V222-9 and V222-10 (it drives `run_shock_pass` through
   `thresholds_from_config`). **V222-12** is disjoint from V222-9..11 and may run
   beside them.
 - **V222-13 → V222-14:** V222-14 runs only on a Stage 3 pass and edits the
-  same files as V222-9/V222-10.
+  same files as V222-9/V222-10. V222-13 also needs V222-6d's rebuilt fixture.
 
 ## Task ledger
 
@@ -226,22 +246,25 @@ All file paths are relative to the v209 worktree
 | V222-3 | Grid, budget, winner rule, Stage 2 day picker, report CLI | 1 | opus | M `scripts/backtest/shock_index_screen.py`; M `tests/backtest_scripts/test_shock_index_screen.py` | `CellResult` (frozen dataclass: `k, v, close_fires, close_episodes, upper_fires, upper_episodes, per_year_close, per_year_upper, in_budget`); `screen_grid(moves) -> list[CellResult]`; `neighbours(k, v) -> list[tuple[float, float]]`; `qualifying(cells) -> list[tuple[float, float]]` (most sensitive first); `pick_winner(cells) -> tuple[float, float] \| None`; `stage2_days(moves, winner, *, alpaca_from=date(2016, 1, 4), n_shock=5, exclude=(date(2026, 11, 5),)) -> dict` (`{"shock": [iso...], "quiet": [iso...]}`); CLI `--data-dir --out-json --out-md`; JSON keys `window, cells, qualifying, winner, episodes` (`episodes`: `"k,v" -> [[iso...]...]` upper series), `stage2_days` |
 | V222-4 | Forward long-book: prod dump and descriptive forward table | 1 | sonnet | C `scripts/reports/shock_longbook_dump.py`; C `scripts/backtest/shock_index_forward.py`; C `tests/scripts/test_shock_longbook_dump.py`; C `tests/backtest_scripts/test_shock_index_forward.py` | `shock_longbook_dump.longbook_record(trade: dict) -> dict \| None` (`{opened_at, r}`); `shock_index_forward.HORIZONS = (1, 3, 5)`; `forward_longbook(episodes: list[list[str]], trades: list[dict], sessions: list[str], horizons=HORIZONS) -> list[dict]` (per horizon: `horizon, n_trades, n_episodes, exp_r, total_r, ci_low, ci_high`); CLI `--screen-json --longbook --data-dir --out-md` |
 | V222-5 | Run Stage 1, write Results, freeze the Stage 2 day list, gate 1 | 1 | sonnet | M spec (main) `## Results` § Stage 1; outputs `data/v222/stage1.json`, `data/v222/stage1.md`, `data/v222/longbook.json`, `data/v222/forward.md` (main tree) | Results § Stage 1 (winner cell or NO-LIFT, qualifying cells) and § Stage 2 day list; `data/v222/stage2_days.json` (`{"shock": [...], "quiet": [...], "cells": [[k, v]...]}`) |
-| V222-6 | Fixture builder parameterised by session date (DST, optional VIX anchor) | 2 | sonnet | M `scripts/data/build_shock_replay_fixture.py`; M `tests/scripts/test_build_shock_replay_fixture.py` | `VixAnchor(at: datetime, level: float, chg_pct: float)`; `SessionSpec(day, open_utc, close_utc, turn_utc, daily_start, vix_anchor)`; `session_spec(day: date, vix_anchor: VixAnchor \| None = None, daily_start: date \| None = None) -> SessionSpec`; `DEFAULT_SPEC`; `spec=DEFAULT_SPEC` kwarg on `step_times, vix_path, fixture_step, load_or_fetch, long_entries, build_fixture`; CLI `--session YYYY-MM-DD`, `--vix-anchor HH:MM,LEVEL,CHG`; non-default outputs `market_data/shock_replay_<yyyy_mm_dd>.json` and cache `market_data/shock_replay_<yyyy_mm_dd>/` |
-| V222-6b | Builder CLI `--session` / `--vix-anchor` and per-session output paths | 2 | sonnet | M `scripts/data/build_shock_replay_fixture.py`; M `tests/scripts/test_build_shock_replay_fixture.py` | `parse_anchor(text: str, day: date) -> VixAnchor`; `resolve_spec(args) -> SessionSpec`; `default_paths(spec) -> tuple[Path, Path]`; CLI `--session`, `--vix-anchor`, `--out`, `--cache-dir`; bad anchor exits 2 |
-| V222-7 | Intraday SPY-half evaluator and survival rule | 2 | opus | C `scripts/backtest/shock_index_intraday.py`; C `tests/backtest_scripts/test_shock_index_intraday.py` | `SURVIVAL_SHOCK_SHARE = 0.75`; `step_readings(fx: dict, th=ShockThresholds()) -> list[ShockReading]`; `spy_half_first_fire(readings, k: float, open_settle_min: int = 15) -> datetime \| None`; `day_table(readings, k: float) -> list[dict]`; `survives(shock_fired: list[bool], quiet_fired: list[bool]) -> bool` |
-| V222-7b | Stage 2 day list, fixture checks, evaluate, report and CLI | 2 | opus | M `scripts/backtest/shock_index_intraday.py`; M `tests/backtest_scripts/test_shock_index_intraday.py` | `load_days`, `fixture_path`, `fixture_status`, `evaluate(days, fixtures) -> {complete, days, cells, survivors, frozen}`, `render_md`; CLI `--days-json --fixtures-dir --out-json --out-md`, exit 0/3/2 |
-| V222-8 | Build Stage 2 fixtures, run, write Results, freeze the cell, gate 2 | 2 | sonnet | M spec (main) `## Results` § Stage 2; outputs `data/v222/stage2/*.json`, `data/v222/stage2.json`, `data/v222/stage2.md` (main tree) | Results § Stage 2 frozen cell `(index_atr_k, index_vix_chg)` = `FROZEN_K, FROZEN_V`, or NO-LIFT |
+| V222-6 | Fixture builder parameterised by session date (DST, optional VIX anchor) | 2a | sonnet | M `scripts/data/build_shock_replay_fixture.py`; M `tests/scripts/test_build_shock_replay_fixture.py` | `VixAnchor(at: datetime, level: float, chg_pct: float)`; `SessionSpec(day, open_utc, close_utc, turn_utc, daily_start, vix_anchor)`; `session_spec(day: date, vix_anchor: VixAnchor \| None = None, daily_start: date \| None = None) -> SessionSpec`; `DEFAULT_SPEC`; `spec=DEFAULT_SPEC` kwarg on `step_times, vix_path, fixture_step, load_or_fetch, long_entries, build_fixture`; CLI `--session YYYY-MM-DD`, `--vix-anchor HH:MM,LEVEL,CHG`; non-default outputs `market_data/shock_replay_<yyyy_mm_dd>.json` and cache `market_data/shock_replay_<yyyy_mm_dd>/` |
+| V222-6b | Builder CLI `--session` / `--vix-anchor` and per-session output paths | 2a | sonnet | M `scripts/data/build_shock_replay_fixture.py`; M `tests/scripts/test_build_shock_replay_fixture.py` | `parse_anchor(text: str, day: date) -> VixAnchor`; `resolve_spec(args) -> SessionSpec`; `default_paths(spec) -> tuple[Path, Path]`; CLI `--session`, `--vix-anchor`, `--out`, `--cache-dir`; bad anchor exits 2 |
+| V222-6c | Real one-minute VIX bars for the 2026-11-05 fixture | 2a | sonnet | C `tests/fixtures/vix_2026_11_05_1m.csv` (copy of `M/market_data/vix_intraday/VIX_2026-11-05_1m.csv`); M `scripts/data/build_shock_replay_fixture.py`; M `tests/scripts/test_build_shock_replay_fixture.py` | `load_vix_bars(path: Path) -> list[tuple[datetime, float]]`; `vix_from_bars(bars, t: datetime, prior: float) -> dict`; `SessionSpec.vix_bars: Path \| None`, `.vix_prior: float \| None` (exclusive with `vix_anchor`); `TAPE_ANCHOR`, `VIX_BARS`, `VIX_BARS_SOURCE = "yfinance_1m"`; `DEFAULT_SPEC` reads the bars; `INTERPOLATED_SPEC` (byte-identical old default); fixture key `vix_source` |
+| V222-6d | Builder `--vix-bars` CLI and the rebuilt 2026-11-05 fixture | 2a | sonnet | M `scripts/data/build_shock_replay_fixture.py`; M `tests/scripts/test_build_shock_replay_fixture.py`; M `tests/fixtures/shock_replay_2026_11_05.json` (rebuilt); M `tests/market/test_shock_replay_2026_11_05.py` (untracked, one provenance line) | CLI `--vix-bars PATH`, `--vix-prior LEVEL` (exit 2 with `--vix-anchor`); committed fixture with `vix_interpolated: false`, `vix_source: "yfinance_1m"`, 26 steps; replay test sha256 for V222-14 |
+| V222-7 | Intraday SPY-half evaluator and survival rule | 2b | opus | C `scripts/backtest/shock_index_intraday.py`; C `tests/backtest_scripts/test_shock_index_intraday.py` | `SURVIVAL_SHOCK_SHARE = 0.75`; `step_readings(fx: dict, th=ShockThresholds()) -> list[ShockReading]`; `spy_half_first_fire(readings, k: float, open_settle_min: int = 15) -> datetime \| None`; `day_table(readings, k: float) -> list[dict]`; `survives(shock_fired: list[bool], quiet_fired: list[bool]) -> bool` |
+| V222-7b | Stage 2 day list, fixture checks, evaluate, report and CLI | 2b | opus | M `scripts/backtest/shock_index_intraday.py`; M `tests/backtest_scripts/test_shock_index_intraday.py` | `load_days`, `fixture_path`, `fixture_status`, `evaluate(days, fixtures) -> {complete, days, cells, survivors, frozen}`, `render_md`; CLI `--days-json --fixtures-dir --out-json --out-md`, exit 0/3/2 |
+| V222-8 | Build Stage 2 fixtures, run, write Results, freeze the cell, gate 2 | 2b | sonnet | M spec (main) `## Results` § Stage 2; outputs `data/v222/stage2/*.json`, `data/v222/stage2.json`, `data/v222/stage2.md` (main tree) | Results § Stage 2 frozen cell `(index_atr_k, index_vix_chg)` = `FROZEN_K, FROZEN_V`, or NO-LIFT |
 | V222-9 | `ShockThresholds` index fields, `_index_path`, `entry_condition` | 3 | sonnet | M `swingbot/core/market/shock.py`; M `tests/market/test_shock_step_entry.py` | `ShockThresholds.index_atr_k: float = 0.0`, `.index_vix_chg: float = 0.0` (appended after `quote_max_age_s`); `shock._index_path(reading: ShockReading, th: ShockThresholds) -> bool` |
 | V222-10 | Config keys, `THRESHOLD_ATTRS` rows, `.env.example`, config pins | 3 | sonnet | M `swingbot/config.py`; M `swingbot/core/scanning/shock_scan.py`; M `.env.example`; M `tests/scanning/test_shock_scan.py`; M `tests/test_config_v209_keys.py` | config `SHOCK_INDEX_ATR_K` (float, default `"0.0"`, min 0, max 5.0, step 0.25), `SHOCK_INDEX_VIX_CHG` (float, default `"0.0"`, min 0, max 200, step 1), placed after `SHOCK_VIX_RELIEF`; `THRESHOLD_ATTRS["index_atr_k"] = "SHOCK_INDEX_ATR_K"`, `["index_vix_chg"] = "SHOCK_INDEX_VIX_CHG"` |
 | V222-11 | Pipeline tests: partial data, stale/proxy VIX, off is byte-identical | 3 | sonnet | C `tests/scanning/test_shock_index_path.py`; M `tests/scanning/test_shock_plans_byte_identical.py` | none (tests only) |
 | V222-12 | Production `^VIX` tape check and VIX-coverage query (read-only) | 3 | sonnet | C `scripts/reports/shock_vix_check.py`; C `tests/scripts/test_shock_vix_check.py`; M spec (main) `## Results` § Production VIX | `shock_vix_check.tape_status(entry, now: datetime, max_age_s: int = 600) -> dict`; `COVERAGE_SQL` |
-| V222-13 | Stage 3: replay 2026-11-05 once with the frozen cell, gate 3 | 3 | sonnet | C `scripts/backtest/shock_index_replay_once.py`; M spec (main) `## Results` § Stage 3 | `replay_table(fx: dict, th: ShockThresholds) -> list[dict]`; Results § Stage 3 PASS/FAIL |
-| V222-14 | Frozen cell becomes the default; commit the replay test unchanged | 3 | sonnet | M `swingbot/core/market/shock.py`; M `swingbot/config.py`; M `.env.example`; M `tests/test_config_v209_keys.py`; M `tests/market/test_shock_step_entry.py`; add `tests/market/test_shock_replay_2026_11_05.py` (unchanged) | defaults `index_atr_k = FROZEN_K`, `index_vix_chg = FROZEN_V` |
+| V222-13 | Stage 3: replay 2026-11-05 once with the frozen cell, gate 3 | 3 | sonnet | C `scripts/backtest/shock_index_replay_once.py`; M spec (main) `## Results` § Stage 3 | `replay_table(fx: dict, th: ShockThresholds) -> list[dict]`; refuses an interpolated fixture (exit 2); replays V222-6d's rebuilt fixture; Results § Stage 3 PASS/FAIL |
+| V222-14 | Frozen cell becomes the default; commit the replay test unchanged | 3 | sonnet | M `swingbot/core/market/shock.py`; M `swingbot/config.py`; M `.env.example`; M `tests/test_config_v209_keys.py`; M `tests/market/test_shock_step_entry.py`; add `tests/market/test_shock_replay_2026_11_05.py` (as V222-6d left it) | defaults `index_atr_k = FROZEN_K`, `index_vix_chg = FROZEN_V` |
 
 ## Parts
 
 | Part | File | Tasks | Scope |
 |---|---|---|---|
 | 1 | `2026-11-09-v222-shock-index-vix-path_1-stage1-screen.md` | V222-1..V222-5 | daily data, daily screen, winner rule, forward long-book, Stage 1 results and gate 1 |
-| 2 | `2026-11-09-v222-shock-index-vix-path_2-stage2-intraday.md` | V222-6..V222-8 | builder by session date, intraday evaluator, Stage 2 results and gate 2 |
+| 2a | `2026-11-09-v222-shock-index-vix-path_2a-stage2-builder.md` | V222-6..V222-6d | builder by session date, real one-minute VIX bars for 2026-11-05, the rebuilt replay fixture |
+| 2b | `2026-11-09-v222-shock-index-vix-path_2b-stage2-intraday.md` | V222-7..V222-8 | intraday evaluator, Stage 2 results and gate 2 |
 | 3 | `2026-11-09-v222-shock-index-vix-path_3-detector-release.md` | V222-9..V222-14 | `_index_path`, config, pipeline pins, production VIX check, Stage 3 replay and default |

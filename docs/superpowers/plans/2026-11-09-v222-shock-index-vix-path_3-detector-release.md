@@ -14,7 +14,8 @@ results in the spec's `## Results`, frozen cell confirmed by the partner). Insid
 V222-9 → V222-10 → V222-11 is sequential (V222-10's `THRESHOLD_ATTRS` set-equality test
 needs V222-9's fields; V222-11 drives `run_shock_pass` through `thresholds_from_config`).
 V222-12 touches disjoint files and may run beside V222-9..V222-11. V222-13 needs
-V222-9..V222-11 merged on the v209 branch; V222-14 runs only on a Stage 3 PASS and edits
+V222-9..V222-11 merged on the v209 branch and V222-6d's rebuilt 2026-11-05 fixture (real
+one-minute VIX bars, Part 2a); V222-14 runs only on a Stage 3 PASS and edits
 the files V222-9/V222-10 edited.
 
 Conventions for every task in this part (same as Parts 1 and 2):
@@ -27,8 +28,9 @@ Conventions for every task in this part (same as Parts 1 and 2):
 - Commit messages are one subject line (the partner's rule: no body, no trailer).
 - After each task: `git -C E:/Documents/Private/Projects/Discord-Bot status --short` shows
   nothing from the task except the spec's `## Results` edits.
-- **`tests/market/test_shock_replay_2026_11_05.py` stays untracked and unedited until
-  V222-14**, and nothing before V222-13 opens 2026-11-05's outcome.
+- **`tests/market/test_shock_replay_2026_11_05.py` stays untracked until V222-14 and
+  unedited apart from V222-6d's one provenance line** (`vix_interpolated is False`,
+  `vix_source == "yfinance_1m"`), and nothing before V222-13 opens 2026-11-05's outcome.
 
 # Phase 3 — Detector, production check, Stage 3 and release
 
@@ -893,19 +895,22 @@ git -C E:/Documents/Private/Projects/Discord-Bot commit -m "docs(v222): producti
 - Modify: `docs/superpowers/specs/2026-11-09-v222-shock-index-vix-path-design.md` (main tree, `## Results`: new `### Stage 3 — replay of 2026-11-05`)
 
 **Interfaces:**
-- Consumes: V222-9 `ShockThresholds(index_atr_k=, index_vix_chg=)`, `shock._depth_path`, `_fast_path`, `_index_path`, `_relief`, `_settled`, `entry_condition`; v209 `shock.measure(snapshot, prev, th)`, `shock.step(state, reading, th)`, `ShockState`, `NameRow`, `VixTape`, `ShockSnapshot`; the fixture JSON shape (`source`, `vix_interpolated`, `note`, `steps[]` with `as_of`, `minutes_since_open`, `vix{level,chg_pct}`, `spy`, `qqq`, `names[]` of `NameRow` dicts); the frozen cell `(FROZEN_K, FROZEN_V)` from the spec's Results § Stage 2 (V222-8).
-- Produces (for V222-14): `replay_table(fx: dict, th: ShockThresholds) -> list[dict]` (one row per step: `as_of, minutes_since_open, breadth_frac, breadth_speed, sectors_down, sectors_total, spy_atr_move, vix_chg_pct, insufficient, settled, depth, fast, index, entry, streak, label`); `first_shock(rows) -> str | None`; `verdict(rows, deadline: datetime = DEADLINE) -> str` (`"PASS"` / `"FAIL"`); `DEADLINE = datetime(2026, 11, 5, 15, 0, tzinfo=UTC)`; CLI `--fixture --k --v --out-json --out-md`; Results § Stage 3 PASS or FAIL.
+- Consumes: V222-9 `ShockThresholds(index_atr_k=, index_vix_chg=)`, `shock._depth_path`, `_fast_path`, `_index_path`, `_relief`, `_settled`, `entry_condition`; v209 `shock.measure(snapshot, prev, th)`, `shock.step(state, reading, th)`, `ShockState`, `NameRow`, `VixTape`, `ShockSnapshot`; V222-6d's rebuilt `tests/fixtures/shock_replay_2026_11_05.json` (VIX from real one-minute `^VIX` bars: `vix_interpolated: false`, `vix_source: "yfinance_1m"`); the fixture JSON shape (`source`, `vix_interpolated`, `vix_source`, `note`, `steps[]` with `as_of`, `minutes_since_open`, `vix{level,chg_pct}`, `spy`, `qqq`, `names[]` of `NameRow` dicts); the frozen cell `(FROZEN_K, FROZEN_V)` from the spec's Results § Stage 2 (V222-8).
+- Produces (for V222-14): `replay_table(fx: dict, th: ShockThresholds) -> list[dict]` (one row per step: `as_of, minutes_since_open, breadth_frac, breadth_speed, sectors_down, sectors_total, spy_atr_move, vix_chg_pct, insufficient, settled, depth, fast, index, entry, streak, label`); `first_shock(rows) -> str | None`; `verdict(rows, deadline: datetime = DEADLINE) -> str` (`"PASS"` / `"FAIL"`); `DEADLINE = datetime(2026, 11, 5, 15, 0, tzinfo=UTC)`; CLI `--fixture --k --v --out-json --out-md` (an interpolated fixture exits `2`); Results § Stage 3 PASS or FAIL.
 
 Rules (spec § Stage 3): the cell is the one frozen at gate 2 and is passed on the command
 line, never chosen here; the run happens **once** — the CLI refuses to overwrite an
-existing `--out-json` (exit 3), and refuses `--k <= 0` (exit 2). PASS means the first
+existing `--out-json` (exit 3), and refuses `--k <= 0` or a fixture whose
+`vix_interpolated` is not `false` (exit 2). PASS means the first
 `SHOCK` is at or before 15:00 UTC (the earliest the settle and two-reading rules allow on
 15-minute steps). A FAIL is a measured answer: no grid, rule or cell is moved, no test is
 weakened. The snapshot is built exactly as the untracked
 `tests/market/test_shock_replay_2026_11_05.py::_snapshot` does (VIX `as_of` = the step's
 `as_of`; `session_date` = the first step's UTC date), so V222-14's unchanged test sees the
-same readings. The fixture's VIX is interpolated from the 15:20 UTC tape reading (spec, VIX
-provenance) and the Results say so beside the verdict.
+same readings. The fixture's VIX comes from real one-minute `^VIX` bars, point-in-time (the
+close of the last bar finished by each step; spec § VIX provenance, amended 2026-11-09,
+rebuilt by V222-6d), and the Results say so beside the verdict. An interpolated fixture
+(the pre-amendment one) is refused, because its 14:45 VIX could never meet any grid value.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -947,7 +952,8 @@ def _step(i, spy_last=496.0, vix_chg=25.0):
 
 
 def _fx(*steps):
-    return {"source": "synthetic", "vix_interpolated": True, "note": "test", "steps": list(steps)}
+    return {"source": "synthetic", "vix_interpolated": False, "vix_source": "yfinance_1m",
+            "note": "test", "steps": list(steps)}
 
 
 def test_the_deadline_is_fifteen_hundred_utc_on_the_replay_day():
@@ -995,8 +1001,9 @@ def test_the_cli_writes_the_table_once(tmp_path, capsys):
     _fixture, argv = _cli(tmp_path, "--k", "1.5", "--v", "20")
     assert once.main(argv) == 0
     out = json.loads((tmp_path / "s3.json").read_text())
-    assert set(out) == {"cell", "fixture", "source", "vix_interpolated", "rows",
+    assert set(out) == {"cell", "fixture", "source", "vix_interpolated", "vix_source", "rows",
                         "first_shock", "deadline", "verdict"}
+    assert (out["vix_interpolated"], out["vix_source"]) == (False, "yfinance_1m")
     assert out["cell"] == [1.5, 20.0] and len(out["rows"]) == 2
     assert "| as_of |" in (tmp_path / "s3.md").read_text()
     assert once.main(argv) == 3                       # run once: never overwrite
@@ -1004,6 +1011,13 @@ def test_the_cli_writes_the_table_once(tmp_path, capsys):
 
 def test_the_cli_refuses_an_off_cell(tmp_path):
     _fixture, argv = _cli(tmp_path, "--k", "0", "--v", "20")
+    assert once.main(argv) == 2
+    assert not (tmp_path / "s3.json").exists()
+
+
+def test_the_cli_refuses_an_interpolated_fixture(tmp_path):
+    fixture, argv = _cli(tmp_path, "--k", "1.5", "--v", "20")
+    fixture.write_text(json.dumps({**_fx(_step(0), _step(1)), "vix_interpolated": True}))
     assert once.main(argv) == 2
     assert not (tmp_path / "s3.json").exists()
 ```
@@ -1026,8 +1040,8 @@ Put the repo root on `sys.path` (as the other `scripts/backtest/` CLIs do), then
 - `_paths(reading, th) -> dict` — `relief = shock._relief(reading, th)`; returns `depth`, `fast`, `index`, `settled`, `entry` (`shock.entry_condition(reading, th)`).
 - `replay_table(fx, th) -> list[dict]` — `session = datetime.fromisoformat(fx["steps"][0]["as_of"]).date()`; loop as the test's `_replay` (`measure`, then `step`), one row per step with the keys in Interfaces (`as_of` ISO text, `streak` = the new state's `entry_streak`, `label` = the new state's label).
 - `first_shock(rows) -> str | None`; `verdict(rows, deadline=DEADLINE) -> str` — `"PASS"` iff a first `SHOCK` exists and `datetime.fromisoformat(first) <= deadline`.
-- `_markdown(out: dict) -> str` — a header line with the cell, source, `vix_interpolated`, first SHOCK and verdict; the line "Fixture VIX is interpolated from the 15:20 UTC tape reading; it is not point-in-time."; then a pipe table `| as_of | min | breadth | speed | sectors | spy ATR | VIX % | settled | depth | fast | index | streak | label |` (values rounded to 3 places, `—` for `None`).
-- `main(argv=None) -> int` — argparse `--fixture` (default `DEFAULT_FIXTURE`), `--k` and `--v` (`float`, required), `--out-json`, `--out-md` (required); `--k <= 0` → print an error, return 2; existing `--out-json` → print "Stage 3 already ran: <path>", return 3; else `th = shock.ShockThresholds(index_atr_k=k, index_vix_chg=v)`, write `{"cell": [k, v], "fixture": str(path), "source", "vix_interpolated", "rows", "first_shock", "deadline": DEADLINE.isoformat(), "verdict"}` as JSON (indent 2) and the markdown, print `verdict: PASS|FAIL first SHOCK: <time|never>`, return 0. Keep every function under complexity 15.
+- `_markdown(out: dict) -> str` — a header line with the cell, source, `vix_interpolated`, `vix_source`, first SHOCK and verdict; the line "Fixture VIX: one-minute ^VIX bars (`<vix_source>`), the close of the last bar finished by each step (point-in-time)."; then a pipe table `| as_of | min | breadth | speed | sectors | spy ATR | VIX % | settled | depth | fast | index | streak | label |` (values rounded to 3 places, `—` for `None`).
+- `main(argv=None) -> int` — argparse `--fixture` (default `DEFAULT_FIXTURE`), `--k` and `--v` (`float`, required), `--out-json`, `--out-md` (required); `--k <= 0` → print an error, return 2; a fixture whose `vix_interpolated` is not `False` → print "interpolated VIX fixture: rebuild it (V222-6d)", return 2, write nothing; existing `--out-json` → print "Stage 3 already ran: <path>", return 3; else `th = shock.ShockThresholds(index_atr_k=k, index_vix_chg=v)`, write `{"cell": [k, v], "fixture": str(path), "source", "vix_interpolated", "vix_source", "rows", "first_shock", "deadline": DEADLINE.isoformat(), "verdict"}` as JSON (indent 2) and the markdown, print `verdict: PASS|FAIL first SHOCK: <time|never>`, return 0. Keep every function under complexity 15.
 
 - [ ] **Step 4: Run the tests and commit the script**
 
@@ -1041,7 +1055,8 @@ git -C E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v2
 
 - [ ] **Step 5: Run Stage 3 once**
 
-Preconditions: V222-9..V222-11 committed on the v209 branch; the spec's Results § Stage 2
+Preconditions: V222-9..V222-11 and V222-6d (the rebuilt fixture) committed on the v209
+branch; the spec's Results § Stage 2
 names the frozen cell and gate 2 passed. Read `FROZEN_K` and `FROZEN_V` from that section
 (copy them; never recompute). Then, exactly once:
 
@@ -1055,8 +1070,8 @@ already ran: use the existing `stage3.json`, never rerun with another cell.
 - [ ] **Step 6: Write the Results (main tree spec)**
 
 Add `### Stage 3 — replay of 2026-11-05` under `## Results`: the cell, the fixture
-(`tests/fixtures/shock_replay_2026_11_05.json`, source, commit `eafc6eb8`), the VIX
-provenance line, the full step table from `stage3.md`, the first `SHOCK` time and
+(`tests/fixtures/shock_replay_2026_11_05.json`, source, V222-6d's rebuild commit, its
+sha256), the VIX provenance line (real one-minute `^VIX` bars, point-in-time), the full step table from `stage3.md`, the first `SHOCK` time and
 **PASS** or **FAIL** against 15:00 UTC, and: "Run once with the cell frozen at gate 2; not
 re-run."
 
@@ -1088,7 +1103,7 @@ skipped and nothing here is committed.
 - Modify: `.claude/worktrees/2026-11-05-v209-market-shock-detector/.env.example`
 - Modify: `.claude/worktrees/2026-11-05-v209-market-shock-detector/tests/test_config_v209_keys.py`
 - Modify: `.claude/worktrees/2026-11-05-v209-market-shock-detector/tests/market/test_shock_step_entry.py`
-- Add to git, unchanged: `.claude/worktrees/2026-11-05-v209-market-shock-detector/tests/market/test_shock_replay_2026_11_05.py` (untracked since V209-12b)
+- Add to git, unchanged since V222-6d: `.claude/worktrees/2026-11-05-v209-market-shock-detector/tests/market/test_shock_replay_2026_11_05.py` (untracked since V209-12b; V222-6d changed only its provenance line)
 
 **Interfaces:**
 - Consumes: the frozen cell `(FROZEN_K, FROZEN_V)` from the spec's Results § Stage 2 and the Stage 3 PASS in § Stage 3; V222-9's fields; V222-10's `Field`s, `V209_FIELDS`, `CAST_DEFAULTS`, `.env.example` lines.
@@ -1103,7 +1118,7 @@ label still blocks nothing.
 
 - [ ] **Step 0: Record the replay test's hash**
 
-Run `sha256sum E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector/tests/market/test_shock_replay_2026_11_05.py` and keep the hash (the file is untracked, so git cannot show an edit to it).
+Run `sha256sum E:/Documents/Private/Projects/Discord-Bot/.claude/worktrees/2026-11-05-v209-market-shock-detector/tests/market/test_shock_replay_2026_11_05.py` and keep the hash (the file is untracked, so git cannot show an edit to it). It must equal the hash V222-6d reported; if not, stop and report (something edited the test after V222-6d).
 
 - [ ] **Step 1: Update the pins first (they fail against the `0.0` defaults)**
 
