@@ -13,6 +13,8 @@ Spec: docs/superpowers/specs/2026-11-05-v209-market-shock-detector-design.md
 """
 from __future__ import annotations
 
+import math
+import statistics
 from dataclasses import dataclass, fields
 from datetime import date, datetime
 
@@ -137,3 +139,120 @@ def _from_row(cls, row: dict):
 def _meets(value: float | None, bar: float) -> bool:
     """``value >= bar`` with the ``_EPS`` tolerance; a missing value never meets."""
     return value is not None and value + _EPS >= bar
+
+
+def _is_down(move: float, atr_k: float) -> bool:
+    return move <= -atr_k + _EPS
+
+
+def _atr_move(row: NameRow | None) -> float | None:
+    if row is None or row.last is None or row.prev_close is None or row.atr14 is None:
+        return None
+    if not row.atr14 > 0:                       # also rejects NaN
+        return None
+    move = (row.last - row.prev_close) / row.atr14
+    return move if math.isfinite(move) else None
+
+
+def _running(pick, prior: float | None, value: float | None) -> float | None:
+    if prior is None:
+        return value
+    if value is None:
+        return prior
+    return pick(prior, value)
+
+
+# --- the reading -----------------------------------------------------------
+
+def _contributors(names) -> list[tuple[str | None, float]]:
+    out = []
+    for row in names:
+        move = _atr_move(row) if row.is_equity else None
+        if move is not None:
+            out.append((row.sector, move))
+    return out
+
+
+def _breadth(contribs, atr_k: float) -> float | None:
+    if not contribs:
+        return None
+    return sum(1 for _sector, move in contribs if _is_down(move, atr_k)) / len(contribs)
+
+
+def _sectors(contribs, atr_k: float) -> tuple[int, int]:
+    by_sector: dict[str, list[float]] = {}
+    for sector, move in contribs:
+        if sector:
+            by_sector.setdefault(sector, []).append(move)
+    groups = [moves for moves in by_sector.values() if len(moves) >= 2]
+    down = sum(1 for moves in groups if _is_down(statistics.median(moves), atr_k))
+    return down, len(groups)
+
+
+def _speed(breadth: float | None, prev: ShockReading | None, same: bool) -> float | None:
+    if not same or breadth is None or prev.insufficient or prev.breadth_frac is None:
+        return None
+    return breadth - prev.breadth_frac
+
+
+def _retrace(last, prev_close, low) -> float | None:
+    if last is None or prev_close is None or low is None:
+        return None
+    if low >= prev_close:
+        return 1.0
+    return (last - low) / (prev_close - low)
+
+
+def _spy_fields(spy: NameRow | None, prev: ShockReading | None, same: bool) -> dict:
+    last = spy.last if spy is not None else None
+    prev_close = spy.prev_close if spy is not None else None
+    prior_low = prev.spy_session_low if same else None
+    low = _running(min, prior_low, last)
+    return {
+        "spy_last": last,
+        "spy_prev_close": prev_close,
+        "spy_session_low": low,
+        "spy_new_low": prior_low is not None and last is not None and last < prior_low,
+        "spy_retrace": _retrace(last, prev_close, low),
+    }
+
+
+def _fresh_vix(vix: VixTape, now: datetime, max_age_s: int) -> tuple[float | None, float | None]:
+    if vix.level is None or vix.as_of is None:
+        return None, None
+    if (now - vix.as_of).total_seconds() > max_age_s:
+        return None, None
+    return vix.level, vix.chg_pct
+
+
+def _vix_fields(snapshot: ShockSnapshot, prev: ShockReading | None, same: bool,
+                th: ShockThresholds) -> dict:
+    level, chg = _fresh_vix(snapshot.vix, snapshot.as_of, th.vix_max_age_s)
+    high = _running(max, prev.vix_session_high if same else None, level)
+    off = (high - level) / high * 100.0 if level is not None and high else None
+    return {"vix_level": level, "vix_chg_pct": chg, "vix_session_high": high,
+            "vix_off_high_pct": off}
+
+
+def measure(snapshot: ShockSnapshot, prev: ShockReading | None,
+            th: ShockThresholds = ShockThresholds()) -> ShockReading:
+    """Build one reading from a pass's snapshot and the previous stored reading."""
+    same = prev is not None and prev.session_date == snapshot.session_date
+    contribs = _contributors(snapshot.names)
+    breadth = _breadth(contribs, th.atr_k)
+    down, total = _sectors(contribs, th.atr_k)
+    return ShockReading(
+        as_of=snapshot.as_of,
+        session_date=snapshot.session_date,
+        minutes_since_open=snapshot.minutes_since_open,
+        breadth_frac=breadth,
+        sectors_down=down,
+        sectors_total=total,
+        breadth_speed=_speed(breadth, prev, same),
+        spy_atr_move=_atr_move(snapshot.spy),
+        qqq_atr_move=_atr_move(snapshot.qqq),
+        **_spy_fields(snapshot.spy, prev, same),
+        **_vix_fields(snapshot, prev, same, th),
+        n_names=len(contribs),
+        insufficient=len(contribs) < th.min_names,
+    )
