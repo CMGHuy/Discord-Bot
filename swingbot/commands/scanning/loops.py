@@ -15,6 +15,7 @@ from swingbot.core.scanning.fetch import _run_bounded
 from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.logsetup import apply_log_level
 from swingbot.core.db import write_failure
+from swingbot.core.db.repositories.market_shock import market_shock_repo
 from swingbot.core.infra import pitr_watch
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core import presentation as ui
@@ -168,6 +169,19 @@ async def _prune_alert_posts() -> None:
         log.info("daily_recap: pruned %d alert_posts row(s)", removed)
     except Exception:
         log.warning("daily_recap: could not prune alert_posts", exc_info=True)
+
+
+async def _prune_shock_readings() -> None:
+    """v209: drop market_shock_readings older than SHOCK_READINGS_KEEP_DAYS. Retention,
+    not detector behaviour, so it runs in every MARKET_SHOCK_MODE; idempotent when a
+    recap is skipped. A failure is logged, never raised."""
+    try:
+        cutoff = (dt.datetime.now(dt.timezone.utc)
+                  - dt.timedelta(days=int(config.SHOCK_READINGS_KEEP_DAYS)))
+        removed = await asyncio.to_thread(market_shock_repo().prune_before, cutoff)
+        log.info("daily_recap: pruned %d market_shock_readings row(s)", removed)
+    except Exception:
+        log.warning("daily_recap: could not prune market_shock_readings", exc_info=True)
 
 
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
@@ -894,6 +908,7 @@ async def daily_recap():
         log.exception("daily_recap: failed to post retrospective")
     await _post_live_loss_flags(today)
     await _prune_alert_posts()
+    await _prune_shock_readings()
 
 
 
