@@ -155,7 +155,7 @@ def test_the_worker_hands_the_pass_its_own_frames_quotes_sectors_and_clock(worke
     assert (first, second) == ("live", "shock")
     assert kwargs["step_shock"] is flag
     assert set(kwargs["frames"]) == {"AAA", "SPY"}
-    assert kwargs["live_prices"] == {"AAA": 97.0}
+    assert kwargs["live_prices"] == (QUOTES if flag else {"AAA": 97.0})
     assert kwargs["sector_of"] == {"AAA": "Information Technology"}
     assert kwargs["spy_df"] is frames["SPY"]
     quotes_at = kwargs["quotes_at"]
@@ -176,3 +176,61 @@ def test_the_label_is_bound_once_before_any_plan_is_built():
     assert src.count("_shock_state_for_pass(") == 1 and "run_shock_pass(" not in src
     assert src.index("shock_state = _shock_state_for_pass(") < src.index("_attach_item_plan(")
     assert src.index("quotes_at = datetime.now(timezone.utc)") < src.index("_shock_state_for_pass(")
+
+
+@pytest.mark.parametrize("mode,flag,extra", [
+    ("off", True, []), ("shadow", False, []), ("live", False, []),
+    ("shadow", True, ["SPY", "QQQ"]), ("live", True, ["SPY", "QQQ"])])
+def test_the_one_live_price_fetch_carries_spy_and_qqq_only_when_stepping(
+        worker, monkeypatch, mode, flag, extra):
+    _frames, _order, asked = worker
+    monkeypatch.setattr(config, "MARKET_SHOCK_MODE", mode)
+    with pytest.raises(_Halt):
+        scan_run._sync_run_scan("all", True, None, None, step_shock=flag)
+    assert asked == [["AAA", *extra]]       # one fetch, watchlist order first, extras appended
+
+
+def test_quote_tickers_appends_missing_benchmarks_without_reordering(monkeypatch):
+    monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "SPY")
+    monkeypatch.setattr(config, "MARKET_SHOCK_MODE", "shadow")
+    watchlist = ["QQQ", "MSFT", "AAPL"]
+    assert shock_scan.quote_tickers(watchlist, True) == ["QQQ", "MSFT", "AAPL", "SPY"]
+    assert shock_scan.quote_tickers(["SPY", "QQQ"], True) == ["SPY", "QQQ"]
+    assert shock_scan.quote_tickers([], True) == []                  # no chunk to ride
+    assert watchlist == ["QQQ", "MSFT", "AAPL"]                     # never mutated
+    assert shock_scan.quote_tickers(watchlist, False) is watchlist
+    monkeypatch.setattr(config, "MARKET_SHOCK_MODE", "off")
+    assert shock_scan.quote_tickers(watchlist, True) is watchlist
+
+
+@pytest.mark.parametrize("watchlist,expected", [
+    (["A", "B", "C"], ["A", "B", "C"]),                 # last chunk full: no extras, no new chunk
+    (["A", "B"], ["A", "B", "SPY"]),                    # room for one
+    (["A"], ["A", "SPY", "QQQ"]),                       # room for both
+    (["A", "B", "C", "D"], ["A", "B", "C", "D", "SPY", "QQQ"])])
+def test_quote_tickers_never_adds_a_fetch_chunk(monkeypatch, watchlist, expected):
+    monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "SPY")
+    monkeypatch.setattr(config, "MARKET_SHOCK_MODE", "shadow")
+    monkeypatch.setattr(config, "BATCH_FETCH_CHUNK_SIZE", 3)
+    got = shock_scan.quote_tickers(watchlist, True)
+    assert got == expected
+    assert -(-len(got) // 3) == -(-len(watchlist) // 3)   # same chunk count
+
+
+def test_scan_quotes_hides_only_the_benchmarks_the_watchlist_lacks(monkeypatch):
+    monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "SPY")
+    prices = {"MSFT": 1.0, "SPY": 2.0, "QQQ": 3.0}
+    assert shock_scan.scan_quotes(prices, ["MSFT"]) == {"MSFT": 1.0}
+    assert shock_scan.scan_quotes(prices, ["MSFT", "SPY"]) == {"MSFT": 1.0, "SPY": 2.0}
+    plain = {"MSFT": 1.0}
+    assert shock_scan.scan_quotes(plain, ["MSFT"]) is plain          # nothing to strip: same dict
+    assert shock_scan.scan_quotes({}, []) == {}
+    assert prices == {"MSFT": 1.0, "SPY": 2.0, "QQQ": 3.0}          # never mutated
+
+
+def test_the_scan_keeps_one_live_price_fetch_and_hands_the_pass_the_full_result():
+    src = inspect.getsource(scan_run._sync_run_scan)
+    assert src.count("_fetch_live_prices(") == 1
+    assert "fetch._fetch_live_prices(shock_scan.quote_tickers(tickers, step_shock), progress)" in src
+    assert "live_prices = shock_scan.scan_quotes(shock_prices, tickers)" in src
+    assert "live_prices=shock_prices" in src

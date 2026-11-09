@@ -561,7 +561,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # Phase 1b: one batched live-price fetch for the whole watchlist (v55),
     # still inside the crawl phase so the ANALYZE phase below stays pure
     # dict lookups -- see _fetch_live_prices and _scan_one's use of it.
-    live_prices = fetch._fetch_live_prices(tickers, progress)
+    shock_prices = fetch._fetch_live_prices(shock_scan.quote_tickers(tickers, step_shock), progress)
+    live_prices = shock_scan.scan_quotes(shock_prices, tickers)   # v209: SPY/QQQ extras feed the shock pass only
     quotes_at = datetime.now(timezone.utc)   # v209: live_prices carry no per-quote time
     _finish_phase("live_prices")
 
@@ -643,7 +644,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # NYSE-regular-hours gate and swallows its own failures); the returned
     # label is stamped on this pass's plans. None under MARKET_SHOCK_MODE=off.
     shock_state = _shock_state_for_pass(
-        step_shock=step_shock, frames=fresh_data, live_prices=live_prices,
+        step_shock=step_shock, frames=fresh_data, live_prices=shock_prices,
         sector_of=sector_of_ticker, quotes_at=quotes_at, spy_df=spy_df)
 
     # Market context (P0): stamp every crawled frame with the ctx_* block so

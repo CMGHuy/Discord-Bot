@@ -200,3 +200,32 @@ def current_label(*, repo=None) -> str | None:
         return shock.NORMAL
     label = stored.get("label")
     return label if label in shock.LABELS else None
+
+
+QQQ_TICKER = "QQQ"
+
+
+def _benchmarks() -> tuple[str, str]:
+    return str(config.MARKET_REGIME_TICKER), QQQ_TICKER
+
+
+def quote_tickers(tickers: list, step_shock: bool) -> list:
+    """The scan's one live-price list: the watchlist untouched, plus SPY and QQQ
+    appended (deduped) on a stepped pass, so the shock pass never fetches --
+    only into the last chunk's free room, so the fetch never gains a chunk."""
+    if not step_shock or shock_mode() == "off":
+        return tickers
+    have = set(tickers)
+    room = (-len(tickers)) % max(1, int(getattr(config, "BATCH_FETCH_CHUNK_SIZE", 100)))
+    extra = [t for t in dict.fromkeys(_benchmarks()) if t not in have][:room]
+    return [*tickers, *extra] if extra else tickers
+
+
+def scan_quotes(prices: dict, tickers: list) -> dict:
+    """The quote dict the rest of the scan sees: benchmark extras the watchlist
+    does not hold are removed, so the long and SHORT lanes see what they saw before."""
+    have = set(tickers)
+    drop = [t for t in _benchmarks() if t not in have and t in prices]
+    if not drop:
+        return prices
+    return {t: p for t, p in prices.items() if t not in drop}
