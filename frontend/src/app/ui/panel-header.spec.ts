@@ -14,6 +14,37 @@ describe('PanelHeader', () => {
   it('toggles tableOpen', () => { const { fixture, el } = render({ title: 'By horizon', tableable: true }); (el.querySelector('button.table') as HTMLButtonElement).click(); fixture.detectChanges(); expect(fixture.componentInstance.tableOpen()).toBe(true); expect((el.querySelector('button.table') as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true'); });
 });
 
+describe('PanelHeader titleTip', () => {
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }));
+  const render = (inputs: Record<string, unknown>) => {
+    const fixture = TestBed.createComponent(PanelHeader);
+    for (const [key, value] of Object.entries(inputs)) fixture.componentRef.setInput(key, value);
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  };
+
+  it('puts the hint on the title, with no (i) button', () => {
+    const el = render({ title: 'Funnel', hint: 'Share of fills.', titleTip: true });
+    const title = el.querySelector('h2')!;
+    expect(title.classList).toContain('tip');
+    expect(title.getAttribute('tabindex')).toBe('0');
+    expect(el.querySelector('sb-hint button')).toBeNull();
+    expect(el.querySelector('[role="tooltip"]')!.textContent).toContain('Share of fills.');
+  });
+
+  it('keeps the (i) button by default', () => {
+    const el = render({ title: 'Funnel', hint: 'Share of fills.' });
+    expect(el.querySelector('sb-hint button')).not.toBeNull();
+    expect(el.querySelector('h2')!.getAttribute('tabindex')).toBeNull();
+  });
+
+  it('draws no tip and no tabstop on a titleTip header without a hint', () => {
+    const el = render({ title: 'Funnel', titleTip: true });
+    expect(el.querySelector('sb-hint')).toBeNull();
+    expect(el.querySelector('h2')!.getAttribute('tabindex')).toBeNull();
+  });
+});
+
 describe('PanelHeader alignment (v179 §3.4)', () => {
   const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/panel-header.ts'), 'utf8');
 

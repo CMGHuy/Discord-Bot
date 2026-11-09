@@ -17,8 +17,13 @@ import { Hint } from './hint';
   template: `
     <header>
       <div class="heading">
-        <h2>{{ title() }}</h2>
-        @if (hint()) { <sb-hint [text]="hint()!" [label]="title() + ' definition'" /> }
+        @if (titleTip() && hint()) {
+          <h2 #name class="tip" tabindex="0">{{ title() }}</h2>
+          <sb-hint [anchor]="name" [wide]="true" [text]="hint()!" [label]="title() + ' definition'" />
+        } @else {
+          <h2>{{ title() }}</h2>
+          @if (hint()) { <sb-hint [text]="hint()!" [label]="title() + ' definition'" /> }
+        }
       </div>
       <div class="meta sb-meta">
         @if (n() !== null) { <span class="n num">N={{ n() }}</span> }
@@ -41,6 +46,8 @@ import { Hint } from './hint';
     }
     .heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-6); min-width: 0; }
     h2 { margin: 0; font-family: var(--font-sans); font-weight: 600; font-size: var(--text-table); color: var(--text); letter-spacing: normal; overflow-wrap: anywhere; }
+    h2.tip { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+    h2.tip:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
     .meta { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-end; gap: var(--space-6) var(--space-10); margin-left: auto; }
     .meta:empty { display: none; }
     .n,.all-time { font-family: var(--font-num); font-size:var(--text-micro); letter-spacing:.06em; text-transform:uppercase; color: var(--text-muted); }
@@ -58,6 +65,9 @@ export class PanelHeader {
   readonly n = input<number | null>(null);
   readonly allTime = input(false);
   readonly hint = input<string | null>(null);
+  /** The hint shows as a tooltip on the title itself (hover, focus, tap)
+   *  instead of a separate (i) button beside it. Off by default. */
+  readonly titleTip = input(false);
   readonly tableable = input(false);
   readonly total = input<string | null>(null);
   readonly tableOpen = model(false);
