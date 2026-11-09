@@ -158,7 +158,9 @@ that weakens the replay test, and decide with the partner. It is never a reason
 to move the grid, the rule or the cell. On a pass, the frozen cell becomes the shipped default (the `ShockThresholds`
 default, the config `Field` default and `CAST_DEFAULTS`), because the V209-12b
 replay test reads default `ShockThresholds()` and would otherwise stay `NORMAL`
-at `index_atr_k = 0.0`. The replay test is then committed unchanged.
+at `index_atr_k = 0.0`. The replay test is then committed unchanged apart from one shape assertion
+(`vix_interpolated` is now `False`, `vix_source` is `yfinance_1m`), aligned with the rebuilt
+fixture in V222-6d; its deadline, rules and other tests are untouched.
 
 ## Acceptance
 
