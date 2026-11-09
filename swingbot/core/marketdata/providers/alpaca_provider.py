@@ -10,6 +10,7 @@ from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest, StockSnapshotRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
+from swingbot.core.market import session
 from swingbot.core.marketdata.providers.base import (
     NY, to_alpaca_symbol, to_yf_daily, to_yf_hourly)
 from swingbot.core.marketdata.shared.kinds import QuoteDetail
@@ -74,9 +75,11 @@ def symbols_per_request(period: str, now: datetime = None) -> int:
     return max(1, ROWS_PER_PAGE // rows)
 
 
-def _in_regular_session(now: datetime) -> bool:
-    ny = now.astimezone(NY)
-    return ny.weekday() < 5 and dtime(9, 30) <= ny.time() < dtime(16, 0)
+def _tape_is_live(now: datetime) -> bool:
+    """A live US tape (pre-market, regular, after-hours; holiday aware): an old
+    IEX print is then a miss so yfinance's extended-hours bars can answer.
+    Outside it (weekend, overnight) the last print IS the latest one."""
+    return session.is_tape_open(now)
 
 
 class AlpacaProvider:
@@ -156,7 +159,7 @@ class AlpacaProvider:
         trade = getattr(snap, "latest_trade", None)
         if trade is None or not trade.price or trade.price <= 0:
             return None
-        if _in_regular_session(now) and (now - trade.timestamp).total_seconds() > max_age_s:
+        if _tape_is_live(now) and (now - trade.timestamp).total_seconds() > max_age_s:
             return None
         return float(trade.price)
 

@@ -237,6 +237,35 @@ def test_latest_quotes_old_trade_outside_session_is_kept_with_its_timestamp():
     assert q.price == 190.0 and q.trade_at == friday_close
 
 
+def _at(now, trade_age_h):
+    c = FakeClient(snaps={"AAPL": _qsnap(190.0, now - pd.Timedelta(hours=trade_age_h),
+                                         189.9, 190.1, now)})
+    prov = ap.AlpacaProvider("k", "s", "iex", client=c, now=lambda: now)
+    return prov.latest_quotes(["AAPL"], 300)["AAPL"]
+
+
+def test_latest_quotes_premarket_friday_print_is_a_miss_so_yfinance_can_answer():
+    mon_premarket = datetime(2026, 11, 9, 13, 46, tzinfo=timezone.utc)   # 08:46 ET
+    q = _at(mon_premarket, 64)
+    assert q.price is None and q.trade_at is None        # router falls back to yfinance
+    assert q.quote_at == mon_premarket
+
+
+def test_latest_quotes_after_hours_old_print_is_a_miss():
+    mon_after = datetime(2026, 11, 9, 22, 30, tzinfo=timezone.utc)       # 17:30 ET
+    assert _at(mon_after, 3).price is None
+
+
+def test_latest_quotes_premarket_fresh_print_is_kept():
+    mon_premarket = datetime(2026, 11, 9, 13, 46, tzinfo=timezone.utc)
+    assert _at(mon_premarket, 0.01).price == 190.0
+
+
+def test_latest_quotes_overnight_old_print_is_kept():
+    mon_night = datetime(2026, 11, 9, 7, 0, tzinfo=timezone.utc)         # 02:00 ET, no tape
+    assert _at(mon_night, 10).price == 190.0
+
+
 def test_daily_bars_between_sends_the_range_on_sip_all():
     from datetime import date
     c = FakeClient(bars=_barset(["AAPL"]))
