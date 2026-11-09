@@ -332,11 +332,67 @@ def _from_normal(state: ShockState, reading: ShockReading, th: ShockThresholds) 
     return replace(state, entry_streak=state.entry_streak + 1)
 
 
-def _hold(state: ShockState, reading: ShockReading, th: ShockThresholds) -> ShockState:
-    return state
+def _minutes(start: datetime, end: datetime) -> float:
+    return (end - start).total_seconds() / 60.0
 
 
-RULES: dict[str, Rule] = {NORMAL: _from_normal, SHOCK: _hold, RECOVERY: _hold}
+def _dwelled(state: ShockState, reading: ShockReading, minimum: float) -> bool:
+    return state.since is None or _minutes(state.since, reading.as_of) + _EPS >= minimum
+
+
+def _vix_repaired(reading: ShockReading, th: ShockThresholds) -> bool:
+    below_prior_close = reading.vix_chg_pct is not None and reading.vix_chg_pct < 0
+    return below_prior_close or _meets(reading.vix_off_high_pct, th.recovery_vix_off_high_pct)
+
+
+def _repaired(reading: ShockReading, th: ShockThresholds) -> bool:
+    return (reading.breadth_frac is not None
+            and reading.breadth_frac <= th.breadth_exit + _EPS
+            and _vix_repaired(reading, th)
+            and _meets(reading.spy_retrace, th.recovery_spy_retrace))
+
+
+def recovery_condition(state: ShockState, reading: ShockReading,
+                       th: ShockThresholds = ShockThresholds()) -> bool:
+    """SHOCK -> RECOVERY (with the SHOCK dwell), or RECOVERY still holding."""
+    if state.label == SHOCK and not _dwelled(state, reading, th.min_dwell_min):
+        return False
+    return _repaired(reading, th)
+
+
+def _rising(state: ShockState, reading: ShockReading) -> bool:
+    return (state.prev_breadth is not None and reading.breadth_frac is not None
+            and reading.breadth_frac > state.prev_breadth + _EPS)
+
+
+def reentry_condition(state: ShockState, reading: ShockReading,
+                      th: ShockThresholds = ShockThresholds()) -> bool:
+    """RECOVERY -> SHOCK on one settled reading: rising breadth, or a new SPY low."""
+    if not _settled(reading, th):
+        return False
+    rising = _rising(state, reading) and _meets(reading.breadth_frac, th.breadth_reenter)
+    return rising or reading.spy_new_low
+
+
+def _from_shock(state: ShockState, reading: ShockReading, th: ShockThresholds) -> ShockState:
+    if not recovery_condition(state, reading, th):
+        return state
+    return replace(state, label=RECOVERY, since=reading.as_of, hold_since=reading.as_of,
+                   entry_streak=0)
+
+
+def _from_recovery(state: ShockState, reading: ShockReading, th: ShockThresholds) -> ShockState:
+    if reentry_condition(state, reading, th):
+        return _enter_shock(state, reading)
+    if not recovery_condition(state, reading, th):
+        return replace(state, hold_since=None)
+    hold = state.hold_since or reading.as_of
+    if _minutes(hold, reading.as_of) + _EPS >= th.recovery_min_dwell_min:
+        return replace(state, label=NORMAL, since=reading.as_of, hold_since=None, entry_streak=0)
+    return replace(state, hold_since=hold)
+
+
+RULES: dict[str, Rule] = {NORMAL: _from_normal, SHOCK: _from_shock, RECOVERY: _from_recovery}
 
 
 def _carried_prev_close(state: ShockState, reading: ShockReading, new_session: bool):
