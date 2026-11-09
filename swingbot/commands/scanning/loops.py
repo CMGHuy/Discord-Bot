@@ -264,8 +264,9 @@ async def _session_scan_tick():
     log.info("Running session scan at %s…", now_str)
     runstate.record_tick_start("scan")
     progress = scan_engine.ScanProgress()
+    # v209: the only caller that steps the market-shock state (spec § Gating).
     alerts = await _run_scan_posting_partial(
-        channel, require_confirmation=True, bot=bot, progress=progress)
+        channel, require_confirmation=True, bot=bot, progress=progress, step_shock=True)
     # v152 D3: the only caller that applies the per-symbol cooldown -- the
     # admin-UI scan, !check and the store-write-halt re-post never do.
     held = await send_then_short(channel, alerts, bot=bot, require_confirmation=True,

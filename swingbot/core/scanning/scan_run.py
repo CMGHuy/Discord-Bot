@@ -44,7 +44,7 @@ from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
 from . import (analyze, dedup, fetch, lane_overlap, progress_store, rejection_recorder, runstate,
-               short_funnel, strategy_pass, telemetry)
+               shock_scan, short_funnel, strategy_pass, telemetry)
 from .short_candidates import ShortReference, build_reference_rels, extra_candidates
 from .short_reference import completed_frame as _completed, etf_for_sector
 from .analyze import paper_trade_decision
@@ -490,8 +490,21 @@ def _log_heat_block(ticker: str, enforced_pct: float, add_pct: float, cap_pct: f
              enforced_pct, add_pct, cap_pct, ticker)
 
 
+def _shock_state_for_pass(**kwargs) -> str | None:
+    """v209: the shock pass's label for this scan. run_shock_pass swallows its own
+    failures; this wrapper is belt and braces so a raise can never stop the scan
+    (LONG issuing unchanged): the pass then stamps no shock_state key."""
+    try:
+        return shock_scan.run_shock_pass(**kwargs)
+    except Exception as exc:
+        swallowed(log, "scan.shock.call", exc,
+                  "shock pass raised; scanning without a label: %s", exc, exc_info=True)
+        return None
+
+
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
-                    min_confluence: int = None, params: ScanParams | None = None) -> tuple:
+                    min_confluence: int = None, params: ScanParams | None = None,
+                    step_shock: bool = False) -> tuple:
     """
     All the heavy synchronous work -- network fetches, pandas computation,
     matplotlib chart rendering -- lives here with NO async/await, so it can
@@ -503,6 +516,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     `min_confluence` overrides config.MIN_TARGET_CONFLUENCE_COUNT for this
     run only (used by `!check`'s optional argument); pass None (the
     default) to just use whatever's currently configured.
+
+    `step_shock` (v209) is run_scan's flag: True only for the scheduled
+    session scan, which may then write a market-shock reading.
     """
     _scan_started = time.monotonic()   # Task E82: feeds log_scan_telemetry's duration_s
     fetch.reset_fetch_stats()          # v106: cold_fetch_s / price_sources for this scan
@@ -546,6 +562,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # still inside the crawl phase so the ANALYZE phase below stays pure
     # dict lookups -- see _fetch_live_prices and _scan_one's use of it.
     live_prices = fetch._fetch_live_prices(tickers, progress)
+    quotes_at = datetime.now(timezone.utc)   # v209: live_prices carry no per-quote time
     _finish_phase("live_prices")
 
     # Market breadth (Task E28): % of the just-crawled universe trading above
@@ -621,6 +638,13 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         sector_of_ticker = {}
         etf_symbol_of_sector = {}
         sector_etf_frames = {}
+
+    # v209: one market-shock reading per scheduled pass (shock_scan owns the
+    # NYSE-regular-hours gate and swallows its own failures); the returned
+    # label is stamped on this pass's plans. None under MARKET_SHOCK_MODE=off.
+    shock_state = _shock_state_for_pass(
+        step_shock=step_shock, frames=fresh_data, live_prices=live_prices,
+        sector_of=sector_of_ticker, quotes_at=quotes_at, spy_df=spy_df)
 
     # Market context (P0): stamp every crawled frame with the ctx_* block so
     # entry_filters.entries_for() can read the regime straight off `df`. This
@@ -1336,7 +1360,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
 
 async def run_scan(horizon_filter: str = "all", require_confirmation: bool = True, bot=None, progress: "ScanProgress" = None,
-                    min_confluence: int = None) -> list:
+                    min_confluence: int = None, *, step_shock: bool = False) -> list:
     """
     Thin async wrapper: runs the entire synchronous scan pipeline in a
     background thread (so it never blocks the gateway heartbeat), then
@@ -1357,14 +1381,19 @@ async def run_scan(horizon_filter: str = "all", require_confirmation: bool = Tru
     thread (asyncio.to_thread copies the context) and in map_tickers' pool
     (which submits through with_current_context) -- carries one scan id, so
     `grep s-1405k3 logs/bot.log` shows the scan end to end.
+
+    v209: `step_shock` (keyword only) lets this pass take a market-shock
+    reading and step the state. Only the scheduled session scan sets it;
+    `!check`, the recap and the admin-UI scan leave it False and only read
+    the stored label for their plans.
     """
     with scan_context(new_scan_id()):
         return await _run_scan_in_context(horizon_filter, require_confirmation, bot,
-                                          progress, min_confluence)
+                                          progress, min_confluence, step_shock=step_shock)
 
 
 async def _run_scan_in_context(horizon_filter, require_confirmation, bot, progress,
-                               min_confluence) -> list:
+                               min_confluence, step_shock=False) -> list:
     """run_scan's body, run inside the scan id set by run_scan."""
     started = time.monotonic()
     async with _scan_lock:
@@ -1377,7 +1406,8 @@ async def _run_scan_in_context(horizon_filter, require_confirmation, bot, progre
             # the one thing a progress indicator must never do.
             with progress_store.publishing(progress):
                 alerts, newly_closed, near_close_warnings = await asyncio.to_thread(
-                    _sync_run_scan, horizon_filter, require_confirmation, progress, min_confluence
+                    _sync_run_scan, horizon_filter, require_confirmation, progress, min_confluence,
+                    step_shock=step_shock
                 )
         finally:
             runstate._mark_running(False)
