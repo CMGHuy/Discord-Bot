@@ -6,6 +6,8 @@ import os
 import pandas as pd
 
 from swingbot import config
+from swingbot.core.marketdata.providers.base import (
+    SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_OLD_PRINT)
 from swingbot.core.market.session import nyse_calendar
 
 
@@ -67,10 +69,25 @@ def fallback_rate(source_counts: list[dict]) -> float | None:
     pooled across `source_counts` -- daily-frame and live-price count dicts
     alike. None when Alpaca was asked for nothing (disabled, or its breaker
     open throughout). The one formula behind each scan's
-    ``provider_fallback_rate`` and the Risk page's pooled rate (v106)."""
-    hits = sum(int(d.get("alpaca", 0)) for d in source_counts)
-    misses = sum(int(d.get("yfinance-fallback", 0)) for d in source_counts)
+    ``provider_fallback_rate`` and the Risk page's pooled rate (v106).
+    v223: yfinance-old-print is in neither term -- an old IEX print outside
+    the regular session is neither an Alpaca hit nor an Alpaca failure."""
+    hits = sum(int(d.get(SOURCE_ALPACA, 0)) for d in source_counts)
+    misses = sum(int(d.get(SOURCE_FALLBACK, 0)) for d in source_counts)
     return misses / (hits + misses) if hits + misses else None
+
+
+def old_print_rate(price_sources: dict | None) -> float | None:
+    """v223: old IEX prints re-asked from yfinance, as a share of live-price
+    asks -- yfinance-old-print / (alpaca + yfinance-fallback +
+    yfinance-old-print), over `price_sources` only (daily frames are never
+    old prints). None when that sum is 0 or there is no count dict. Display
+    only: nothing alerts on it."""
+    if not isinstance(price_sources, dict):
+        return None
+    old = int(price_sources.get(SOURCE_OLD_PRINT, 0))
+    asked = old + sum(int(price_sources.get(k, 0)) for k in (SOURCE_ALPACA, SOURCE_FALLBACK))
+    return old / asked if asked else None
 
 
 def _is_empty(df) -> bool:
@@ -112,7 +129,7 @@ def _stale_count(tickers: list, frames: dict, today: dt.date) -> int | None:
 
 def provider_health(tickers: list, frames: dict, data_sources: dict | None,
                     price_sources: dict | None, today: dt.date) -> dict:
-    """v148 O4: one scan's provider degradation, four telemetry-row fields.
+    """v148 O4: one scan's provider degradation, five telemetry-row fields.
 
     `today` is the ET market date (``market_today()``), never
     ``date.today()``. `frames` is the scan's ticker -> frame dict, whose
@@ -122,15 +139,19 @@ def provider_health(tickers: list, frames: dict, data_sources: dict | None,
       `data_sources` + `price_sources`. Blind to a price chunk whose child was
       killed on timeout (it lands in the ``none`` bucket); that shows as the
       ``scan.run_bounded`` swallowed count instead.
+    - ``old_print_rate``: :func:`old_print_rate` over `price_sources` only
+      (v223), labelled "of live-price asks" wherever it is shown.
     - ``empty_symbols`` / ``empty_rate``: tickers with no frame or an empty one.
     - ``stale_symbols``: frames whose last bar predates the previous NYSE
       session; None when the calendar cannot say. Display only -- no
       threshold is measured yet.
     """
     rate = fallback_rate([d for d in (data_sources, price_sources) if isinstance(d, dict)])
+    old = old_print_rate(price_sources)
     empty = sum(1 for ticker in tickers if _is_empty(frames.get(ticker)))
     return {
         "provider_fallback_rate": None if rate is None else round(rate, 4),
+        "old_print_rate": None if old is None else round(old, 4),
         "empty_symbols": empty,
         "empty_rate": round(empty / len(tickers), 4) if tickers else None,
         "stale_symbols": _stale_count(tickers, frames, today),

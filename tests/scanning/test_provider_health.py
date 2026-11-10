@@ -10,7 +10,7 @@ import pytest
 
 from swingbot.core.infra import swallowed as swallowed_mod
 from swingbot.core.scanning import telemetry
-from swingbot.core.scanning.telemetry import fallback_rate, provider_health
+from swingbot.core.scanning.telemetry import fallback_rate, old_print_rate, provider_health
 
 #: Monday 2026-01-19 (Martin Luther King Jr. Day) is an NYSE holiday, so the
 #: session before Tuesday the 20th is Friday the 16th.
@@ -78,8 +78,8 @@ def test_empty_symbols_count_missing_none_and_empty_frames():
 
 def test_an_empty_universe_has_no_empty_rate():
     health = _health({}, tickers=[])
-    assert health == {"provider_fallback_rate": None, "empty_symbols": 0,
-                      "empty_rate": None, "stale_symbols": 0}
+    assert health == {"provider_fallback_rate": None, "old_print_rate": None,
+                      "empty_symbols": 0, "empty_rate": None, "stale_symbols": 0}
 
 
 # --- provider_health: stale frames ------------------------------------------------
@@ -121,7 +121,8 @@ def test_outside_the_frozen_calendar_stale_is_unknown():
 def test_the_fields_are_json_ready():
     frames = {"A": _frame("2026-01-16"), "B": None}
     health = _health(frames, data_sources={"alpaca": 1, "yfinance-fallback": 0})
-    assert set(health) == {"provider_fallback_rate", "empty_symbols", "empty_rate", "stale_symbols"}
+    assert set(health) == {"provider_fallback_rate", "old_print_rate", "empty_symbols",
+                           "empty_rate", "stale_symbols"}
     assert json.loads(json.dumps(health)) == health
 
 
@@ -134,13 +135,13 @@ def clean_counts():
     swallowed_mod.reset()
 
 
-def test_the_scan_row_helper_returns_the_four_fields(monkeypatch):
+def test_the_scan_row_helper_returns_the_provider_fields(monkeypatch):
     from swingbot.core.scanning import scan_run
     monkeypatch.setattr(scan_run, "market_today", lambda: TUESDAY_AFTER_HOLIDAY)
     stats = {"data_sources": {"alpaca": 3, "yfinance-fallback": 1}, "price_sources": {"alpaca": 0}}
     fields = scan_run._provider_health_fields(["A", "B"], {"A": _frame("2026-01-16")}, stats)
-    assert fields == {"provider_fallback_rate": 0.25, "empty_symbols": 1,
-                      "empty_rate": 0.5, "stale_symbols": 0}
+    assert fields == {"provider_fallback_rate": 0.25, "old_print_rate": None,
+                      "empty_symbols": 1, "empty_rate": 0.5, "stale_symbols": 0}
 
 
 def test_a_failing_metric_costs_its_fields_not_the_row(monkeypatch, caplog, clean_counts):
@@ -161,3 +162,53 @@ def test_the_scan_merges_the_fields_into_its_telemetry_row():
     from swingbot.core.scanning import scan_run
     source = inspect.getsource(scan_run._sync_run_scan)
     assert "scan_stats.update(_provider_health_fields(tickers, fresh_data, scan_stats))" in source
+
+
+# --- v223: old prints ---------------------------------------------------------------
+
+PRE_MARKET_DATA = {"alpaca": 85, "yfinance": 0, "yfinance-fallback": 0, "cache": 2}
+PRE_MARKET_PRICES = {"alpaca": 7, "yfinance": 0, "yfinance-fallback": 0,
+                     "yfinance-old-print": 80, "none": 0}
+
+
+def test_old_prints_are_neither_hits_nor_failures_in_the_fallback_rate():
+    health = _health({"A": _frame("2026-01-16")}, data_sources=PRE_MARKET_DATA,
+                     price_sources=PRE_MARKET_PRICES)
+    assert health["provider_fallback_rate"] == 0.0
+
+
+def test_old_print_rate_is_over_live_price_asks_only():
+    health = _health({"A": _frame("2026-01-16")}, data_sources=PRE_MARKET_DATA,
+                     price_sources=PRE_MARKET_PRICES)
+    assert health["old_print_rate"] == pytest.approx(round(80 / 87, 4))
+
+
+def test_old_print_rate_counts_real_misses_in_its_pool():
+    prices = {"alpaca": 6, "yfinance-fallback": 2, "yfinance-old-print": 2, "yfinance": 9}
+    assert old_print_rate(prices) == pytest.approx(0.2)
+
+
+@pytest.mark.parametrize("prices", [
+    {"alpaca": 0, "yfinance": 4, "yfinance-fallback": 0, "yfinance-old-print": 0, "none": 3},
+    {},
+    None,
+    "not a dict",
+])
+def test_old_print_rate_is_none_without_live_price_asks(prices):
+    assert old_print_rate(prices) is None
+
+
+def test_all_zero_counts_give_both_rates_none():
+    zero_data = {"alpaca": 0, "yfinance": 0, "yfinance-fallback": 0, "cache": 0}
+    zero_prices = dict.fromkeys(("alpaca", "yfinance", "yfinance-fallback",
+                                 "yfinance-old-print", "none"), 0)
+    health = _health({"A": _frame("2026-01-16")}, data_sources=zero_data,
+                     price_sources=zero_prices)
+    assert health["provider_fallback_rate"] is None and health["old_print_rate"] is None
+
+
+def test_a_price_dict_without_old_prints_reads_zero():
+    """A count dict with no old-print bucket (as before v223) reads 0.0: Alpaca was asked."""
+    health = _health({"A": _frame("2026-01-16")},
+                     price_sources={"alpaca": 7, "yfinance": 0, "yfinance-fallback": 1, "none": 0})
+    assert health["old_print_rate"] == 0.0

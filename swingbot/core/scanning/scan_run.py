@@ -78,9 +78,9 @@ def _count_sources(frames) -> dict:
 
 
 def _provider_health_fields(tickers: list, frames: dict, stats: dict) -> dict:
-    """v148 O4: the four provider-degradation fields for this scan's telemetry
+    """v148 O4: the provider-degradation fields for this scan's telemetry
     row, from the source counts already in `stats`. Guarded here, not by the
-    row's own try: a failure costs these four fields, never the row."""
+    row's own try: a failure costs these fields, never the row."""
     try:
         return telemetry.provider_health(tickers, frames, stats.get("data_sources"),
                                          stats.get("price_sources"), market_today())
