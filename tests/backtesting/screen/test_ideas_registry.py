@@ -305,3 +305,64 @@ def test_the_shock_failed_bounce_idea_pins_level_context_control_and_family():
     assert idea.control is shock_failed_bounce_short.control_events
     assert idea.family == IDEAS["shock_support_break_short"].family
     assert idea.levels is None and idea.entry == "next_open"
+
+
+def _states(df):
+    return df
+
+
+def test_modes_and_the_defaults():
+    """v214 G1: MODE is part of the frozen definition, like RACE/DIRECTION/ENTRY."""
+    assert ideas.MODES == ("edge", "avoid")
+    idea = Idea(name="x", events=_events, time_cap_bars=5)
+    assert (idea.mode, idea.states) == ("edge", None)
+
+
+def test_every_registered_idea_reads_edge_mode_with_no_states():
+    """v214 witness: every idea frozen before v214 reads MODE = "edge" and no
+    states(df), so its verdict, results doc and hypothesis stay byte-identical."""
+    assert {n: (i.mode, i.states) for n, i in IDEAS.items()} == {
+        n: ("edge", None) for n in IDEAS}
+
+
+def test_mode_and_states_sit_directly_after_context_kind():
+    names = [f.name for f in dataclasses.fields(Idea)]
+    at = names.index("context_kind")
+    assert names[at + 1: at + 3] == ["mode", "states"]
+
+
+def test_load_reads_mode_and_states_and_defaults_to_edge(monkeypatch):
+    plain = _fake_module(monkeypatch, "fake_edge_default", CAP=10)
+    avoid = _fake_module(monkeypatch, "fake_avoid", CAP=20, MODE="avoid", states=_states)
+    assert (ideas._load(plain).mode, ideas._load(plain).states) == ("edge", None)
+    loaded = ideas._load(avoid)
+    assert loaded.mode == "avoid" and loaded.states is _states
+
+
+def test_an_unknown_mode_is_refused():
+    with pytest.raises(ValueError, match="mode 'veto'"):
+        Idea(name="x", events=_events, time_cap_bars=20, mode="veto")
+
+
+def test_an_avoid_idea_needs_states_and_an_edge_idea_refuses_them():
+    with pytest.raises(ValueError, match="avoid idea needs states"):
+        Idea(name="x", events=_events, time_cap_bars=20, mode="avoid")
+    with pytest.raises(ValueError, match="edge idea takes no states"):
+        Idea(name="x", events=_events, time_cap_bars=20, states=_states)
+    idea = Idea(name="x", events=_events, time_cap_bars=20, mode="avoid", states=_states)
+    assert idea.mode == "avoid" and idea.states is _states
+
+
+def test_an_avoid_idea_races_the_fixed_shape_from_the_next_open():
+    with pytest.raises(ValueError, match="fixed shape from the next open"):
+        Idea(name="x", events=_events, time_cap_bars=60, race_shape="trail",
+             mode="avoid", states=_states)
+    with pytest.raises(ValueError, match="fixed shape from the next open"):
+        Idea(name="x", events=_events, time_cap_bars=20, direction="short",
+             entry="level", levels=_levels, mode="avoid", states=_states)
+
+
+def test_load_refuses_an_avoid_module_without_states(monkeypatch):
+    bad = _fake_module(monkeypatch, "fake_avoid_no_states", CAP=20, MODE="avoid")
+    with pytest.raises(ValueError, match="states"):
+        ideas._load(bad)

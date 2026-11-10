@@ -24,6 +24,13 @@ v211: a module with CONTEXT may also export CONTEXT_KIND ("z" default, or
 close): the runner loads it under the same raw-index and SPY-session checks
 but never z-scores it, and the v174 z diagnostics do not apply. A changed
 CONTEXT_KIND is a new idea with a new name.
+
+v214: a module may also export MODE ("edge" default, or "avoid") and, for an
+avoid idea, states(df): one frame per ticker with bool columns event,
+control_condition and condition, and a float column bottom (spec v214 G3). An
+avoid idea races the fixed shape from the next open, and its verdict is the
+six-clause avoid rule (screen/verdict.py). A changed MODE is a new idea with a
+new name.
 """
 from __future__ import annotations
 
@@ -54,6 +61,9 @@ ENTRY_MODES = ("next_open", "level")
 #: v211: how a context file is read: "z" (trailing z-score, v174) or "level"
 #: (raw values, no z-coverage floor).
 CONTEXT_KINDS = ("z", "level")
+#: v214: "edge" (every idea before v214: must beat the matched null) or "avoid"
+#: (must do worse than the null AND a control arm; licenses a veto spec only).
+MODES = ("edge", "avoid")
 
 
 def _shape_problem(idea: "Idea") -> str | None:
@@ -90,6 +100,18 @@ def _context_problem(idea: "Idea") -> str | None:
     return None
 
 
+def _mode_problem(idea: "Idea") -> str | None:
+    if idea.mode not in MODES:
+        return f"{idea.name}: mode {idea.mode!r} is not one of {MODES}"
+    if idea.mode == "avoid" and idea.states is None:
+        return f"{idea.name}: an avoid idea needs states(df)"
+    if idea.mode == "edge" and idea.states is not None:
+        return f"{idea.name}: an edge idea takes no states"
+    if idea.mode == "avoid" and (idea.entry != "next_open" or idea.race_shape != "fixed"):
+        return f"{idea.name}: an avoid idea races the fixed shape from the next open"
+    return None
+
+
 @dataclass(frozen=True)
 class Idea:
     name: str
@@ -106,9 +128,12 @@ class Idea:
     control: Callable[[pd.DataFrame], pd.Series] | None = None
     family: tuple[str, ...] = ()
     context_kind: str = "z"
+    mode: str = "edge"
+    states: Callable[[pd.DataFrame], pd.DataFrame] | None = None
 
     def __post_init__(self):
-        problem = _side_problem(self) or _shape_problem(self) or _context_problem(self)
+        problem = (_side_problem(self) or _shape_problem(self)
+                   or _context_problem(self) or _mode_problem(self))
         if problem:
             raise ValueError(problem)
         object.__setattr__(self, "params", MappingProxyType(dict(self.params)))
@@ -128,7 +153,9 @@ def _load(name: str) -> Idea:
                 levels=getattr(module, "levels", None),
                 control=getattr(module, "control_events", None),
                 family=tuple(getattr(module, "FAMILY", ())),
-                context_kind=getattr(module, "CONTEXT_KIND", "z"))
+                context_kind=getattr(module, "CONTEXT_KIND", "z"),
+                mode=getattr(module, "MODE", "edge"),
+                states=getattr(module, "states", None))
 
 
 IDEAS: dict[str, Idea] = {name: _load(name) for name in IDEA_MODULES}
