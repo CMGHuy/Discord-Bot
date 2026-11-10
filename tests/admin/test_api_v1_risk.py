@@ -662,6 +662,21 @@ def test_fallback_rate_pools_daily_frames_and_live_prices(
     assert ds["fallback_rate"] == pytest.approx(6 / 80)
 
 
+def test_the_pooled_fallback_rate_excludes_old_prints(logged_in, tmp_path, monkeypatch):
+    """v223: an old IEX print outside regular hours is neither an Alpaca hit
+    nor a failure, so 80 old prints leave the pooled rate at 1 / 10."""
+    from swingbot.core.scanning import engine
+    from swingbot.core.scanning import telemetry
+
+    monkeypatch.setattr(telemetry, "TELEMETRY_PATH", str(tmp_path / "scan_telemetry.jsonl"))
+    engine.log_scan_telemetry({"duration_s": 60, "tickers": 150,
+        "data_sources": {"alpaca": 2, "yfinance": 0, "yfinance-fallback": 0, "cache": 70},
+        "price_sources": {"alpaca": 7, "yfinance": 2, "yfinance-fallback": 1,
+                          "yfinance-old-print": 80, "none": 0}})
+    ds = logged_in.get("/api/v1/risk").get_json()["scan_health"]["data_sources"]
+    assert ds["fallback_rate"] == pytest.approx(1 / 10)
+
+
 def test_data_sources_fallback_rate_is_null_without_alpaca_traffic(
         logged_in, tmp_path, monkeypatch):
     from swingbot.core.scanning import engine

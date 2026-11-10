@@ -54,7 +54,9 @@ def _data_sources_summary(rows: list) -> dict:
     `_DATA_SOURCE_WINDOW` scans that logged `data_sources`;
     None when none of them asked Alpaca for anything. The formula is
     telemetry.fallback_rate, shared with each scan's provider_fallback_rate
-    (v148 O4).
+    (v148 O4). From v223 on, old IEX prints outside regular hours
+    (yfinance-old-print) are excluded -- for one window after that deploy the
+    pool mixes rows that still counted them as fallback, so the rate falls.
 
     `breaker_open` is this admin process's own router -- the bot's scans run
     their fetches in spawned children whose breaker never reaches here, so
