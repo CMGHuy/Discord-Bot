@@ -341,6 +341,10 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # whole directory is the target because V190-3/4/12..16 add files there.
     ("data/market_data_pit/", ("tests/history_store/",)),
     ("data/universe/symbol_aliases.json", ("tests/history_store/",)),
+    # v211 V211-12: the --count-only golden captured from the base, compared
+    # byte for byte by the preflight test.
+    ("tests/backtest_scripts/golden/count_only_range_breakdown_close.md",
+     ("tests/backtest_scripts/test_screen_preflight.py",)),
 )
 
 # Known to affect no test. Distinct from "unplaceable", which widens: silence
