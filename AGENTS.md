@@ -168,11 +168,11 @@ Detail: `known-traps.md` § Two OHLCV caches, `backtest-methodology.md`
 § Windows.
 
 Specs from v141 carry `**Screen:**` under `Edge:` (an entry strategy or filter
-cites a `SCREEN-PASS` ledger row from `scripts/backtest/screen_idea.py`, except a
-fill-timing veto (decided by price between the alert and the fill), which says
-`exempt (post-signal)` and must clear Stage -1 reachability (v192); a screen
-fail is closed, never re-screened under either race shape; each idea freezes one,
-`fixed` or v163 `trail` with cap >= 60, under the same pass rule) and from v146
+cites a `SCREEN-PASS` row of `scripts/backtest/screen_idea.py`; an `Edge: expectancy`
+veto may cite `<id> SCREEN-AVOID-PASS (veto)` (v214: >= 0.10R worse than the null
+and a control arm); a fill-timing veto says `exempt (post-signal)` and clears
+Stage -1 reachability (v192); a fail is closed, never re-screened; each idea
+freezes one race (`fixed`/`trail` cap >= 60) and one `MODE`) and from v146
 `**Panel:**` (1-3 role skills run through `panel`; an unresolved `BLOCKING`
 finding stops close-out). Feature
 acceptance is one gate (`swingbot/core/backtesting/acceptance.py`, driven by
