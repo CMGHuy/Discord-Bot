@@ -4,12 +4,19 @@ Renderer half (V210-1): the event's payload becomes one plain status embed --
 headline, trigger numbers and, on an entry into SHOCK, one line per open long
 for someone with resting orders at a broker. Never an alert embed: no Kind, no
 disclaimer. Pure: no database, no network.
+
+Payload half (V210-2): open-long rows, the rate limit and the queue event; config is
+read only for the target channel.
 """
-from datetime import datetime
+import math
+from collections.abc import Mapping
+from datetime import datetime, timedelta, timezone
 
 import discord
 
+from swingbot import config
 from swingbot.core import presentation as ui
+from swingbot.core.infra.lifecycle_events import make_event
 from swingbot.core.market import shock
 from swingbot.core.presentation import kinds
 
@@ -109,3 +116,68 @@ def build_shock_embed(event: dict) -> discord.Embed:
     embed.set_footer(text=f"Event {event['event_id']}")
     embed.timestamp = datetime.fromisoformat(payload["occurred_at"])
     return embed
+
+
+KIND = "market_shock"
+
+
+def _positive(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def _age_min(opened_at, now: datetime) -> int:
+    try:
+        opened = datetime.fromisoformat(str(opened_at))
+    except ValueError:
+        return 0
+    opened = opened if opened.tzinfo else opened.replace(tzinfo=timezone.utc)
+    return max(int((now - opened).total_seconds() // 60), 0)
+
+
+def _long_row(trade: dict, last_prices: Mapping[str, float], now: datetime) -> dict | None:
+    entry, stop = _positive(trade.get("entry")), _positive(trade.get("stop_loss"))
+    if entry is None or stop is None:
+        return None
+    last = _positive(last_prices.get(trade["ticker"]))
+    risk = entry - stop
+    open_r = None if last is None or risk <= 0 else (last - entry) / risk
+    return {"ticker": str(trade["ticker"]), "entry": entry, "stop": stop, "last": last,
+            "open_r": open_r, "age_min": _age_min(trade.get("opened_at"), now),
+            "through_stop": last is not None and last <= stop}
+
+
+def open_long_rows(trades: list[dict], last_prices: Mapping[str, float],
+                   now: datetime) -> list[dict]:
+    """One row per open long, by ticker; shorts and rows without entry/stop are skipped."""
+    rows = (_long_row(t, last_prices, now) for t in trades
+            if t.get("direction") == "bullish" and t.get("ticker"))
+    return sorted((row for row in rows if row is not None), key=lambda row: row["ticker"])
+
+
+def should_notify(prior_label: str, new_label: str, last_notice_at: datetime | None,
+                  now: datetime, min_dwell_min: int) -> bool:
+    """One notice per SHOCK_MIN_DWELL_MIN, except a transition into SHOCK."""
+    if prior_label == new_label:
+        return False
+    if new_label == shock.SHOCK or last_notice_at is None:
+        return True
+    return now - last_notice_at >= timedelta(minutes=min_dwell_min)
+
+
+def notice_payload(prior: shock.ShockState, new: shock.ShockState,
+                   reading: shock.ShockReading, open_longs: list[dict], now: datetime) -> dict:
+    return {"label": new.label, "prior_label": prior.label, "occurred_at": now.isoformat(),
+            "reading": reading.as_row(), "open_longs": list(open_longs),
+            "entry_into_shock": new.label == shock.SHOCK and prior.label != shock.SHOCK}
+
+
+def notice_event(payload: dict, *, as_of: datetime) -> dict:
+    """The queue event; the channel id is computed here, never via bot.get_channel."""
+    channel = config.DISCORD_CHANNEL_OPS_ID or config.DISCORD_CHANNEL_TRADES_ID or None
+    return make_event(transition_id=f"{KIND}:{as_of.isoformat()}", kind=KIND,
+                      target_channel_id=channel, occurred_at=payload["occurred_at"],
+                      payload=payload)
