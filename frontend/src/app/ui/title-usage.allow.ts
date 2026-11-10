@@ -26,6 +26,8 @@ export const TITLE_INPUT_ELEMENTS: readonly string[] = ['sb-panel-header', 'sb-e
 
 export const TITLE_ALLOW: readonly TitleSite[] = [
   // -- shell ---------------------------------------------------------------
+  { file: 'shell/shock-pill.ts', binding: '[attr.title]="summary()"', kind: 'echo', note: 'same sentence as its aria-label: the market-shock summary (v210)' },
+  { file: 'shell/tape/tape.ts', binding: '[attr.title]="shockTitle()"', kind: 'echo', note: 'same sentence as its aria-label: the market-shock summary (v210)' },
   { file: 'shell/read-only-badge.ts', binding: '[attr.title]="spoken()"', kind: 'echo', note: 'full sentence the badge says in its visually hidden span (v207)' },
   { file: 'shell/profile-menu.ts', binding: '[attr.title]="haloTitle()"', kind: 'control-name', note: 'the avatar menu button: bot up/down beside its aria-label' },
   { file: 'shell/tape/tape.ts', binding: "[attr.title]=\"asOfTime() === ABSENT ? null : 'Tape data as of ' + asOfTime()\"", kind: 'echo', note: 'as-of time; each tile shows its own age' },
