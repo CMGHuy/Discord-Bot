@@ -141,7 +141,7 @@ right before the commit. `Bump:` states a level only, never a version number.
 **No file over 1500 lines, no task over 20 KB, no plan over 20 tasks** — split,
 never compress a task. **No plan schedules a full suite; CI runs it.** Specs and plans are
 committed on `main` **the moment written (each plan index/part once `plan_lint.py` passes), never left uncommitted**; branch only to implement. Run `/new-doc`; detail: `document-conventions.md`, `document-lifecycle.md`.
-**Write a plan in two phases** after `plan-briefer` (Sonnet) gathers the code
+**Every spec and every implementation plan is written on Claude Opus** (main session, `plan-writer` and any agent authoring spec or plan text; partner, 2026-11-10); only `plan-briefer`'s code gathering may run cheaper. **Write a plan in two phases** after `plan-briefer` (Sonnet) gathers the code
 into one brief: `plan-writer` `mode=index`, then one (its **Goal** explains *why* and *what changes*: `document-conventions.md`)
 `mode=part <N>` per part, **at most 2 part writers at once**; each writer appends task by
 task to disk; `scripts/dev/plan_lint.py` must pass. **At most 2 plans in progress per session**; a plan cut off by

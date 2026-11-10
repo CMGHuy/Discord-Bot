@@ -402,7 +402,7 @@ same work to them so bulk output stays out of your context:
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
 symbols exist), `task-implementer` then `task-reviewer` (one plan task each: `task_handoff.py <plan> <id>` writes the handoff; `agent_cost.py` checks cost),
 `plan-briefer` (gathers a spec's code context into
-`.superpowers/briefs/<plan base>.md` first), `plan-writer` (a plan from an
+`.superpowers/briefs/<plan base>.md` first), `plan-writer` (every spec and plan is written at the `opus` tier -- partner, 2026-11-10; a plan from an
 approved spec and that brief: `mode=index` (index and task ledger) first,
 then one `mode=part <N>` per part, one at a time here, each appending task by
 task to disk; at most 2 plans in progress per session; a plan cut off
