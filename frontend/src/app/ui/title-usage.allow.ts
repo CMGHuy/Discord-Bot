@@ -50,6 +50,7 @@ export const TITLE_ALLOW: readonly TitleSite[] = [
   { file: 'workspaces/system/swallowed-errors-panel.ts', binding: '[attr.title]="line.lastSeenAt"', kind: 'echo', note: 'exact timestamp of the relative time shown' },
   // -- trades ----------------------------------------------------------------
   { file: 'workspaces/trades/trade-detail.ts', binding: "[title]=\"'Trade ID: ' + trade.id\"", kind: 'echo', note: 'the id printed beside it' },
+  { file: 'workspaces/trades/trades.ts', binding: "[title]=\"'No live quote -- last close, ' + (row.last_close_date ?? 'date unknown')\"", kind: 'echo', note: 'restates the greyed "close MM-DD" tag the cell prints' },
   { file: 'workspaces/trades/trades.ts', binding: 'title="Trailing stop"', kind: 'control-name', note: 'names the trailing-stop icon' },
   // -- versions / watchlist --------------------------------------------------
   { file: 'workspaces/versions/versions.ts', binding: "[attr.title]=\"component + ' ' + version + ' — click to filter'\"", kind: 'control-name', note: 'filter chip button: names what a click does' },
