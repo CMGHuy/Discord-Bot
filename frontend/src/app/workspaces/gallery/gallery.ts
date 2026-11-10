@@ -43,6 +43,7 @@ import { InlineMd } from '../../ui/inline-md';
 import { ControlRow, Drawer, Panel, Tab, TabBar } from '../../ui/layout';
 import { LineChartSeries } from '../../ui/line-chart';
 import { LineChart } from '../../ui/line-chart';
+import { ExposureStrip } from '../../ui/exposure-strip';
 import { Magnitude } from '../../ui/magnitude';
 import { Matrix } from '../../ui/matrix';
 import { MetricCard } from '../../ui/metric-card';
@@ -179,6 +180,7 @@ interface ContractRow {
     Icon,
     InlineMd,
     LineChart,
+    ExposureStrip,
     Magnitude,
     Matrix,
     MetricCard,
@@ -564,6 +566,7 @@ interface ContractRow {
       <sb-donut [slices]="[{label: 'A', count: 3}, {label: 'B', count: 1}, {label: 'Absent', count: 0}]" />
       <sb-scatter [points]="[{x: .2, y: 2, tone: 'pos'}, {x: 1, y: .4, tone: 'neg'}]" xLabel="MAE (R)" yLabel="MFE (R)" />
       <sb-line-chart [series]="lineChartSeries" />
+      <sb-exposure-strip [dates]="exposureDates" [bars]="exposureBars" />
       <sb-chart-container [loading]="false" [error]="null" [hasData]="true" [height]="200" caption="AAPL -- daily">
         <sb-trade-chart [data]="null" />
       </sb-chart-container>
@@ -1123,6 +1126,13 @@ export class Gallery {
         { date: '2026-04-01', value: 0.6 },
       ],
     },
+  ];
+
+  protected readonly exposureDates = ['2026-01-01', '2026-02-01', '2026-03-01'];
+  protected readonly exposureBars = [
+    { date: '2026-01-01', pct: 30, approx: false },
+    { date: '2026-02-01', pct: 55, approx: true },
+    { date: '2026-03-01', pct: 40, approx: false },
   ];
 
   /** v85 R2-05 -- sb-timeline demo rows. */
