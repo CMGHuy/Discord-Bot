@@ -35,6 +35,7 @@ from swingbot.core.marketdata import data_store, universe
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import UnrealizedPnL, compute_unrealized_pnl, load_account_config
+from swingbot.core.planning.params import shock_asof
 from swingbot.core.planning.plan_manager import log_plan_armed
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.planning import rebuild
@@ -44,7 +45,7 @@ from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
 from . import (analyze, dedup, fetch, lane_overlap, progress_store, rejection_recorder, runstate,
-               short_funnel, strategy_pass, telemetry)
+               shock_scan, short_funnel, strategy_pass, telemetry)
 from .short_candidates import ShortReference, build_reference_rels, extra_candidates
 from .short_reference import completed_frame as _completed, etf_for_sector
 from .analyze import paper_trade_decision
@@ -102,7 +103,7 @@ def _skip_rejected_plan(item, require_confirmation: bool) -> None:
 
 def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, sector_of_ticker,
                              etf_symbol_of_sector, sector_etf_frames, trade_log, alerts,
-                             require_confirmation) -> dict:
+                             require_confirmation, shock_state: str | None = None) -> dict:
     """Run v93's opt-in path; manual checks are strictly shadow-only.
 
     The compression short's shadow evidence (compression_shadow.jsonl, scan-level reasons) accrues ONLY
@@ -117,7 +118,7 @@ def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, s
         mode = "shadow"
     live_allow = {value.strip() for value in (config.STRATEGY_ALERTS_LIVE_STRATEGIES or "").split(",") if value.strip()}
 
-    def asof_of(ticker):
+    def rs_asof(ticker):
         if rs_cache is None or spy_df is None or fresh_data.get(ticker) is None:
             return {}
         pct = rs_factors.rs_percentile(fresh_data[ticker], spy_df, universe_rels=rs_cache.get("rels"))
@@ -130,8 +131,12 @@ def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, s
         return {"rs_pctile": pct, "sector_pctile": sector_pct,
                 "rs_combined": rs_factors.rs_score(pct, sector_pct) if sector_pct is not None else pct}
 
+    def asof_of(ticker):
+        # v209: the scan's shock label rides on every strategy plan's asof.
+        return {**rs_asof(ticker), **shock_asof(shock_state)}
+
     def rs_combined_of(ticker):
-        return asof_of(ticker).get("rs_combined")
+        return rs_asof(ticker).get("rs_combined")
 
     now = datetime.now(timezone.utc)
     compression_of, earnings_of = _compression_hooks(
@@ -400,29 +405,31 @@ def _trade_quote(requote, ticker: str) -> dict | None:
     return rebuild.quote_record(price, requote.age_at_persist(ticker))
 
 
-def _attach_item_plan(item, scenario, df, regimes, regime) -> None:
+def _attach_item_plan(item, scenario, df, regimes, regime, shock_state=None) -> None:
     """Attach the v2 plan for `scenario` at the frame's last bar's regime;
-    shared by the merge loop and the v171 pre-post rebuild."""
+    shared by the merge loop and the v171 pre-post rebuild. `shock_state` is
+    the scan's market-shock label (v209), None under MARKET_SHOCK_MODE=off."""
     regime2_state = analyze._regime_at(regimes, df.index[-1] if df is not None and len(df) > 0 else None)
     analyze.attach_plan_v2(item, scenario, df,
                            item.result.ticker, item.result.horizon_key,
                            level_map=item.level_map, regime=regime,
                            rs_percentile=item.rs_percentile, breadth=item.breadth,
-                           regime2_state=regime2_state)
+                           regime2_state=regime2_state, shock_state=shock_state)
     if item.plan_v2 is not None:
         item.plan_v2.regime_aligned = not (
             item.htf_info and item.htf_info.get("counter_trend", False)
         )
 
 
-def _rebuild_item(item, price, *, fresh_data, regimes, regime, require_confirmation):
+def _rebuild_item(item, price, *, fresh_data, regimes, regime, require_confirmation,
+                  shock_state=None):
     """v171 D5: rebuild `item` at `price` from the scan's own frame. A drop
     revokes the confirmation, so it consumes no cooldown and no dedup."""
     df = fresh_data.get(item.result.ticker)
     outcome = rebuild.rebuild_before_post(
         item, price,
         rescenario=lambda p: analyze.rescenario(item, df, p),
-        attach=lambda s: _attach_item_plan(item, s, df, regimes, regime))
+        attach=lambda s: _attach_item_plan(item, s, df, regimes, regime, shock_state))
     if not outcome.kept:
         item.plan_v2_rejected = outcome.reason
         _skip_rejected_plan(item, require_confirmation)
@@ -490,8 +497,21 @@ def _log_heat_block(ticker: str, enforced_pct: float, add_pct: float, cap_pct: f
              enforced_pct, add_pct, cap_pct, ticker)
 
 
+def _shock_state_for_pass(**kwargs) -> str | None:
+    """v209: the shock pass's label for this scan. run_shock_pass swallows its own
+    failures; this wrapper is belt and braces so a raise can never stop the scan
+    (LONG issuing unchanged): the pass then stamps no shock_state key."""
+    try:
+        return shock_scan.run_shock_pass(**kwargs)
+    except Exception as exc:
+        swallowed(log, "scan.shock.call", exc,
+                  "shock pass raised; scanning without a label: %s", exc, exc_info=True)
+        return None
+
+
 def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "ScanProgress" = None,
-                    min_confluence: int = None, params: ScanParams | None = None) -> tuple:
+                    min_confluence: int = None, params: ScanParams | None = None,
+                    step_shock: bool = False) -> tuple:
     """
     All the heavy synchronous work -- network fetches, pandas computation,
     matplotlib chart rendering -- lives here with NO async/await, so it can
@@ -503,6 +523,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     `min_confluence` overrides config.MIN_TARGET_CONFLUENCE_COUNT for this
     run only (used by `!check`'s optional argument); pass None (the
     default) to just use whatever's currently configured.
+
+    `step_shock` (v209) is run_scan's flag: True only for the scheduled
+    session scan, which may then write a market-shock reading.
     """
     _scan_started = time.monotonic()   # Task E82: feeds log_scan_telemetry's duration_s
     fetch.reset_fetch_stats()          # v106: cold_fetch_s / price_sources for this scan
@@ -545,7 +568,9 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # Phase 1b: one batched live-price fetch for the whole watchlist (v55),
     # still inside the crawl phase so the ANALYZE phase below stays pure
     # dict lookups -- see _fetch_live_prices and _scan_one's use of it.
-    live_prices = fetch._fetch_live_prices(tickers, progress)
+    shock_prices = fetch._fetch_live_prices(shock_scan.quote_tickers(tickers, step_shock), progress)
+    live_prices = shock_scan.scan_quotes(shock_prices, tickers)   # v209: SPY/QQQ extras feed the shock pass only
+    quotes_at = datetime.now(timezone.utc)   # v209: live_prices carry no per-quote time
     _finish_phase("live_prices")
 
     # Market breadth (Task E28): % of the just-crawled universe trading above
@@ -621,6 +646,13 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         sector_of_ticker = {}
         etf_symbol_of_sector = {}
         sector_etf_frames = {}
+
+    # v209: one market-shock reading per scheduled pass (shock_scan owns the
+    # NYSE-regular-hours gate and swallows its own failures); the returned
+    # label is stamped on this pass's plans. None under MARKET_SHOCK_MODE=off.
+    shock_state = _shock_state_for_pass(
+        step_shock=step_shock, frames=fresh_data, live_prices=shock_prices,
+        sector_of=sector_of_ticker, quotes_at=quotes_at, spy_df=spy_df)
 
     # Market context (P0): stamp every crawled frame with the ctx_* block so
     # entry_filters.entries_for() can read the regime straight off `df`. This
@@ -837,7 +869,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # timing exactly -- a still-debouncing scenario no longer pays
                 # for plan construction on every scan pass.
                 _attach_item_plan(item, item.plan, fresh_data.get(item.result.ticker),
-                                  regimes, regime)
+                                  regimes, regime, shock_state=shock_state)
                 if (config.PLAN_ENGINE_V2 == "on"
                         and getattr(item, "plan_v2_rejected", None)):
                     filtered_by_rr += 1
@@ -934,7 +966,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     requote = Requote(deduped)
     for item in requote.iter_fresh(deduped, rebuild=functools.partial(
             _rebuild_item, fresh_data=fresh_data, regimes=regimes, regime=regime,
-            require_confirmation=require_confirmation)):
+            require_confirmation=require_confirmation, shock_state=shock_state)):
         if runstate.is_stop_requested():
             log.info("Alert building: stop requested -- ending early (%d/%d alert(s) built so far)",
                       len(alerts), len(deduped))
@@ -1280,7 +1312,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         tickers=tickers, fresh_data=fresh_data, spy_df=spy_df, regimes=regimes,
         rs_cache=rs_cache, sector_of_ticker=sector_of_ticker,
         etf_symbol_of_sector=etf_symbol_of_sector, sector_etf_frames=sector_etf_frames,
-        trade_log=trade_log, alerts=alerts, require_confirmation=require_confirmation)
+        trade_log=trade_log, alerts=alerts, require_confirmation=require_confirmation,
+        shock_state=shock_state)
 
     # Filled in only now that the alert-building loop (which is what actually
     # computes it) has finished -- lets callers explain gaps like "2
@@ -1336,7 +1369,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
 
 
 async def run_scan(horizon_filter: str = "all", require_confirmation: bool = True, bot=None, progress: "ScanProgress" = None,
-                    min_confluence: int = None) -> list:
+                    min_confluence: int = None, *, step_shock: bool = False) -> list:
     """
     Thin async wrapper: runs the entire synchronous scan pipeline in a
     background thread (so it never blocks the gateway heartbeat), then
@@ -1357,14 +1390,19 @@ async def run_scan(horizon_filter: str = "all", require_confirmation: bool = Tru
     thread (asyncio.to_thread copies the context) and in map_tickers' pool
     (which submits through with_current_context) -- carries one scan id, so
     `grep s-1405k3 logs/bot.log` shows the scan end to end.
+
+    v209: `step_shock` (keyword only) lets this pass take a market-shock
+    reading and step the state. Only the scheduled session scan sets it;
+    `!check`, the recap and the admin-UI scan leave it False and only read
+    the stored label for their plans.
     """
     with scan_context(new_scan_id()):
         return await _run_scan_in_context(horizon_filter, require_confirmation, bot,
-                                          progress, min_confluence)
+                                          progress, min_confluence, step_shock=step_shock)
 
 
 async def _run_scan_in_context(horizon_filter, require_confirmation, bot, progress,
-                               min_confluence) -> list:
+                               min_confluence, step_shock=False) -> list:
     """run_scan's body, run inside the scan id set by run_scan."""
     started = time.monotonic()
     async with _scan_lock:
@@ -1377,7 +1415,8 @@ async def _run_scan_in_context(horizon_filter, require_confirmation, bot, progre
             # the one thing a progress indicator must never do.
             with progress_store.publishing(progress):
                 alerts, newly_closed, near_close_warnings = await asyncio.to_thread(
-                    _sync_run_scan, horizon_filter, require_confirmation, progress, min_confluence
+                    _sync_run_scan, horizon_filter, require_confirmation, progress, min_confluence,
+                    step_shock=step_shock
                 )
         finally:
             runstate._mark_running(False)

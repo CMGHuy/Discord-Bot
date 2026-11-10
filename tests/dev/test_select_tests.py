@@ -719,3 +719,12 @@ def test_targets_inside_a_selected_directory_are_collapsed(sel, tmp_path):
     assert (result.full, result.targets) == (
         False, ["tests/dev/test_doc_section.py", "tests/hooks/",
                 "tests/scout/test_generator_roles.py"])
+
+
+def test_shock_replay_fixtures_route_to_the_replay_test(sel):
+    target = "tests/market/test_shock_acceptance_a1.py"
+    for rel in ("tests/fixtures/shock_replay/validation_days.json",
+                "tests/fixtures/shock_replay/2025-04-04.json.gz",
+                "tests/fixtures/shock_replay_2026_11_05.json"):
+        result = sel.select([rel], REPO)
+        assert result.full is False and target in result.targets, rel
