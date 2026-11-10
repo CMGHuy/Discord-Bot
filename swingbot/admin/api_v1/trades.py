@@ -1419,6 +1419,11 @@ def _attach_door_prices(live: list[dict]) -> None:
     quotes = market_values.read_quotes([r["ticker"] for r in live])
     for r in live:
         r.update(market_values.quote_fields(quotes.get(str(r["ticker"]).upper())))
+    unpriced = [r["ticker"] for r in live if r.get("current_price") is None]
+    closes = market_values.last_close_fields(unpriced)
+    for r in live:
+        if r.get("current_price") is None:
+            r.update(closes.get(str(r["ticker"]).upper(), {}))
 
 
 def _attach_current_prices(rows: list[dict]) -> None:

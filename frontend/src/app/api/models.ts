@@ -83,6 +83,10 @@ export interface RowQuoteFields {
   price_age_s?: number | null;
   price_refreshing?: boolean;
   price_error?: string | null;
+  /** Sent only while `current_price` is null: the last cached daily close and its
+   *  bar date (YYYY-MM-DD). Shown greyed as a close, never as a live price. */
+  last_close?: number | null;
+  last_close_date?: string | null;
 }
 
 export interface TradeCollection extends Collection<TradeRow> { prices_as_of?: string | null; market_meta?: MarketMeta; }

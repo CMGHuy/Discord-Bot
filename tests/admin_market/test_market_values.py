@@ -132,3 +132,24 @@ def test_request_refresh_enqueues_at_user_priority(market):
 def test_request_refresh_with_no_symbols_enqueues_nothing(market):
     assert mv.request_refresh([]) == 0
     assert market.queue.pending == {}
+
+
+def test_last_close_fields_reads_the_cached_daily_bar(monkeypatch):
+    import pandas as pd
+    from swingbot.core.marketdata import daily_readonly
+    frame = pd.DataFrame({"Close": [10.0, 12.5]}, index=pd.to_datetime(["2026-11-06", "2026-11-09"]))
+    monkeypatch.setattr(daily_readonly, "read_cached_daily",
+                        lambda syms, period="2y", min_rows=1: daily_readonly.ReadOnlyBars(
+                            {"ASTS": frame}, {"ARM": "no_file"}, {}))
+    got = mv.last_close_fields(["asts", "ARM"])
+    assert got == {"ASTS": {"last_close": 12.5, "last_close_date": "2026-11-09"}}
+
+
+def test_last_close_fields_is_empty_when_the_cache_is_not_mounted(monkeypatch):
+    from swingbot.core.marketdata import daily_readonly
+
+    def down(*a, **k):
+        raise daily_readonly.DailyCacheUnavailable("not mounted")
+    monkeypatch.setattr(daily_readonly, "read_cached_daily", down)
+    assert mv.last_close_fields(["ASTS"]) == {}
+    assert mv.last_close_fields([]) == {}

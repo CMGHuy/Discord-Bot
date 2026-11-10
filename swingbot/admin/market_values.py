@@ -133,6 +133,34 @@ def quote_fields(quote: Optional[MarketQuote]) -> dict:
             "price_refreshing": quote.refreshing, "price_error": quote.error}
 
 
+def last_close_fields(symbols: Iterable[str]) -> dict[str, dict]:
+    """{SYMBOL: {"last_close", "last_close_date"}} from the cached daily bars, for
+    rows with no live quote. A greyed last-known price beats an empty cell, but it
+    is shown as a close with its date, never as a live price, and nothing derived
+    (P&L, status bar) is computed from it. Reads the file cache only; a symbol with
+    no bars, or a cache that is not mounted, is simply absent."""
+    wanted = _upper_unique(symbols)
+    if not wanted:
+        return {}
+    from swingbot.core.marketdata import daily_readonly
+    try:
+        frames = daily_readonly.read_cached_daily(wanted, period="6mo").frames
+    except Exception as exc:  # noqa: BLE001 - the page renders without a last close
+        swallowed(log, "ops.admin.market_values.last_close", exc, "last close unreadable: %s", exc)
+        return {}
+    out: dict[str, dict] = {}
+    for sym, df in frames.items():
+        try:
+            close = float(df["Close"].iloc[-1])
+            stamp = df.index[-1]
+            day = stamp.date().isoformat() if hasattr(stamp, "date") else str(stamp)[:10]
+        except Exception:  # noqa: BLE001 - one malformed frame never hides the others
+            continue
+        if close > 0:
+            out[sym] = {"last_close": close, "last_close_date": day}
+    return out
+
+
 def _meta(**overrides) -> dict:
     meta = {"as_of": None, "refreshing": False, "stale_count": 0, "missing_count": 0,
             "incomplete": False, "computed_at": None, "stale_inputs": False,

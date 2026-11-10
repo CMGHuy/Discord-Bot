@@ -406,6 +406,20 @@ describe('Trades - price age and Refresh (v201)', () => {
     expect(cellText(cells[0])).toContain('100.00');
   });
 
+  it('an unpriced row shows its last close greyed and dated, not as a live price', () => {
+    const el = renderPriced([row({ id: 'a', ticker: 'ASTS', status: 'ACTIVE', current_price: null,
+      last_close: 36.86, last_close_date: '2026-11-09' })]);
+    const lc = el.querySelector('tbody .last-close')!;
+    expect(cellText(lc)).toContain('36.86');
+    expect(cellText(lc)).toContain('close 11-09');
+  });
+
+  it('a priced row shows no last-close note', () => {
+    const el = renderPriced([row({ id: 'a', ticker: 'MSFT', status: 'ACTIVE', current_price: 100, price_as_of: AT,
+      last_close: 99, last_close_date: '2026-11-09' })]);
+    expect(el.querySelector('tbody .last-close')).toBeNull();
+  });
+
   it('the header shows prices as-of, the incomplete note and Refresh', () => {
     const el = renderPriced([priced('a', 'MSFT', 'ACTIVE')]);
     const header = el.querySelector('sb-page [page-actions]')!;

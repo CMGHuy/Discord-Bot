@@ -460,6 +460,11 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
         @if (row.current_price !== null && row.current_price !== undefined) {
           <sb-market-value [asOf]="row.price_as_of ?? null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null">{{ fmtNum(row.current_price) }}</sb-market-value>
         } @else {
+          @if (row.last_close !== null && row.last_close !== undefined) {
+            <!-- No live quote: the last cached daily close, greyed and dated so
+                 it is never read as a live price. Nothing is derived from it. -->
+            <span class="last-close" [title]="'No live quote -- last close, ' + (row.last_close_date ?? 'date unknown')"><span class="last-close-value">{{ fmtNum(row.last_close) }}</span> <span class="last-close-tag">close {{ row.last_close_date ? row.last_close_date.slice(5) : '' }}</span></span>
+          }
           <sb-market-value [asOf]="null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null" />
         }
       </ng-template>
@@ -691,6 +696,10 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
        so the two read as one family, not a mismatched addition. */
     .count { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
     .fx-caveat { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
+    /* Last close shown while there is no live quote: muted, never the live colour. */
+    .last-close { color: var(--text-faint); display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-4); }
+    .last-close-value { font-family: var(--font-mono); }
+    .last-close-tag { font-size: var(--text-micro); }
     .leg { display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
