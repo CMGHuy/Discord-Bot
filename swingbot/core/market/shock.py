@@ -33,7 +33,8 @@ _DATE_FIELDS = frozenset({"session_date"})
 class ShockThresholds:
     atr_k: float = 1.0
     breadth_enter: float = 0.40
-    sectors_frac: float = 0.6
+    depth_frac: float = 0.50
+    breadth_majority: float = 0.50
     breadth_fast: float = 0.25
     speed_enter: float = 0.10
     vix_spike_pct: float = 15.0
@@ -86,6 +87,7 @@ class ShockReading:
     breadth_frac: float | None
     sectors_down: int
     sectors_total: int
+    depth_frac: float | None
     breadth_speed: float | None
     spy_atr_move: float | None
     qqq_atr_move: float | None
@@ -180,14 +182,16 @@ def _breadth(contribs, atr_k: float) -> float | None:
     return sum(1 for _sector, move in contribs if _is_down(move, atr_k)) / len(contribs)
 
 
-def _sectors(contribs, atr_k: float) -> tuple[int, int]:
+def _sectors(contribs, atr_k: float) -> tuple[int, int, float | None]:
     by_sector: dict[str, list[float]] = {}
     for sector, move in contribs:
         if sector:
             by_sector.setdefault(sector, []).append(move)
     groups = [moves for moves in by_sector.values() if len(moves) >= 2]
-    down = sum(1 for moves in groups if _is_down(statistics.median(moves), atr_k))
-    return down, len(groups)
+    down_groups = [moves for moves in groups if _is_down(statistics.median(moves), atr_k)]
+    names = sum(len(moves) for moves in groups)
+    in_down = sum(len(moves) for moves in down_groups)
+    return len(down_groups), len(groups), in_down / names if names else None
 
 
 def _speed(breadth: float | None, prev: ShockReading | None, same: bool) -> float | None:
@@ -241,7 +245,7 @@ def measure(snapshot: ShockSnapshot, prev: ShockReading | None,
     same = prev is not None and prev.session_date == snapshot.session_date
     contribs = _contributors(snapshot.names)
     breadth = _breadth(contribs, th.atr_k)
-    down, total = _sectors(contribs, th.atr_k)
+    down, total, depth = _sectors(contribs, th.atr_k)
     return ShockReading(
         as_of=snapshot.as_of,
         session_date=snapshot.session_date,
@@ -249,6 +253,7 @@ def measure(snapshot: ShockSnapshot, prev: ShockReading | None,
         breadth_frac=breadth,
         sectors_down=down,
         sectors_total=total,
+        depth_frac=depth,
         breadth_speed=_speed(breadth, prev, same),
         spy_atr_move=_atr_move(snapshot.spy),
         qqq_atr_move=_atr_move(snapshot.qqq),
@@ -299,14 +304,15 @@ def _relief(reading: ShockReading, th: ShockThresholds) -> float:
     return th.vix_relief if _meets(reading.vix_chg_pct, th.vix_spike_pct) else 0.0
 
 
-def _sectors_needed(reading: ShockReading, th: ShockThresholds) -> int:
-    return math.ceil(round(th.sectors_frac * reading.sectors_total, 9))
-
-
 def _depth_path(reading: ShockReading, th: ShockThresholds, relief: float) -> bool:
-    return (reading.sectors_total >= 1
-            and reading.sectors_down >= _sectors_needed(reading, th)
+    """A1 weighted depth: enough names sit in down sectors, and breadth is wide."""
+    return (_meets(reading.depth_frac, th.depth_frac)
             and _meets(reading.breadth_frac, th.breadth_enter - relief))
+
+
+def _majority_path(reading: ShockReading, th: ShockThresholds, relief: float) -> bool:
+    """A1 sustained breadth: a majority of names down, no depth or speed needed."""
+    return _meets(reading.breadth_frac, th.breadth_majority - relief)
 
 
 def _fast_path(reading: ShockReading, th: ShockThresholds, relief: float) -> bool:
@@ -315,9 +321,10 @@ def _fast_path(reading: ShockReading, th: ShockThresholds, relief: float) -> boo
 
 
 def entry_condition(reading: ShockReading, th: ShockThresholds = ShockThresholds()) -> bool:
-    """NORMAL -> SHOCK on this one reading (breadth+depth or breadth+speed)."""
+    """NORMAL -> SHOCK on this one reading (A1: weighted depth, sustained breadth or speed)."""
     relief = _relief(reading, th)
-    return _depth_path(reading, th, relief) or _fast_path(reading, th, relief)
+    return (_depth_path(reading, th, relief) or _majority_path(reading, th, relief)
+            or _fast_path(reading, th, relief))
 
 
 def _enter_shock(state: ShockState, reading: ShockReading) -> ShockState:

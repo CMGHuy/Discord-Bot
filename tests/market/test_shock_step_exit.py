@@ -20,7 +20,8 @@ REPAIRED = dict(breadth_frac=0.20, vix_off_high_pct=5.0, spy_retrace=0.5)
 def _reading(at=0, **over):
     base = dict(
         as_of=T0 + timedelta(minutes=at), session_date=D0, minutes_since_open=60.0 + at,
-        breadth_frac=0.05, sectors_down=0, sectors_total=5, breadth_speed=None,
+        breadth_frac=0.05, sectors_down=0, sectors_total=5, depth_frac=0.0,
+        breadth_speed=None,
         spy_atr_move=0.0, qqq_atr_move=None, spy_last=500.0, spy_prev_close=500.0,
         spy_session_low=500.0, spy_new_low=False, spy_retrace=1.0, vix_level=16.0,
         vix_chg_pct=0.0, vix_session_high=16.0, vix_off_high_pct=0.0, n_names=30,
@@ -135,7 +136,7 @@ def test_overnight_gap_up_repair_reaches_recovery_on_the_first_reading():
 
 
 def test_overnight_second_leg_down_stays_shock():
-    first = _day1(20, breadth_frac=0.45, sectors_down=4, spy_retrace=0.2, spy_prev_close=490.0)
+    first = _day1(20, breadth_frac=0.45, sectors_down=4, depth_frac=0.6, spy_retrace=0.2, spy_prev_close=490.0)
     after = step(_shock(since=datetime(2026, 11, 5, 19, 0, tzinfo=UTC)), first, TH)
     assert after.label == "SHOCK" and after.session_date == D1
     assert after.spy_prev_close == 490.0
@@ -177,7 +178,7 @@ def test_first_reading_of_a_new_session_through_measure_and_step():
 
 
 def test_a_full_cycle_normal_shock_recovery_normal():
-    depth = dict(breadth_frac=0.45, sectors_down=4, sectors_total=5)
+    depth = dict(breadth_frac=0.45, sectors_down=4, sectors_total=5, depth_frac=0.6)
     state = ShockState()
     for at, over in [(0, depth), (15, depth), (60, REPAIRED), (75, REPAIRED), (90, REPAIRED)]:
         state = step(state, _reading(at, **over), TH)

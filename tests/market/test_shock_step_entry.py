@@ -18,7 +18,8 @@ def _reading(at=0, **over):
     """A calm, sufficient reading `at` minutes after T0; override any field."""
     base = dict(
         as_of=T0 + timedelta(minutes=at), session_date=D0, minutes_since_open=60.0 + at,
-        breadth_frac=0.05, sectors_down=0, sectors_total=5, breadth_speed=None,
+        breadth_frac=0.05, sectors_down=0, sectors_total=5, depth_frac=0.0,
+        breadth_speed=None,
         spy_atr_move=0.0, qqq_atr_move=None, spy_last=500.0, spy_prev_close=500.0,
         spy_session_low=500.0, spy_new_low=False, spy_retrace=1.0, vix_level=16.0,
         vix_chg_pct=0.0, vix_session_high=16.0, vix_off_high_pct=0.0, n_names=30,
@@ -27,7 +28,8 @@ def _reading(at=0, **over):
     return ShockReading(**base)
 
 
-DEPTH = dict(breadth_frac=0.40, sectors_down=3, sectors_total=5)
+DEPTH = dict(breadth_frac=0.40, sectors_down=3, sectors_total=5, depth_frac=0.6)
+MAJORITY = dict(breadth_frac=0.50, depth_frac=0.0)
 FAST = dict(breadth_frac=0.25, breadth_speed=0.10)
 
 
@@ -55,7 +57,7 @@ def test_rules_cover_every_label():
     assert set(shock.RULES) == set(LABELS)
 
 
-@pytest.mark.parametrize("over", [DEPTH, FAST], ids=["depth", "fast"])
+@pytest.mark.parametrize("over", [DEPTH, MAJORITY, FAST], ids=["depth", "majority", "fast"])
 def test_two_consecutive_qualifying_readings_enter_shock(over):
     first = step(ShockState(), _reading(0, **over), TH)
     assert first.label == "NORMAL" and first.entry_streak == 1
@@ -70,15 +72,18 @@ def test_a_non_qualifying_reading_between_resets_the_streak():
 
 
 @pytest.mark.parametrize("over, expected", [
-    (dict(breadth_frac=0.50, sectors_down=2, sectors_total=5), False),   # needs ceil(3.0) = 3
-    (dict(breadth_frac=0.50, sectors_down=3, sectors_total=5), True),
-    (dict(breadth_frac=0.50, sectors_down=2, sectors_total=3), True),    # ceil(1.8) = 2
-    (dict(breadth_frac=0.50, sectors_down=0, sectors_total=0), False),   # no sector to judge depth
-    (dict(breadth_frac=0.39, sectors_down=5, sectors_total=5), False),
+    (dict(breadth_frac=0.40, depth_frac=0.50), True),                     # weighted depth at both bars
+    (dict(breadth_frac=0.40, depth_frac=0.49), False),
+    (dict(breadth_frac=0.39, depth_frac=1.0), False),
+    (dict(breadth_frac=0.45, depth_frac=None), False),                    # no sector to judge depth
+    (dict(breadth_frac=0.45, sectors_down=5, sectors_total=5, depth_frac=0.40), False),  # the count no longer counts
+    (dict(breadth_frac=0.50, depth_frac=None), True),                     # sustained breadth alone
+    (dict(breadth_frac=0.49, depth_frac=0.0, breadth_speed=None), False),
+    (dict(breadth_frac=0.25, breadth_speed=0.10), True),                  # fast path unchanged
     (dict(breadth_frac=0.25, breadth_speed=0.09), False),
     (dict(breadth_frac=0.24, breadth_speed=0.20), False),
     (dict(breadth_frac=0.30, breadth_speed=None), False),
-    (dict(breadth_frac=None, sectors_down=5, sectors_total=5), False),
+    (dict(breadth_frac=None, depth_frac=1.0), False),
     (dict(breadth_frac=0.05, spy_atr_move=-4.0, qqq_atr_move=-4.0), False),  # index moves never trigger
 ])
 def test_entry_condition_paths(over, expected):
@@ -86,11 +91,15 @@ def test_entry_condition_paths(over, expected):
 
 
 @pytest.mark.parametrize("chg, expected", [(15.0, True), (14.9, False), (None, False)])
-def test_vix_spike_lowers_both_breadth_bars(chg, expected):
-    depth = _reading(breadth_frac=7 / 20, sectors_down=3, sectors_total=5, vix_chg_pct=chg)
+def test_vix_spike_lowers_every_breadth_bar_but_not_the_depth_bar(chg, expected):
+    depth = _reading(breadth_frac=7 / 20, depth_frac=0.6, vix_chg_pct=chg)
+    majority = _reading(breadth_frac=0.45, depth_frac=0.0, vix_chg_pct=chg)
     fast = _reading(breadth_frac=0.20, breadth_speed=0.10, vix_chg_pct=chg)
     assert entry_condition(depth, TH) is expected
+    assert entry_condition(majority, TH) is expected
     assert entry_condition(fast, TH) is expected
+    shallow = _reading(breadth_frac=0.40, depth_frac=0.46, vix_chg_pct=chg)
+    assert entry_condition(shallow, TH) is False
 
 
 def test_readings_inside_the_open_settle_window_never_count():
@@ -110,8 +119,11 @@ def test_an_insufficient_reading_returns_the_state_untouched():
     assert step(state, _reading(30, **DEPTH), TH).label == "SHOCK"
 
 
-def test_hysteresis_band_holds_normal():
-    between = dict(breadth_frac=0.30, sectors_down=3, sectors_total=5)
+@pytest.mark.parametrize("between", [
+    dict(breadth_frac=0.30, depth_frac=0.6),       # deep, but under the depth path's breadth bar
+    dict(breadth_frac=0.45, depth_frac=0.40),      # under the majority bar and shallow
+], ids=["deep-narrow", "wide-shallow"])
+def test_hysteresis_band_holds_normal(between):
     state = _run(ShockState(), *[_reading(15 * i, **between) for i in range(4)])
     assert state.label == "NORMAL" and state.entry_streak == 0
 

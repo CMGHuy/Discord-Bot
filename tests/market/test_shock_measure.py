@@ -21,7 +21,8 @@ TH = ShockThresholds(min_names=3)
 def _full_reading(**over):
     base = dict(
         as_of=T0, session_date=D0, minutes_since_open=60.0, breadth_frac=0.45,
-        sectors_down=4, sectors_total=6, breadth_speed=0.12, spy_atr_move=-1.8,
+        sectors_down=4, sectors_total=6, depth_frac=0.6,
+        breadth_speed=0.12, spy_atr_move=-1.8,
         qqq_atr_move=None, spy_last=490.0, spy_prev_close=500.0, spy_session_low=489.5,
         spy_new_low=True, spy_retrace=0.05, vix_level=21.13, vix_chg_pct=27.21,
         vix_session_high=21.5, vix_off_high_pct=1.77, n_names=42, insufficient=False)
@@ -36,7 +37,8 @@ def test_labels_are_the_three_states_in_order():
 
 def test_threshold_defaults_equal_the_config_defaults():
     assert ShockThresholds() == ShockThresholds(
-        atr_k=1.0, breadth_enter=0.40, sectors_frac=0.6, breadth_fast=0.25,
+        atr_k=1.0, breadth_enter=0.40, depth_frac=0.50, breadth_majority=0.50,
+        breadth_fast=0.25,
         speed_enter=0.10, vix_spike_pct=15.0, vix_relief=0.05, breadth_reenter=0.30,
         breadth_exit=0.20, recovery_vix_off_high_pct=5.0, recovery_spy_retrace=0.5,
         min_dwell_min=45, recovery_min_dwell_min=30, min_names=20, vix_max_age_s=600,
@@ -46,7 +48,8 @@ def test_threshold_defaults_equal_the_config_defaults():
 def test_reading_field_order_is_the_ledger_contract():
     assert [f.name for f in dataclasses.fields(ShockReading)] == [
         "as_of", "session_date", "minutes_since_open", "breadth_frac", "sectors_down",
-        "sectors_total", "breadth_speed", "spy_atr_move", "qqq_atr_move", "spy_last",
+        "sectors_total", "depth_frac",
+        "breadth_speed", "spy_atr_move", "qqq_atr_move", "spy_last",
         "spy_prev_close", "spy_session_low", "spy_new_low", "spy_retrace", "vix_level",
         "vix_chg_pct", "vix_session_high", "vix_off_high_pct", "n_names", "insufficient"]
 
@@ -169,6 +172,29 @@ def test_sectors_need_two_contributing_members_and_use_the_median():
     reading = measure(_snap(names), None, TH)
     assert (reading.sectors_down, reading.sectors_total) == (1, 2)
     assert reading.n_names == 7 and reading.breadth_frac == pytest.approx(4 / 7)
+    assert reading.depth_frac == pytest.approx(3 / 5)
+
+
+def test_depth_frac_weights_sectors_by_their_names():
+    # one heavy sector down, two light ones flat: 1 of 3 sectors, but 6 of 10 names
+    names = ([_row(f"T{i}", -1.5, "Tech") for i in range(6)]
+             + [_row("B1", 0.0, "Banks"), _row("B2", 0.1, "Banks"),
+                _row("E1", 0.0, "Energy"), _row("E2", -0.2, "Energy")])
+    reading = measure(_snap(names), None, TH)
+    assert (reading.sectors_down, reading.sectors_total) == (1, 3)
+    assert reading.depth_frac == pytest.approx(0.6)
+
+
+def test_depth_frac_is_none_without_a_two_member_sector():
+    names = [_row("A", -2.0, "Semis"), _row("B", -2.0, "Energy"), _row("C", -2.0, None)]
+    assert measure(_snap(names), None, TH).depth_frac is None
+
+
+def test_a_row_without_depth_frac_is_refused():
+    row = _full_reading().as_row()
+    del row["depth_frac"]
+    with pytest.raises(TypeError):
+        ShockReading.from_row(row)
 
 
 def test_empty_watchlist_is_insufficient_with_no_breadth():
@@ -176,6 +202,7 @@ def test_empty_watchlist_is_insufficient_with_no_breadth():
     assert reading.n_names == 0 and reading.insufficient is True
     assert reading.breadth_frac is None and reading.breadth_speed is None
     assert (reading.sectors_down, reading.sectors_total) == (0, 0)
+    assert reading.depth_frac is None
 
 
 def test_insufficient_below_min_names_and_sufficient_at_it():

@@ -15,7 +15,7 @@ D0 = date(2026, 11, 5)
 
 def _reading(**over) -> dict:
     base = dict(as_of=T0, session_date=D0, minutes_since_open=75.0, breadth_frac=0.45,
-                sectors_down=3, sectors_total=5, breadth_speed=None, spy_atr_move=-1.2,
+                sectors_down=3, sectors_total=5, depth_frac=0.6, breadth_speed=None, spy_atr_move=-1.2,
                 qqq_atr_move=None, spy_last=495.0, spy_prev_close=500.0,
                 spy_session_low=495.0, spy_new_low=False, spy_retrace=0.0, vix_level=None,
                 vix_chg_pct=None, vix_session_high=None, vix_off_high_pct=None, n_names=40,
@@ -60,6 +60,7 @@ def test_a_reading_round_trips_with_its_none_fields(repo, db_conn):
     assert got["id"] == reading_id and got["state_after"] == "NORMAL"
     assert shock.ShockReading.from_row(got) == shock.ShockReading.from_row(row)
     assert got["breadth_speed"] is None and got["vix_level"] is None
+    assert got["depth_frac"] == 0.6
 
 
 def test_promoted_columns_copy_the_headline_numbers(repo, db_conn):

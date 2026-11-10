@@ -94,6 +94,7 @@ def test_two_stepped_crash_readings_enter_shock_and_record_each():
     assert after == "NORMAL" == state["label"]
     assert reading["n_names"] == 3 and reading["breadth_frac"] == pytest.approx(1.0)
     assert (reading["sectors_down"], reading["sectors_total"]) == (1, 1)
+    assert reading["depth_frac"] == pytest.approx(1.0)
     assert reading["spy_last"] == 490.0 and reading["spy_prev_close"] == 500.0
     assert _pass(repo, now=NOW + timedelta(minutes=15)) == "SHOCK"
     assert len(repo.recorded) == 2 and repo.recorded[1][2] == "SHOCK"
