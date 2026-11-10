@@ -322,7 +322,8 @@ def test_a_ticker_missing_from_the_hash_file_refuses(tmp_path, monkeypatch, caps
     (tmp_path / "hashes.json").write_text("{}", encoding="utf-8")
     _forbid_screening(monkeypatch)
     assert screen_idea.main(_ctx_argv(tmp_path, cache, "--dry-run")) == 2
-    assert "TLT has no SHA-256" in capsys.readouterr().err
+    # context_tickers() is sorted: since v211 BREADTH_ATR1 is the first one missing
+    assert "BREADTH_ATR1 has no SHA-256" in capsys.readouterr().err
 
 
 def test_matching_hashes_let_a_dry_run_through(tmp_path, capsys, fake_registered):
@@ -648,3 +649,18 @@ def test_context_mutation_during_loading_refuses_before_screening(
     assert "TLT.csv SHA-256" in capsys.readouterr().err
     for written in ("ledger.jsonl", "results", "hashes.json"):
         assert not (tmp_path / written).exists()
+
+
+def test_the_shock_support_idea_screens_short_with_its_context_and_control():
+    """v211: a level-context short on the real call path -- events read the
+    context, the control book runs, the v174 restricted null does not."""
+    from swingbot.core.backtesting.screen.ideas import shock_support_break_short as idea_mod
+    from tests.backtesting.screen.helpers import episodes_covering, shock_context
+    df = random_walk(2600)
+    hits = np.flatnonzero(idea_mod.low_break(df).to_numpy())
+    ctx = shock_context(df.index, episodes_covering(hits, len(df)))
+    out = screen_idea.screen_ticker(IDEAS["shock_support_break_short"], "AAA", df,
+                                    ALWAYS, context=ctx)
+    assert out.events                                         # non-vacuous
+    assert out.control                                        # the control book ran
+    assert out.restricted is None and out.depths is None and out.repriced is None

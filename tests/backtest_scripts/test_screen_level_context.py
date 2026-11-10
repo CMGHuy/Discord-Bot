@@ -97,7 +97,8 @@ def _quiet(*_args, **_kwargs):
 def test_context_kinds_and_the_default():
     assert CONTEXT_KINDS == ("z", "level")
     assert Idea(name="x", events=lambda df: df["Close"] > 0, time_cap_bars=5).context_kind == "z"
-    assert {idea.context_kind for idea in IDEAS.values()} == {"z"}
+    assert {n for n, i in IDEAS.items() if i.context_kind != "z"} <= {
+        "shock_support_break_short", "shock_failed_bounce_short"}
 
 
 def test_a_level_idea_needs_context_and_a_known_kind():
