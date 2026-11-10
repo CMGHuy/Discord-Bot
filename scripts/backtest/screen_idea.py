@@ -856,6 +856,17 @@ def run_count(args) -> int:
 RESULTS_DIR =ROOT / "docs" / "superpowers" / "results"
 INSTRUMENT = "screen-v1"
 
+#: v214 G1: the closed screens a sign flip alone would clear (calibration only, never re-run)
+CALIBRATION_IDS = ("screen-high52w", "screen-gap_volume", "screen-sweep_reclaim_bos",
+                   "screen-range_breakdown_close")
+#: the ledger keeps the edge p (share of resamples <= 0), not the interval; p >= 0.975
+#: means the upper 95% bound sits at or below 0
+CALIBRATION_P = 0.975
+#: the v211 shots that share the ledger's BH family (spec § Constraints, ledger order)
+V211_SHOT_IDS = ("screen-shock_support_break_short", "screen-shock_failed_bounce_short")
+#: the per-ticker avoid counts that sum across the universe
+AVOID_COUNTS = ("below_floor", "kept", "excluded", "population", "overnight")
+
 #: {ticker: sha256} of every registered context CSV, written by the first
 #: real run of a context idea; backtest_cache_ext is gitignored (v174 § 2).
 CONTEXT_HASHES = RESULTS_DIR / "2026-10-18-v174-context-hashes.json"
@@ -1128,6 +1139,43 @@ def summarise(screens, skipped=None, *, mode: str = "edge") -> dict:
             "mean_r_null": _mean([row["r_null"] for row in events]),
             "drift": _drift(screens), "rank": _rank(screens),
             "timeouts": _timeouts(screens, events), "stress": _stress(screens)}
+
+
+def with_avoid_blocks(summary: dict, screens, idea: Idea) -> dict:
+    """v214: an avoid idea's summed read-out counts and idea-error tickers;
+    any other idea's summary comes back untouched."""
+    if idea.mode != "avoid":
+        return summary
+    blocks = [s.avoid for s in screens if s.avoid]
+    prefix = "idea_error:"
+    errors = sorted(key[len(prefix):] for key in summary["skipped"] if key.startswith(prefix))
+    avoid = {name: sum(block[name] for block in blocks) for name in AVOID_COUNTS}
+    return {**summary, "avoid": {**avoid, "errors": {ticker: 1 for ticker in errors}}}
+
+
+def _calibration(rows) -> list:
+    """v214: the four closed screens read against the avoid clauses (printout only)."""
+    by_id = {row["id"]: row for row in rows}
+    out = []
+    for row_id in CALIBRATION_IDS:
+        name = row_id.removeprefix("screen-")
+        row = by_id.get(row_id, {})
+        exp_r, p = row.get("exp_r"), row.get("p")
+        out.append({"id": row_id, "direction": IDEAS[name].direction if name in IDEAS else "n/a",
+                    "exp_r": exp_r, "p": p,
+                    "clause_1": verdict.avoid_mean_clause(exp_r),
+                    "clause_2": p is not None and p >= CALIBRATION_P})
+    return out
+
+
+def _avoid_run(run: dict, idea: Idea, rows, row: dict) -> dict:
+    """An avoid idea's run dict also carries the calibration and the ledger order."""
+    if idea.mode != "avoid":
+        return run
+    return {**run, "calibration": _calibration(rows),
+            "ledger_order": {"position": len(rows) + 1,
+                             "preceding_v211": [r["id"] for r in rows
+                                                if r["id"] in V211_SHOT_IDS]}}
 
 
 def _restricted_pairs(screens):
@@ -1629,6 +1677,52 @@ _CONTEXT_SECTIONS: dict[str, Callable] = {"z": _render_context,
                                           "level": _render_level_context}
 
 
+def _render_calibration(rows) -> list:
+    lines = ["### Calibration: four closed screens (never re-run)", "",
+             f"Clause 1 is ΔExpR ≤ {-verdict.PASS_EXP_R:+.2f}R. Clause 2 (upper 95% bound < 0) is "
+             f"read from the ledger's edge p as p ≥ {CALIBRATION_P}, because the ledger stores no "
+             "interval. A screen passing both shows what a sign flip alone would clear; the "
+             "control arm is what it never faced.", "",
+             "| Ledger id | Direction | ΔExpR | edge p | Clause 1 | Clause 2 |",
+             "|---|---|---|---|---|---|"]
+    lines += [f"| `{c['id']}` | {c['direction']} | {_fmt(c['exp_r'])}R | {_fmt(c['p'], '.4f')} "
+              f"| {_yes(c['clause_1'])} | {_yes(c['clause_2'])} |" for c in rows]
+    return lines
+
+
+def _render_avoid(summary, run) -> list:
+    """v214: the avoid read-outs (never gating), the control arm per year, the
+    calibration printout and the ledger order."""
+    a, c = summary["avoid"], summary["verdict"].control
+    order = run["ledger_order"]
+    return [
+        "## Avoid mode (read-outs, never gating)", "",
+        "**Seeds:** the matched null draws with `null_seed(idea, ticker)` = [42, crc32(idea), "
+        "crc32(ticker)]; the control arm with `null_seed(idea + \":control\", ticker)`, from bars "
+        "where the idea's control condition holds, at least "
+        f"{null.MIN_CANDIDATES} candidates per event. Every bar where the idea's condition holds "
+        "is excluded from both pools.", "",
+        "| Read-out | Count | Share |", "|---|---|---|",
+        f"| member and warm bars | {a['population']} | |",
+        f"| condition bars excluded from both pools | {a['excluded']} | "
+        f"{_share(_ratio(a['excluded'], a['population']))} of member and warm bars |",
+        f"| kept events below the control floor | {a['below_floor']} | "
+        f"{_share(_ratio(a['below_floor'], a['kept']))} of kept events |",
+        "| kept events whose next open reached the gap bottom (overnight) | "
+        f"{a['overnight']} | {_share(_ratio(a['overnight'], a['kept']))} of kept events |",
+        f"| tickers aborted by an idea error | {len(a['errors'])} | |", "",
+        "Idea errors per ticker: "
+        f"{', '.join(f'{t} 1' for t in a['errors']) or 'none'}.", "",
+        "### Control arm per year", "",
+        "| Year | N_c | mean(d_c) |", "|---|---|---|",
+        *[f"| {year} | {n} | {_fmt(mean)}R |" for year, (n, mean) in c.per_year.items()], "",
+        *_render_calibration(run["calibration"]), "",
+        "### Ledger order", "",
+        f"This row is ledger row {order['position']}; v211 shots already in the ledger: "
+        f"{', '.join(order['preceding_v211']) or 'none'}. The BH q in the header is computed "
+        "across the whole ledger in this order (spec § Constraints)."]
+
+
 def render_results(idea, summary, universe, run) -> str:
     v = summary["verdict"]
     sections = [_render_head(idea, v, run), _render_universe(universe, summary),
@@ -1643,6 +1737,8 @@ def render_results(idea, summary, universe, run) -> str:
         sections.append(_render_shock_blocks(idea, summary, run))
     if idea.context:
         sections.append(_CONTEXT_SECTIONS[idea.context_kind](idea, summary, run))
+    if idea.mode == "avoid":
+        sections.append(_render_avoid(summary, run))
     return "\n\n".join("\n".join(lines) for lines in sections) + "\n"
 
 
@@ -1690,9 +1786,20 @@ def _level_hypothesis(idea) -> str:
               "(v211 shock screen). " + diagnostics.scope_sentence(idea))
 
 
+def _avoid_hypothesis(idea) -> str:
+    """v214: the avoid ledger hypothesis, naming both baselines and the margin."""
+    return (f"{idea.name}: {idea.summary}; AVOID mode (v214): fixed {race.STOP_ATR}/"
+            f"{race.STOP_ATR * race.REWARD_RISK} ATR race, {idea.direction}, entry next open, "
+            f"cap {idea.time_cap_bars}, must trail both a K={null.K} matched null and a "
+            f"K={null.K} control arm by >= {verdict.PASS_EXP_R:.2f}R, condition bars excluded "
+            "from both pools, PIT S&P 500 2010-2019, after costs (v214 avoid screen)")
+
+
 def hypothesis(idea) -> str:
     """The ledger hypothesis, naming the shape and cap; the fixed text is
     today's, byte for byte."""
+    if idea.mode == "avoid":
+        return _avoid_hypothesis(idea)
     if idea.context_kind == "level":
         return _level_hypothesis(idea)
     if idea.context:
@@ -1761,7 +1868,7 @@ def publish(args, idea, universe, summary, rows, data=None) -> int:
     row = ledger_row(idea, v, record_path(path), args.date)
     stats.validate_ledger_row(row)
     q = stats.ledger_qvalues(rows + [row])[row["id"]]
-    run = _context_run(_run_info(args, q), idea, rows, row, data)
+    run = _avoid_run(_context_run(_run_info(args, q), idea, rows, row, data), idea, rows, row)
     text = render_results(idea, summary, universe, run)
     reason = _context_hash_refusal(args, data)
     if reason:
@@ -1798,7 +1905,8 @@ def _run_screens(args, idea: Idea, universe: Universe, data, spy) -> dict:
     summary = with_diagnostics(summarise(screens, skipped, mode=idea.mode), screens, idea,
                                data, end=args.end)
     summary = with_short_blocks(summary, screens, idea, spy)
-    return with_shock_blocks(summary, screens, idea)
+    summary = with_shock_blocks(summary, screens, idea)
+    return with_avoid_blocks(summary, screens, idea)
 
 
 def main(argv=None) -> int:

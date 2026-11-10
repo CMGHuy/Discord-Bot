@@ -341,3 +341,88 @@ def test_an_avoid_run_never_prints_an_edge_label(tmp_path, monkeypatch, capsys):
     assert "## Verdict: SCREEN-" in text and "years with mean(d) < 0" in text
     assert re.search(r"(?<!AVOID-)SCREEN-PASS", text) is None
     assert "years with mean(d) > 0" not in text
+
+
+# --- V214-8: avoid read-outs, calibration, hypothesis, ledger order --------
+
+def _block(**counts):
+    return {"control": [], **{key: counts.get(key, 0) for key in screen_idea.AVOID_COUNTS}}
+
+
+def _ledger_row(row_id, exp_r=None, p=None):
+    return {"id": row_id, "exp_r": exp_r, "p": p, "verdict": "SCREEN-FAIL"}
+
+
+def test_with_avoid_blocks_sums_the_counts_and_lists_the_errors():
+    a, b = _screen([]), _screen([])
+    a.avoid = _block(below_floor=2, kept=10, excluded=30, population=900, overnight=1)
+    b.avoid = _block(below_floor=1, kept=5, excluded=20, population=600, overnight=4)
+    skipped = Counter({"idea_error": 2, "idea_error:ZZZ": 1, "idea_error:BAD": 1,
+                       "empty_frame": 1})
+    out = screen_idea.with_avoid_blocks({"skipped": skipped}, [a, b], AVOID)["avoid"]
+    assert out == {"below_floor": 3, "kept": 15, "excluded": 50, "population": 1500,
+                   "overnight": 5, "errors": {"BAD": 1, "ZZZ": 1}}
+    assert list(out["errors"]) == ["BAD", "ZZZ"]
+
+
+def test_with_avoid_blocks_leaves_an_edge_summary_alone():
+    summary = {"skipped": Counter()}
+    assert screen_idea.with_avoid_blocks(summary, [], IDEAS["gap_volume"]) is summary
+
+
+def test_the_calibration_reads_the_four_closed_rows():
+    rows = [_ledger_row("screen-high52w", -0.366, 1.0),
+            _ledger_row("screen-gap_volume", -0.4639, 1.0),
+            _ledger_row("screen-sweep_reclaim_bos", -0.05, 0.99),
+            _ledger_row("other", -0.9, 1.0)]
+    out = screen_idea._calibration(rows)
+    assert [c["id"] for c in out] == list(screen_idea.CALIBRATION_IDS)
+    assert (out[0]["direction"], out[0]["clause_1"], out[0]["clause_2"]) == ("long", True, True)
+    assert (out[2]["clause_1"], out[2]["clause_2"]) == (False, True)
+    assert out[3] == {"id": "screen-range_breakdown_close", "direction": "short",
+                      "exp_r": None, "p": None, "clause_1": False, "clause_2": False}
+
+
+def test_the_ledger_order_names_the_v211_shots_already_in():
+    rows = [{"id": "screen-a"}, {"id": "screen-shock_failed_bounce_short"}]
+    run = screen_idea._avoid_run({"q": 0.5}, AVOID, rows, {"id": "screen-fake_avoid"})
+    assert run["ledger_order"] == {"position": 3,
+                                   "preceding_v211": ["screen-shock_failed_bounce_short"]}
+    assert len(run["calibration"]) == 4 and run["q"] == 0.5
+    edge_run = {"q": 0.5}
+    assert screen_idea._avoid_run(edge_run, IDEAS["gap_volume"], rows, {}) is edge_run
+
+
+def test_the_avoid_hypothesis_names_the_mode_and_both_baselines():
+    text = screen_idea.hypothesis(AVOID)
+    assert text.startswith("fake_avoid: ")
+    for part in ("AVOID mode (v214)", "K=20 matched null", "K=20 control arm",
+                 ">= 0.10R", "cap 20", "condition bars excluded from both pools",
+                 "(v214 avoid screen)"):
+        assert part in text
+    assert "SCREEN-PASS" not in text
+
+
+def test_a_real_avoid_run_writes_the_avoid_section_and_one_row(tmp_path, monkeypatch):
+    monkeypatch.setitem(screen_idea.IDEAS, "fake_avoid", AVOID)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    for seed, ticker in enumerate(("AAA", "BBB"), start=1):
+        _write_csv(cache / f"{ticker}.csv", random_walk(2700, seed=seed))
+    membership = tmp_path / "membership.csv"
+    membership.write_text("ticker,start_date,end_date\nAAA,2000-01-01,\nBBB,2000-01-01,\n",
+                          encoding="utf-8")
+    ledger = tmp_path / "ledger.jsonl"
+    argv = ["--idea", "fake_avoid", "--cache-dir", str(cache), "--membership", str(membership),
+            "--ledger", str(ledger), "--results-dir", str(tmp_path / "r"),
+            "--date", "2026-11-06"]
+    assert screen_idea.main(argv) == 0
+    doc = (tmp_path / "r" / "2026-11-06-screen-fake_avoid.md").read_text(encoding="utf-8")
+    for heading in ("## Avoid mode (read-outs, never gating)", "### Control arm per year",
+                    "### Calibration: four closed screens (never re-run)", "### Ledger order"):
+        assert heading in doc
+    assert 'null_seed(idea + ":control", ticker)' in doc
+    assert "This row is ledger row 1; v211 shots already in the ledger: none." in doc
+    (row,) = stats.load_ledger(ledger)
+    assert row["id"] == "screen-fake_avoid" and row["verdict"] in stats.VERDICTS
+    assert row["hypothesis"] == screen_idea.hypothesis(AVOID)
