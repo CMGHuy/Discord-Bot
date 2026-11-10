@@ -22,6 +22,8 @@ only** (no `ui` line), and the shadow soak is checked through the
 
 **Model:** sonnet — a bounded script and tests on fixed contracts; the network fetch and checkpointing follow the existing `alpaca_history` pattern.
 
+> **Amended by A1** ([A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md), V209-A1-2b): the builder gains a session date, DST-aware bounds, a daily-VIX path and a validation mode writing gzip fixtures under `tests/fixtures/shock_replay/` (never synthetic); the 2026-11-05 path and its committed fixture are unchanged.
+
 V209-12 was split at the 20 KB task cap: this task builds the fixture builder, its tests and the committed fixture; **V209-12b** adds the replay test over that fixture and runs straight after it.
 
 **Files:**
@@ -260,6 +262,8 @@ git commit -m "test(v209): 2026-11-05 replay fixture builder + frozen fixture (<
 
 **Model:** sonnet — one test module over a frozen fixture and the finished detector; the only judgment is reading a miss as a measured answer.
 
+> **Superseded by Amendment A1** ([A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md), V209-A1-4). The run below produced the measured miss (a382234d: NORMAL all session). A1 renames this test to `tests/market/test_shock_acceptance_a1.py` and replaces its rules: the `≤ 15:00 UTC` gate and the synthetic escape are gone, 2026-11-05 is reported in-sample only, and the gate is recall and per-class precision over the frozen validation days. Do not implement the steps below.
+
 Split from V209-12 at the 20 KB cap; it runs straight after V209-12, on that task's committed fixture.
 
 **Files:**
@@ -382,6 +386,8 @@ git commit -m "test(v209): replay 2026-11-05 -- first SHOCK 15:00 UTC, <x> of <n
 
 **Model:** opus — it touches production (schema migration, `.env`, deploy) and a wrong rollback line or a skipped check costs a live session.
 
+> **A1 precondition** ([A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md)): this task runs only after V209-A1-4 recorded **PASS** in `.superpowers/sdd/progress.md`. On an A1 FAIL it does not run; v209 closes `no-lift/`.
+
 **Files:**
 - Modify: `docs/deploy/DEPLOY_HETZNER.md`. Add one paragraph to `## Rolling back`, and add a new `### v209: market shock tables` section after `### v205: daily FX rates (fx_daily_rates)`, before `## Accessing the admin UI`.
 - Modify: `VERSION.json` (the `bot` line only)
@@ -412,6 +418,8 @@ python scripts/dev/testrun.py changed --dry-run   # shows which suites CI will l
 Expected: every task id from the Interfaces list appears in a commit subject, and there is one head, `v209_001`. If a task is missing, stop and report it; this task never implements one.
 
 - [ ] **Step 2: Production checks (read-only)**
+
+**A1 empty-table check, first** (V209-A1-1 Step 1 again, right before the deploy): production `SELECT to_regclass('market_shock_readings') IS NOT NULL` prints `f`, and `grep -c '^SHOCK_SECTORS_FRAC' .env` prints `0`; the local replica holds no `market_shock_readings` rows (drop any, as in V209-A1-1). `depth_frac` is a required field with no read-time upcasting, so a pre-A1 row must not exist anywhere. Any other result: stop and report.
 
 Run against the **running (pre-v209) image**:
 
@@ -585,6 +593,8 @@ Nothing is left to commit. Step 3 committed the doc; Step 5 committed the releas
 
 **Model:** sonnet — a scripted ritual with one guard; the panel's judgment runs in its own expert agents.
 
+> **A1:** the close-out also moves the A1 amendment stem ([A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md) and its parts 1 and 2); on an A1 FAIL the controller moves both stems to `no-lift/` instead and this task's panel is not run.
+
 **Files:**
 - Move (by `/close-out` Step 6), into `docs/superpowers/plans/implemented/`, the v209 Track 1 plan files:
   - `docs/superpowers/plans/2026-11-05-v209-market-shock-detector_0-index.md`
@@ -642,7 +652,7 @@ If the release commit is missing, or `VERSION.json` holds a different version: *
 
 - [ ] **Step 4: `/close-out` with the bump marked as released**
 
-Invoke the `close-out` skill and state up front: *"The bump for v209 was released in V209-13 (`<sha>`, bot `<version>`): skip Steps 3–4; run Step 5's prediction check; move only the six Track 1 plan files listed in this task; leave the spec and `_4-notices-and-admin.md` in place."*
+Invoke the `close-out` skill and state up front: *"The bump for v209 was released in V209-13 (`<sha>`, bot `<version>`): skip Steps 3–4; run Step 5's prediction check; move only the Track 1 plan files and the three A1 amendment files listed in this task; leave the spec and `_4-notices-and-admin.md` in place."*
 
 - Step 2 of the close-out is already done (this task's Step 2).
 - **Step 5 (prediction check):** the delivered level is **bot minor** and `Edge: none (integrity)`.
@@ -658,8 +668,11 @@ git mv docs/superpowers/plans/2026-11-05-v209-market-shock-detector_0-index.md \
        docs/superpowers/plans/2026-11-05-v209-market-shock-detector_3-scan-wiring-and-stamp.md \
        docs/superpowers/plans/2026-11-05-v209-market-shock-detector_3b-byte-identical-pins.md \
        docs/superpowers/plans/2026-11-05-v209-market-shock-detector_5-replay-release-closeout.md \
+       docs/superpowers/plans/2026-11-05-v209-market-shock-detector-a1_0-index.md \
+       docs/superpowers/plans/2026-11-05-v209-market-shock-detector-a1_1-rule-and-tooling.md \
+       docs/superpowers/plans/2026-11-05-v209-market-shock-detector-a1_2-data-and-acceptance.md \
        docs/superpowers/plans/implemented/
-git status --short     # seven renames (plus the index header edit, if Step 5 amended it); VERSION.json untouched
+git status --short     # ten renames (plus the index header edit, if Step 5 amended it); VERSION.json untouched
 ```
 
 - **Step 7 (worktree):** run `git rev-list --count main..<v209 branch>`; it must print `0`. Then remove the worktree and its branch per `document-lifecycle.md`. If the branch name contains `backup`, stop and ask instead.

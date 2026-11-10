@@ -16,6 +16,8 @@ the plan's worktree branch.
 
 **Model:** sonnet — two more table-driven rules with dwell and hold clocks and a cheap re-entry; pure code whose cases the tests enumerate.
 
+> **Superseded in part by Amendment A1** ([A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md), V209-A1-1): `SHOCK_SECTORS_FRAC` / `sectors_frac` and the sector-count depth clause are replaced by `SHOCK_DEPTH_FRAC` / `SHOCK_BREADTH_MAJORITY` and the required `ShockReading.depth_frac`. The text below is kept as the record of what was built at a382234d.
+
 **Files:**
 - Modify: `swingbot/core/market/shock.py` (append `recovery_condition`, `reentry_condition`, `_from_shock`, `_from_recovery`; replace the `RULES` line)
 - Create: `tests/market/test_shock_step_exit.py`

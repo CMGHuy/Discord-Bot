@@ -358,6 +358,8 @@ git commit -m "feat(v209): market_shock_readings and market_shock_state tables (
 
 **Model:** opus — a one-transaction write that spans two tables and the v197 queue, and the hybrid-doc trap (null promoted columns vanish on merge).
 
+> **A1** ([A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md), V209-A1-1): the test helper's `ShockReading` gains `depth_frac`.
+
 **Files:**
 - Create: `swingbot/core/db/repositories/market_shock.py`
 - Modify: `swingbot/commands/scanning/loops.py` (one import; `_prune_shock_readings` directly below `_prune_alert_posts`; one `await _prune_shock_readings()` line in `daily_recap`)
@@ -786,6 +788,8 @@ git commit -m "feat(v209): one-transaction MarketShockRepository and nightly rea
 
 **Model:** opus — the regular-hours gate, the live-quote clock and the completed-bar rule decide what the detector sees; a wrong choice silently feeds stale bars into the state machine.
 
+> **Superseded in part by Amendment A1** ([A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md), V209-A1-1): `SHOCK_SECTORS_FRAC` / `sectors_frac` and the sector-count depth clause are replaced by `SHOCK_DEPTH_FRAC` / `SHOCK_BREADTH_MAJORITY` and the required `ShockReading.depth_frac`. The text below is kept as the record of what was built at a382234d.
+
 V209-6 was split at the 20 KB task cap: this task builds the pure-ish half
 of `shock_scan.py` (no repository, no fetch); **V209-6a** appends the
 stepped pass, `run_shock_pass` and `current_label`, and must run straight
@@ -1160,6 +1164,8 @@ git commit -m "feat(v209): shock_scan snapshot -- regular-hours gate, live-quote
 ### Task V209-6a: `shock_scan.py`: `run_shock_pass`, `current_label`
 
 **Model:** opus — the stepped pass reads the prior reading and state, measures, steps and records in one call, and its failure fallback decides what label every plan of the pass is stamped with.
+
+> **Superseded in part by Amendment A1** ([A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md), V209-A1-1): `SHOCK_SECTORS_FRAC` / `sectors_frac` and the sector-count depth clause are replaced by `SHOCK_DEPTH_FRAC` / `SHOCK_BREADTH_MAJORITY` and the required `ShockReading.depth_frac`. The text below is kept as the record of what was built at a382234d.
 
 Second half of V209-6 (split at the 20 KB task cap; the id is `6a` because
 `V209-6b` is already the scan-wiring task). Runs straight after V209-6 on the

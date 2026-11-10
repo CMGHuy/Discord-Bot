@@ -180,6 +180,8 @@ in Track 2's screens are frozen separately below and never follow these.**
 | `SHOCK_BREADTH_REENTER` | 0.30 | `SHOCK_OPEN_SETTLE_MIN` | 15 |
 | `SHOCK_READINGS_KEEP_DAYS` | 180 | `SHOCK_QUOTE_MAX_AGE_S` | 300 |
 
+> **A1 (2026-11-10):** `SHOCK_SECTORS_FRAC` is removed; `SHOCK_DEPTH_FRAC` = 0.50 and `SHOCK_BREADTH_MAJORITY` = 0.50 are added (§ Amendment A1).
+
 Every field is declared in `swingbot/config.py`'s schema, in a new
 "Market Shock" section.
 

@@ -30,6 +30,8 @@ a task read alone is complete):
 
 **Model:** haiku — mechanical config declarations and a pin test that mirror an existing pattern (`tests/test_config_v171_keys.py`).
 
+> **Superseded in part by Amendment A1** ([A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md), V209-A1-1): `SHOCK_SECTORS_FRAC` / `sectors_frac` and the sector-count depth clause are replaced by `SHOCK_DEPTH_FRAC` / `SHOCK_BREADTH_MAJORITY` and the required `ShockReading.depth_frac`. The text below is kept as the record of what was built at a382234d.
+
 **Files:**
 - Modify: `swingbot/config.py` (new `# --- Market Shock (v209) ---` block of `Field`s between the `DCB_VOLUME_RATIO` field and the `# --- Database ---` comment, ~line 1535; one `_MODE_VALUES` entry, ~line 1640)
 - Modify: `.env.example` (new `# --- Market Shock ---` section between `DCB_VOLUME_RATIO=0` and `# --- Database ---`)
@@ -361,6 +363,8 @@ git commit -m "feat(v209): Market Shock config section -- MARKET_SHOCK_MODE and 
 
 **Model:** sonnet — a new pure module of frozen dataclasses and row helpers that every later task imports; small, but its names are the contract for parts 2 and 3.
 
+> **Superseded in part by Amendment A1** ([A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md), V209-A1-1): `SHOCK_SECTORS_FRAC` / `sectors_frac` and the sector-count depth clause are replaced by `SHOCK_DEPTH_FRAC` / `SHOCK_BREADTH_MAJORITY` and the required `ShockReading.depth_frac`. The text below is kept as the record of what was built at a382234d.
+
 **Files:**
 - Create: `swingbot/core/market/shock.py`
 - Create: `tests/market/test_shock_measure.py`
@@ -670,6 +674,8 @@ git commit -m "feat(v209): shock.py -- reading types, thresholds and JSON rows"
 ### Task V209-2b: `shock.py`: `measure`
 
 **Model:** sonnet — numeric reading rules with several edge cases (sector minimum and median, same-session carry, stale VIX, missing SPY) in a pure function set, each helper under complexity 15.
+
+> **Superseded in part by Amendment A1** ([A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md), V209-A1-1): `SHOCK_SECTORS_FRAC` / `sectors_frac` and the sector-count depth clause are replaced by `SHOCK_DEPTH_FRAC` / `SHOCK_BREADTH_MAJORITY` and the required `ShockReading.depth_frac`. The text below is kept as the record of what was built at a382234d.
 
 **Files:**
 - Modify: `swingbot/core/market/shock.py` (two stdlib imports; helpers and `measure` appended after `_meets`)
@@ -1054,6 +1060,8 @@ git commit -m "feat(v209): shock.measure -- breadth, sectors, speed, SPY and VIX
 ### Task V209-3: `shock.py`: `ShockState` + `step` entry rules
 
 **Model:** sonnet — a table-driven state machine with a two-consecutive-readings streak and an open-settle rule; pure code, but the rule order matters.
+
+> **Superseded in part by Amendment A1** ([A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md), V209-A1-1): `SHOCK_SECTORS_FRAC` / `sectors_frac` and the sector-count depth clause are replaced by `SHOCK_DEPTH_FRAC` / `SHOCK_BREADTH_MAJORITY` and the required `ShockReading.depth_frac`. The text below is kept as the record of what was built at a382234d.
 
 **Files:**
 - Modify: `swingbot/core/market/shock.py` (import `replace`, `Callable`; append `ShockState`, entry rules, `RULES`, `step`)
