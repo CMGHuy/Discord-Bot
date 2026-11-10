@@ -48,3 +48,35 @@ def assert_prefix_stable(fn, df, checkpoints, *, skip_last=False) -> None:
         pd.testing.assert_series_equal(
             part.iloc[:stop], full.iloc[:stop], check_names=False,
             check_exact=False, rtol=1e-12, atol=0.0, obj=f"prefix ending at bar {t}")
+
+
+def shock_context(index, episodes) -> dict:
+    """BREADTH_ATR1 and ^VIX frames on ``index`` for the v211 shock tests.
+    Each (enter_pos, release_pos) pair, enter_pos < release_pos: breadth 0.45
+    on enter_pos, 0.20 strictly between, 0.05 on release_pos with ^VIX one
+    point down that day. Elsewhere breadth 0.05 and ^VIX flat at 20, so
+    nothing else enters or releases."""
+    index = pd.DatetimeIndex(index)
+    n = len(index)
+    breadth, vix = np.full(n, 0.05), np.full(n, 20.0)
+    for enter_pos, release_pos in episodes:
+        breadth[enter_pos] = 0.45
+        breadth[enter_pos + 1:release_pos] = 0.20
+        vix[release_pos] = 19.0
+    return {"BREADTH_ATR1": frame(breadth, index=index, opens=breadth, highs=breadth,
+                                  lows=breadth, volumes=np.full(n, 400.0)),
+            "^VIX": frame(vix, index=index, opens=vix, highs=vix, lows=vix,
+                          volumes=np.zeros(n))}
+
+
+def episodes_covering(positions, n, *, length=6) -> list:
+    """Non-overlapping (enter, release) pairs: each enters one bar before a
+    position and releases ``length`` bars after entering; a position inside
+    (or the bar after) the previous episode, or too close to the end, is skipped."""
+    out, last = [], -10
+    for p in (int(p) for p in positions):
+        enter, release = p - 1, p - 1 + length
+        if enter > last + 1 and enter >= 0 and release < n:
+            out.append((enter, release))
+            last = release
+    return out
