@@ -165,7 +165,7 @@ outside this spec, so the plan reports it and moves no colour. The filled button
   guard that already pins the Graphite copies. `manifest.webmanifest` stays
   Graphite: a manifest is static and installed once, so it cannot follow a
   per-browser choice. A Dark blue user's home-screen splash is black for an
-  instant. That is accepted, and the manifest's comment says so.
+  instant. That is accepted, and the `index.html` comment beside the cold-load copies says so (the manifest is JSON and cannot hold one).
 - On every toggle, `ThemeService` also updates `<meta name="theme-color">`.
   On a phone the browser chrome follows.
 
@@ -202,9 +202,9 @@ outside this spec, so the plan reports it and moves no colour. The filled button
 - lightweight-charts charts (`trade-chart.ts`, `price-pane.ts`,
   `equity-candles.ts`) and the canvas primitives (`legend-primitive.ts`,
   `vline-primitive.ts`) read token strings once, through `chart-theme.ts`'s
-  `token()`, at creation. Each must re-apply its options when
+  `token()` (defined in `chart-frame.ts`), at creation. Each must re-apply its options when
   `ThemeService.theme()` changes (an `effect` calling `applyOptions` with a
-  fresh `chartTheme()` read, and the primitives re-reading on their next
+  fresh `chartOptions(chartPalette())` read, and the primitives re-reading on their next
   draw). Otherwise a chart open during the toggle keeps the old ground until
   the route is left.
 - How each chart is refreshed is the builder's call. The requirement: after a
