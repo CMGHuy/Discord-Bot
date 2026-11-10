@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import { ProviderHealthRow, SystemHealth } from '../../api/models';
 import { ABSENT, dateTime, num, share } from '../../ui/format';
+import { Hint } from '../../ui/hint';
 import { Panel } from '../../ui/layout';
 
 /** One rendered row. The text is built here rather than in the template so
@@ -13,11 +14,15 @@ export interface ProviderHealthLine {
   fallbackBreach: boolean;
   empty: string;
   emptyBreach: boolean;
+  oldPrint: string;
   stale: string;
 }
 
 const isKnown = (value: number | null | undefined): value is number =>
   value !== null && value !== undefined;
+
+/** v223: the "Old prints" column's header hint. */
+export const OLD_PRINT_HINT = 'Old IEX prints re-asked from yfinance, share of live-price asks';
 
 /** A fraction as an unsigned percentage with one decimal; unknown → "—".
  *  `share`, not `pct`: a rate is a level, not a gain or a loss. */
@@ -48,6 +53,7 @@ export function providerLines(health: SystemHealth | null): ProviderHealthLine[]
     fallbackBreach: breaches(row.provider_fallback_rate, fallback_pct),
     empty: emptyText(row),
     emptyBreach: breaches(row.empty_rate, empty_pct),
+    oldPrint: rateText(row.old_print_rate),
     stale: num(row.stale_symbols, 0),
   }));
 }
@@ -62,12 +68,13 @@ export function providerLines(health: SystemHealth | null): ProviderHealthLine[]
 @Component({
   selector: 'sb-provider-health-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel],
+  imports: [Panel, Hint],
   template: `
     <sb-panel heading="Data providers">
       <p class="explain">
         Recent scans, newest first. The ops channel is alerted when fallback is above {{ fallbackPct() }}% or empty is above {{ emptyPct() }}% of a scan.
         Stale counts frames whose last bar is older than the previous NYSE session; it is shown here, not alerted on.
+        Old prints are old IEX prints outside regular hours re-asked from yfinance, as a share of live-price asks; it is shown here, not alerted on.
       </p>
       @if (lines().length) {
         <div class="scroll">
@@ -78,6 +85,7 @@ export function providerLines(health: SystemHealth | null): ProviderHealthLine[]
                 <th scope="col" class="right">Tickers</th>
                 <th scope="col" class="right">Fallback</th>
                 <th scope="col" class="right">Empty</th>
+                <th scope="col" class="right">Old prints<sb-hint [text]="oldPrintHint" label="About old prints" align="left" /></th>
                 <th scope="col" class="right">Stale</th>
               </tr>
             </thead>
@@ -88,6 +96,7 @@ export function providerLines(health: SystemHealth | null): ProviderHealthLine[]
                   <td class="num right">{{ line.tickers }}</td>
                   <td class="num right" [class.breach]="line.fallbackBreach">{{ line.fallback }}@if (line.fallbackBreach) {<span class="flag"> · over limit</span>}</td>
                   <td class="num right" [class.breach]="line.emptyBreach">{{ line.empty }}@if (line.emptyBreach) {<span class="flag"> · over limit</span>}</td>
+                  <td class="num right">{{ line.oldPrint }}</td>
                   <td class="num right">{{ line.stale }}</td>
                 </tr>
               }
@@ -136,6 +145,7 @@ export class ProviderHealthPanel {
   readonly health = input<SystemHealth | null>(null);
   /** True after a failed refresh: show unavailable, never an empty table as current. */
   readonly stale = input(false);
+  protected readonly oldPrintHint = OLD_PRINT_HINT;
 
   protected readonly current = computed(() => this.stale() ? null : this.health());
   protected readonly lines = computed(() => providerLines(this.current()));

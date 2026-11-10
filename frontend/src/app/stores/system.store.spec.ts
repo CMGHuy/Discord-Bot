@@ -122,6 +122,7 @@ const HEALTH = {
       at: '2026-10-09T14:05:00+00:00',
       tickers: 150,
       provider_fallback_rate: 0.04,
+      old_print_rate: 0.92,
       stale_symbols: 0,
       empty_symbols: 2,
       empty_rate: 0.0133,
@@ -761,6 +762,14 @@ describe('SystemStore', () => {
   });
 
   /* -- v148: system health ------------------------------------------------ */
+
+  it('carries the old-print rate through from the health answer (v223)', () => {
+    store.resolveProviders().subscribe();
+    backend.expectOne('/api/v1/system/health').flush(HEALTH);
+    backend.expectOne('/api/v1/risk').flush({});
+
+    expect(store.health()!.providers[0].old_print_rate).toBe(0.92);
+  });
 
   it('resolves health with the Providers tab, and the Scan tab no longer reads it (v195 §5.1)', () => {
     store.resolveProviders().subscribe();
