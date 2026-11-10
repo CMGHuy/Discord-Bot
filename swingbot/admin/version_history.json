@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-10 11:10:53 UTC",
+  "generated_at": "2026-11-10 11:54:42 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.40.3",
-    "bot": "2.18.0"
+    "ui": "1.40.4",
+    "bot": "2.18.1"
   },
   "releases": [
     {
@@ -2507,6 +2507,32 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-11-10",
+      "last_seen": "2026-11-10",
+      "commit": "1b9bd986",
+      "subject": "release(bot): 2.18.1 -- provider alert counts only real Alpaca failures; old IEX prints tagged apart (v223)",
+      "versions": {
+        "ui": "1.40.3",
+        "bot": "2.18.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-10",
+      "last_seen": "2026-11-10",
+      "commit": "f9400b4f",
+      "subject": "release(ui): 1.40.4 -- Provider health Old prints column, watchlist old-print hint (v223)",
+      "versions": {
+        "ui": "1.40.4",
+        "bot": "2.18.1"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
