@@ -214,3 +214,130 @@ def test_the_real_idea_screens_one_ticker_deterministically():
     b = screen_idea.screen_ticker(idea, "AAA", df, ALWAYS)
     assert set(a.avoid) == AVOID_KEYS
     assert (a.events, a.avoid) == (b.events, b.avoid)
+
+
+# --- V214-7: mode-threaded verdicts ---------------------------------------
+
+import re  # noqa: E402
+from datetime import date, timedelta  # noqa: E402
+
+from swingbot.core.backtesting.instrument import stats  # noqa: E402
+from swingbot.core.backtesting.screen import forward  # noqa: E402
+from swingbot.core.backtesting.screen import ideas as ideas_module  # noqa: E402
+
+CLAUSES_AVOID = {"exp_r", "ci", "years", "n", "control_exp_r", "control_ci", "control_n"}
+
+
+def _rows(n, r_event, r_null=0.0):
+    """n rows, one per ISO week, cycling through 2011-2019."""
+    out = []
+    for i in range(n):
+        day = date(verdict.YEARS[i % len(verdict.YEARS)], 1, 4) + timedelta(weeks=i // 9)
+        out.append({"ticker": "AAA", "entry_date": day.isoformat(),
+                    "exit_date": day.isoformat(), "r_event": r_event, "r_null": r_null,
+                    "outcome": "stop"})
+    return out
+
+
+def _screen(events, arm=None, **fields):
+    rank = pd.DataFrame(columns=["year", "event"] + [f"fwd_{h}" for h in forward.HORIZONS])
+    avoid = None if arm is None else {"control": arm, "below_floor": 0, "kept": len(events),
+                                      "excluded": 0, "population": 0, "overnight": 0}
+    return screen_idea.TickerScreen(ticker="AAA", counters=Counter(), events=events,
+                                    null_outcomes=Counter(),
+                                    excess={h: [] for h in forward.HORIZONS}, rank=rank,
+                                    avoid=avoid, **fields)
+
+
+def _avoid_summary():
+    """N = 400 at d = -0.5; N_c = 350 at d_c = -0.4: every avoid clause holds."""
+    return screen_idea.summarise([_screen(_rows(400, -0.5), _rows(350, -0.5, -0.1))],
+                                 mode="avoid")
+
+
+def test_the_mode_vocabularies_agree():
+    assert verdict.MODES == ideas_module.MODES == ("edge", "avoid")
+    assert verdict.SCREEN_AVOID_PASS == stats.VERDICTS[-1] == "SCREEN-AVOID-PASS"
+
+
+def test_an_avoid_summary_pairs_the_null_and_the_control_arm():
+    v = _avoid_summary()["verdict"]
+    assert (v.mode, v.verdict, v.n) == ("avoid", "SCREEN-AVOID-PASS", 400)
+    assert set(v.clauses) == CLAUSES_AVOID and all(v.clauses.values())
+    assert v.delta_exp_r == pytest.approx(-0.5)
+    assert v.control.n == 350 and v.control.delta_exp_r == pytest.approx(-0.4)
+
+
+def test_avoid_pairs_pool_every_screens_control_rows_in_order():
+    first, last = _rows(3, -0.2, 0.1), _rows(2, 0.4, 0.5)
+    pairs = screen_idea._avoid_pairs([_screen(_rows(3, 0.0), first),
+                                      _screen(_rows(1, 0.0)), _screen(_rows(2, 0.0), last)])
+    assert [p.d for p in pairs] == pytest.approx([-0.3, -0.3, -0.3, -0.1, -0.1])
+    assert [p.entry_date for p in pairs] == [r["entry_date"] for r in first + last]
+
+
+def test_an_edge_summary_is_unchanged():
+    screens = [_screen(_rows(320, 0.3))]
+    default, edge = screen_idea.summarise(screens), screen_idea.summarise(screens, mode="edge")
+    assert default["verdict"] == edge["verdict"]
+    v = default["verdict"]
+    assert (v.mode, v.control, v.years_negative) == ("edge", None, None)
+    assert set(v.clauses) == {"exp_r", "ci", "years", "n"}
+
+
+def test_stress_and_decide_carry_the_mode():
+    rows = _rows(50, -0.3)
+    screens = [_screen(rows, stressed=rows)]
+    assert screen_idea._stress(screens).mode == "edge"
+    assert screen_idea._stress(screens, mode="avoid").mode == "avoid"
+    assert screen_idea._decide(rows, "avoid").mode == "avoid"
+    assert screen_idea._decide(None, "avoid") is None
+
+
+def test_short_blocks_carry_the_mode():
+    idea = Idea(name="short_avoid", events=lambda df: fake_states(df)["event"],
+                time_cap_bars=20, direction="short", mode="avoid", states=fake_states)
+    rows = _rows(40, -0.2)
+    block = screen_idea.with_short_blocks({"events": rows}, [_screen(rows, control=rows)],
+                                          idea, None)["short"]
+    assert block["control"].mode == "avoid"
+
+
+def test_the_avoid_verdict_table_states_the_avoid_rules():
+    text = "\n".join(screen_idea._render_verdict(_avoid_summary()["verdict"]))
+    assert text.startswith("## Verdict: SCREEN-AVOID-PASS")
+    for row in ("| ΔExpR = mean(R_event − mean R_null) | -0.5000R | ≤ -0.10R | yes |",
+                "| years with mean(d) < 0 | 9 of 9 | ≥ 7 | yes |",
+                "| kept events N | 400 | ≥ 300 | yes |",
+                "| control arm ΔExpR = mean(R_event − mean R_control) | -0.4000R | ≤ -0.10R | yes |",
+                "| control arm events N_c | 350 | ≥ 300 | yes |",
+                "One-sided bootstrap p (share of resamples ≥ 0): "):
+        assert row in text
+    assert "| upper 95% bound, week-clustered bootstrap | -0.5000R (lower -0.5000R) | < 0 | yes |" in text
+    assert "| control arm upper 95% bound | -0.4000R (lower -0.4000R) | < 0 | yes |" in text
+    assert "mean(d) > 0" not in text and "share of resamples ≤ 0" not in text
+
+
+def test_years_text_per_mode():
+    assert screen_idea._years_text(_avoid_summary()["verdict"]) == "9/9 years negative"
+    edge = verdict.Verdict("SCREEN-FAIL", 412, 0.03, -0.01, 0.07, 0.23, 4, {}, {})
+    assert screen_idea._years_text(edge) == "4/9 years"
+
+
+def test_an_avoid_run_never_prints_an_edge_label(tmp_path, monkeypatch, capsys):
+    monkeypatch.setitem(screen_idea.IDEAS, "fake_avoid", AVOID)
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    for seed, ticker in enumerate(("AAA", "BBB"), start=1):
+        _write_csv(cache / f"{ticker}.csv", random_walk(2700, seed=seed))
+    membership = tmp_path / "membership.csv"
+    membership.write_text("ticker,start_date,end_date\nAAA,2000-01-01,\nBBB,2000-01-01,\n",
+                          encoding="utf-8")
+    argv = ["--idea", "fake_avoid", "--cache-dir", str(cache), "--membership", str(membership),
+            "--ledger", str(tmp_path / "ledger.jsonl"), "--results-dir", str(tmp_path / "r"),
+            "--date", "2026-11-06", "--dry-run"]
+    assert screen_idea.main(argv) == 0
+    text = capsys.readouterr().out
+    assert "## Verdict: SCREEN-" in text and "years with mean(d) < 0" in text
+    assert re.search(r"(?<!AVOID-)SCREEN-PASS", text) is None
+    assert "years with mean(d) > 0" not in text

@@ -1091,21 +1091,35 @@ def _timeouts(screens, events) -> dict:
             "null": _book_timeouts(null_mix["timeout"], sum(null_mix.values()), null_r)}
 
 
-def _stress(screens):
+def _avoid_pairs(screens) -> list:
+    """v214: every screen's avoid control-arm rows, pooled in screen order."""
+    return [verdict.PairedEvent(r["entry_date"], r["r_event"] - r["r_null"])
+            for s in screens if s.avoid for r in s.avoid["control"]]
+
+
+def _decide_kwargs(mode: str, screens=()) -> dict:
+    """v214: the extra ``verdict.decide`` arguments for ``mode``. Edge gives
+    none, so every edge call stays the literal ``verdict.decide(paired)``."""
+    if mode == "edge":
+        return {}
+    return {"mode": "avoid", "control": _avoid_pairs(screens)}
+
+
+def _stress(screens, mode: str = "edge"):
     """The 2 x slippage verdict over the trail pairs; None for a fixed idea."""
     if all(screen.stressed is None for screen in screens):
         return None
     rows = [row for screen in screens if screen.stressed is not None
             for row in screen.stressed]
     return verdict.decide([verdict.PairedEvent(row["entry_date"], row["r_event"] - row["r_null"])
-                           for row in rows])
+                           for row in rows], **_decide_kwargs(mode))
 
 
-def summarise(screens, skipped=None) -> dict:
+def summarise(screens, skipped=None, *, mode: str = "edge") -> dict:
     events = [row for screen in screens for row in screen.events]
     paired = [verdict.PairedEvent(row["entry_date"], row["r_event"] - row["r_null"])
               for row in events]
-    return {"verdict": verdict.decide(paired), "events": events,
+    return {"verdict": verdict.decide(paired, **_decide_kwargs(mode, screens)), "events": events,
             "counters": _sum_counters(screen.counters for screen in screens),
             "skipped": Counter(skipped or {}),
             "event_outcomes": Counter(row["outcome"] for row in events),
@@ -1145,11 +1159,11 @@ def _pooled(screens, name: str) -> list | None:
     return [row for screen in screens if getattr(screen, name) for row in getattr(screen, name)]
 
 
-def _decide(rows) -> verdict.Verdict | None:
+def _decide(rows, mode: str = "edge") -> verdict.Verdict | None:
     if rows is None:
         return None
     return verdict.decide([verdict.PairedEvent(r["entry_date"], r["r_event"] - r["r_null"])
-                           for r in rows])
+                           for r in rows], **_decide_kwargs(mode))
 
 
 def _overlap_total(screens) -> dict | None:
@@ -1209,9 +1223,9 @@ def with_short_blocks(summary: dict, screens, idea: Idea, spy) -> dict:
               descriptive.regime_split(summary["events"], descriptive.spy_above_200(spy)))
     block = {"partner": None if partner is None else partner.name,
              "overlap": _overlap_total(screens),
-             "control": _decide(_pooled(screens, "control")),
+             "control": _decide(_pooled(screens, "control"), idea.mode),
              "regime": regime,
-             "repriced": _decide(_pooled(screens, "repriced")),
+             "repriced": _decide(_pooled(screens, "repriced"), idea.mode),
              **_level_blocks(screens)}
     return {**summary, "short": block}
 
@@ -1314,6 +1328,11 @@ def _render_universe(universe, summary) -> list:
 
 
 def _render_verdict(v) -> list:
+    """The verdict table for ``v.mode`` (v214)."""
+    return _VERDICT_RENDERERS[v.mode](v)
+
+
+def _render_edge_verdict(v) -> list:
     return [f"## Verdict: {v.verdict}", "",
             "| Clause | Measured | Rule | Holds |", "|---|---|---|---|",
             f"| ΔExpR = mean(R_event − mean R_null) | {_fmt(v.delta_exp_r)}R | ≥ {verdict.PASS_EXP_R:+.2f}R | {_yes(v.clauses['exp_r'])} |",
@@ -1322,6 +1341,34 @@ def _render_verdict(v) -> list:
             f"| kept events N | {v.n} | ≥ {verdict.MIN_N} | {_yes(v.clauses['n'])} |", "",
             f"One-sided bootstrap p (share of resamples ≤ 0): {_fmt(v.p, '.4f')}. "
             f"N < {verdict.MIN_N} is `SCREEN-UNDERPOWERED` whatever the other clauses say."]
+
+
+def _render_avoid_verdict(v) -> list:
+    """v214: the avoid table -- every clause mirrored below zero, plus the control arm."""
+    c, rule = v.control, f"≤ {-verdict.PASS_EXP_R:+.2f}R"
+    return [f"## Verdict: {v.verdict}", "",
+            "| Clause | Measured | Rule | Holds |", "|---|---|---|---|",
+            f"| ΔExpR = mean(R_event − mean R_null) | {_fmt(v.delta_exp_r)}R | {rule} | {_yes(v.clauses['exp_r'])} |",
+            f"| upper 95% bound, week-clustered bootstrap | {_fmt(v.ci_high)}R (lower {_fmt(v.ci_low)}R) | < 0 | {_yes(v.clauses['ci'])} |",
+            f"| years with mean(d) < 0 | {v.years_negative} of {len(verdict.YEARS)} | ≥ {verdict.MIN_POSITIVE_YEARS} | {_yes(v.clauses['years'])} |",
+            f"| kept events N | {v.n} | ≥ {verdict.MIN_N} | {_yes(v.clauses['n'])} |",
+            f"| control arm ΔExpR = mean(R_event − mean R_control) | {_fmt(c.delta_exp_r)}R | {rule} | {_yes(v.clauses['control_exp_r'])} |",
+            f"| control arm upper 95% bound | {_fmt(c.ci_high)}R (lower {_fmt(c.ci_low)}R) | < 0 | {_yes(v.clauses['control_ci'])} |",
+            f"| control arm events N_c | {c.n} | ≥ {verdict.MIN_N} | {_yes(v.clauses['control_n'])} |", "",
+            f"One-sided bootstrap p (share of resamples ≥ 0): {_fmt(v.p, '.4f')}. "
+            f"N < {verdict.MIN_N} or N_c < {verdict.MIN_N} is `SCREEN-UNDERPOWERED` whatever "
+            "the other clauses say; the control arm is drawn from bars where the idea's "
+            "control condition holds (G1), so a sign flip alone never passes."]
+
+
+_VERDICT_RENDERERS = {"edge": _render_edge_verdict, "avoid": _render_avoid_verdict}
+
+
+def _years_text(v) -> str:
+    """The publish line's year count: positive years (edge), negative years (avoid)."""
+    if v.mode == "avoid":
+        return f"{v.years_negative}/{len(verdict.YEARS)} years negative"
+    return f"{v.years_positive}/{len(verdict.YEARS)} years"
 
 
 def _mix(outcomes: Counter, names: tuple) -> list:
@@ -1728,7 +1775,7 @@ def publish(args, idea, universe, summary, rows, data=None) -> int:
     _pin_context_hashes(args, data)
     stats.append_ledger_row(row, path=args.ledger)
     print(f"{row['id']}: {v.verdict}, N={v.n}, dExpR={_fmt(v.delta_exp_r)}R, "
-          f"lower95={_fmt(v.ci_low)}R, {v.years_positive}/{len(verdict.YEARS)} years -> {row['record']}")
+          f"lower95={_fmt(v.ci_low)}R, {_years_text(v)} -> {row['record']}")
     return 0
 
 
@@ -1748,7 +1795,8 @@ def _run_screens(args, idea: Idea, universe: Universe, data, spy) -> dict:
                                        end=args.end, tickers=tickers,
                                        context=None if data is None else data.frames,
                                        checkpoint_dir=args.checkpoint_dir)
-    summary = with_diagnostics(summarise(screens, skipped), screens, idea, data, end=args.end)
+    summary = with_diagnostics(summarise(screens, skipped, mode=idea.mode), screens, idea,
+                               data, end=args.end)
     summary = with_short_blocks(summary, screens, idea, spy)
     return with_shock_blocks(summary, screens, idea)
 
