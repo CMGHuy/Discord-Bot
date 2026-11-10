@@ -7,7 +7,8 @@ import pytest
 
 from swingbot.core.backtesting.screen import ideas
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea
-from swingbot.core.backtesting.screen.ideas import (range_breakdown_close, range_breakdown_stop,
+from swingbot.core.backtesting.screen.ideas import (fvg_overhead_aged, range_breakdown_close,
+                                                    range_breakdown_stop,
                                                     shock_failed_bounce_short,
                                                     shock_support_break_short)
 
@@ -18,7 +19,8 @@ def test_registry_holds_the_first_batch_in_spec_order_then_later_ideas():
                                   "bond_spike_rebound", "dollar_drop",
                                   "sweep_reclaim_bos", "range_breakdown_close",
                                   "range_breakdown_stop", "vix_curve_calm",
-                                  "shock_support_break_short", "shock_failed_bounce_short")
+                                  "shock_support_break_short", "shock_failed_bounce_short",
+                                  "fvg_overhead_aged")
     assert list(IDEAS) == list(ideas.IDEA_MODULES)
     assert all(IDEAS[name].name == name for name in IDEAS)
 
@@ -29,7 +31,8 @@ def test_time_caps_are_the_spec_values():
         "turtle_soup": 10, "quiet_pullback": 10, "bond_spike_rebound": 10,
         "dollar_drop": 10, "sweep_reclaim_bos": 20, "range_breakdown_close": 20,
         "range_breakdown_stop": 20, "vix_curve_calm": 10,
-        "shock_support_break_short": 10, "shock_failed_bounce_short": 10}
+        "shock_support_break_short": 10, "shock_failed_bounce_short": 10,
+        "fvg_overhead_aged": 20}
 
 
 def test_frozen_parameter_sets():
@@ -63,6 +66,10 @@ def test_frozen_parameter_sets():
         "near": "^VIX", "far": "^VIX3M", "stress_on_above": 1.0,
         "stress_off_below": 0.95, "events": "calm (not stressed)", "side": "long"}
     _assert_shock_params()
+    assert dict(IDEAS["fvg_overhead_aged"].params) == {
+        "side": "bearish", "anchor": "bottom", "min_age_bars": 5, "reach_atr": 3.0,
+        "atr_n": 14, "lookback": 100, "max_per_side": 3, "fill": "any wick touch",
+        "onset": "once per gap bar_index"}
 
 
 def _assert_shock_params():
@@ -93,7 +100,7 @@ def test_every_registered_idea_pins_its_direction_and_entry():
         "bond_spike_rebound": "long", "dollar_drop": "long", "sweep_reclaim_bos": "long",
         "range_breakdown_close": "short", "range_breakdown_stop": "short",
         "vix_curve_calm": "long", "shock_support_break_short": "short",
-        "shock_failed_bounce_short": "short"}
+        "shock_failed_bounce_short": "short", "fvg_overhead_aged": "long"}
     assert {n: i.entry for n, i in IDEAS.items()} == {
         "high52w": "next_open", "uptrend_pullback": "next_open", "gap_volume": "next_open",
         "turn_of_month": "next_open", "turtle_soup": "next_open",
@@ -101,7 +108,7 @@ def test_every_registered_idea_pins_its_direction_and_entry():
         "dollar_drop": "next_open", "sweep_reclaim_bos": "next_open",
         "range_breakdown_close": "next_open", "range_breakdown_stop": "level",
         "vix_curve_calm": "next_open", "shock_support_break_short": "next_open",
-        "shock_failed_bounce_short": "next_open"}
+        "shock_failed_bounce_short": "next_open", "fvg_overhead_aged": "next_open"}
     breakdown = ("range_breakdown_close", "range_breakdown_stop")
     special = (*breakdown, "shock_support_break_short", "shock_failed_bounce_short")
     older = {n: i for n, i in IDEAS.items() if n not in special}
@@ -150,7 +157,8 @@ def test_every_registered_idea_is_raced_under_one_pinned_shape():
         "bond_spike_rebound": "fixed", "dollar_drop": "fixed",
         "sweep_reclaim_bos": "fixed", "range_breakdown_close": "fixed",
         "range_breakdown_stop": "fixed", "vix_curve_calm": "fixed",
-        "shock_support_break_short": "fixed", "shock_failed_bounce_short": "fixed"}
+        "shock_support_break_short": "fixed", "shock_failed_bounce_short": "fixed",
+        "fvg_overhead_aged": "fixed"}
 
 
 MURPHY = ("Murphy (2004), Intermarket Analysis — shock proxy, "
@@ -167,7 +175,8 @@ def test_only_the_intermarket_and_shock_ideas_read_context_series():
         "sweep_reclaim_bos": (), "range_breakdown_close": (), "range_breakdown_stop": (),
         "vix_curve_calm": ("^VIX", "^VIX3M"),
         "shock_support_break_short": ("BREADTH_ATR1", "^VIX"),
-        "shock_failed_bounce_short": ("BREADTH_ATR1", "^VIX")}
+        "shock_failed_bounce_short": ("BREADTH_ATR1", "^VIX"),
+        "fvg_overhead_aged": ()}
     assert IDEAS["bond_spike_rebound"].source == MURPHY
     assert IDEAS["dollar_drop"].source == MURPHY
 
@@ -321,8 +330,16 @@ def test_modes_and_the_defaults():
 def test_every_registered_idea_reads_edge_mode_with_no_states():
     """v214 witness: every idea frozen before v214 reads MODE = "edge" and no
     states(df), so its verdict, results doc and hypothesis stay byte-identical."""
-    assert {n: (i.mode, i.states) for n, i in IDEAS.items()} == {
-        n: ("edge", None) for n in IDEAS}
+    edge = {n: i for n, i in IDEAS.items() if n != "fvg_overhead_aged"}
+    assert {n: (i.mode, i.states) for n, i in edge.items()} == {n: ("edge", None) for n in edge}
+
+
+def test_the_overhead_gap_idea_is_the_only_avoid_idea():
+    aged = IDEAS["fvg_overhead_aged"]
+    assert {n for n, i in IDEAS.items() if i.mode == "avoid"} == {"fvg_overhead_aged"}
+    assert aged.states is fvg_overhead_aged.states and aged.events is fvg_overhead_aged.events
+    assert (aged.context, aged.context_kind, aged.levels, aged.control, aged.family) == (
+        (), "z", None, None, ())
 
 
 def test_mode_and_states_sit_directly_after_context_kind():
