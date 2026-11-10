@@ -72,7 +72,7 @@ const PERFORMANCE = {
 };
 
 const EQUITY_CURVE = {
-  points: [], points_n: 0, as_of: null, benchmark: { spy_indexed: [] }, scope: SCOPE, n: 0,
+  points: [], points_n: 0, as_of: null, scope: SCOPE, n: 0,
 };
 
 /* SR51 — the grid results and Propose.

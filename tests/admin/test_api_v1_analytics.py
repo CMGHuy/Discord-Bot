@@ -344,24 +344,14 @@ def test_equity_curve_carries_currency_and_percent_and_scope(seed, logged_in):
     assert [p["cum_pnl"] for p in body["points"]] == [70.0, 40.0]
     assert all(isinstance(p["cum_pct"], (int, float)) or p["cum_pct"] is None for p in body["points"])
     assert body["scope"]["ledger"] == "both" and body["n"] == 2
-    assert "spy_indexed" in body["benchmark"]
+    assert "benchmark" not in body
 
 
-def test_index_benchmark_rebases_to_first_point_in_range():
-    from swingbot.admin.api_v1.analytics import _index_benchmark
-    out = _index_benchmark({"2026-08-01": 100.0, "2026-08-02": 102.0, "2026-08-03": 99.0}, "2026-08-02")
-    assert out == [{"date": "2026-08-02", "pct": 0.0}, {"date": "2026-08-03", "pct": round((99 / 102 - 1) * 100, 4)}]
-    assert _index_benchmark({}, None) == []
-    # `spy_cum`'s only real producer (the pre-refactor `get_detailed_stats`,
-    # dropped in 4ae117dc) was itself a {date: value} dict -- no list-of-rows
-    # shape has ever existed for this key (`get_extended_stats`, what today's
-    # route actually reads, doesn't populate `spy_cum` at all). So this covers
-    # the dict shape more thoroughly instead: a `None` reading is filtered out
-    # (a real gap, not a zero), and when the exact `start` has no entry (here
-    # because it was filtered as `None`) the series rebases to the next
-    # available date at/after it, not to the nearest one before.
-    assert _index_benchmark({"2026-08-01": 100.0, "2026-08-02": None, "2026-08-03": 105.0},
-                             "2026-08-02") == [{"date": "2026-08-03", "pct": 0.0}]
+def test_the_dead_spy_overlay_is_gone():
+    """v208: the Benchmark tab replaces the removed SPY overlay."""
+    from swingbot.admin.api_v1 import analytics
+
+    assert not hasattr(analytics, "_index_benchmark")
 
 
 def test_by_dimension_accepts_every_dimension_and_nulls_thin_rates(seed, logged_in):

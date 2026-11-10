@@ -240,7 +240,7 @@ describe('AnalyticsStore', () => {
   };
   const EQUITY_CURVE = {
     points: [{ date: '2026-04-01', cum_r: 1, drawdown_r: 0, cum_pnl: 70, cum_pct: 0.7 }],
-    points_n: 1, as_of: '2026-04-01', benchmark: { spy_indexed: [] }, scope: SCOPE, n: 1,
+    points_n: 1, as_of: '2026-04-01', scope: SCOPE, n: 1,
   };
   const VARIANCE_BAND = { status: 'insufficient', scope: 'whole_book', days: 0, weeks: 0 };
   const BY_DIMENSION = { rows: [], as_of: null, min_cell_n: 20, scope: SCOPE, n: 34 };

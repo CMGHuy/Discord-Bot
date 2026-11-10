@@ -53,7 +53,7 @@ function storeStub(over: Record<string, unknown> = {}) {
     equityCurve: signal({
       points: [{ date: '2026-08-01', cum_r: 1, drawdown_r: 0, cum_pnl: 70, cum_pct: 0.7 },
                { date: '2026-08-02', cum_r: 0.5, drawdown_r: 0.5, cum_pnl: 40, cum_pct: 0.4 }],
-      points_n: 2, as_of: '2026-08-02', benchmark: { spy_indexed: [] }, scope: {}, n: 2,
+      points_n: 2, as_of: '2026-08-02', scope: {}, n: 2,
     }),
     equityCurveError: signal(null),
     varianceBand: signal(null), varianceBandError: signal(null),
@@ -79,6 +79,24 @@ function render(over: Record<string, unknown> = {}) {
 
 describe('OverviewTab', () => {
   beforeEach(() => TestBed.resetTestingModule());
+
+  it('links to the Benchmark tab in place of the dead SPY notes (v208)', () => {
+    for (const unit of ['r', 'pct', 'money']) {
+      TestBed.resetTestingModule();
+      const { el } = render({ unit: signal(unit) });
+      const link = el.querySelector<HTMLAnchorElement>('a.benchmark-link');
+      expect(link, unit).not.toBeNull();
+      expect(link!.textContent!.trim()).toBe('Compare with indexes → Benchmark tab');
+      expect(link!.getAttribute('href')).toBe('/insights/analytics?tab=benchmark');
+      expect(el.textContent).not.toContain('SPY indexed');
+      expect(el.textContent).not.toContain('SPY appears in % mode only');
+    }
+  });
+
+  it('keeps the link when the scope has no closed trades', () => {
+    const { el } = render({ equityCurve: signal({ points: [], points_n: 0, as_of: null, scope: {}, n: 0 }) });
+    expect(el.querySelector('a.benchmark-link')).not.toBeNull();
+  });
 
   it('shows six KPI tiles, all six labelled', () => {
     const { el } = render();
@@ -204,6 +222,7 @@ describe('OverviewTab', () => {
 describe('OverviewTab hint and tooltip copy (A4 audit)', () => {
   beforeEach(() => TestBed.resetTestingModule());
 
+
   it('Equity and R distribution hints state the paper, gross, pre-tax basis', () => {
     const { fixture } = render();
     expect(hintText(fixture, 'Equity definition')).toContain('per closed trade, ordered by close date');
@@ -300,6 +319,7 @@ describe('overview.ts breakpoints', () => {
 
 describe('OverviewTab performance strip (v195 §5.2)', () => {
   beforeEach(() => TestBed.resetTestingModule());
+
 
   const tiles = (fixture: ReturnType<typeof render>['fixture']): StatTile[] =>
     fixture.debugElement.queryAll(By.css('sb-stat-tile')).map((d) => d.componentInstance as StatTile);

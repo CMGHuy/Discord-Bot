@@ -141,12 +141,11 @@ function maxDrawdown(values: readonly number[]): number | null {
           <sb-line-chart [series]="equitySeries()" [referenceLine]="0" [valueFormat]="format" />
           <h4 class="pane-label">Drawdown</h4>
           <sb-line-chart [series]="drawdownSeries()" [valueFormat]="format" />
-          @if (store.unit() === 'pct' && benchmarkSeries().length) {
-            <p class="benchmark-note">SPY indexed to the range start, for context.</p>
-          } @else if (store.unit() !== 'pct') {
-            <p class="benchmark-note">SPY appears in % mode only — an R curve and a price index share no axis.</p>
-          }
+
         }
+        <p class="benchmark-link-row">
+          <a class="sb-hit benchmark-link" routerLink="/insights/analytics" [queryParams]="{ tab: 'benchmark' }">Compare with indexes → Benchmark tab</a>
+        </p>
       </sb-panel>
 
       <sb-panel>
@@ -199,11 +198,7 @@ function maxDrawdown(values: readonly number[]): number | null {
        take the columns from 640px up and stack below. */
     .wide { grid-column: 1 / -1; }
     .pane-label { font-size: var(--text-chip); color: var(--text-secondary); margin: var(--space-10) 0 var(--space-4); }
-    /* Named .benchmark-note, not .note (v54 precedent, trade-detail.ts):
-       that name is a promoted sb-note callout composite -- this is an
-       unrelated one-line caption, not a callout, and the shared name would
-       be coincidence. */
-    .benchmark-note { font-size: var(--text-chip); color: var(--text-faint); margin: var(--space-6) 0 0; }
+    .benchmark-link-row { font-size: var(--text-chip); margin: var(--space-6) 0 0; }
     .pairs { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-8); margin: var(--space-10) 0 0; }
     .pairs dt { font-size: var(--text-micro); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.1em; }
     .pairs dd { margin: var(--space-4) 0 0; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -261,12 +256,6 @@ export class OverviewTab {
     points: this.points().map((p) => ({ date: p.date, value: -p.drawdown_r })),
   }]);
 
-  /** No producer emits this in production (B3's `spy_indexed` was dropped in
-   *  `4ae117dc` and nothing replaced it, a previously-ruled defect) -- this
-   *  reads the payload honestly and stays `[]` rather than fabricating a
-   *  series, and the template's two-branch note never claims SPY is present
-   *  when this is empty. */
-  readonly benchmarkSeries = computed(() => this.store.equityCurve()?.benchmark?.spy_indexed ?? []);
 
   /** Last 30 `cum_r` deltas, not cumulative values -- a sparkline of the
    *  running total would just look like the equity chart it sits beside. */

@@ -666,7 +666,6 @@ export interface AnalyticsEquityCurve extends Scoped {
   points: EquityCurvePoint[];
   points_n: number;
   as_of: string | null;
-  benchmark: { spy_indexed: { date: string; pct: number }[] };
   /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
   fx_missing_count?: number;
 }

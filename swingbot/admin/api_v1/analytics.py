@@ -86,31 +86,6 @@ def _all_trades(tl: TradeLog) -> list[dict]:
     return tl.get_trades(status=None, limit=None, ledger=None) or []
 
 
-def _index_benchmark(spy_cum, start: str | None) -> list[dict]:
-    """SPY as a percent series indexed to the first point at/after `start`
-    (spec v94 D6/H5: one axis -- SPY is only ever drawn in % mode).
-
-    `spy_cum` is a `{date: cumulative_level}` mapping -- the only shape this
-    key has ever had. It came from `TradeLog.get_detailed_stats`, dropped as
-    dead code in 4ae117dc; `get_extended_stats` (what `/performance` reads
-    today) does not compute `spy_cum` at all, so in production this is
-    `{}` until a real benchmark fetch is wired back in. No producer -- past
-    or present -- has ever emitted a list-of-rows shape for this key, so
-    this does not invent handling for one; a non-dict input is treated as
-    absent.
-    """
-    if not isinstance(spy_cum, dict):
-        return []
-    rows = sorted((str(d)[:10], float(v)) for d, v in spy_cum.items() if v is not None)
-    rows = [(d, v) for d, v in rows if not start or d >= start]
-    if not rows:
-        return []
-    base = rows[0][1]
-    if not base:
-        return []
-    return [{"date": d, "pct": round((v / base - 1) * 100, 4)} for d, v in rows]
-
-
 def _soak_for(strategy: str):
     from swingbot.core.backtesting.registry import get_badge
     from swingbot.core.edge.strategy_soak import soak_verdict
@@ -360,9 +335,6 @@ def analytics_equity_curve():
     happen to coincide only because nothing is currently skipped from
     `points`.
 
-    `benchmark.spy_indexed` re-bases `spy_cum` (see `_index_benchmark`) to
-    the scope's own start so the SPY overlay and the account curve always
-    share the same day-zero, never SPY's own inception.
     """
     from swingbot.core.analytics import metrics as m
     from swingbot.core.analytics.scope import closed_only, echo, select
@@ -379,7 +351,6 @@ def analytics_equity_curve():
     scoped = select(closed, scope)
     base_balance = float(account_module.load_account_config().get("base_balance") or 0.0)
     window_balance = m.balance_at(closed, scope.start, base_balance)
-    spy_cum = (tl.get_extended_stats(trades=all_raw) or {}).get("spy_cum") or {}
 
     ordered = sorted(scoped, key=lambda t: t.get("closed_at") or "")
     points = []
@@ -404,7 +375,6 @@ def analytics_equity_curve():
         "points": points,
         "points_n": len(points),
         "as_of": points[-1]["date"] if points else None,
-        "benchmark": {"spy_indexed": _index_benchmark(spy_cum, scope.start)},
         "fx_missing_count": missing_count(scoped),
         **echo(scope, len(scoped)),
     })
