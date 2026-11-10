@@ -133,3 +133,17 @@ Can run together: {V223-1, V223-2, V223-5, V223-6}. Then {V223-3, V223-4, V223-7
 |---|---|---|---|
 | 1 | [2026-11-10-v223-provider-alert-stale-quote-split_1-classify-route-telemetry.md](2026-11-10-v223-provider-alert-stale-quote-split_1-classify-route-telemetry.md) | V223-1..V223-4 | tag list, Alpaca classifier, router tagging, `old_print_rate` field and embeds |
 | 2 | [2026-11-10-v223-provider-alert-stale-quote-split_2-display-release.md](2026-11-10-v223-provider-alert-stale-quote-split_2-display-release.md) | V223-5..V223-8 | system-health key, Risk docstring, Angular panel and watchlist, release and acceptance |
+
+## Handoff
+
+Implemented and released 2026-11-10: V223-1..7 on main, bot 2.18.1 / ui 1.40.4, CI green on `0fb1f9f0`.
+Closed out with `skills: none affected`.
+
+- **Still owed:** V223-8 Step 5 production acceptance (read-only) on the first weekday window after deploy
+  (09:00-14:30 and 21:00-22:00 UTC, no degraded post, `old_print_rate` high, regular rows 0), then confirm the ops channel stayed quiet.
+- **Accepted blind spot (panel: staff-engineer, quant-engineer, both ADVISORY):** a frozen IEX feed *outside* the NYSE regular session
+  while the tape is open now reads as `yfinance-old-print`, which never alerts; it shows only in the display-only `old_print_rate`.
+  A frozen feed in regular hours still alerts. If extended-hours scans become frequent, consider alerting on a sustained high `old_print_rate`.
+- **Open-bell spike:** just after 09:30 ET (and after a holiday/weekend open) a prior-session print older than the max age is a real miss, so a brief fallback-rate spike is expected.
+- **Rollback note:** rolling back to 2.18.0 also reverts commits `3baaad99` (refresher held-symbol yfinance during a scan) and `9a93ac51` (trades last close), which rode this release unspecced.
+- **UI:** the compact watchlist card wraps every cell in an inert button, so the old-print hint (and the existing fallback hint) cannot be opened by touch at 390 px. Pre-existing; not fixed here.
