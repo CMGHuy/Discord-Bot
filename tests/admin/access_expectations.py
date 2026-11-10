@@ -28,7 +28,7 @@ _PUBLIC = [
 #: /market/tape records demand and refreshes stale quotes: idempotent cache
 #: fills any reader triggers, never a change to the book (V207-7 audit).
 _VIEWER_GET = [
-    "/analytics/by-dimension", "/analytics/calibration", "/analytics/cohort",
+    "/analytics/benchmark", "/analytics/by-dimension", "/analytics/calibration", "/analytics/cohort",
     "/analytics/equity-curve", "/analytics/exit-quality", "/analytics/heat-grid",
     "/analytics/journal", "/analytics/override-fidelity", "/analytics/partials",
     "/analytics/performance", "/analytics/plans", "/analytics/registry",
