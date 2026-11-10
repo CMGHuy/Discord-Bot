@@ -117,9 +117,12 @@ LEDGER_FIELDS = ("id", "date", "hypothesis", "instrument", "n", "exp_r", "p",
 #: (a ledger row is never edited). v190 appends DESCRIPTION: a recorded
 #: description of an instrument change (the v3 re-baseline); it decides
 #: nothing, so it carries `p: null` and stays out of the BH family.
+#: v214 appends SCREEN-AVOID-PASS: an avoid-mode screen pass (six clauses
+#: against the null and a control arm), which licenses a veto spec only; its
+#: p (share of resamples >= 0) is in the same BH family.
 VERDICTS = ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE", "WITHDRAWN", "OPEN",
             "SCREEN-PASS", "SCREEN-FAIL", "SCREEN-UNDERPOWERED",
-            "COST", "SAVED", "INCONCLUSIVE", "DESCRIPTION")
+            "COST", "SAVED", "INCONCLUSIVE", "DESCRIPTION", "SCREEN-AVOID-PASS")
 INSTRUMENTS = ("v1", "v2", "screen-v1", "v3")
 DESCRIPTION = "DESCRIPTION"
 #: v162 adds one OPTIONAL field: the bars a verdict was measured on. Rows
