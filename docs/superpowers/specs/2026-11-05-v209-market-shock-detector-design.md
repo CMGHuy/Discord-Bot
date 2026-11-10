@@ -629,7 +629,7 @@ Plan-briefer reconciliation (2026-11-05, after the panel): D1 the notify queue i
 
 ## Amendment A1 (2026-11-10) — entry rule re-registered after the replay miss
 
-**Status:** pre-registered here, before any detector run on a validation day. Frozen once committed.
+**Status:** pre-registered here, before any detector run on a validation day. Frozen once committed. **Honest provenance:** the rule's *structure* (a depth share and a no-speed breadth path) and the two 0.50 bars were chosen *after* 2026-11-05 was read, to fit it; "a majority" is a rationale, not independence. With VIX relief the effective bar is 0.45 whenever VIX is up 15 % or more. 2026-11-05 is therefore an **in-sample fit check, never evidence of out-of-sample skill**; only the validation set below is.
 
 ### The measured miss
 
@@ -647,23 +647,51 @@ NORMAL → SHOCK when **either**:
    `depth_frac` = share of sectored contributing names that sit in a sector (≥ 2 members) whose median ATR move ≤ −`SHOCK_ATR_K`. Replaces `sectors_down ≥ ceil(SHOCK_SECTORS_FRAC × sectors_total)`.
 2. **Sustained breadth:** `breadth_frac ≥ SHOCK_BREADTH_MAJORITY` (relief applies). No speed needed.
 
-The fast path (`SHOCK_BREADTH_FAST` + `SHOCK_SPEED_ENTER`) stays. `sectors_down`/`sectors_total` stay in the reading (display only). New fields: `SHOCK_DEPTH_FRAC` = **0.50**, `SHOCK_BREADTH_MAJORITY` = **0.50**; `SHOCK_SECTORS_FRAC` is removed. Values are set by "a majority", not read off 2026-11-05, and are frozen. Exit, recovery, re-entry and carry rules are unchanged. `depth_frac` is added to the reading's JSON row (no migration: rows are JSON).
+The fast path (`SHOCK_BREADTH_FAST` + `SHOCK_SPEED_ENTER`) stays. `sectors_down`/`sectors_total` stay in the reading (display only). New fields: `SHOCK_DEPTH_FRAC` = **0.50**, `SHOCK_BREADTH_MAJORITY` = **0.50**; `SHOCK_SECTORS_FRAC` is removed. Values are frozen. Exit, recovery, re-entry and carry rules are unchanged. `depth_frac` is a new required field on `ShockReading` and its JSON row. v209 has never been deployed, so no stored row lacks it (no read-time upcasting, no migration); the plan verifies the local replica and production hold no `market_shock_readings` rows before it lands, and drops any local ones.
 
 ### Validation set (outcome-blind, frozen before any run)
 
-Selected from daily SPY and ^VIX only, never from detector output, over the last three full calendar years before 2026-11-05, 2026-11-05 excluded:
-- **Shock days (6):** the six largest SPY close-to-close drops.
-- **Calm days (12):** a fixed-seed draw (`seed=209`) of 12 days with |SPY| < 0.5 % and VIX change < +3 %, at most 4 per year.
-- **Hard negatives (4, reported, not scored):** the four largest SPY drops between −1.5 % and −2.5 % with VIX change < +15 %.
-Same 87-name watchlist (survivorship noted), same step grid, VIX interpolated the same way from the day's VIX open-to-close change (its daily row; noted in the fixture).
+Selected from daily SPY, QQQ and ^VIX only, never from detector output, over the last three full calendar years before 2026-11-05 (2026-11-05 excluded). Each day replays from a **fresh `ShockState()`** (no overnight carry is scored).
+- **Shock days (6):** the largest SPY close-to-close drops, taken in order, skipping any day within 5 sessions of an already-chosen one, until 6.
+- **Calm negatives (12):** days with |SPY| < 0.5 % and VIX close-to-close change < +3 %; sort by date, shuffle with `random.Random(209)`, take in order skipping any year already holding 4.
+- **Rotation negatives (4):** the days with the 4 largest `QQQ − SPY` shortfalls (most negative) among days with SPY ≥ −1.5 % and VIX close-to-close change < +15 %. These are the tech-led selloffs a tech-heavy watchlist could false-fire on.
+- **Hard negatives (4):** the four largest SPY drops between −1.5 % and −2.5 % with VIX change < +15 %.
+- Same 87-name watchlist (survivorship noted). VIX path per step: linear from the day's open change vs the prior close (at 14:30/13:30 UTC, DST-aware) to its close change (at close), from the daily ^VIX row; noted in the fixture. (2026-11-05 keeps its tape path, which ramps from 0 and understates early VIX; noted.)
+- **A day whose fixture cannot be built, or whose readings are `insufficient`, counts as a miss (shock class) or a false fire (negative classes); it is never dropped.**
+
+Fixtures are committed compactly (gzip) under `tests/fixtures/`, one per day, with a `DATA_READERS` row in `scripts/dev/select_tests.py`, so CI runs the acceptance test and the frozen day list is reproducible from the repo. The raw bar cache lives under `market_data/` (gitignored) and checkpoints per (day, ticker); a restart skips finished pairs, within the Alpaca token-bucket budget.
 
 ### Acceptance (one shot)
 
-- Recall: SHOCK reached on ≥ 5 of the 6 shock days, and on 2026-11-05 **between 15:00 and 17:00 UTC** (the 15:00 lower bound still pins settle and two-reading rules).
-- Precision: SHOCK on ≤ 1 of the 12 calm days.
-- Hard negatives are printed per day; no gate.
-- **On a fail, v209 closes `no-lift/` (with v210/v211). No second tuning round, no threshold change, no new fixture, as for any closed pre-registration.**
+- **Recall:** SHOCK reached on ≥ 5 of the 6 shock days.
+- **Precision, scored per class:** SHOCK on ≤ 1 of 12 calm, ≤ 1 of 4 rotation, ≤ 1 of 4 hard-negative days.
+- **Invariant:** wherever SHOCK is reached, never before 15:00 UTC on a 14:30 open (pins the settle and two-reading rules).
+- **Reported, never gated:** 2026-11-05's first SHOCK time (in-sample); per shock day the first-SHOCK time, the share of that day's SPY drop (prior close to close) still ahead at that moment, and SHOCK dwell time; the grind/flush mix and episode clustering of the six; the longs-opened-before-SHOCK line.
+- **Power is limited** (N = 6 recall, 20 negatives): a pass is a sanity screen, not proof; the verdict says so.
+- **On a fail, v209 closes `no-lift/`.** v210 (its notices and badge consume the detector) closes with it. v211 is independent by this spec (§ Plans), so it is **decided separately by the partner, not closed here**. No second tuning round, no threshold change, no new fixture, as for any closed pre-registration.
 
 ### Plan impact
 
-Part 1 detector tasks change `measure`/`step` and the config section (19 fields: −1, +2); the fixture builder gains a session-date parameter (DST-aware) and a validation-day mode; V209-12b becomes the A1 acceptance test (frozen day list, fixtures checkpointed under `market_data/`); V209-13/14 unchanged. Written as a plan amendment via `plan-writer` after approval.
+Part 1 detector tasks change `measure`/`step` and the config section (19 fields: −1, +2). `SHOCK_SECTORS_FRAC` is removed at every site: `swingbot/config.py` (field and Field help text), the threshold key map in `shock_scan.py`, `.env.example`, `tests/test_config_v209_keys.py`, and this spec's field table. The fixture builder gains a session-date parameter (DST-aware) and the validation-day mode; V209-12b becomes the A1 acceptance test over the frozen list; V209-13/14 unchanged. Written as a plan amendment via `plan-writer` after approval.
+
+## Panel review (A1, 2026-11-10)
+
+- quant-researcher: BLOCKING -- bars set after 2026-11-05 was read, "a majority" is not independence -- applied (provenance stated; 2026-11-05 demoted to in-sample check).
+- quant-researcher: BLOCKING -- the 11-05 15:00-17:00 gate was moved after the miss -- applied (gate removed; 15:00 kept only as an invariant, 11-05 reported).
+- quant-researcher: scored classes are the easy extremes -- applied (rotation negatives added, hard negatives scored).
+- quant-researcher: N = 6 power, episode clustering, start state -- applied (5-session spacing, fresh state, power caveat, clustering reported).
+- quant-researcher: VIX open-to-close vs prior-close parity -- applied (ramp from the open change vs prior close).
+- quant-researcher: calm-day draw not reproducible -- applied (sorted shuffle, seed, year-cap rule).
+- quant-researcher: unbuildable/insufficient day -- applied (counts as miss or false fire).
+- quant-researcher: survivorship of the 2026 watchlist -- rejected: noted only; quantifying it needs historical membership data this repo does not hold (quant-engineer's seat if wanted).
+- staff-engineer: "no migration: rows are JSON" -- applied (stated as true only because v209 is undeployed; replica/prod check).
+- staff-engineer: fixtures in gitignored `market_data/` -- applied (compact committed fixtures, DATA_READERS row).
+- staff-engineer: closing v211 on a Track 1 fail -- applied (v211 decided separately).
+- staff-engineer: config removal sites -- applied (listed).
+- staff-engineer: no (day, ticker) checkpoint -- applied.
+- veteran-trader: recall ignores timing -- applied (reported lead-time share of SPY drop).
+- veteran-trader: rule 2 false-fires on tech-only selloffs -- applied (rotation-negative class scored); rule left frozen.
+- veteran-trader: validation lacks rotation days -- applied.
+- veteran-trader: six drops cluster, mostly flush not grind -- applied (mix and clustering reported; the verdict states it).
+- veteran-trader: VIX ramp understates early VIX on gap days -- applied (ramp from the open change).
+- veteran-trader: stale SHOCK after a V-shaped day -- applied (SHOCK dwell time reported).
