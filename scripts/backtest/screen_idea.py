@@ -1268,6 +1268,20 @@ def _render_control(summary, block) -> list:
             "credited to the range."]
 
 
+def _render_shock_control(summary, block) -> list:
+    """v211: the unconditional control, the same trigger with the shock state ignored."""
+    c = block["control"]
+    margin = _minus(summary["verdict"].delta_exp_r, c.delta_exp_r)
+    return ["**Unconditional control** (`control_events`: the same trigger with the shock "
+            "state ignored; same race, same matched null): "
+            f"N = {c.n}, ΔExpR {_fmt(c.delta_exp_r)}R, 95% week-clustered interval "
+            f"{_fmt(c.ci_low)}R to {_fmt(c.ci_high)}R. The idea's ΔExpR minus the control's: "
+            f"{_fmt(margin)}R. A pass whose ΔExpR is not clearly above the control is not "
+            "credited to the shock condition."]
+
+
+_CONTROL_TEXT: dict[str, Callable] = {"z": _render_control, "level": _render_shock_control}
+
 _REGIME_ROWS = (("above", "above its 200-day average"), ("below", "below its 200-day average"))
 
 
@@ -1315,7 +1329,7 @@ def _render_short_blocks(idea, summary, run) -> list:
     if block["overlap"] is not None:
         parts.append(_render_overlap(idea, block))
     if block["control"] is not None:
-        parts.append(_render_control(summary, block))
+        parts.append(_CONTROL_TEXT[idea.context_kind](summary, block))
     parts.append(_render_regime(block))
     if block["depths"] is not None:
         parts.append(_render_level(summary, block, run))
@@ -1361,6 +1375,74 @@ def _render_context(idea, summary, run) -> list:
                               scope=diagnostics.scope_sentence(idea))
 
 
+def _render_split(title: str, column: str, split: dict, labels: tuple,
+                  missing_label: str) -> list:
+    """v211: one labelled split table and its missing-count line."""
+    lines = [title, "", f"| {column} | N | mean R_event | ΔExpR (standard null) |",
+             "|---|---:|---:|---:|"]
+    for label in labels:
+        cell = split[label]
+        lines.append(f"| {label} | {cell['n']} | {_fmt(cell['exp_r_event'])}R | "
+                     f"{_fmt(cell['delta_exp_r'])}R |")
+    return lines + ["", f"{missing_label}: {split['missing']}."]
+
+
+def _render_shock_blocks(idea, summary, run) -> list:
+    """v211: the shock read-outs, descriptive and never gating."""
+    b, v = summary["shock"], summary["verdict"]
+    n2, s3 = b["null2"], b["stress3"]
+    factor = shock_readouts.SHOCK_STRESS_SLIPPAGE_FACTOR
+    parts = [
+        [f"Kept events N = {v.n}; skipped as overlapping an open race (`skipped_overlap`) "
+         f"= {b['skipped_overlap']}."],
+        [f"**Shock-day null** (K = {null.K} bars drawn only from this ticker's SHOCK days, "
+         "no month or trend match; its own seeded stream): "
+         f"N = {n2.n}, ΔExpR {_fmt(n2.delta_exp_r)}R, 95% week-clustered interval "
+         f"{_fmt(n2.ci_low)}R to {_fmt(n2.ci_high)}R; events dropped for fewer than "
+         f"{null.MIN_CANDIDATES} SHOCK-day candidates: {b['null2_dropped']}. "
+         f"The standard ΔExpR minus this one: {_fmt(_minus(v.delta_exp_r, n2.delta_exp_r))}R. "
+         "An edge that vanishes against this null is the market's drift after a shock day, "
+         "not the stock trigger."],
+        [f"**Re-priced at {factor} x slippage** ({factor * run['slippage_bps']} bps a side, "
+         "both fills, events and standard null; shock-day spreads widen 2-5x): "
+         f"ΔExpR {_fmt(s3.delta_exp_r)}R, 95% week-clustered interval "
+         f"{_fmt(s3.ci_low)}R to {_fmt(s3.ci_high)}R; change vs the base book "
+         f"{_fmt(_minus(s3.delta_exp_r, v.delta_exp_r))}R. Printed, never gating."],
+        _render_split("**Gap split** (next open vs the signal close; the race fills the "
+                      "entry at that open, gap included, and a gap through the stop at the "
+                      "open):", "gap", b["gap"], shock_readouts.GAP_BUCKETS,
+                      "Events with no next open"),
+        _render_split("**Day of the episode** (`peak`: the signal close is the episode's "
+                      "highest BREADTH_ATR1 so far, so the entry is the session after the "
+                      "breadth peak; `later`: any other SHOCK day of the episode):",
+                      "day", b["episode_day"], shock_readouts.EPISODE_DAYS,
+                      "Events on a NORMAL day"),
+    ]
+    lines = ["## Shock read-outs (v211; descriptive, never gating)"]
+    for part in parts:
+        lines += [""] + part
+    return lines
+
+
+def _render_level_context(idea, summary, run) -> list:
+    """v211: the level idea's context series and the short-family BH q."""
+    lines = ["## Context series (v211 level)", "", diagnostics.scope_sentence(idea), "",
+             "| series | rows | first | last | SHA-256 |", "|---|---:|---|---|---|"]
+    for _, r in sorted(run["context"].records.items()):
+        lines.append(f"| {r['ticker']} | {r['rows']} | {r['first']} | {r['last']} | "
+                     f"`{r['sha256'][:12]}` |")
+    lines += ["", "**Short-family BH q** (every short idea screened so far, "
+              "`SHORT_SCREEN_IDS`, this run's row included; reported, never gating):",
+              "", "| ledger id | q |", "|---|---:|"]
+    lines += [f"| `{i}` | {_fmt(q, '.4f')} |" for i, q in run["short_q"].items()] \
+        or ["| (no short idea in the ledger yet) | n/a |"]
+    return lines
+
+
+_CONTEXT_SECTIONS: dict[str, Callable] = {"z": _render_context,
+                                          "level": _render_level_context}
+
+
 def render_results(idea, summary, universe, run) -> str:
     v = summary["verdict"]
     sections = [_render_head(idea, v, run), _render_universe(universe, summary),
@@ -1371,8 +1453,10 @@ def render_results(idea, summary, universe, run) -> str:
     sections += [_render_years(v), _render_drift(summary)]
     if "short" in summary:
         sections.append(_render_short_blocks(idea, summary, run))
-    if idea.context and idea.context_kind == "z":
-        sections.append(_render_context(idea, summary, run))
+    if "shock" in summary:
+        sections.append(_render_shock_blocks(idea, summary, run))
+    if idea.context:
+        sections.append(_CONTEXT_SECTIONS[idea.context_kind](idea, summary, run))
     return "\n\n".join("\n".join(lines) for lines in sections) + "\n"
 
 
@@ -1455,11 +1539,30 @@ def _run_info(args, q) -> dict:
             "commission": commission_r()}
 
 
+#: v211 (spec § Track 2): every short idea screened so far; the results doc
+#: prints BH q across them. range_breakdown_stop is unspent and simply absent
+#: from q until it runs.
+SHORT_SCREEN_IDS = ("v104-b-short-mechanisms", "screen-range_breakdown_close",
+                    "screen-range_breakdown_stop", "screen-shock_support_break_short",
+                    "screen-shock_failed_bounce_short")
+
+
+def short_family_q(rows: list[dict], row: dict) -> dict[str, float | None]:
+    """BH q over the short ideas in the ledger plus this run's row, in
+    SHORT_SCREEN_IDS order; a row with p = None maps to None."""
+    family = {r["id"]: r for r in [*rows, row] if r["id"] in SHORT_SCREEN_IDS}
+    q = stats.ledger_qvalues(list(family.values()))
+    return {i: q[i] for i in SHORT_SCREEN_IDS if i in q}
+
+
 def _context_run(run: dict, idea, rows, row: dict, data) -> dict:
     """A context idea's run dict also carries its ContextData and the
-    screen-family BH q (§ 5.5); any other idea's run dict is returned as is."""
+    screen-family BH q (§ 5.5); any other idea's run dict is returned as is.
+    v211: a level idea carries the short-family q instead (§ Track 2)."""
     if not idea.context:
         return run
+    if idea.context_kind == "level":
+        return {**run, "context": data, "short_q": short_family_q(rows, row)}
     return {**run, "context": data,
             "screen_q": diagnostics.screen_family_q(rows, row, INSTRUMENT)}
 

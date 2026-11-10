@@ -211,3 +211,85 @@ def test_a_plain_run_has_no_shock_block(tmp_path, monkeypatch):
     argv[1] = "turn_of_month"
     assert screen_idea.main(argv) == 0
     assert "shock" not in seen["summary"]
+
+
+# --- V211-11b: the results doc -------------------------------------------------
+
+def test_short_screen_ids_are_every_short_idea_screened_so_far():
+    assert screen_idea.SHORT_SCREEN_IDS == (
+        "v104-b-short-mechanisms", "screen-range_breakdown_close",
+        "screen-range_breakdown_stop", "screen-shock_support_break_short",
+        "screen-shock_failed_bounce_short")
+
+
+def _ledger(id_, p, instrument="screen-v1"):
+    return {"id": id_, "p": p, "instrument": instrument}
+
+
+def test_short_family_q_is_bh_over_the_short_ids_present():
+    rows = [_ledger("screen-high52w", 0.001),
+            _ledger("screen-range_breakdown_close", 0.9996),
+            _ledger("v104-b-short-mechanisms", None, "v1")]
+    q = screen_idea.short_family_q(rows, _ledger("screen-shock_support_break_short", 0.01))
+    assert list(q) == ["v104-b-short-mechanisms", "screen-range_breakdown_close",
+                       "screen-shock_support_break_short"]
+    assert q["v104-b-short-mechanisms"] is None
+    assert q["screen-shock_support_break_short"] == pytest.approx(0.02)   # 0.01 x 2 / 1
+    assert q["screen-range_breakdown_close"] == pytest.approx(0.9996)
+
+
+def test_short_family_q_of_a_non_short_row_is_empty():
+    assert screen_idea.short_family_q([], _ledger("screen-fake_level", 0.5)) == {}
+
+
+def test_the_run_dict_per_kind(level_idea):
+    data, row = object(), _ledger("screen-x", 0.5)
+    level = screen_idea._context_run({"q": 0.5}, level_idea, [], row, data)
+    assert level["context"] is data and level["short_q"] == {} and "screen_q" not in level
+    z = screen_idea._context_run({"q": 0.5}, IDEAS["dollar_drop"], [], row, data)
+    assert "screen_q" in z and "short_q" not in z
+    plain = {"q": 0.5}
+    assert screen_idea._context_run(plain, IDEAS["high52w"], [], row, None) is plain
+
+
+def test_a_level_dry_run_prints_the_shock_blocks_and_the_level_context(tmp_path, capsys,
+                                                                      level_idea):
+    cache = _level_cache(tmp_path)
+    assert screen_idea.main(_level_argv(tmp_path, cache, "--dry-run")) == 0
+    out = capsys.readouterr().out
+    for needle in ("## Shock read-outs (v211; descriptive, never gating)",
+                   "(`skipped_overlap`) = ", "**Shock-day null**",
+                   "**Re-priced at 3 x slippage**", "**Gap split**",
+                   "| <= -1% |", "| -1% .. +1% |", "| >= +1% |", "Events with no next open: ",
+                   "**Day of the episode**", "| peak |", "| later |",
+                   "**Unconditional control**",
+                   "## Context series (v211 level)", "| BREADTH_ATR1 |", "| ^VIX |",
+                   "**Short-family BH q**", "| (no short idea in the ledger yet) | n/a |",
+                   screen_idea.diagnostics.scope_sentence(level_idea)):
+        assert needle in out, needle
+    assert "Trend-only control" not in out and "credited to the range" not in out
+    assert (out.index("## Short-side blocks") < out.index("## Shock read-outs")
+            < out.index("## Context series (v211 level)"))
+    assert not (tmp_path / "results").exists()
+
+
+def test_a_short_idea_without_context_keeps_the_v182_doc(tmp_path, capsys):
+    cache = _level_cache(tmp_path)
+    argv = _level_argv(tmp_path, cache, "--dry-run")
+    argv[1] = "range_breakdown_close"
+    assert screen_idea.main(argv) == 0
+    out = capsys.readouterr().out
+    assert "**Trend-only control**" in out and "credited to the range" in out
+    for needle in ("Shock read-outs", "Unconditional control", "Context series (v211 level)",
+                   "Short-family BH q"):
+        assert needle not in out, needle
+
+
+def test_render_split_prints_every_label_and_the_missing_count():
+    split = {"peak": {"n": 2, "exp_r_event": 0.25, "delta_exp_r": 0.1},
+             "later": {"n": 0, "exp_r_event": None, "delta_exp_r": None}, "missing": 3}
+    lines = screen_idea._render_split("**Day of the episode**", "day", split,
+                                      shock_readouts.EPISODE_DAYS, "Events on a NORMAL day")
+    assert "| peak | 2 | +0.2500R | +0.1000R |" in lines
+    assert "| later | 0 | n/aR | n/aR |" in lines
+    assert lines[-1] == "Events on a NORMAL day: 3."
