@@ -293,6 +293,8 @@ interface ContractRow {
       </sb-control-row>
       <sb-control-row>
         <sb-select label="Select" placeholder="Pick one" [options]="selectOptions" />
+      </sb-control-row>
+      <sb-control-row>
         <sb-checkbox label="Checked" [checked]="true" />
         <sb-checkbox label="Unchecked" [checked]="false" />
         <sb-checkbox label="Disabled" [checked]="false" [disabled]="true" />
