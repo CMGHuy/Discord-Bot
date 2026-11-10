@@ -84,8 +84,10 @@ new palette takes names it does not match. The user-facing label is
 On their own tints (the `contrast.spec.ts` v181 gate measures over `--surface`
 and `--surface-raised`): `--pos` 6.09 / 5.54, `--neg` 5.41 / 4.93. Every gated
 pair clears 4.5:1. One ungated pair sits just under it: `--neg` on `--neg-soft`
-over `--surface-overlay` is 4.48:1. It is ungated in Graphite too, and the plan
-reports it rather than moving a colour. The filled buttons do not change
+over `--surface-overlay` is 4.48:1. Graphite measures the same, 4.48:1 on its
+overlay `#1f242b`, and that pair is ungated there too. Fixing it means moving
+an overlay step or the red tint in both themes, which is a palette change
+outside this spec, so the plan reports it and moves no colour. The filled buttons do not change
 (`--accent-fill`/`--accent-fill-hi` carry white at 5.74 / 5.00 in both themes).
 
 ### Mechanism (tier 2, `tokens.css`)
@@ -113,6 +115,15 @@ reports it rather than moving a colour. The filled buttons do not change
   added `midnight-*`/`frost-*` keys, and that regeneration is committed with
   the palette. Every existing key keeps its value. `chart_style.THEME` reads
   meaning-level tokens only, so `STYLE_VERSION` does not change.
+- **The standing rule for future palette work:** the tokens that make up
+  the *ground and ink* are a named list: `--bg`, the three surfaces,
+  `--overlay-dim`, both borders, `--text`, `--text-secondary`,
+  `--text-muted`, `--text-faint`. Every token on that list has a Navy value,
+  and every token off it is shared. A future ground or ink token (a new
+  surface step, a new text tier) joins the list and gets its Navy value in
+  the same commit. The rewritten `tokens.css` header states this rule, and
+  `tokens.spec.ts` checks it both ways: the Navy block re-points exactly
+  the listed tokens, and every listed token is re-pointed.
 - The `tokens.css` header note ("Dark only. There is no light theme ... no
   `[data-theme]` hook") is rewritten. Both themes are dark, there is still no
   light theme and no `prefers-color-scheme`, and `data-theme` exists for the
@@ -133,13 +144,23 @@ reports it rather than moving a colour. The filled buttons do not change
   "shell preferences go through PreferencesStore" is about account-level
   settings and does not cover this one. The `ThemeService` doc comment says
   so, citing this spec.
+- **The `theme-color` value is never a literal in TS.** `primitives.spec.ts`
+  ("declares no colour literal") covers every `.ts` under `src/`. So
+  `ThemeService` sets the attribute first, then reads the computed `--bg`
+  off `document.documentElement` and writes that into the meta.
 - **Pre-paint:** a small inline `<script>` in `frontend/src/index.html`, placed
   before the inline `<style>`, reads `ui.theme` (in try/catch). On `navy` it sets
   `data-theme="navy"` on `<html>`, swaps the `theme-color` meta's content, and
   paints the cold-load ground in the Navy `--bg`. The existing inline style
   stays Graphite for every other case.
-- **The cold-load copies.** `index.html` gains one more literal hex: the Navy
-  `--bg`, inside that script. `primitives.spec.ts`'s cold-load test is
+- **The cold-load copies.** `index.html` gains exactly one more literal hex:
+  the Navy `--bg`, held once in a script variable that both the meta swap
+  and the ground paint read. The colour gate's exact, in-order allow-list
+  for `index.html` (`primitives.spec.ts`, `HEX_ALLOWLIST`, today
+  `['#0d0f12', '#0d0f12']`) becomes the three literals in file order: the
+  Graphite meta, then the Navy script variable, then the Graphite inline
+  style, if the script sits between the meta and the `<style>`. The
+  allow-list comment is updated with the reason. `primitives.spec.ts`'s cold-load test is
   extended to assert it equals the resolved `--midnight-950`, the same
   guard that already pins the Graphite copies. `manifest.webmanifest` stays
   Graphite: a manifest is static and installed once, so it cannot follow a
@@ -153,24 +174,26 @@ reports it rather than moving a colour. The filled buttons do not change
 - **Top bar, tablet and desktop:** an icon button (`sb-button
   variant="icon"`, `sb-hit` for the 44px hit area on phone and tablet) placed
   between the search trigger and the profile menu in `shell.html`.
-  `aria-pressed` reflects Dark blue. Its `aria-label` and hint are "Dark blue
+  `aria-pressed` reflects Dark blue, and the pressed state is visible too:
+  the glyph takes `--accent` on an `--accent-soft` ground, the same
+  selected look the segmented controls use. Without that, the icon looks
+  the same in both states. Its `aria-label` and hint are "Dark blue
   theme", so the name stays fixed while the state toggles. One click
   switches; the change is immediate, with no reload.
 - **Icon (my call):** a new `theme` glyph in `ui/icon.ts`, a circle half
   filled, drawn like the existing line icons (no emoji).
-- **Profile menu row (my call):** a "Theme" segmented row, Black | Dark
-  blue, under the existing Motion and Density rows in `profile-menu.ts`. It
-  writes through the same `ThemeService`, so the menu and the bar can never
-  disagree. It gives the setting a visible text label and is where
-  someone looking for display settings will look first. Strike it in review
-  if the bar button alone is wanted.
+- **Profile menu row, all three device classes:** a "Theme" segmented row,
+  Black | Dark blue, under the existing Motion and Density rows in
+  `profile-menu.ts`. It follows their layout (label, then `sb-segmented`, and
+  each segment at least 44px wide). It writes through the same
+  `ThemeService`, so the menu and the bar can never disagree. It is the
+  setting's only visible text label, and on a phone it is the only switch.
 - **Command palette (my call):** one command, "Switch theme", in the
   palette's command list.
 - **Phone (partner, 2026-11-10): no bar button.** The 390px bar already
   carries the brand, up to three chips, search and the profile menu. On a
   phone (`ViewportService.isPhone()`) the bar button is not rendered, and the
-  profile menu's Theme row is the switch. The menu row is therefore
-  required on phone; on tablet and desktop it stays my call.
+  profile menu's Theme row is the switch.
 
 ### Charts
 
@@ -210,9 +233,13 @@ reports it rather than moving a colour. The filled buttons do not change
   holds no hex. It also asserts that no other tier-2 token is re-pointed in
   it, and that the Arctic Navy guard still passes.
 - **`contrast.spec.ts`:** every existing gate runs twice, once per theme.
-  The resolver gains a theme argument that layers the `[data-theme="navy"]`
-  block over the bare `:root` blocks for test use only; the fixture stays
-  Graphite.
+  A **separate test-only helper** (e.g. `resolveTokenIn(theme, name)` in
+  `ui/testing/`) layers the `[data-theme="navy"]` block over the bare
+  `:root` blocks. `resolve-token.ts`'s existing path stays byte-identical to
+  its documented line-for-line twin `scripts/dev/dump_tokens.py`, which gets
+  **no** theme argument. The pairing comment in both files gains one line
+  saying so, so the drift is never "fixed" by teaching the Python half
+  about Navy, which would put the Discord parity at risk.
 - **`primitives.spec.ts`:** the Navy cold-load copy in `index.html` equals
   the resolved Navy `--bg`; the manifest still equals the Graphite `--bg`.
 - **Discord parity:** a test that `dump_tokens.py`'s output is identical
@@ -227,7 +254,16 @@ reports it rather than moving a colour. The filled buttons do not change
   theme calls `applyOptions` with the new `--surface`.
 - **Layout audit:** `layout-audit.mjs` must exit 0 at 390, 768 and 1440 in
   **both** themes. The plan gives the audit a `--theme navy` switch, or seeds
-  `ui.theme` before the run.
+  `ui.theme` before the run. The audit also covers the **open profile
+  menu** at 390px, because the Theme row is the phone's only control and the
+  part most likely to overflow.
+- **Canvas check:** the layout audit cannot see canvas pixels. So one
+  Playwright screenshot of a chart screen (Dashboard equity candles) at
+  390px and 1440px, in each theme, taken after toggling with the chart
+  already mounted, is attached to the implementation's review.
+- **No new faint text:** the existing `no-text-uses-text-faint` rule holds
+  under Navy unchanged (`--text-faint` is 3.03 to 3.84:1). The plan adds no
+  text in `--text-faint`.
 
 ## Out of scope
 
@@ -235,4 +271,33 @@ reports it rather than moving a colour. The filled buttons do not change
 - Per-account theme sync through `PreferencesStore`.
 - Navy Discord chart images, a Navy manifest, or Navy favicons.
 - Changing any valence, accent, chart-series or quality colour.
-- The Jinja templates (only the Angular SPA is themed).
+- The Jinja templates (only the Angular SPA is themed). The login form is
+  part of the SPA (`App` renders it in place of the shell), so it follows
+  the theme. Any page still rendered by Jinja stays Graphite.
+
+## Blast radius and rollback
+
+Only the admin SPA bundle (the `admin` container) changes. The bot, the
+refresher, the Discord alerts and their chart PNGs are untouched. Rolling
+back to the previous ui release (`scripts/ops/rollback_to.sh`,
+`docs/deploy/DEPLOY_HETZNER.md`) leaves a `ui.theme` key in localStorage
+that the old bundle never reads: the page is simply Graphite again. There
+is no schema, `.env`, cron or production data change.
+
+## Panel review
+
+Run 2026-11-10 on 08f9fdbd (ux-designer, staff-engineer). No BLOCKING findings.
+
+- staff-engineer: the index.html colour-gate allow-list (`HEX_ALLOWLIST`, exact and in order) was unstated; the Navy hex could be written twice -- applied (§ Preference: one script variable, allow-list becomes three literals in file order).
+- staff-engineer: where `ThemeService` gets the `theme-color` value was unstated; a TS hex fails "declares no colour literal" -- applied (reads the computed `--bg`).
+- staff-engineer: a theme argument on `resolve-token.ts` breaks its line-for-line pairing with `dump_tokens.py` -- applied (separate test-only helper; pairing comment amended in both files).
+- staff-engineer: the closed eleven-token re-point list silently leaves future ground/ink tokens Graphite under Navy -- applied (named ground/ink list, rule in the `tokens.css` header, checked both ways).
+- staff-engineer: no blast-radius or rollback line -- applied (§ Blast radius and rollback).
+- ux-designer: the bar icon shows no visible pressed state -- applied (`--accent` glyph on `--accent-soft`).
+- ux-designer: the profile-menu Theme row should be unconditional, with its phone layout specified -- applied (row on all three classes, Motion/Density layout, 44px segments).
+- ux-designer: the layout audit should cover the open profile menu at 390px -- applied.
+- ux-designer: confirm no text uses `--text-faint` under Navy -- applied (stated in § Testing; the existing rule holds unchanged).
+- ux-designer: gate or fix `--neg` on `--neg-soft` over the overlay (4.48:1) -- rejected: Graphite measures the same 4.48:1 on its overlay, so the fix is a palette change to both themes and out of this spec's scope; recorded in § Palette.
+- ux-designer: the PWA splash (black) and the toggled `theme-color` disagree on a phone -- rejected: already accepted in § Preference; the reviewer agreed it is acceptable.
+- ux-designer: canvas colours escape the layout audit; add screenshots of one chart screen in both themes -- applied (§ Testing, canvas check).
+- ux-designer: say which Jinja pages stay Graphite -- applied (login is SPA-rendered; any Jinja page stays Graphite).
