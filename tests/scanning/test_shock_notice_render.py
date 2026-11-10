@@ -1,11 +1,15 @@
 """v210: shock_notices renderer -- the market_shock embed and its copy."""
+import asyncio
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from swingbot.core.infra.lifecycle_events import make_event
 from swingbot.core.market import shock
 from swingbot.core.presentation import kinds, tokens
-from swingbot.core.scanning import shock_notices
+from swingbot.core.scanning import lifecycle_notifications, shock_notices
 
 AT = "2026-11-05T14:45:00+00:00"
 FOOTER = ("The bot moved no stop and closed nothing. "
@@ -128,3 +132,35 @@ def test_the_payload_is_not_mutated():
     before = repr(notice)
     shock_notices.build_shock_embed(notice)
     assert repr(notice) == before
+
+
+def queued(label="SHOCK", prior="NORMAL"):
+    payload = shock_event(label, prior)["payload"]
+    return make_event(transition_id=f"market_shock:{AT}", kind="market_shock",
+                      target_channel_id="7", occurred_at=AT, payload=payload)
+
+
+def test_lifecycle_renderer_dispatches_the_shock_kind():
+    notice = queued()
+    built = lifecycle_notifications.build_lifecycle_notification(notice)
+    assert built.title == "Market state: NORMAL → SHOCK"
+    assert built.footer.text == f"Event {notice['event_id']}"
+    assert not any(field.name == "Recorded transition" for field in built.fields)
+
+
+def test_a_malformed_shock_event_is_a_blocked_delivery():
+    notice = queued()
+    notice["payload"]["reading"] = None
+    with pytest.raises(lifecycle_notifications.BlockedDelivery) as caught:
+        lifecycle_notifications.build_lifecycle_notification(notice)
+    assert caught.value.code == "malformed_payload"
+
+
+def test_send_posts_the_shock_embed_with_its_push_line():
+    channel = SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=99)))
+    bot = SimpleNamespace(get_channel=Mock(return_value=channel), fetch_channel=AsyncMock())
+    assert asyncio.run(lifecycle_notifications.send_lifecycle_notification(
+        bot, queued())) == "99"
+    bot.get_channel.assert_called_once_with(7)
+    kwargs = channel.send.await_args.kwargs
+    assert kwargs["content"] == "Market state: NORMAL → SHOCK" == kwargs["embed"].title

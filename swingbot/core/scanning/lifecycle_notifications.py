@@ -9,6 +9,7 @@ from swingbot.core import presentation as ui
 from swingbot.core.infra.lifecycle_events import validate_event
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.kinds import Kind
+from swingbot.core.scanning import shock_notices
 from swingbot.core.scanning.lifecycle_embeds import build_closed_trade_embed
 
 _BLOCKED_CODES = frozenset(("destination_unresolved", "channel_unavailable",
@@ -74,6 +75,8 @@ def _append_transition(embed, event):
 def build_lifecycle_notification(event: dict) -> discord.Embed:
     try:
         validate_event(event)
+        if event["kind"] == "market_shock":
+            return shock_notices.build_shock_embed(event)
         payload = event["payload"]
         embed = (build_closed_trade_embed(_recorded_trade(payload))
                  if event["kind"] == "trade_closed" else _plan_embed(payload))
