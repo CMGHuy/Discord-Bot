@@ -106,6 +106,56 @@ def filter_gaps(df: pd.DataFrame, gaps: list, mode: str = "all",
     return [gap for gap in gaps if is_displacement_gap(df, gap, k, atr_series)]
 
 
+def scan_fair_value_gaps(df: pd.DataFrame, lookback: int = LOOKBACK_BARS,
+                         max_per_side: int = MAX_GAPS_PER_SIDE) -> list[dict]:
+    """The FVG scan itself, raising on bad input (v214 G4).
+
+    Same output as find_fair_value_gaps_detailed() for every frame it can
+    read. The idea screen calls this one, so a malformed frame aborts the
+    ticker with a counted error instead of reading as "no gap" and shrinking
+    N silently. Live callers keep the swallowing wrapper below.
+    """
+    highs = df["High"].values
+    lows = df["Low"].values
+    n = len(df)
+    if n < 3:
+        return []
+
+    start = max(2, n - lookback)
+    bullish_gaps = []
+    bearish_gaps = []
+
+    for i in range(start, n):
+        h0, l2 = highs[i - 2], lows[i]
+        if l2 > h0:
+            gap_bottom, gap_top = h0, l2
+            filled = any(
+                lows[j] <= gap_top and highs[j] >= gap_bottom
+                for j in range(i + 1, n)
+            )
+            if not filled:
+                bullish_gaps.append({
+                    "bottom": float(gap_bottom), "top": float(gap_top),
+                    "mid": float((gap_bottom + gap_top) / 2), "bar_index": i, "direction": "bullish",
+                })
+            continue
+
+        l0, h2 = lows[i - 2], highs[i]
+        if h2 < l0:
+            gap_bottom, gap_top = h2, l0
+            filled = any(
+                lows[j] <= gap_top and highs[j] >= gap_bottom
+                for j in range(i + 1, n)
+            )
+            if not filled:
+                bearish_gaps.append({
+                    "bottom": float(gap_bottom), "top": float(gap_top),
+                    "mid": float((gap_bottom + gap_top) / 2), "bar_index": i, "direction": "bearish",
+                })
+
+    return bullish_gaps[-max_per_side:] + bearish_gaps[-max_per_side:]
+
+
 def find_fair_value_gaps_detailed(df: pd.DataFrame, lookback: int = LOOKBACK_BARS,
                                    max_per_side: int = MAX_GAPS_PER_SIDE) -> list:
     """
@@ -117,47 +167,10 @@ def find_fair_value_gaps_detailed(df: pd.DataFrame, lookback: int = LOOKBACK_BAR
     a shaded rectangle instead of a single line; find_fair_value_gaps()
     itself only needs the price for levels.py's confluence system, so it
     stays a thin wrapper around this rather than duplicating the scan.
+    Never raises: any error from scan_fair_value_gaps() reads as no gaps (v214 keeps the live behaviour).
     """
     try:
-        highs = df["High"].values
-        lows = df["Low"].values
-        n = len(df)
-        if n < 3:
-            return []
-
-        start = max(2, n - lookback)
-        bullish_gaps = []
-        bearish_gaps = []
-
-        for i in range(start, n):
-            h0, l2 = highs[i - 2], lows[i]
-            if l2 > h0:
-                gap_bottom, gap_top = h0, l2
-                filled = any(
-                    lows[j] <= gap_top and highs[j] >= gap_bottom
-                    for j in range(i + 1, n)
-                )
-                if not filled:
-                    bullish_gaps.append({
-                        "bottom": float(gap_bottom), "top": float(gap_top),
-                        "mid": float((gap_bottom + gap_top) / 2), "bar_index": i, "direction": "bullish",
-                    })
-                continue
-
-            l0, h2 = lows[i - 2], highs[i]
-            if h2 < l0:
-                gap_bottom, gap_top = h2, l0
-                filled = any(
-                    lows[j] <= gap_top and highs[j] >= gap_bottom
-                    for j in range(i + 1, n)
-                )
-                if not filled:
-                    bearish_gaps.append({
-                        "bottom": float(gap_bottom), "top": float(gap_top),
-                        "mid": float((gap_bottom + gap_top) / 2), "bar_index": i, "direction": "bearish",
-                    })
-
-        return bullish_gaps[-max_per_side:] + bearish_gaps[-max_per_side:]
+        return scan_fair_value_gaps(df, lookback, max_per_side)
     except Exception:
         return []
 
