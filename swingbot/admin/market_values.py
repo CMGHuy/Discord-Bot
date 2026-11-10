@@ -154,7 +154,9 @@ def last_close_fields(symbols: Iterable[str]) -> dict[str, dict]:
             close = float(df["Close"].iloc[-1])
             stamp = df.index[-1]
             day = stamp.date().isoformat() if hasattr(stamp, "date") else str(stamp)[:10]
-        except Exception:  # noqa: BLE001 - one malformed frame never hides the others
+        except Exception as exc:  # noqa: BLE001 - one malformed frame never hides the others
+            swallowed(log, "ops.admin.market_values.last_close_frame", exc,
+                      "last close skipped for %s: %s", sym, exc)
             continue
         if close > 0:
             out[sym] = {"last_close": close, "last_close_date": day}
