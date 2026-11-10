@@ -45,14 +45,14 @@ def test_footer_is_the_exact_spec_copy():
 
 @pytest.mark.parametrize("over,line", [
     ({}, "MU · entry 100.00 · stop 95.00 · last 97.50 · -0.50R · 2h05m · "
-         "stop at broker untouched: 95.00"),
+         "last above stop: 95.00"),
     ({"last": 94.0, "open_r": -1.2, "age_min": 45, "through_stop": True},
      "MU · entry 100.00 · stop 95.00 · last 94.00 · -1.20R · 45m · THROUGH STOP"),
     ({"last": None, "open_r": None, "age_min": 0},
      "MU · entry 100.00 · stop 95.00 · last n/a · n/a R · 0m · stop status unknown: 95.00"),
     ({"last": 101.5, "open_r": 0.3, "age_min": 3005},
      "MU · entry 100.00 · stop 95.00 · last 101.50 · +0.30R · 50h05m · "
-     "stop at broker untouched: 95.00"),
+     "last above stop: 95.00"),
 ])
 def test_long_line(over, line):
     assert shock_notices.long_line(long_row(**over)) == line

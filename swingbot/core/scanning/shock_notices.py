@@ -46,7 +46,7 @@ def _marker(row: dict) -> str:
         return f"stop status unknown: {row['stop']:.2f}"
     if row.get("through_stop"):
         return THROUGH_STOP
-    return f"stop at broker untouched: {row['stop']:.2f}"
+    return f"last above stop: {row['stop']:.2f}"
 
 
 def long_line(row: dict) -> str:
