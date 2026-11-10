@@ -79,6 +79,21 @@ def _exact_frame(df: pd.DataFrame) -> dict:
             "values": _exact(df.to_numpy().tolist())}
 
 
+#: v214 appended these to Verdict. An edge Verdict holding their defaults is
+#: captured over its original nine fields, as on main @ 9536ce09; any other
+#: value (an avoid verdict) is captured in full, never hidden.
+_V214_VERDICT_DEFAULTS = {"mode": "edge", "years_negative": None, "control": None}
+
+
+def _captured_fields(value) -> list:
+    fields = dataclasses.fields(value)
+    if not isinstance(value, verdict.Verdict):
+        return list(fields)
+    if any(getattr(value, k) != v for k, v in _V214_VERDICT_DEFAULTS.items()):
+        return list(fields)
+    return [f for f in fields if f.name not in _V214_VERDICT_DEFAULTS]
+
+
 def _exact(value):
     """Recursive JSON-safe conversion; every float becomes its repr string."""
     if isinstance(value, np.generic):
@@ -96,7 +111,7 @@ def _exact(value):
     if isinstance(value, pd.DataFrame):
         return _exact_frame(value)
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        return {f.name: _exact(getattr(value, f.name)) for f in dataclasses.fields(value)}
+        return {f.name: _exact(getattr(value, f.name)) for f in _captured_fields(value)}
     raise TypeError(f"cannot capture {type(value).__name__}: {value!r}")
 
 
