@@ -644,14 +644,14 @@ The code matches the spec; the entry rules do not fit this shape of shock. Not a
 
 NORMAL → SHOCK when **either**:
 1. **Weighted depth:** `depth_frac ≥ SHOCK_DEPTH_FRAC` **and** `breadth_frac ≥ SHOCK_BREADTH_ENTER` (relief applies to the breadth bar).
-   `depth_frac` = share of sectored contributing names that sit in a sector (≥ 2 members) whose median ATR move ≤ −`SHOCK_ATR_K`. Replaces `sectors_down ≥ ceil(SHOCK_SECTORS_FRAC × sectors_total)`.
+   `depth_frac` = (contributing names in down-sectors) / (contributing names in sectors with ≥ 2 members); a sector is down when its median ATR move ≤ −`SHOCK_ATR_K`. Replaces `sectors_down ≥ ceil(SHOCK_SECTORS_FRAC × sectors_total)`.
 2. **Sustained breadth:** `breadth_frac ≥ SHOCK_BREADTH_MAJORITY` (relief applies). No speed needed.
 
 The fast path (`SHOCK_BREADTH_FAST` + `SHOCK_SPEED_ENTER`) stays. `sectors_down`/`sectors_total` stay in the reading (display only). New fields: `SHOCK_DEPTH_FRAC` = **0.50**, `SHOCK_BREADTH_MAJORITY` = **0.50**; `SHOCK_SECTORS_FRAC` is removed. Values are frozen. Exit, recovery, re-entry and carry rules are unchanged. `depth_frac` is a new required field on `ShockReading` and its JSON row. v209 has never been deployed, so no stored row lacks it (no read-time upcasting, no migration); the plan verifies the local replica and production hold no `market_shock_readings` rows before it lands, and drops any local ones.
 
 ### Validation set (outcome-blind, frozen before any run)
 
-Selected from daily SPY, QQQ and ^VIX only, never from detector output, over the last three full calendar years before 2026-11-05 (2026-11-05 excluded). Each day replays from a **fresh `ShockState()`** (no overnight carry is scored).
+Selected from daily SPY, QQQ and ^VIX only, never from detector output, over **2023-01-02 to 2025-12-31** (the last three full calendar years; 2026 is excluded). Each day replays from a **fresh `ShockState()`** (no overnight carry is scored).
 - **Shock days (6):** the largest SPY close-to-close drops, taken in order, skipping any day within 5 sessions of an already-chosen one, until 6.
 - **Calm negatives (12):** days with |SPY| < 0.5 % and VIX close-to-close change < +3 %; sort by date, shuffle with `random.Random(209)`, take in order skipping any year already holding 4.
 - **Rotation negatives (4):** the days with the 4 largest `QQQ − SPY` shortfalls (most negative) among days with SPY ≥ −1.5 % and VIX close-to-close change < +15 %. These are the tech-led selloffs a tech-heavy watchlist could false-fire on.
@@ -672,7 +672,7 @@ Fixtures are committed compactly (gzip) under `tests/fixtures/`, one per day, wi
 
 ### Plan impact
 
-Part 1 detector tasks change `measure`/`step` and the config section (19 fields: −1, +2). `SHOCK_SECTORS_FRAC` is removed at every site: `swingbot/config.py` (field and Field help text), the threshold key map in `shock_scan.py`, `.env.example`, `tests/test_config_v209_keys.py`, and this spec's field table. The fixture builder gains a session-date parameter (DST-aware) and the validation-day mode; V209-12b becomes the A1 acceptance test over the frozen list; V209-13/14 unchanged. Written as a plan amendment via `plan-writer` after approval.
+Part 1 detector tasks change `measure`/`step` and the config section (19 fields now, 20 after A1: −1, +2). `SHOCK_SECTORS_FRAC` is removed at every site: `swingbot/config.py` (field and Field help text), the threshold key map in `shock_scan.py`, `.env.example`, `tests/test_config_v209_keys.py`, and this spec's field table. The fixture builder gains a session-date parameter (DST-aware) and the validation-day mode; V209-12b becomes the A1 acceptance test over the frozen list; V209-13/14 unchanged. Written as a plan amendment via `plan-writer` after approval.
 
 ## Panel review (A1, 2026-11-10)
 
