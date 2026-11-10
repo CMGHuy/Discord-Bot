@@ -304,9 +304,9 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
      ("tests/dev/test_skill_frontmatter.py", "tests/hooks/test_codex_mirror.py",
       "tests/hooks/test_skill_shape.py")),
     # v209 A1: the shock replay fixtures (11-05 and the frozen validation days).
-    ("tests/fixtures/shock_replay/", ("tests/market/test_shock_replay_2026_11_05.py",)),
+    ("tests/fixtures/shock_replay/", ("tests/market/test_shock_acceptance_a1.py",)),
     ("tests/fixtures/shock_replay_2026_11_05.json",
-     ("tests/market/test_shock_replay_2026_11_05.py",)),
+     ("tests/market/test_shock_acceptance_a1.py",)),
     # sync_codex.py does a bare `import skill_frontmatter` and test_codex_mirror
     # loads sync_codex.py by path, so no import graph links them (v154). An
     # exact Python key is the one Python form this table accepts.
