@@ -4,16 +4,26 @@
 Every arm plan is derived from the knob-0 reference plan replay_scenarios
 yields, so both arms see the same alert stream and the same cooldown. The
 frictions of edge/frictions.py are applied here, at scoring, on the sizing
-risk |trigger_price - stop| -- the R the account books. Census rows read no
-outcome (Stage -1); entry rows (V212-11b) carry outcomes (Stages 0-3). Reads
-whatever frame the caller passes (the measure script: data/backtest_cache_ext).
+risk |trigger_price - stop| -- the R the account books. Two row shapes ship:
+census rows (census_row / census) read no outcome (Stage -1); entry rows
+(entry_rows / replay_entries) carry one reference row and one row per cell,
+each with its fill, exit and gross/net R (Stages 0-3). Both arms simulate under
+REPLAY_INSTRUMENT (v2 fills, zero costs). Reads whatever frame the caller
+passes (the measure script: data/backtest_cache_ext).
 """
 from __future__ import annotations
 
+import dataclasses
+
+import pandas as pd
+
 from swingbot import config
+from swingbot.core.backtesting.acceptance import planned_rr
 from swingbot.core.backtesting.backtest_scenarios import _replay_params, replay_scenarios
+from swingbot.core.backtesting.instrument.contract import ZERO_COSTS, resolve
 from swingbot.core.edge.frictions import apply_frictions, borrow_r, commission_r
 from swingbot.core.planning.builders import apply_confluence_limit, clamped_distance
+from swingbot.core.planning.exit_sim_v2 import FILLED_STOPPED_GAP, simulate_exit_v2
 from swingbot.core.planning.limit_entry_rule import bar_outcome
 from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct
 
@@ -21,6 +31,11 @@ from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pc
 F_GRID = (1 / 3, 1 / 2, 2 / 3)
 GUARDED_KNOBS = ("CONFLUENCE_LIMIT_ENTRY_F", "CONFLUENCE_STRUCTURAL_STOP_PCT",
                  "CONFLUENCE_STOP_DROP_PCT", "CONFLUENCE_ATR_STOP_FLOOR")
+EARLY_STOP_BARS = 3
+#: v2 fills (market at the next open, gap-through) with zero costs: the sim
+#: stays frictionless and net_r applies edge/frictions.py at scoring.
+REPLAY_INSTRUMENT = dataclasses.replace(resolve("v2"), cost_model=ZERO_COSTS)
+UNTRIGGERED = ("not_triggered", "no_trade")
 _TOL = 1e-9
 
 
@@ -149,3 +164,100 @@ def census(ticker, frame, horizons, window, *, cells=F_GRID) -> list:
     """Stage -1 rows for one ticker."""
     return [census_row(frame, i, ref, arms)
             for i, ref, arms in _alerts(ticker, frame, horizons, window, tuple(cells))]
+
+
+def _gross_r(direction, entry, exit_legs, risk) -> float:
+    sign = 1.0 if direction == "bullish" else -1.0
+    return sum(frac * sign * (px - entry) for frac, px in exit_legs) / risk
+
+
+def _atr14_pct(df, i) -> float | None:
+    """ATR14 as % of the signal close, bars <= i only."""
+    if i < 14:
+        return None
+    window = df.iloc[i - 14:i + 1]
+    prev = window["Close"].shift(1)
+    tr = pd.concat([window["High"] - window["Low"], (window["High"] - prev).abs(),
+                    (window["Low"] - prev).abs()], axis=1).max(axis=1).iloc[1:]
+    return float(tr.mean() / float(df["Close"].iloc[i]) * 100.0)
+
+
+def _wick_through(df, plan, res) -> bool:
+    """Stopped on a wick: the stop bar closed back on the trade's side."""
+    if not res.legs or res.legs[-1].get("reason") != "stop":
+        return False
+    close = float(df["Close"].iloc[res.exit_index])
+    return close > plan.stop_loss if _is_bull(plan) else close < plan.stop_loss
+
+
+def _days(df, res) -> int:
+    start, end = df.index[res.entry_index].date(), df.index[res.exit_index].date()
+    return max((end - start).days, 0)
+
+
+def _scores(df, plan, res) -> dict:
+    """Both R readings on the sizing risk, plus the stop diagnostics."""
+    risk = abs(plan.trigger_price - plan.stop_loss)
+    legs = [(leg["fraction"], leg["exit_price"]) for leg in res.legs]
+    return {"r_gross": _gross_r(plan.direction, res.entry_price, legs, risk),
+            "r_net": net_r(plan.direction, res.entry_price, legs, risk, _days(df, res)),
+            "stop_pct": planned_loss_pct(res.entry_price, plan.stop_loss),
+            "early_stop": res.outcome == "loss"
+            and res.exit_index - res.entry_index < EARLY_STOP_BARS,
+            "wick_through": _wick_through(df, plan, res)}
+
+
+_EMPTY_SCORES = {"r_gross": None, "r_net": None, "stop_pct": None, "early_stop": False,
+                 "wick_through": False}
+
+
+def _fill_rule(touch) -> str:
+    return "touch" if touch else "trade_through"
+
+
+def _row(df, i, ref, arm_name, plan, res, touch) -> dict:
+    filled = res.outcome not in UNTRIGGERED
+    reason = getattr(res, "exit_reason", None)
+    return {**_identity(df, i, ref), "arm": arm_name, "dropped": None, "filled": filled,
+            "market": ref.trigger_price, "limit": None if arm_name == "ref" else plan.trigger_price,
+            "stop_loss": plan.stop_loss, "outcome": res.outcome,
+            "entry": res.entry_price if filled else None,
+            "fill_date": _date(df, res.entry_index) if filled else None,
+            "exit_date": _date(df, res.exit_index) if filled else None,
+            "expiry_date": _date(df, min(i + plan.expiry_bars, len(df) - 1)),
+            "exit_reason": reason, "gap_stopped": reason == FILLED_STOPPED_GAP,
+            "gap_stop_r_from_limit": getattr(res, "gap_stop_r_from_limit", None),
+            "planned_rr": planned_rr(plan.trigger_price, plan.stop_loss, plan.tp1),
+            "atr14_pct": _atr14_pct(df, i), "fill_rule": _fill_rule(touch),
+            **(_scores(df, plan, res) if filled else _EMPTY_SCORES)}
+
+
+def _dropped_row(df, i, ref, arm_name, reason, touch) -> dict:
+    return {**_identity(df, i, ref), "arm": arm_name, "dropped": reason, "filled": False,
+            "market": ref.trigger_price, "limit": None, "stop_loss": None, "outcome": "dropped",
+            "entry": None, "fill_date": None, "exit_date": None, "expiry_date": None,
+            "exit_reason": None, "gap_stopped": False, "gap_stop_r_from_limit": None,
+            "planned_rr": None, "atr14_pct": _atr14_pct(df, i), "fill_rule": _fill_rule(touch),
+            **_EMPTY_SCORES}
+
+
+def _simulate(df, i, plan, touch):
+    return simulate_exit_v2(df, i, plan, REPLAY_INSTRUMENT, scale_out=True, touch_fill=touch)
+
+
+def entry_rows(df, i, ref, arms, *, touch=False) -> list:
+    """The reference row, then one row per cell (dropped, unfilled or filled).
+    The reference never reads `touch` for its fill: touch is arm-only."""
+    rows = [_row(df, i, ref, "ref", ref, _simulate(df, i, ref, False), touch)]
+    for key, arm in arms.items():
+        if isinstance(arm, str):
+            rows.append(_dropped_row(df, i, ref, key, arm, touch))
+        else:
+            rows.append(_row(df, i, ref, key, arm, _simulate(df, i, arm, touch), touch))
+    return rows
+
+
+def replay_entries(ticker, frame, horizons, window, *, touch=False, cells=F_GRID) -> list:
+    """Outcome rows for one ticker; the exit walk may run past `window`'s end."""
+    return [row for i, ref, arms in _alerts(ticker, frame, horizons, window, tuple(cells))
+            for row in entry_rows(frame, i, ref, arms, touch=touch)]
