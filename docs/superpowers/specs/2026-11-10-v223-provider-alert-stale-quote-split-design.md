@@ -136,9 +136,14 @@ regular session**. The new tag is `yfinance-old-print`, and the new field is
 9. **Display.**
    - `admin/api_v1/ops_health.py` `_PROVIDER_KEYS` adds `old_print_rate`.
    - The Angular Provider health panel (`provider-health-panel.ts`, model in
-     `api/models.ts`) adds one row, "Old IEX prints, re-asked from yfinance (of
-     live-price asks)", showing "—" for None. It uses the panel's existing
-     layout at phone, tablet and desktop widths.
+     `api/models.ts`) is a table with one row per scan. It gains one
+     **column**, "Old prints", with a header tooltip "Old IEX prints re-asked
+     from yfinance, share of live-price asks", showing "—" for None. On
+     `ProviderHealthRow` the field is **optional**
+     (`old_print_rate?: number | null`), so existing typed fixtures
+     (`provider-health-panel.spec.ts`, `system.store.spec.ts`,
+     `providers-tab.spec.ts`) still compile. The column follows the table's
+     existing responsive rules at phone, tablet and desktop widths.
    - `provider_degraded_embed` and `provider_recovered_embed` add one line,
      `• Old IEX prints: <rate> of live-price asks`, next to the existing
      `Stale symbols` line, which keeps its meaning.
@@ -147,8 +152,11 @@ regular session**. The new tag is `yfinance-old-print`, and the new field is
     as the row's `price_source`. The TS union at `models.ts:1440` adds
     `'yfinance-old-print'`. `watchlist.ts:469` shows the same "fallback" badge
     for both tags, so pre-market and after-hours rows keep the badge they show
-    today. The badge's tooltip says which case it is: "Alpaca had no answer" or
-    "IEX print older than 5 min outside regular hours".
+    today. `yfinance-fallback` keeps the existing `WATCHLIST_FALLBACK_HINT`
+    (`watchlist.ts:179`, pinned verbatim by `watchlist.spec.ts`).
+    `yfinance-old-print` gets a new `WATCHLIST_OLD_PRINT_HINT`: "Alpaca's last
+    IEX trade is older than 5 minutes outside regular hours, so this price
+    comes from yfinance's extended-hours data."
 
 ## What does not change
 
