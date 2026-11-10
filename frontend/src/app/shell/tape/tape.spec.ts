@@ -7,13 +7,15 @@ import { LiveValuesStore } from '../../stores/live-values.store';
 import { FakeLiveValues } from '../../testing/fake-live-values';
 import { ConnectionStore } from '../../stores/connection.store';
 import { TapeStore } from '../../stores/tape.store';
-import { TAPE_PROXY_HINT, Tape } from './tape';
+import { TapeFeed } from '../../stores/tape-feed';
+import { TAPE_PROXY_HINT, Tape, shockSummary } from './tape';
 
 describe('Tape', () => {
   function setup(
     indexRows: unknown[],
     stockRows: unknown[],
     asOf: string | null = '2026-09-09T14:35:00+00:00',
+    shock: unknown = null,
   ) {
     TestBed.configureTestingModule({
       providers: [
@@ -22,6 +24,7 @@ describe('Tape', () => {
         { provide: LiveValuesStore, useClass: FakeLiveValues },
         { provide: ConnectionStore, useValue: { marketActive: () => true } },
         { provide: MarketIndexStore, useValue: { rows: () => indexRows, asOf: () => null, load: () => undefined } },
+        { provide: TapeFeed, useValue: { shock: () => shock } },
         { provide: TapeStore, useValue: {
           rows: () => stockRows, asOf: () => asOf,
           visible: () => stockRows.length > 0, load: () => undefined,
@@ -129,5 +132,52 @@ describe('Tape', () => {
     const el = setup([{ ...index, price_refreshing: true }], []).nativeElement as HTMLElement;
     expect(el.querySelector('.tile sb-market-value sb-spinner')).not.toBeNull();
     expect(el.querySelector('.tile sb-market-value .mv-age')).toBeNull();
+  });
+
+  const shockState = {
+    label: 'SHOCK', since: '2026-11-05T14:45:00+00:00', as_of: '2026-11-05T15:00:00+00:00',
+    breadth_pct: 42, sectors_down: 5, sectors_total: 8, spy_atr_move: -1.8, qqq_atr_move: -2.3,
+    vix_level: 21.13, vix_chg_pct: 27.2, vix_missing: false,
+  };
+
+  it('shows no badge without a shock object (detector off)', () => {
+    const el = setup([index], [stock]).nativeElement as HTMLElement;
+    expect(el.querySelector('.shock-badge')).toBeNull();
+  });
+
+  it.each(['NORMAL', 'SHOCK', 'RECOVERY'])('labels the badge %s', (label) => {
+    const el = setup([index], [stock], undefined, { ...shockState, label }).nativeElement as HTMLElement;
+    const badge = el.querySelector('.shock-badge')!;
+    expect(badge.getAttribute('data-label')).toBe(label);
+    expect(badge.querySelector('.shock-label')!.textContent!.trim()).toBe(label);
+    expect(badge.textContent).not.toContain('VIX missing');
+  });
+
+  it('says VIX missing when the reading has no VIX', () => {
+    const missing = { ...shockState, vix_level: null, vix_chg_pct: null, vix_missing: true };
+    const el = setup([index], [], undefined, missing).nativeElement as HTMLElement;
+    expect(el.querySelector('.shock-badge .shock-vix')!.textContent!.trim()).toBe('VIX missing');
+  });
+
+  it('sits after the tape lane, never inside its clipped viewport', () => {
+    const el = setup([index], [stock], undefined, shockState).nativeElement as HTMLElement;
+    expect(el.querySelector('.lane .shock-badge')).toBeNull();
+    expect(el.querySelector('.lane')!.nextElementSibling!.classList).toContain('shock-badge');
+    expect(el.querySelectorAll('.cap-row').length).toBe(1);
+    expect(el.textContent!.toLowerCase()).not.toContain('live');
+  });
+
+  it('carries the headline numbers in its title', () => {
+    const el = setup([index], [stock], undefined, shockState).nativeElement as HTMLElement;
+    expect(el.querySelector('.shock-badge')!.getAttribute('title')).toBe(
+      'Market state SHOCK since 14:45 UTC · breadth 42% · sectors 5/8 · SPY -1.80 ATR · QQQ -2.30 ATR · VIX 21.13 (+27.2%)');
+  });
+
+  it('summarises a reading with no numbers as n/a', () => {
+    expect(shockSummary({
+      label: 'NORMAL', since: null, as_of: null, breadth_pct: null, sectors_down: null,
+      sectors_total: null, spy_atr_move: null, qqq_atr_move: null, vix_level: null,
+      vix_chg_pct: null, vix_missing: true,
+    })).toBe('Market state NORMAL · breadth n/a · sectors n/a · SPY n/a · QQQ n/a · VIX missing');
   });
 });

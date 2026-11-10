@@ -2439,11 +2439,31 @@ export interface TapeRow extends RowQuoteFields {
   age_s?: number | null;
 }
 
+/** v210: the market-shock detector's state, shown beside the tape. */
+export type ShockLabel = 'NORMAL' | 'SHOCK' | 'RECOVERY';
+
+export interface TapeShock {
+  label: ShockLabel;
+  since: string | null;
+  /** The last reading's instant; null before any reading. */
+  as_of: string | null;
+  breadth_pct: number | null;
+  sectors_down: number | null;
+  sectors_total: number | null;
+  spy_atr_move: number | null;
+  qqq_atr_move: number | null;
+  vix_level: number | null;
+  vix_chg_pct: number | null;
+  vix_missing: boolean;
+}
+
 export interface TapeResponse {
   /** ISO-8601 UTC instant the server composed this answer at. Rendered in the
    *  pinned end-cap; never inside the moving track. */
   as_of: string;
   rows: TapeRow[];
+  /** v210: null under MARKET_SHOCK_MODE=off or before the first stepped pass. */
+  shock?: TapeShock | null;
 }
 
 /* -- equity candles (v172) ------------------------------------------------ */

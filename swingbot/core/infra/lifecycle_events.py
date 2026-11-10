@@ -3,6 +3,11 @@ from copy import deepcopy
 from datetime import datetime
 from uuid import NAMESPACE_URL, uuid5
 
+from swingbot.core.market.shock import LABELS, SHOCK
+
+#: v210: the v197 queue's event kinds; market_shock is a status notice, not a lifecycle event.
+KINDS = ("trade_closed", "plan_transition", "market_shock")
+
 
 def _identity(transition_id, kind):
     return str(uuid5(NAMESPACE_URL, f"swingbot:lifecycle:{transition_id}:{kind}"))
@@ -32,6 +37,9 @@ def _validate_trade(payload):
 def _validate_payload(kind, payload):
     if not isinstance(payload, dict):
         raise ValueError("invalid_payload")
+    if kind == "market_shock":
+        _validate_shock_payload(payload)
+        return
     required = ("ticker", "direction", "prior_status", "new_status", "reason", "occurred_at")
     if any(not isinstance(payload.get(key), str) or not payload[key] for key in required):
         raise ValueError("incomplete_payload")
@@ -51,9 +59,27 @@ def _validate_plan_transition(payload):
         raise ValueError("cancelled_plan_has_fill")
 
 
+def _validate_shock_payload(payload):
+    """v210: a market-state transition notice (shock_notices.notice_payload)."""
+    label, prior = payload.get("label"), payload.get("prior_label")
+    if label not in LABELS or prior not in LABELS:
+        raise ValueError("invalid_shock_label")
+    if label == prior:
+        raise ValueError("shock_notice_without_transition")
+    _aware(payload.get("occurred_at"))
+    if not isinstance(payload.get("reading"), dict):
+        raise ValueError("invalid_shock_reading")
+    unavailable = payload.get("open_longs_unavailable", False)
+    if not isinstance(payload.get("open_longs"), list) or not isinstance(unavailable, bool):
+        raise ValueError("invalid_open_longs")
+    entry = payload.get("entry_into_shock")
+    if not isinstance(entry, bool) or entry != (label == SHOCK):
+        raise ValueError("invalid_entry_flag")
+
+
 def validate_event(event: dict) -> None:
     kind = event.get("kind")
-    if kind not in ("trade_closed", "plan_transition") or not event.get("transition_id"):
+    if kind not in KINDS or not event.get("transition_id"):
         raise ValueError("invalid_event_kind_or_identity")
     if event.get("event_id") != _identity(event["transition_id"], kind):
         raise ValueError("invalid_event_identity")

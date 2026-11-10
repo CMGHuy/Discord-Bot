@@ -18,10 +18,11 @@ import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
-import { ScanEventProgress } from '../api/models';
+import { ScanEventProgress, TapeShock } from '../api/models';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { PreferencesStore } from '../stores/preferences.store';
 import { LiveValuesStore } from '../stores/live-values.store';
+import { TapeFeed } from '../stores/tape-feed';
 import { TapeStore } from '../stores/tape.store';
 import { ViewportService } from '../ui/breakpoints';
 import { CLOCK } from '../ui/clock';
@@ -387,6 +388,24 @@ describe('shell.css breakpoints', () => {
 
     expect(widths.length).toBeGreaterThan(0);
     expect(widths.filter((w) => !allowed.has(w))).toEqual([]);
+  });
+});
+
+describe('shell phone bar worst case (v210)', () => {
+  const css = readFileSync(join(process.cwd(), 'src/app/shell/shell.css'), 'utf8');
+  const phone = css.slice(css.lastIndexOf('@media (max-width: 639px)'));
+
+  it('lets the chip cluster shrink so search and the profile avatar stay on screen', () => {
+    expect(phone).toMatch(/\.status-cluster \{[^}]*min-width: 0;/);
+  });
+
+  it('spends the wordmark on the shock pill: the diamond stays, the words go visually', () => {
+    expect(phone).toMatch(/\.topbar:has\(\.shock-pill\):has\(sb-read-only-badge\) \.brand \.word \{[^}]*clip-path: inset\(50%\);/);
+    expect(phone).not.toMatch(/\.brand \.word \{[^}]*display: none/);
+  });
+
+  it('collapses the wordmark only when the read-only badge shares the bar with the pill', () => {
+    expect(phone).not.toMatch(/\.topbar:has\(\.shock-pill\) \.brand/);
   });
 });
 
@@ -1321,5 +1340,58 @@ describe('shell top bar (v203, spec v202 §3)', () => {
       expect(rule('.brand .word')).toContain(declaration);
     }
     expect(rule('.brand .word span:last-child')).toContain('color: var(--accent);');
+  });
+});
+
+describe('shell phone shock pill (v210)', () => {
+  const shockState: TapeShock = {
+    label: 'SHOCK', since: '2026-11-05T14:45:00+00:00', as_of: '2026-11-05T15:00:00+00:00',
+    breadth_pct: 42, sectors_down: 5, sectors_total: 8, spy_atr_move: -1.8, qqq_atr_move: -2.3,
+    vix_level: 21.13, vix_chg_pct: 27.2, vix_missing: false,
+  };
+
+  // The real MarketIndexStore (the shell injects it) and V210-3b's sb-tape
+  // read the feed too, so the fake carries every member they touch.
+  function mount(phone: boolean, state: TapeShock | null): HTMLElement {
+    TestBed.configureTestingModule({ providers: shellProviders() });
+    TestBed.overrideProvider(TapeFeed, {
+      useValue: {
+        register: vi.fn(), refresh: vi.fn(), rows: signal({}), asOf: signal(null),
+        loading: signal(false), shock: signal(state),
+      },
+    });
+    TestBed.overrideProvider(ViewportService, {
+      useValue: { isPhone: signal(phone), isNarrow: signal(phone), viewport: signal(phone ? 'xs' : 'md') },
+    });
+    const fixture = createShell();
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('shows SHOCK in the phone status cluster, before the alarm and killswitch chips', () => {
+    const el = mount(true, shockState);
+    const cluster = el.querySelector('header.topbar .status-cluster')!;
+    expect(cluster.querySelector('sb-shock-pill .shock-pill')!.textContent!.trim()).toBe('SHOCK');
+    const tags = [...cluster.children].map((c) => c.tagName.toLowerCase());
+    expect(tags.indexOf('sb-shock-pill')).toBeGreaterThanOrEqual(0);
+    expect(tags.indexOf('sb-shock-pill')).toBeLessThan(tags.indexOf('sb-alarm-chip'));
+    expect(tags.indexOf('sb-shock-pill')).toBeLessThan(tags.indexOf('sb-killswitch-chip'));
+  });
+
+  it('shows RECOVERY on a phone too', () => {
+    const el = mount(true, { ...shockState, label: 'RECOVERY' });
+    expect(el.querySelector('.status-cluster .shock-pill')!.textContent!.trim()).toBe('RECOVERY');
+  });
+
+  it('shows no pill on NORMAL', () => {
+    expect(mount(true, { ...shockState, label: 'NORMAL' }).querySelector('.shock-pill')).toBeNull();
+  });
+
+  it('shows no pill without a shock object (detector off)', () => {
+    expect(mount(true, null).querySelector('.shock-pill')).toBeNull();
+  });
+
+  it('renders no pill above phone width: the tape badge covers it there', () => {
+    expect(mount(false, shockState).querySelector('sb-shock-pill')).toBeNull();
   });
 });

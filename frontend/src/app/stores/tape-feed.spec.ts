@@ -197,4 +197,34 @@ describe('TapeFeed', () => {
     await flush();
     expect(api.tape).toHaveBeenCalledTimes(1);
   });
+
+  const shock = {
+    label: 'SHOCK', since: '2026-11-05T14:45:00+00:00', as_of: '2026-11-05T15:00:00+00:00',
+    breadth_pct: 42, sectors_down: 5, sectors_total: 8, spy_atr_move: -1.8, qqq_atr_move: -2.3,
+    vix_level: 21.13, vix_chg_pct: 27.2, vix_missing: false,
+  } as const;
+
+  it('keeps the reply shock object (v210)', async () => {
+    api.tape.mockReturnValue(of({ as_of: 'x', rows: [row('^GSPC')], shock }));
+    feed.register('index', signal(['^GSPC']));
+    await flush();
+    expect(feed.shock()).toEqual(shock);
+  });
+
+  it('a reply without shock reads as null (detector off)', async () => {
+    api.tape.mockReturnValue(of({ as_of: 'x', rows: [row('^GSPC')] }));
+    feed.register('index', signal(['^GSPC']));
+    await flush();
+    expect(feed.shock()).toBeNull();
+  });
+
+  it('a failed refetch keeps the previous shock', async () => {
+    api.tape.mockReturnValue(of({ as_of: 'x', rows: [row('^GSPC')], shock }));
+    feed.register('index', signal(['^GSPC']));
+    await flush();
+    api.tape.mockReturnValue(throwError(() => new Error('down')));
+    events.raise('scan');
+    await flush();
+    expect(feed.shock()).toEqual(shock);
+  });
 });

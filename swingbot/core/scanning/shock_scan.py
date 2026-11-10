@@ -24,6 +24,7 @@ from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import indicators, session, shock
 from swingbot.core.marketdata import asset_class
 from swingbot.core.marketdata.shared import tape
+from swingbot.core.scanning import shock_notices
 
 log = logging.getLogger(__name__)
 
@@ -156,6 +157,49 @@ def _load_prior(repo) -> tuple[shock.ShockReading | None, shock.ShockState]:
     return prev, shock.ShockState.from_row((stored.get("doc") or {}).get("state"))
 
 
+def _open_trades() -> list[dict] | None:
+    """Open trades for a SHOCK notice; None when the trade log cannot be read."""
+    try:
+        from swingbot.core.scanning.singletons import trade_log
+        return list(trade_log.get_trades(status="open", limit=None) or [])
+    except Exception as exc:
+        swallowed(log, "scan.shock.open_trades", exc, "shock: open trades unreadable: %s", exc)
+        return None
+
+
+def _open_longs(quotes, now) -> tuple[list[dict], bool]:
+    trades = _open_trades()
+    if trades is None:
+        return [], True
+    return shock_notices.open_long_rows(trades, quotes, now), False
+
+
+def _notice_for(prior, new, reading, quotes, now, repo, th) -> dict | None:
+    if prior.label == new.label:
+        return None
+    last_notice_at = (repo.current_state() or {}).get("last_notice_at")
+    if not shock_notices.should_notify(prior.label, new.label, last_notice_at, now,
+                                       th.min_dwell_min):
+        return None
+    longs, unavailable = (_open_longs(quotes, now) if new.label == shock.SHOCK
+                          else ([], False))
+    payload = shock_notices.notice_payload(prior, new, reading, longs, now)
+    if unavailable:
+        payload["open_longs_unavailable"] = True
+    return shock_notices.notice_event(payload, as_of=reading.as_of)
+
+
+def _safe_notice(prior, new, reading, quotes, now, repo, th) -> dict | None:
+    """A notice that cannot be built never costs the reading or the state step."""
+    try:
+        return _notice_for(prior, new, reading, quotes, now, repo, th)
+    except Exception as exc:
+        swallowed(log, "scan.shock.notice", exc,
+                  "shock: notice not built; the reading is still recorded: %s", exc,
+                  exc_info=True)
+        return None
+
+
 def _stepped_pass(frames, live_prices, sector_of, quotes_at, spy_df, now, repo) -> str:
     """One reading from the quotes the scan already holds. Never fetches: a
     benchmark absent from live_prices gives a NameRow with last=None."""
@@ -166,7 +210,10 @@ def _stepped_pass(frames, live_prices, sector_of, quotes_at, spy_df, now, repo) 
     prev, state = _load_prior(repo)
     reading = shock.measure(snapshot, prev, th)
     new_state = shock.step(state, reading, th)
-    repo.record(reading.as_row(), new_state.as_row(), state_after=new_state.label)
+    quotes = _fresh_quotes(live_prices, quotes_at, now, th)
+    event = _safe_notice(state, new_state, reading, quotes, now, repo, th)
+    repo.record(reading.as_row(), new_state.as_row(), state_after=new_state.label,
+                notice_event=event)
     return new_state.label
 
 

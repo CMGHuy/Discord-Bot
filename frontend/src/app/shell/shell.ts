@@ -18,6 +18,7 @@ import { EventStream } from '../api/event-stream';
 import { ConnectionStore } from '../stores/connection.store';
 import { MarketIndexStore } from '../stores/market-index.store';
 import { PreferencesStore } from '../stores/preferences.store';
+import { TapeFeed } from '../stores/tape-feed';
 import { TapeStore } from '../stores/tape.store';
 import { MotionMode, MotionService } from '../ui/motion/motion.service';
 import { CLOCK } from '../ui/clock';
@@ -37,6 +38,7 @@ import { CommandPalette, isPaletteShortcut, shortcutLabel } from './palette/comm
 import { PhoneTabBar } from './phone-tab-bar';
 import { RefresherBanner } from './refresher-banner';
 import { AlarmChip } from './alarm-chip';
+import { ShockPill } from './shock-pill';
 import { navEntriesFor, navEntryFor } from './nav';
 import { ReadOnlyBadge } from './read-only-badge';
 import { SectionTabs } from './section-tabs';
@@ -81,7 +83,7 @@ const ZOOM_DEFAULT = 100;
     RouterOutlet, RouterLink, AlarmChip, ToastHost,
     ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, ProfileMenu, Tape,
     Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
-    LiveDock, LiveEdgeTab, LiveStrip, LiveSheet, ReadOnlyBadge,
+    LiveDock, LiveEdgeTab, LiveStrip, LiveSheet, ReadOnlyBadge, ShockPill,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shell.html',
@@ -98,6 +100,7 @@ export class Shell {
   private readonly routeRefresh = inject(RouteRefreshService);
   private readonly tape = inject(TapeStore);
   private readonly marketIndex = inject(MarketIndexStore);
+  protected readonly shock = inject(TapeFeed).shock;
   protected readonly clock = inject(CLOCK);
 
   /** The rail's five work destinations and its foot (System), from the one

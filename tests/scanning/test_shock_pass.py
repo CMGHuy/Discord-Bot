@@ -55,6 +55,7 @@ def _env(monkeypatch):
     monkeypatch.setattr(config, "MARKET_SHOCK_MODE", "shadow")
     monkeypatch.setattr(config, "MARKET_REGIME_TICKER", "SPY")
     monkeypatch.setattr(config, "SHOCK_MIN_NAMES", 2)
+    monkeypatch.setattr(shock_scan, "_open_trades", lambda: [])
     monkeypatch.setattr(shock_scan.asset_class, "classify",
                         lambda t: "etf" if t in ("SPY", "QQQ") else "equity")
     monkeypatch.setattr(shock_scan.tape, "read_tape", lambda symbols: {})
