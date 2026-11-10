@@ -52,7 +52,7 @@
     "swingbot.core.backtesting.backtest:run_backtest_daterange": 25,
     "swingbot.core.backtesting.backtest_scenarios:_aggregate": 18,
     "swingbot.core.backtesting.backtest_wf:collect_portfolio_signals": 18,
-    "swingbot.core.backtesting.backtest_wf:portfolio_replay": 45,
+    "swingbot.core.backtesting.backtest_wf:portfolio_replay": 38,
     "swingbot.core.backtesting.shadow_log:backfill_forward_returns": 15,
     "swingbot.core.charts.chart_geometry:_shape_for": 32,
     "swingbot.core.charts.chart_geometry:_trendline_shape": 20,
