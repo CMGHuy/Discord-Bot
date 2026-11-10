@@ -10,7 +10,7 @@
 | `shock_support_break_short` | SCREEN-FAIL | 6545 | -0.3131R | [-0.5259, -0.0732] | 1/9 | 70 | `results/2026-11-10-screen-shock_support_break_short.md` |
 | `shock_failed_bounce_short` | SCREEN-FAIL | 8470 | -0.2000R | [-0.3843, -0.0014] | 1/9 | 70 | `results/2026-11-10-screen-shock_failed_bounce_short.md` |
 
-**0 of 2 passed.**
+**0 of 2 passed.** Event-arm total R (ExpR x N, derived): `shock_support_break_short` about -912R over 6545 trades; `shock_failed_bounce_short` about -1753R over 8470. "Shock weeks" counts ISO weeks of the signal days; the bootstrap clusters by ISO week of entry (a Friday signal enters Monday), and one shock episode spans several weeks, so 70 is an approximate effective N, not the exact cluster count. Neither changes a verdict (both upper bounds are below 0). Null depth is about 17.6 and 18.0 draws per event, below the nominal K = 20.
 
 ## Printed beside each verdict (never gating)
 
@@ -25,6 +25,8 @@
 
 - They test the daily `SHOCK_D` proxy on the point-in-time S&P 500. **A pass does not license the Track 1 detector's labels** (no sector clause, no fast path, no VIX relief, no RECOVERY tier; index membership, not the watchlist).
 - The year rule may sink a crash-only edge: the preflight found no year without a shock day and no year with zero events, so no year was empty and the fail does not rest on empty years. A `SCREEN-FAIL` or `SCREEN-UNDERPOWERED` is closed and never re-run with a looser definition.
+- Not modelled, to carry into any follow-on: SEC Rule 201 (a name down 10 % on the day can only be shorted on the offer or above the bid until the next close, so an open fill at the modelled price may not exist), a flat 0.5 %/yr borrow with no hard-to-borrow flag, and a stop-first fixed 1.5 ATR stop where the idea docstring speaks of a resting buy-stop above High[b]. Entry is the next open after a close-based trigger, so a live version is an overnight resting order needing a stated expiry.
+- No live comparison exists: there are no closed live shock-day shorts, and the 2026-11-05 long-book loss that motivated the screens is in-sample.
 - The shadow log (plans v209, v210) can motivate a new idea; it can never license one.
 
 ## What follows
