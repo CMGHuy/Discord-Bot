@@ -437,6 +437,19 @@ does not run, and the delete is idempotent.
 
 The tables stay until a later spec retires the detector.
 
+**v210: market-shock notice and tape badge.** No revision, no new setting:
+a stepped pass that changes the market state enqueues one `market_shock`
+event in the v197 notify queue (`manual_close_notify`), delivered as a plain
+status embed to `DISCORD_CHANNEL_OPS_ID` (falls back to the trades channel);
+`GET /api/v1/market/tape` carries a `shock` object and the shell tape shows
+a NORMAL / SHOCK / RECOVERY badge at 640 px and wider; below 640 px the
+phone header shows a SHOCK / RECOVERY pill instead. `MARKET_SHOCK_MODE=off`
+silences both (no reading, no notice, `shock: null`). Rollback is image-only
+(§ Rolling back): the previous image does not know the third queue kind, so
+after a rollback check
+`SELECT count(*) FROM manual_close_notify WHERE delivered_at IS NULL AND doc::text LIKE '%market_shock%'`
+and, if it is not `0`, ask before deleting those rows.
+
 ## Accessing the admin UI
 
 The admin UI runs on port `1234` (or `$ADMIN_PORT`), published on

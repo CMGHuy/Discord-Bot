@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-10 11:54:42 UTC",
+  "generated_at": "2026-11-10 18:48:21 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.40.4",
-    "bot": "2.18.1"
+    "ui": "1.40.5",
+    "bot": "2.18.2"
   },
   "releases": [
     {
@@ -2533,6 +2533,20 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-11-10",
+      "last_seen": "2026-11-10",
+      "commit": "b3d2ce5b",
+      "subject": "release(bot,ui): bot 2.18.2 / ui 1.40.5 -- market-shock notice and tape badge (v210)",
+      "versions": {
+        "ui": "1.40.5",
+        "bot": "2.18.2"
+      },
+      "changed": [
+        "ui",
+        "bot"
       ]
     }
   ]
