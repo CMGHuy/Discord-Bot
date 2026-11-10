@@ -55,6 +55,7 @@ from swingbot import config  # noqa: E402
 from swingbot.core.backtesting.screen import forward, indicators, null, race, trail, verdict  # noqa: E402,F401
 from swingbot.core.backtesting.instrument import stats  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea  # noqa: E402
+from swingbot.core.backtesting.screen.errors import IdeaError  # noqa: E402
 from swingbot.core.backtesting.screen import context as screen_context  # noqa: E402
 from swingbot.core.backtesting.screen import context as pit  # noqa: E402
 from swingbot.core.backtesting.screen import descriptive, diagnostics  # noqa: E402
@@ -131,10 +132,14 @@ class TickerScreen:
     control: list | None = None                           # v182: rows of the trend-only control book
     overlap: dict | None = None                           # v182: raw-bar overlap with the family partner
     shock: dict | None = None   # v211: level only, shock-day null, 3 x book, gap/episode tags
+    avoid: dict | None = None   # v214: avoid only, control-arm rows and read-out counts
 
 
 #: v182: bars from the event bar to the entry bar, per entry mode.
 _ENTRY_OFFSET = {"next_open": 1, "level": 0}
+
+#: v214 G1: the control arm's own seed stream, null_seed(idea + ":control", ticker).
+CONTROL_SEED_SUFFIX = ":control"
 
 
 def _event_rows(ticker, index, kept, null_mean_r, entry_offset: int = 1) -> list:
@@ -163,10 +168,12 @@ def _event_depths(df: pd.DataFrame, event_pos, ctx: dict, direction: str) -> np.
 
 def _null_pool(idea: Idea, ctx: dict, exclude: np.ndarray | None = None) -> np.ndarray:
     """The bars the matched null may draw from; ``exclude`` (v174) removes
-    bars from the pool only."""
+    bars from the pool only.
+    v214: an avoid idea's condition bars never enter the pool."""
     eligible = null.eligible_mask(ctx["raw"], ctx["member"], ctx["warm"], idea.time_cap_bars)
-    if exclude is not None:
-        eligible = eligible & ~exclude
+    for mask in (exclude, ctx.get("condition")):
+        if mask is not None:
+            eligible = eligible & ~mask
     return eligible
 
 
@@ -320,16 +327,33 @@ def raw_levels(idea: Idea, df: pd.DataFrame) -> np.ndarray | None:
     return idea.levels(df).reindex(df.index).to_numpy(dtype=float)
 
 
+def _avoid_context(idea: Idea, df: pd.DataFrame) -> dict:
+    """v214: an avoid idea's states(df), read once and put on the ticker's own
+    index -- raw events, the control and exclusion masks and the gap bottom.
+    An edge idea gets ``{}``."""
+    if idea.mode != "avoid":
+        return {}
+    states = idea.states(df).reindex(df.index)
+    flags = {key: states[key].fillna(False).to_numpy(dtype=bool)
+             for key in ("event", "control_condition", "condition")}
+    return {"raw": flags["event"], "control_condition": flags["control_condition"],
+            "condition": flags["condition"],
+            "bottom": states["bottom"].to_numpy(dtype=float)}
+
+
 def ticker_context(idea: Idea, df: pd.DataFrame, spans, context: Mapping | None = None) -> dict:
-    """Per-ticker inputs every screen path shares: raw events, membership, warm-up, ATR14 and the null's trend state (v182: moved out of screen_ticker so --count-only reads the same ones)."""
+    """Per-ticker inputs every screen path shares: raw events, membership, warm-up, ATR14 and the null's trend state (v182: moved out of screen_ticker so --count-only reads the same ones).
+    v214: an avoid idea's raw events come from its states(df), whose masks and bottom follow the edge keys."""
     atr = indicators.atr(df)
     sma200 = indicators.sma(df["Close"], 200)
     member = null.member_mask(df.index, spans)
     warm = race.warm_mask(atr, sma200) & (df.index >= pd.Timestamp(EVENT_START))
-    return {"raw": np.asarray(raw_events(idea, df, context), dtype=bool),
+    avoid = _avoid_context(idea, df)
+    raw = avoid.pop("raw") if avoid else np.asarray(raw_events(idea, df, context), dtype=bool)
+    return {"raw": raw,
             "member": member, "warm": warm, "atr": atr,
             "trend": null.trend_state(df, sma200), "levels": raw_levels(idea, df),
-            "context": context}
+            "context": context, **avoid}
 
 
 def _family_partner(idea: Idea) -> Idea | None:
@@ -362,6 +386,41 @@ def _control(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict) 
                        entry_offset=_ENTRY_OFFSET[idea.entry])
 
 
+def _overnight(df: pd.DataFrame, event_pos, bottom: np.ndarray) -> int:
+    """v214: events whose next open is at or above the gap bottom (bar t's
+    bottom, bar t + 1's open). A booked next-open event always has bar t + 1."""
+    pos = np.asarray(event_pos, dtype=int)
+    if len(pos) == 0:
+        return 0
+    opens = df["Open"].to_numpy(dtype=float)
+    return int(np.count_nonzero(opens[pos + 1] >= bottom[pos]))
+
+
+def _avoid_arm(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict,
+               kept) -> dict | None:
+    """v214, avoid ideas only: the control arm -- every kept event matched
+    against control_condition bars (condition bars already out of the pool)
+    on its own seed stream -- and the read-out counts. Events below the
+    control floor (null.MIN_CANDIDATES, inside matched_null) stay in the
+    null-paired book; they are counted in ``below_floor``."""
+    if idea.mode != "avoid":
+        return None
+    pool = _null_pool(idea, ctx) & ctx["control_condition"]
+    draw = null.matched_null(df, kept.event_pos, pool, null.K,
+                             null.null_seed(idea.name + CONTROL_SEED_SUFFIX, ticker),
+                             cap=idea.time_cap_bars, atr=ctx["atr"], trend=ctx["trend"],
+                             shape=idea.race_shape, direction=idea.direction, **costs)
+    matched = kept.take(np.isin(kept.event_pos, draw.event_pos))
+    population = ctx["member"] & ctx["warm"]
+    return {"control": _event_rows(ticker, df.index, matched, draw.null_mean_r,
+                                   entry_offset=_ENTRY_OFFSET[idea.entry]),
+            "below_floor": int(draw.dropped_no_match),
+            "kept": len(kept.event_pos),
+            "excluded": int((ctx["condition"] & population).sum()),
+            "population": int(population.sum()),
+            "overnight": _overnight(df, kept.event_pos, ctx["bottom"])}
+
+
 def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
                   slippage_bps=None, commission=None,
                   context: Mapping | None = None) -> TickerScreen:
@@ -383,6 +442,7 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
         restricted=_restricted(idea, ticker, df, ctx, costs),
         control=_control(idea, ticker, df, ctx, costs), overlap=_overlap(idea, df, ctx),
         shock=_shock_report(idea, ticker, df, ctx, costs, kept),
+        avoid=_avoid_arm(idea, ticker, df, ctx, costs, kept),
         **_level_report(idea, ticker, df, ctx, costs, kept, draw))
 
 
@@ -529,6 +589,24 @@ def _screen_or_resume(idea, ticker, universe, cache_dir, start, end, context, ch
     return screen
 
 
+def _guarded_errors(idea: Idea) -> tuple:
+    """v214: the errors one ticker may raise without stopping the run --
+    IdeaError for an avoid idea, none for an edge idea (``except ()`` catches nothing)."""
+    return (IdeaError,) if idea.mode == "avoid" else ()
+
+
+def _screen_guarded(idea: Idea, ticker: str, skipped: Counter, out, call):
+    """v214: ``call()``, or ``None`` after counting and printing a guarded
+    idea error -- that ticker is skipped and never checkpointed."""
+    try:
+        return call()
+    except _guarded_errors(idea) as exc:
+        skipped["idea_error"] += 1
+        skipped[f"idea_error:{ticker}"] = 1
+        out(f"[{idea.name}] {ticker}: idea error: {exc}", flush=True)
+        return None
+
+
 def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
                     start: str = WINDOW_START, end: str = WINDOW_END,
                     tickers=None, out=print, context: Mapping | None = None,
@@ -543,11 +621,13 @@ def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
                                                       universe.intervals), out)
     screens, skipped = [], Counter()
     for i, ticker in enumerate(names, start=1):
-        result = _screen_or_resume(idea, ticker, universe, cache_dir, start, end,
-                                   context, checkpoint)
+        result = _screen_guarded(
+            idea, ticker, skipped, out,
+            lambda: _screen_or_resume(idea, ticker, universe, cache_dir, start, end,
+                                      context, checkpoint))
         if result is _EMPTY:
             skipped["empty_frame"] += 1
-        else:
+        elif result is not None:
             screens.append(result)
         if i % PROGRESS_EVERY == 0 or i == len(names):
             out(f"[{idea.name}] {i}/{len(names)} tickers ({100.0 * i / len(names):.0f}%)",
@@ -619,8 +699,12 @@ def count_universe(idea: Idea, universe: Universe, cache_dir, *,
         if df is None:
             total["skipped"]["empty_frame"] += 1
         else:
-            _add_count(total, count_ticker(idea, ticker, df,
-                                           universe.intervals.get(ticker, []), context=context))
+            one = _screen_guarded(idea, ticker, total["skipped"], out,
+                                  lambda: count_ticker(idea, ticker, df,
+                                                       universe.intervals.get(ticker, []),
+                                                       context=context))
+            if one is not None:
+                _add_count(total, one)
         if i % PROGRESS_EVERY == 0 or i == len(names):
             out(f"[{idea.name}] {i}/{len(names)} tickers ({100.0 * i / len(names):.0f}%)",
                 flush=True)
