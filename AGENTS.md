@@ -380,13 +380,13 @@ Detail: `docs/claude/testing-cost.md` § Test suites.
 `pytest path::test`), never by re-running the whole suite; a fix touching other
 files widens to `testrun.py changed`. **No full suite after merging back to
 `main`**: it ran once, before the merge.
-Every feature, fix or change you implement updates the existing unit tests it
-affects and creates new ones for what is new, in the same work (backend and frontend, edge and empty cases included), run green before
-you call it done; the partner never has to ask.
+Every feature, fix or change updates the unit tests it affects and adds new ones
+for what is new, in the same work (backend and frontend, edge and empty cases),
+run green before you call it done; the partner never has to ask.
 
 **Green means `0 failed` and `0 xfailed`.** A changed pass count is not itself a
-failure; read the output. Timings swing 2-4x with machine load, so do not
-re-measure to justify a change. Backtests and grids run minutes to hours; chunk
+failure. Timings swing 2-4x with machine load; do not re-measure to justify
+a change. Backtests and grids run minutes to hours; chunk
 them per strategy, no casual broad sweeps. Any script past a couple of minutes
 prints flushed per-unit progress; past 15 minutes, a percent-complete figure
 rewritten each unit (never summed by the reader) in a log deleted on completion.
@@ -402,15 +402,15 @@ same work to them so bulk output stays out of your context:
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
 symbols exist), `task-implementer` then `task-reviewer` (one plan task each: `task_handoff.py <plan> <id>` writes the handoff; `agent_cost.py` checks cost),
 `plan-briefer` (gathers a spec's code context into
-`.superpowers/briefs/<plan base>.md` first), `plan-writer` (every spec and plan is written at the `opus` tier -- partner, 2026-11-10; a plan from an
-approved spec and that brief: `mode=index` (index and task ledger) first,
+`.superpowers/briefs/<plan base>.md` first), `plan-writer` (specs and plans are written at the `opus` tier only, partner 2026-11-10; a plan from a
+spec and that brief: `mode=index` (index and task ledger) first,
 then one `mode=part <N>` per part, one at a time here, each appending task by
 task to disk; at most 2 plans in progress per session; a plan cut off
 mid-write resumes from its first missing task, never skipped or restarted. The
 SessionStart hook prints `PLAN WIP` for such a plan: resume it before new work.
-Record partner decisions in the index's `## Handoff` section as made, and commit
-the index, each part and partial files (`docs(vN): plan WIP`) as you go --
-progress lives in the repo, never in session memory;
+Record partner decisions in the index's `## Handoff` as made; commit the index,
+each part and partials (`docs(vN): plan WIP`) as you go -- progress lives in the
+repo, never in session memory;
 `python scripts/dev/plan_lint.py <index>` must print PASS before the plan is
 committed as finished), and
 `expert-reviewer` (one expert role's read-only review, `role=<name>`, cited
