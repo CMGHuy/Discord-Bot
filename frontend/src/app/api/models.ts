@@ -1439,9 +1439,11 @@ export interface Ticker extends RowQuoteFields {
    *  when the cache has nothing for this symbol yet. */
   price: number | null;
   /** v106 -- which provider served `price` when it is the live overlay;
-   *  null when `price` is the cached close. Only `yfinance-fallback` is
-   *  flagged in the table: Alpaca missed and yfinance answered instead. */
-  price_source?: 'alpaca' | 'yfinance' | 'yfinance-fallback' | null;
+   *  null when `price` is the cached close. Only the yfinance answers for an
+   *  Alpaca-eligible symbol are flagged in the table: `yfinance-fallback`
+   *  (Alpaca missed) and, from v223, `yfinance-old-print` (Alpaca's last IEX
+   *  trade was too old outside regular hours). */
+  price_source?: 'alpaca' | 'yfinance' | 'yfinance-fallback' | 'yfinance-old-print' | null;
   /** v171 D2: seconds since `price` was fetched; null when unknown. */
   price_age_s?: number | null;
   /** ISO-8601 UTC instant of that fetch. */
@@ -1575,7 +1577,8 @@ export interface Killswitch {
 
 /** v106 -- the live data provider and how often Alpaca misses.
  *  `fallback_rate` is yfinance-fallback over everything Alpaca was asked for
- *  across the last `scans` scans that logged it; null when none did. */
+ *  across the last `scans` scans that logged it; null when none did. From
+ *  v223 on, old IEX prints outside regular hours are excluded. */
 export interface DataSourcesHealth {
   enabled: boolean;
   feed: string;
@@ -1833,14 +1836,19 @@ export interface ScanCommandResult {
 /* -- system health (v148) ------------------------------------------------ */
 
 /** One scheduled scan's provider figures, from `GET /system/health`.
- *  Rates are fractions (0.05 = 5%). The four figures are null on a row
- *  written before v148 -- render "—", never 0. */
+ *  Rates are fractions (0.05 = 5%). The figures are null on a row written
+ *  before v148 (`old_print_rate`: before v223) -- render "—", never 0. */
 export interface ProviderHealthRow {
   at: string;
   tickers: number;
   /** yfinance-fallback / (alpaca + yfinance-fallback), daily frames and live
-   *  prices pooled; null when Alpaca was asked for nothing. */
+   *  prices pooled; null when Alpaca was asked for nothing. From v223 on,
+   *  old IEX prints outside regular hours are excluded. */
   provider_fallback_rate: number | null;
+  /** v223: old IEX prints re-asked from yfinance, as a share of live-price
+   *  asks only (not the fallback rate's wider pool). Display only: no alert
+   *  reads it. Optional: older rows and fixtures do not carry it. */
+  old_print_rate?: number | null;
   /** Frames whose last bar is before the previous NYSE session. Display
    *  only: no alert reads it. */
   stale_symbols: number | null;
