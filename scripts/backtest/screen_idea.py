@@ -18,6 +18,9 @@ prints the results doc and writes nothing; --tickers needs --dry-run.
 --count-only (v182) prints the event count before the shot (the real events,
 drops and null draw, full-cap non-overlap) and, for a level idea, check 5; it
 races nothing, writes nothing and never reads the ledger.
+v211: a level-context idea counts with its context loaded and checked like the
+real run, and the report ends with the outcome-blind preflight (shock days, ISO
+shock weeks and events per year).
 v182: a short or level idea's results doc ends with the short-side blocks
 (event overlap with its family partner, the trend-only control, the SPY
 200-day regime split, and for a level idea the fill depths, null_unfilled and
@@ -560,11 +563,13 @@ def _count_depths(idea: Idea, df: pd.DataFrame, ctx: dict, booked: np.ndarray):
     return np.asarray(_event_depths(df, booked, ctx, idea.direction), dtype=float)
 
 
-def count_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans) -> dict:
+def count_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans,
+                 context: Mapping | None = None) -> dict:
     """v182 --count-only for one ticker: the real run's events, drops and
     null draw, with a race-free exit bound (every trade lasts the full cap).
-    Nothing is raced; no R is computed."""
-    ctx = ticker_context(idea, df, spans)
+    Nothing is raced; no R is computed. v211: ``event_dates`` lists the ISO
+    signal date of every counted event, ascending."""
+    ctx = ticker_context(idea, df, spans, context)
     cap = idea.time_cap_bars
     cand, counts = race.candidate_events(ctx["raw"], ctx["member"], ctx["warm"], cap,
                                          entry=idea.entry)
@@ -579,13 +584,14 @@ def count_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans) -> dict:
     matched = np.isin(booked, groups.event_pos)
     return {"ticker": ticker, "counters": Counter(counts),
             "raw": int(np.count_nonzero(ctx["raw"])), "events": int(matched.sum()),
+            "event_dates": [d.strftime("%Y-%m-%d") for d in df.index[booked[matched]]],
             "event_depths": [] if depth is None else [float(d) for d in depth[matched]],
             "null_depths": [float(d) for d in groups.null_depths],
             "null_slots": int(groups.null_slots), "null_unfilled": int(groups.null_unfilled)}
 
 
 _COUNT_SUMS = ("raw", "events", "null_slots", "null_unfilled")
-_COUNT_LISTS = ("event_depths", "null_depths")
+_COUNT_LISTS = ("event_dates", "event_depths", "null_depths")
 
 
 def _add_count(total: dict, one: dict) -> None:
@@ -599,19 +605,22 @@ def _add_count(total: dict, one: dict) -> None:
 
 
 def count_universe(idea: Idea, universe: Universe, cache_dir, *,
-                   start: str = WINDOW_START, end: str = WINDOW_END, out=print) -> dict:
+                   start: str = WINDOW_START, end: str = WINDOW_END, out=print,
+                   context: Mapping | None = None) -> dict:
     """v182 --count-only over every cached member, the screen_universe loop
-    and progress line, summed into one dict."""
+    and progress line, summed into one dict. ``context`` (v211) is handed
+    unchanged to every count_ticker call."""
     total = {"tickers": 0, "members": len(universe.members), "missing": len(universe.missing),
              "skipped": Counter(), "counters": Counter(), "raw": 0, "events": 0,
-             "event_depths": [], "null_depths": [], "null_slots": 0, "null_unfilled": 0}
+             "event_dates": [], "event_depths": [], "null_depths": [], "null_slots": 0, "null_unfilled": 0}
     names = universe.cached
     for i, ticker in enumerate(names, start=1):
         df = load_frame(Path(cache_dir) / f"{ticker}.csv", start, end)
         if df is None:
             total["skipped"]["empty_frame"] += 1
         else:
-            _add_count(total, count_ticker(idea, ticker, df, universe.intervals.get(ticker, [])))
+            _add_count(total, count_ticker(idea, ticker, df,
+                                           universe.intervals.get(ticker, []), context=context))
         if i % PROGRESS_EVERY == 0 or i == len(names):
             out(f"[{idea.name}] {i}/{len(names)} tickers ({100.0 * i / len(names):.0f}%)",
                 flush=True)
@@ -659,8 +668,44 @@ def _check5_block(idea: Idea, counts: dict) -> list[str]:
             + [f"- {line}" for line in lines] + ["", verdict_line])
 
 
-def render_counts(idea: Idea, counts: dict, args) -> str:
-    """The --count-only report: counts, the N gate and (level ideas) check 5."""
+#: v211: the outcome-blind preflight's table header (spec § Track 2).
+PREFLIGHT_HEADER = "| year | shock days | shock weeks | events |"
+
+
+def _preflight_block(table: dict[int, dict]) -> list[str]:
+    """v211 (spec § Track 2, Outcome-blind preflight): shock days, ISO shock
+    weeks (the bootstrap's clusters) and counted events per year, then the
+    totals. Printed only."""
+    empty = sum(1 for row in table.values() if row["shock_days"] == 0)
+    totals = {key: sum(row[key] for row in table.values())
+              for key in ("shock_days", "shock_weeks", "events")}
+    return (["", "## Preflight — shock days, weeks and events per year (outcome-blind)", "",
+             "Printed before the shot from the context and the counted events only; it never "
+             "decides whether the shot runs (the shot runs as registered). A shock week is an "
+             "ISO week; a week spanning New Year counts once in each year.",
+             f"Years without a shock day: {empty} of {len(table)}.", "",
+             PREFLIGHT_HEADER, "|---:|---:|---:|---:|"]
+            + [f"| {year} | {row['shock_days']} | {row['shock_weeks']} | {row['events']} |"
+               for year, row in table.items()]
+            + [f"| **total** | **{totals['shock_days']}** | **{totals['shock_weeks']}** | "
+               f"**{totals['events']}** |"])
+
+
+def _count_preflight(idea: Idea, data, counts: dict) -> dict | None:
+    """v211: the per-year preflight table for a level-context idea, from the
+    market-wide SHOCK state on the context calendar (not any ticker's) and the
+    counted events' signal dates; None for every other idea, before reading
+    anything."""
+    if idea.context_kind != "level":
+        return None
+    frames = data.frames
+    state = sb.shock_state(frames[sb.BREADTH]["Close"], frames[sb.VIX]["Close"])
+    return shock_readouts.preflight_years(state, counts["event_dates"])
+
+
+def render_counts(idea: Idea, counts: dict, args, *, preflight: dict | None = None) -> str:
+    """The --count-only report: counts, the N gate, (level ideas) check 5 and
+    (v211 level-context ideas) the preflight table."""
     cap = idea.time_cap_bars
     lines = [f"# v182 count: `{idea.name}` (outcome-blind: no race, no R)", "",
              f"**Window:** {args.start}..{args.end} (events from {EVENT_START}). "
@@ -677,12 +722,15 @@ def render_counts(idea: Idea, counts: dict, args) -> str:
               _count_gate(counts["events"])]
     if idea.entry == "level":
         lines += _check5_block(idea, counts)
+    if preflight is not None:
+        lines += _preflight_block(preflight)
     return "\n".join(lines) + "\n"
 
 
 def count_refusal(args, idea: Idea) -> str | None:
     """Why this count must not happen, or None. Checked before any data is
-    read; never reads the ledger."""
+    read; never reads the ledger. v211: a level-context idea is counted (its
+    context loads in run_count); a z idea is still refused."""
     if args.end > WINDOW_END:
         return f"window end {args.end} is after {WINDOW_END}; the screen never reads 2020+"
     if (args.start, args.end) != (WINDOW_START, WINDOW_END):
@@ -691,26 +739,33 @@ def count_refusal(args, idea: Idea) -> str | None:
     if args.tickers:
         return ("--count-only counts the whole universe; --tickers belongs to a --dry-run "
                 "smoke test")
-    if idea.context:
+    if idea.context and idea.context_kind == "z":
         return (f"--count-only counts ideas without context series; {idea.name} reads "
                 f"{', '.join(idea.context)}")
     return None
 
 
 def run_count(args) -> int:
-    """v182 --count-only: refuse, or print the count report. Writes nothing."""
+    """v182 --count-only: refuse, or print the count report. Writes nothing.
+    v211: a context idea's series load and are checked (SHA pin included)
+    exactly as the real run; nothing is pinned or written."""
     idea = IDEAS[args.idea]
+    data = None
     reason = count_refusal(args, idea)
     if reason is None:
         try:
             universe = load_universe(args.cache_dir, args.membership, args.start, args.end)
         except ValueError as exc:
             reason = str(exc)
+    if reason is None:
+        data, reason = _context_step(args, idea)
     if reason:
         print(f"refused: {reason}", file=sys.stderr)
         return 2
-    counts = count_universe(idea, universe, args.cache_dir, start=args.start, end=args.end)
-    print(render_counts(idea, counts, args))
+    context = None if data is None else data.frames
+    counts = count_universe(idea, universe, args.cache_dir, start=args.start, end=args.end,
+                            context=context)
+    print(render_counts(idea, counts, args, preflight=_count_preflight(idea, data, counts)))
     return 0
 
 
