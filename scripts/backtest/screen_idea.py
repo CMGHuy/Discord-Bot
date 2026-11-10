@@ -408,9 +408,29 @@ CHECKPOINT_MANIFEST = "manifest.json"
 _EMPTY = object()      # the empty-frame marker (None is a legal monkeypatched result)
 
 
-def _checkpoint_manifest(idea: Idea, start: str, end: str, names: list[str]) -> dict:
+def _json_sha256(value) -> str:
+    text = json.dumps(value, sort_keys=True, default=str)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _context_sha256(context) -> str | None:
+    """sha256 over every context series' records, in ticker order; None without one."""
+    if not context:
+        return None
+    digest = hashlib.sha256()
+    for ticker in sorted(context):
+        digest.update(ticker.encode("utf-8"))
+        digest.update(pd.util.hash_pandas_object(context[ticker], index=True).values.tobytes())
+    return digest.hexdigest()
+
+
+def _checkpoint_manifest(idea: Idea, start: str, end: str, names: list[str],
+                         context=None, intervals=None) -> dict:
     return {"idea": idea.name, "start": start, "end": end,
-            "tickers_sha256": hashlib.sha256("\n".join(names).encode("utf-8")).hexdigest()}
+            "tickers_sha256": hashlib.sha256("\n".join(names).encode("utf-8")).hexdigest(),
+            "context_sha256": _context_sha256(context),
+            "intervals_sha256": _json_sha256(intervals or {}),
+            "params_sha256": _json_sha256(dict(idea.params))}
 
 
 class _Checkpoint:
@@ -477,7 +497,8 @@ def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
     context = _universe_context(idea, cache_dir, end, context)
     names = universe.cached if tickers is None else [t for t in tickers if t in universe.cached]
     checkpoint = _open_checkpoint(checkpoint_dir,
-                                  _checkpoint_manifest(idea, start, end, names), out)
+                                  _checkpoint_manifest(idea, start, end, names, context,
+                                                      universe.intervals), out)
     screens, skipped = [], Counter()
     for i, ticker in enumerate(names, start=1):
         result = _screen_or_resume(idea, ticker, universe, cache_dir, start, end,
@@ -821,7 +842,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--checkpoint-dir", type=Path, default=None,
                    help="v211: persist each finished ticker's screen here; a restart skips "
                         "them (refuses another run's checkpoint)")
-    mode =p.add_mutually_exclusive_group()
+    mode = p.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="print the doc, write nothing")
     mode.add_argument("--count-only", action="store_true",
                       help="v182: count events, drops and full-cap non-overlap (and check 5 "

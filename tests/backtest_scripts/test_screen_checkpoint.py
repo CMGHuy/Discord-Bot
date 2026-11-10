@@ -5,6 +5,7 @@ import functools
 import json
 import sys
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -110,8 +111,11 @@ def test_the_layout_and_the_manifest(tmp_path, monkeypatch):
     assert ("AAA.pkl.tmp", "AAA.pkl") in moves
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
     assert manifest == screen_idea._checkpoint_manifest(
-        IDEA, "2010-01-01", "2019-12-31", ["AAA", "BBB", "CCC", "DDD"])
-    assert set(manifest) == {"idea", "start", "end", "tickers_sha256"}
+        IDEA, "2010-01-01", "2019-12-31", ["AAA", "BBB", "CCC", "DDD"],
+        None, universe.intervals)
+    assert set(manifest) == {"idea", "start", "end", "tickers_sha256", "context_sha256",
+                             "intervals_sha256", "params_sha256"}
+    assert manifest["context_sha256"] is None
     assert manifest["idea"] == "turn_of_month" and len(manifest["tickers_sha256"]) == 64
 
 
@@ -127,6 +131,33 @@ def test_another_runs_checkpoint_refuses_before_screening(tmp_path, monkeypatch,
     with pytest.raises(ValueError, match="belongs to another run"):
         screen_idea.screen_universe(idea, universe, cache, out=_quiet,
                                     checkpoint_dir=directory, **kwargs)
+
+
+def _changed_run(change, universe):
+    """The idea, the context frames and the universe a run resumes with."""
+    idea, context = IDEA, {"X": random_walk(300, seed=5)}
+    if change == "param":
+        idea = replace(IDEA, params={**IDEA.params, "edited": 1})
+    elif change == "context":
+        context = {"X": random_walk(300, seed=6)}
+    elif change == "intervals":
+        universe = replace(universe, intervals={**universe.intervals, "AAA": [("2011-01-01", None)]})
+    return idea, context, universe
+
+
+@pytest.mark.parametrize("change", ["param", "context", "intervals"])
+def test_a_changed_context_parameter_or_membership_refuses(tmp_path, monkeypatch, change):
+    cache, universe = _universe(tmp_path)
+    directory = tmp_path / "ckpt"
+    first_context = {"X": random_walk(300, seed=5)}
+    screen_idea.screen_universe(IDEA, universe, cache, out=_quiet, checkpoint_dir=directory,
+                                context=first_context)
+    monkeypatch.setattr(screen_idea, "screen_ticker",
+                        lambda *a, **k: pytest.fail("screened after a manifest mismatch"))
+    idea, context, universe = _changed_run(change, universe)
+    with pytest.raises(ValueError, match="belongs to another run"):
+        screen_idea.screen_universe(idea, universe, cache, out=_quiet,
+                                    checkpoint_dir=directory, context=context)
 
 
 def test_main_threads_the_checkpoint_dir(tmp_path):
