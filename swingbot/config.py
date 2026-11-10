@@ -234,6 +234,17 @@ FIELDS: list[Field] = [
                "today's 1.75-2% stop put it and the plan is dropped when its reward:risk against "
                "the band stop falls under the minimum. v191 verdicts: keep (arm K) NO-LIFT, "
                "rechoose (arm R) NO-LIFT."),
+    Field("CONFLUENCE_LIMIT_ENTRY_F", "CONFLUENCE_LIMIT_ENTRY_F", "Trade Filters & Risk",
+          "Confluence limit entry fraction f (v212)",
+          type="float", default="0", min=0, max=0.9, step=0.01,
+          help="v212 pre-registration. 0 = off: confluence plans enter at market as today. "
+               "Above 0, a confluence market plan whose level sits more than 2% from the "
+               "price rests a limit at price - f x (price - level) instead, with its stop "
+               "0.25% beyond the level, TP1/TP2 unchanged, valid through the close of the "
+               "3rd full session (3 sessions) after the alert and cancelled if TP1 trades "
+               "first. A plan whose stop would sit more than 2% from the limit is dropped "
+               "(limit_stop_beyond_cap). Unmeasured -- see "
+               "docs/superpowers/specs/2026-11-06-v212-confluence-limit-entry.md. Keep 0."),
     Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
@@ -1708,6 +1719,7 @@ _SEARCH_CLASSES = {
         "FVG_LEVELS_MODE", "FVG_DISPLACEMENT_ATR_K",
         "CONFLUENCE_STRUCTURAL_STOP_PCT", "CONFLUENCE_STOP_DROP_PCT",
         "CONFLUENCE_ATR_STOP_FLOOR", "CONFLUENCE_ATR_TARGET_MODE",
+        "CONFLUENCE_LIMIT_ENTRY_F",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
