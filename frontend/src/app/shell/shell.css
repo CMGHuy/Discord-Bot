@@ -310,10 +310,10 @@
   /* v210: the worst case (viewer badge, SHOCK pill, alarm dot, killswitch)
      needs ~465px beside the wordmark. The cluster may shrink (the badge
      ellipsises) so search and the avatar never leave the screen, and while
-     the pill shows the wordmark gives way to the diamond; its words stay in
+     the pill and the badge both show the wordmark gives way to the diamond; its words stay in
      the link's accessible name. */
   .status-cluster { min-width: 0; }
-  .topbar:has(.shock-pill) .brand .word {
+  .topbar:has(.shock-pill):has(sb-read-only-badge) .brand .word {
     position: absolute;
     width: 1px;
     height: 1px;

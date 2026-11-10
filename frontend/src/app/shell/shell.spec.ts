@@ -400,8 +400,12 @@ describe('shell phone bar worst case (v210)', () => {
   });
 
   it('spends the wordmark on the shock pill: the diamond stays, the words go visually', () => {
-    expect(phone).toMatch(/\.topbar:has\(\.shock-pill\) \.brand \.word \{[^}]*clip-path: inset\(50%\);/);
+    expect(phone).toMatch(/\.topbar:has\(\.shock-pill\):has\(sb-read-only-badge\) \.brand \.word \{[^}]*clip-path: inset\(50%\);/);
     expect(phone).not.toMatch(/\.brand \.word \{[^}]*display: none/);
+  });
+
+  it('collapses the wordmark only when the read-only badge shares the bar with the pill', () => {
+    expect(phone).not.toMatch(/\.topbar:has\(\.shock-pill\) \.brand/);
   });
 });
 
