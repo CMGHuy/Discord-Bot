@@ -681,6 +681,7 @@ def _limit_reward_ok(limit, stop, tp1, is_bull, min_rr) -> bool:
 
 
 def _limit_degenerate(entry, limit, stop, is_bull) -> bool:
+    """v212: True unless stop < limit < entry (short: entry < limit < stop)."""
     return not (stop < limit < entry) if is_bull else not (entry < limit < stop)
 
 

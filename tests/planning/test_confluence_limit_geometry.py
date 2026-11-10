@@ -84,6 +84,11 @@ def test_degenerate_rounding_is_a_scope_drop():
     assert _geo(1.0, 0.975, True, 1.05, THIRD) == "limit_scope"
 
 
+def test_short_degenerate_rounding_is_a_scope_drop():
+    # 1.00 + (1/3) * 0.025 = 1.00833 floors to 1.00 == the price
+    assert _geo(1.0, 1.025, False, 0.95, THIRD) == "limit_scope"
+
+
 def _market(direction="bullish", **kw):
     bull = direction == "bullish"
     base = dict(plan_id="p1", ticker="XYZ", created_at="2026-11-06", source="confluence",
@@ -100,7 +105,8 @@ def _market(direction="bullish", **kw):
 
 
 def test_to_limit_plan_rewrites_only_the_entry_fields_and_copies():
-    plan = _market(reclaim_level=99.0, waits_next_open=True)
+    plan = _market(reclaim_level=99.0, waits_next_open=True, working_stop=99.0,
+                   reclaim_atr=1.2, reclaim_session="rth")
     before = plan_to_dict(plan)
     out = to_limit_plan(plan, LimitGeometry(98.5, 96.75, 3.0), HALF)
     assert plan_to_dict(plan) == before                          # never mutates
@@ -110,6 +116,7 @@ def test_to_limit_plan_rewrites_only_the_entry_fields_and_copies():
     assert (out.expiry_bars, out.limit_cancel_level, out.limit_strict_fill) == (3, 104.0, True)
     assert (out.limit_entry_f, out.stop_ceiling_pct) == (HALF, None)
     assert (out.reclaim_level, out.waits_next_open) == (None, None)
+    assert (out.working_stop, out.reclaim_atr, out.reclaim_session) == (None, None, None)
     assert out.acceptance_level == 97.0 and out.plan_id == "p1"
 
 
