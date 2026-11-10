@@ -247,11 +247,14 @@ def neighbours(key: str) -> list[str]:
 
 
 def plateau(results: dict) -> str | None:
-    """The passing cell with the highest ExpR whose neighbours all pass; a
-    tie keeps the smaller f (max keeps the first maximum)."""
-    pool = [key for key in clr.CELLS if results[key]["passes"]
-            and all(results[other]["passes"] for other in neighbours(key))]
-    return max(pool, key=lambda key: results[key]["expr"]) if pool else None
+    """Spec § Stage 1 plateau: the winner is the highest-ExpR cell clearing
+    all clauses (a tie keeps the smaller f: max keeps the first maximum in
+    CELLS order); it stands only if every grid neighbour clears them too."""
+    passing = [key for key in clr.CELLS if results[key]["passes"]]
+    if not passing:
+        return None
+    winner = max(passing, key=lambda key: results[key]["expr"])
+    return winner if all(results[other]["passes"] for other in neighbours(winner)) else None
 
 
 def thin(rows) -> bool:

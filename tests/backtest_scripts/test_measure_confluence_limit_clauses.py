@@ -185,10 +185,28 @@ def test_one_failing_clause_fails_the_cell():
     assert out["passes"] is False
 
 
-def test_plateau_needs_every_neighbour_to_pass():
-    # f0.5 has the top ExpR and one passing neighbour of two: not a plateau.
+def test_plateau_needs_every_neighbour_of_the_winner_to_pass():
+    # f0.5 is the best passing cell but f0.333 fails: no plateau, even though
+    # f0.667 passes with a passing neighbour (the runner-up never steps in).
     assert mcl.plateau({"f0.333": _res(False, .3), "f0.5": _res(True, .5),
-                        "f0.667": _res(True, .4)}) == "f0.667"
+                        "f0.667": _res(True, .4)}) is None
+
+
+def test_plateau_returns_the_winner_when_its_neighbours_pass():
+    assert mcl.plateau({"f0.333": _res(True, .1), "f0.5": _res(True, .6),
+                        "f0.667": _res(True, .2)}) == "f0.5"
+
+
+def test_an_edge_winner_needs_only_its_one_neighbour():
+    assert mcl.plateau({"f0.333": _res(True, .5), "f0.5": _res(True, .2),
+                        "f0.667": _res(False, .9)}) == "f0.333"
+    assert mcl.plateau({"f0.333": _res(False, .9), "f0.5": _res(True, .2),
+                        "f0.667": _res(True, .5)}) == "f0.667"
+
+
+def test_no_passing_cell_is_no_plateau():
+    assert mcl.plateau({"f0.333": _res(False, .5), "f0.5": _res(False, .6),
+                        "f0.667": _res(False, .7)}) is None
 
 
 def test_plateau_tie_between_edge_cells_keeps_the_smaller_f():
