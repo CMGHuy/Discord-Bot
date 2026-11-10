@@ -180,8 +180,9 @@ async def _prune_shock_readings() -> None:
                   - dt.timedelta(days=int(config.SHOCK_READINGS_KEEP_DAYS)))
         removed = await asyncio.to_thread(market_shock_repo().prune_before, cutoff)
         log.info("daily_recap: pruned %d market_shock_readings row(s)", removed)
-    except Exception:
-        log.warning("daily_recap: could not prune market_shock_readings", exc_info=True)
+    except Exception as exc:
+        swallowed(log, "ops.prune_shock_readings", exc,
+                  "daily_recap: could not prune market_shock_readings", exc_info=True)
 
 
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
