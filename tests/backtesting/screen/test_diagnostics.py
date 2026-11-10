@@ -301,3 +301,47 @@ def test_empty_restricted_pass_reports_zero_pairs_instead_of_not_run():
     assert "Restricted null not run" not in text
     assert "at least 10 sessions from any shock day" in text
     assert "N = 0" in text and "interval n/aR to n/aR" in text
+
+
+# --- v214 G5: the idea's mode reaches every decide ---------------------------
+
+import dataclasses  # noqa: E402
+
+
+def _mode_spy(monkeypatch):
+    modes = []
+    real = verdict.decide
+
+    def spy(events, **kw):
+        modes.append(kw.get("mode", "edge"))
+        return real(events, n_resamples=200, **kw)
+
+    monkeypatch.setattr(verdict, "decide", spy)
+    return modes
+
+
+def _restricted():
+    return [{"entry_date": _entry(450), "r_event": 0.6, "r_null": 0.3}]
+
+
+def test_an_avoid_idea_gets_avoid_verdicts_in_every_diagnostic(monkeypatch):
+    modes = _mode_spy(monkeypatch)
+    idea = dataclasses.replace(_idea(), mode="avoid", states=lambda df: df)
+    out = diagnostics.compute(idea, _events(), _restricted(), _data(), **_window())
+    assert modes == ["avoid", "avoid", "avoid"]           # restricted, selloff down, selloff up
+    verdicts = [out["overlap"]["restricted"], out["selloff"]["down"], out["selloff"]["up"]]
+    assert {v.mode for v in verdicts} == {"avoid"}
+    assert all(v.verdict != verdict.SCREEN_PASS for v in verdicts)
+
+
+def test_an_edge_idea_keeps_edge_verdicts(monkeypatch):
+    modes = _mode_spy(monkeypatch)
+    out = diagnostics.compute(_idea(), _events(), _restricted(), _data(), **_window())
+    assert modes == ["edge", "edge", "edge"]
+    assert out["overlap"]["restricted"].mode == "edge"
+
+
+def test_the_private_decide_defaults_to_edge():
+    assert diagnostics._decide([]) is None
+    assert diagnostics._decide(_events()).mode == "edge"
+    assert diagnostics._decide(_events(), "avoid").mode == "avoid"

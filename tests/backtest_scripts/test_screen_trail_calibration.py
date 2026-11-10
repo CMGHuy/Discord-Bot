@@ -463,3 +463,53 @@ def test_the_next_open_docs_keep_the_old_generator_wording(monkeypatch):
         text = cal.render(result, params, "2026-10-21")
         assert "Close = Open x exp" not in text
         assert cal._generator_paragraph() in text
+
+
+# --- v214 G5: only an edge pass is a false pass ------------------------------
+
+import dataclasses  # noqa: E402
+
+AVOID_PASS = _v(verdict.SCREEN_AVOID_PASS, 400, -0.2, -0.3, -0.1)
+
+
+def test_false_passes_count_only_edge_passes():
+    assert cal._false_passes(FAKE + [AVOID_PASS]) == 1
+    assert cal._false_passes([]) == 0
+
+
+def test_calibrate_never_counts_an_avoid_pass(monkeypatch):
+    _fake_replicates(monkeypatch, [AVOID_PASS, AVOID_PASS])
+    out = cal.calibrate(2, seed=0, **QUIET)
+    assert (out["false_pass"], out["false_pass_rate"]) == (0, 0.0)
+
+
+def _as_avoid(make):
+    def avoid_idea(df, rng, rate, direction, entry):
+        idea = make(df, rng, rate, direction, entry)
+
+        def states(frame):
+            event = idea.events(frame).reindex(frame.index, fill_value=False)
+            return pd.DataFrame({"event": event.to_numpy(dtype=bool),
+                                 "control_condition": False, "condition": False,
+                                 "bottom": np.nan}, index=frame.index)
+
+        return dataclasses.replace(idea, mode="avoid", states=states)
+
+    return avoid_idea
+
+
+def test_a_replicate_hands_the_ideas_mode_to_decide(monkeypatch):
+    modes = []
+    real = verdict.decide
+
+    def spy(events, **kw):
+        modes.append(kw.get("mode"))
+        return real(events, **kw)
+
+    monkeypatch.setattr(cal.verdict, "decide", spy)
+    edge = cal.replicate(5, tickers=1, n_resamples=100, direction="short")
+    monkeypatch.setattr(cal, "_replicate_idea", _as_avoid(cal._replicate_idea))
+    avoid = cal.replicate(5, tickers=1, n_resamples=100, direction="short")
+    assert modes == ["edge", "avoid"]
+    assert (edge.mode, avoid.mode) == ("edge", "avoid")
+    assert avoid.verdict != verdict.SCREEN_PASS
