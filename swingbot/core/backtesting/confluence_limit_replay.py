@@ -11,12 +11,11 @@ whatever frame the caller passes (the measure script: data/backtest_cache_ext).
 from __future__ import annotations
 
 from swingbot import config
-from swingbot.core.backtesting.backtest_scenarios import replay_scenarios
+from swingbot.core.backtesting.backtest_scenarios import _replay_params, replay_scenarios
 from swingbot.core.edge.frictions import apply_frictions, borrow_r, commission_r
 from swingbot.core.planning.builders import apply_confluence_limit, clamped_distance
 from swingbot.core.planning.limit_entry_rule import bar_outcome
 from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct
-from swingbot.scan_params import ScanParams
 
 #: PRE-REGISTERED grid (spec § The rule). Changing it is a new pre-registration.
 F_GRID = (1 / 3, 1 / 2, 2 / 3)
@@ -72,9 +71,11 @@ def arm_plans(ref, *, cells=F_GRID, min_rr) -> dict:
 
 
 def paired_alerts(ticker, df, horizon_key, *, cells=F_GRID, gates=None) -> list:
-    """[(signal_index, reference_plan, {cell: arm plan | reason})], in-scope only."""
+    """[(signal_index, reference_plan, {cell: arm plan | reason})], in-scope only.
+    The arms' R:R floor comes from the params replay_scenarios builds the
+    reference with (a `gates` dict overrides it), so both arms share one floor."""
     _check_knobs_off()
-    min_rr = ScanParams.from_config().min_risk_reward_ratio
+    min_rr = _replay_params(None, gates)[0].min_risk_reward_ratio
     plans = replay_scenarios(ticker, df, horizon_key, gates=gates)
     return [(int(i), ref, arm_plans(ref, cells=cells, min_rr=min_rr))
             for i, ref in plans if in_scope(ref)]

@@ -85,8 +85,32 @@ def test_paired_alerts_keep_in_scope_plans_only(monkeypatch):
     assert [(i, sorted(arms)) for i, _, arms in out] == [(I, sorted(clr.CELLS))]
 
 
-def test_the_guard_refuses_a_live_knob(monkeypatch):
-    monkeypatch.setattr(config, "CONFLUENCE_LIMIT_ENTRY_F", 0.5)
+@pytest.mark.parametrize("gates,config_rr,dropped", [
+    ({"min_risk_reward": 4.0}, 1.5, True),    # f0.5 R:R from L = 5.5 / 1.75 = 3.14
+    ({"min_risk_reward": 1.5}, 4.0, False),
+])
+def test_paired_alerts_take_the_rr_floor_from_the_gates(monkeypatch, gates, config_rr, dropped):
+    """The arms use the reference's R:R floor: a gates override wins over config."""
+    monkeypatch.setattr(config, "MIN_RISK_REWARD_RATIO", config_rr)
+    monkeypatch.setattr(clr, "replay_scenarios", lambda *a, **k: [(I, ref_plan())])
+    arm = clr.paired_alerts("XYZ", frame(DIP), "4w", gates=gates)[0][2]["f0.5"]
+    assert (arm == "limit_rr_fail") is dropped
+
+
+def test_arm_plans_refuse_a_reference_handed_back(monkeypatch):
+    monkeypatch.setattr(clr, "apply_confluence_limit", lambda plan, *a, **k: plan)
+    with pytest.raises(RuntimeError, match="disagree"):
+        clr.arm_plans(ref_plan(), min_rr=1.5)
+
+
+# Literal, not clr.GUARDED_KNOBS: dropping a knob from the module must fail a case.
+V212_KNOBS = ("CONFLUENCE_LIMIT_ENTRY_F", "CONFLUENCE_STRUCTURAL_STOP_PCT",
+              "CONFLUENCE_STOP_DROP_PCT", "CONFLUENCE_ATR_STOP_FLOOR")
+
+
+@pytest.mark.parametrize("knob", V212_KNOBS)
+def test_the_guard_refuses_a_live_knob(monkeypatch, knob):
+    monkeypatch.setattr(config, knob, 0.5)
     with pytest.raises(RuntimeError, match="must be 0"):
         clr.paired_alerts("XYZ", frame(DIP), "4w", gates={})
 
@@ -129,6 +153,14 @@ def test_census_never_fills_on_the_signal_bar():
     assert clr.census_row(df, I, ref, clr.arm_plans(ref, min_rr=1.5))["fill_state"]["f0.5"] == "expired"
 
 
+@pytest.mark.parametrize("after", [0, 1, 2])
+def test_census_expires_at_the_frame_end(after):
+    """A signal 0-2 bars before the last bar: the life is capped, never an IndexError."""
+    quiet = (100.0, 100.1, 99.9, 100.0)
+    df, ref = make_ohlcv(FLAT + [quiet] * after, start="2021-01-04"), ref_plan()
+    assert clr.census_row(df, I, ref, clr.arm_plans(ref, min_rr=1.5))["fill_state"]["f0.5"] == "expired"
+
+
 def test_census_mirrors_for_a_short():
     ref = ref_plan("bearish")
     df = frame((100.0, 101.6, 99.9, 101.0), (101.0, 101.1, 95.5, 95.8))
@@ -141,8 +173,12 @@ def test_net_r_long_and_short():
     assert clr.net_r("bullish", 100.0, [(1.0, 102.0)], 2.0, 3) == pytest.approx(0.9295)
     # short: entry 99.95, exit 98.049 -> 0.9505 - 0.02 - 0.25 borrow (365 days)
     assert clr.net_r("bearish", 100.0, [(1.0, 98.0)], 2.0, 365) == pytest.approx(0.6805)
-    # a gap stop: entry = exit = the open, risk 1.75 -> frictions only
-    assert -0.1 < clr.net_r("bullish", 96.0, [(1.0, 96.0)], 1.75, 0) < 0.0
+    # a gap stop: entry = exit = the open, risk 1.75 -> frictions only:
+    # entry 96.048, exit 95.952 -> -0.096 / 1.75 = -0.054857 - 0.02 = -0.074857
+    assert clr.net_r("bullish", 96.0, [(1.0, 96.0)], 1.75, 0) == pytest.approx(-0.0749, abs=1e-4)
+    # two legs: entry 100.05; 0.5 x (103.948 - 100.05) = 1.949,
+    # 0.5 x (105.947 - 100.05) = 2.9485; 4.8975 / 2 = 2.44875 - 0.02 = 2.42875
+    assert clr.net_r("bullish", 100.0, [(0.5, 104.0), (0.5, 106.0)], 2.0, 3) == pytest.approx(2.42875)
     with pytest.raises(ValueError):
         clr.net_r("bullish", 100.0, [(1.0, 102.0)], 0.0, 3)
 
