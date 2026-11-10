@@ -626,3 +626,44 @@ Run 2026-11-05 on `512dcf83`, one role at a time. BLOCKING findings first.
 - veteran-trader: Idea 2 needs a placeable stop and a squeeze cap -- applied (a buy-stop above `High[b]` recorded for the follow-on; squeeze handling is on the follow-on's order path, from v183).
 
 Plan-briefer reconciliation (2026-11-05, after the panel): D1 the notify queue is lifecycle-only, so a `market_shock` kind is added end to end; D2 regular-hours gate; D3 `last` from live quotes; the screen runner gets a declared `CONTEXT_KIND = "level"` extension pinned by parity digests (this replaces "stop and report"); `^VIX.csv` naming and session alignment; rollback corrected (`rollback_to.sh` is PITR-safe; the image-only path gets a downgrade step); `shock_state` stays out of `FEATURE_KEYS`; the 11-05 replay fixture is fetched from Alpaca, because no local store holds the day's partial bars.
+
+## Amendment A1 (2026-11-10) — entry rule re-registered after the replay miss
+
+**Status:** pre-registered here, before any detector run on a validation day. Frozen once committed.
+
+### The measured miss
+
+V209-12b ran the built detector (default thresholds, spec rules as written) over the frozen 2026-11-05 Alpaca fixture (87 names, 26 steps). It stayed NORMAL all session although the day was a real shock (SPY −1.3 % at 14:45 UTC to −4.4 % at 21:00, VIX +27 %, median name beyond −1 ATR from 15:45). Why:
+
+- **Depth path:** `sectors_down` needs `ceil(0.6 × 8) = 5` equal-weight sectors; the day never exceeded 4 (1 at 15:00). The watchlist is tech-heavy (30 of 87 names in one sector), so breadth ran 0.5–0.63 while the other sectors held.
+- **Speed path:** needs `breadth_speed ≥ 0.10` on two consecutive readings; the day ground lower (+0.13 once, never twice running).
+
+The code matches the spec; the entry rules do not fit this shape of shock. Not a code bug, not a failed idea (Track 1 is `Edge: none (integrity)`; its thresholds are labelling knobs).
+
+### Revised entry rule (replaces the two-path rule in § State machine; VIX relief, settle and two-consecutive rules unchanged)
+
+NORMAL → SHOCK when **either**:
+1. **Weighted depth:** `depth_frac ≥ SHOCK_DEPTH_FRAC` **and** `breadth_frac ≥ SHOCK_BREADTH_ENTER` (relief applies to the breadth bar).
+   `depth_frac` = share of sectored contributing names that sit in a sector (≥ 2 members) whose median ATR move ≤ −`SHOCK_ATR_K`. Replaces `sectors_down ≥ ceil(SHOCK_SECTORS_FRAC × sectors_total)`.
+2. **Sustained breadth:** `breadth_frac ≥ SHOCK_BREADTH_MAJORITY` (relief applies). No speed needed.
+
+The fast path (`SHOCK_BREADTH_FAST` + `SHOCK_SPEED_ENTER`) stays. `sectors_down`/`sectors_total` stay in the reading (display only). New fields: `SHOCK_DEPTH_FRAC` = **0.50**, `SHOCK_BREADTH_MAJORITY` = **0.50**; `SHOCK_SECTORS_FRAC` is removed. Values are set by "a majority", not read off 2026-11-05, and are frozen. Exit, recovery, re-entry and carry rules are unchanged. `depth_frac` is added to the reading's JSON row (no migration: rows are JSON).
+
+### Validation set (outcome-blind, frozen before any run)
+
+Selected from daily SPY and ^VIX only, never from detector output, over the last three full calendar years before 2026-11-05, 2026-11-05 excluded:
+- **Shock days (6):** the six largest SPY close-to-close drops.
+- **Calm days (12):** a fixed-seed draw (`seed=209`) of 12 days with |SPY| < 0.5 % and VIX change < +3 %, at most 4 per year.
+- **Hard negatives (4, reported, not scored):** the four largest SPY drops between −1.5 % and −2.5 % with VIX change < +15 %.
+Same 87-name watchlist (survivorship noted), same step grid, VIX interpolated the same way from the day's VIX open-to-close change (its daily row; noted in the fixture).
+
+### Acceptance (one shot)
+
+- Recall: SHOCK reached on ≥ 5 of the 6 shock days, and on 2026-11-05 **between 15:00 and 17:00 UTC** (the 15:00 lower bound still pins settle and two-reading rules).
+- Precision: SHOCK on ≤ 1 of the 12 calm days.
+- Hard negatives are printed per day; no gate.
+- **On a fail, v209 closes `no-lift/` (with v210/v211). No second tuning round, no threshold change, no new fixture, as for any closed pre-registration.**
+
+### Plan impact
+
+Part 1 detector tasks change `measure`/`step` and the config section (19 fields: −1, +2); the fixture builder gains a session-date parameter (DST-aware) and a validation-day mode; V209-12b becomes the A1 acceptance test (frozen day list, fixtures checkpointed under `market_data/`); V209-13/14 unchanged. Written as a plan amendment via `plan-writer` after approval.
