@@ -118,3 +118,35 @@ def test_is_arm_limit(kw, expected):
 def test_non_arm_plans_are_refused():
     with pytest.raises(ValueError, match="arm limit"):
         bar_outcome(_plan(LONG, limit_entry_f=None), open_=99.0, high=99.5, low=98.0)
+
+
+# L - tick (long) / L + tick (short) lands a hair off the printed price in float
+# arithmetic: 1.13 - 0.01 == 1.1199999999999999, 1.12 + 0.01 == 1.1300000000000001
+@pytest.mark.parametrize("limit,low", [(1.13, 1.12), (1.38, 1.37), (1.63, 1.62), (1.88, 1.87)])
+def test_long_trade_through_one_tick_under_survives_float_noise(limit, low):
+    levels = dict(direction="bullish", trigger_price=limit, stop_loss=1.0, tp1=2.0)
+    assert _out(levels, limit + 0.05, limit + 0.1, low) == BarOutcome("fill", limit, False)
+
+
+@pytest.mark.parametrize("limit,high", [(1.12, 1.13), (1.37, 1.38), (1.62, 1.63), (1.87, 1.88)])
+def test_short_trade_through_one_tick_over_survives_float_noise(limit, high):
+    levels = dict(direction="bearish", trigger_price=limit, stop_loss=2.0, tp1=1.0)
+    assert _out(levels, limit - 0.05, high, limit - 0.1) == BarOutcome("fill", limit, False)
+
+
+@SIDES
+def test_trade_through_tolerance_edge_is_inclusive(side, levels):
+    # an extreme exactly at L -/+ tick -/+ 1e-9 still fills (the tolerance edge itself)
+    L = levels["trigger_price"]
+    if side == 0:
+        bar = (99.5, 100.0, L - 0.01 + 1e-9)
+    else:
+        bar = (100.5, L + 0.01 - 1e-9, 100.0)
+    assert _out(levels, *bar) == BarOutcome("fill", L, False)
+
+
+@SIDES
+def test_tp1_cancel_wins_over_a_gap_through_the_limit_above_the_stop(side, levels):
+    # open between stop and L (rule 3 would fill at the open), bar also reaches TP1
+    bar = (98.0, 104.0, 97.5) if side == 0 else (102.0, 102.5, 96.0)
+    assert _out(levels, *bar) == BarOutcome("cancel", None, False)
