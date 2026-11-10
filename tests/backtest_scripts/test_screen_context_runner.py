@@ -664,3 +664,18 @@ def test_the_shock_support_idea_screens_short_with_its_context_and_control():
     assert out.events                                         # non-vacuous
     assert out.control                                        # the control book ran
     assert out.restricted is None and out.depths is None and out.repriced is None
+
+
+def test_the_shock_family_partners_overlap_through_the_real_context():
+    """v211: both shock ideas are level-context partners; _overlap (V211-5)
+    hands each the context, so neither raises and both report an overlap."""
+    from swingbot.core.backtesting.screen.ideas import shock_failed_bounce_short as fb
+    from tests.backtesting.screen.helpers import episodes_covering, shock_context
+    df = random_walk(2600)
+    hits = np.flatnonzero(fb.control_events(df).to_numpy())
+    ctx = shock_context(df.index, episodes_covering(hits, len(df)))
+    outs = {name: screen_idea.screen_ticker(IDEAS[name], "AAA", df, ALWAYS, context=ctx)
+            for name in ("shock_failed_bounce_short", "shock_support_break_short")}
+    assert outs["shock_failed_bounce_short"].events            # non-vacuous
+    for out in outs.values():
+        assert out.overlap is not None and out.control and out.restricted is None
