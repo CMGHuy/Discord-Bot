@@ -34,7 +34,7 @@ _POST_SIGNAL = re.compile(r"^exempt\s*\(post-signal\)")
 _HEADROOM = re.compile(r"^harvest-headroom\s+`?([^`\s]+)`?")
 _LEDGER = re.compile(r"^`?([^`\s]+)`?\s+SCREEN-PASS\b")
 _AVOID_VETO = re.compile(r"^`?([^`\s]+)`?\s+SCREEN-AVOID-PASS\s+\(veto\)")
-_AVOID_BARE = re.compile(r"^`?([^`\s]+)`?\s+SCREEN-AVOID-PASS")
+_AVOID_BARE = re.compile(r"^`?([^`\s]+)`?\s+SCREEN-AVOID-PASS\b")
 _PASS_VETO = re.compile(r"^`?([^`\s]+)`?\s+SCREEN-PASS\s+\(veto\)")
 _EDGES_FOR = {"exempt": {"none"}, "post_signal": {"expectancy"},
               "headroom": {"expectancy", "harvest"}, "ledger": {"expectancy", "volume"},
