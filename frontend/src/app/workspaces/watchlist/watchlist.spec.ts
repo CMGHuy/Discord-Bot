@@ -21,7 +21,7 @@ import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer, phoneViewport } from '../../ui/data-table/testing/reachability';
 import { SortSpec } from '../../ui/data-table/data-table.types';
 import { isInline } from '../../ui/priority';
-import { compareTickers, isWithinCurrentWeek, Watchlist, WATCHLIST_COLUMNS, WATCHLIST_FALLBACK_HINT } from './watchlist';
+import { compareTickers, isWithinCurrentWeek, Watchlist, WATCHLIST_COLUMNS, WATCHLIST_FALLBACK_HINT, WATCHLIST_OLD_PRINT_HINT } from './watchlist';
 import { WatchlistStore } from '../../stores/watchlist.store';
 import { LiveValuesStore } from '../../stores/live-values.store';
 import { FakeLiveValues } from '../../testing/fake-live-values';
@@ -92,6 +92,24 @@ describe('fallback price badge (v194 A3)', () => {
     expect(badge.textContent!.trim()).toBe('fallback');
     expect(badge.hasAttribute('title')).toBe(false);
     expect(badge.nextElementSibling!.querySelector('[role="tooltip"]')!.textContent!.trim()).toBe(WATCHLIST_FALLBACK_HINT);
+  });
+
+  it('shows the same badge for an old IEX print, with its own hint (v223)', () => {
+    const r = firstRow({ price_source: 'yfinance-old-print' });
+    const badge = r.querySelector('.source-badge')!;
+    expect(badge.textContent!.trim()).toBe('fallback');
+    expect(badge.nextElementSibling!.querySelector('[role="tooltip"]')!.textContent!.trim())
+      .toBe(WATCHLIST_OLD_PRINT_HINT);
+  });
+
+  it('keeps the two hints apart (v223)', () => {
+    expect(WATCHLIST_OLD_PRINT_HINT).toBe(
+      "Alpaca's last IEX trade is older than 5 minutes outside regular hours, so this price comes from yfinance's extended-hours data.");
+    expect(WATCHLIST_FALLBACK_HINT).toBe('Alpaca missed this quote; yfinance answered instead.');
+  });
+
+  it('shows neither badge nor hint for a plain yfinance price', () => {
+    expect(firstRow({ price_source: 'yfinance' }).querySelector('.source-badge')).toBeNull();
   });
 
   it('shows neither badge nor hint for a plain Alpaca price', () => {

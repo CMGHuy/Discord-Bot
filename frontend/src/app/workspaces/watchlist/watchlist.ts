@@ -177,6 +177,10 @@ export const WATCHLIST_CONTROLS: ToolbarControl[] = [
 
 /** v194 A3: what the "fallback" badge means. */
 export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answered instead.';
+/** v223: the same badge when Alpaca's last IEX trade was too old outside
+ *  regular hours and yfinance's extended-hours price was used on purpose. */
+export const WATCHLIST_OLD_PRINT_HINT =
+  "Alpaca's last IEX trade is older than 5 minutes outside regular hours, so this price comes from yfinance's extended-hours data.";
 
 @Component({
   selector: 'sb-watchlist',
@@ -465,9 +469,13 @@ export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answe
         <sb-market-value [asOf]="row.price_as_of ?? null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null"><span class="price">{{ num(row.price) }}</span></sb-market-value>
         <span class="as-of">{{ text(row.as_of) }}</span>
         <!-- v106: only the exception is flagged -- Alpaca missed and yfinance
-             answered. An Alpaca or plain-yfinance price stays quiet. -->
+             answered. v223: an old IEX print outside regular hours shows the
+             same badge with its own hint. An Alpaca or plain-yfinance price
+             stays quiet. -->
         @if (row.price_source === 'yfinance-fallback') {
           <span class="source-badge">fallback</span><sb-hint [text]="fallbackHint" label="About fallback prices" align="left" />
+        } @else if (row.price_source === 'yfinance-old-print') {
+          <span class="source-badge">fallback</span><sb-hint [text]="oldPrintHint" label="About old-print prices" align="left" />
         }
       </ng-template>
 
@@ -594,6 +602,7 @@ export const WATCHLIST_FALLBACK_HINT = 'Alpaca missed this quote; yfinance answe
 })
 export class Watchlist {
   protected readonly fallbackHint = WATCHLIST_FALLBACK_HINT;
+  protected readonly oldPrintHint = WATCHLIST_OLD_PRINT_HINT;
   private readonly router = inject(Router);
   private readonly session = inject(SessionStore);
   protected readonly store = inject(WatchlistStore);
