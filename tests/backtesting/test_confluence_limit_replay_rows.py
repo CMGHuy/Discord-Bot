@@ -4,6 +4,8 @@ a fill, a TP1 cancel, a drop, a gap through the stop, the touch sensitivity
 import pytest
 
 from swingbot.core.backtesting import confluence_limit_replay as clr
+from swingbot.core.market.indicators import atr
+from tests.helpers import make_ohlcv
 from tests.backtesting.test_confluence_limit_replay import (  # noqa: F401  (autouse fixture)
     DIP, GAP_UNDER_STOP, I, TO_TP1, _frictions, frame, ref_plan)
 
@@ -71,12 +73,30 @@ def test_gap_through_the_stop_is_a_realised_fill_at_the_open():
     assert half["r_gross"] == pytest.approx(0.0)
     assert -0.1 < half["r_net"] < 0.0                    # frictions only, never -1R
     assert half["gap_stop_r_from_limit"] < -1.0          # the pessimistic from-L reading
+    assert half["stop_pct"] == pytest.approx(1.75 / 98.5 * 100)   # planned, from L, not the open
     assert rows["ref"]["filled"] is False                # the market plan's own gap cancel
 
 
 def test_atr_reads_bars_up_to_the_signal_only():
     calm, wild = _rows(frame(DIP, TO_TP1))["ref"], _rows(frame(GAP_UNDER_STOP))["ref"]
     assert calm["atr14_pct"] == pytest.approx(0.2) == wild["atr14_pct"]
+
+
+#: Ranges that vary bar to bar, so Wilder smoothing and a plain mean disagree.
+_VARIED = [(100.0, 100.0 + 0.1 * (k % 5 + 1), 100.0 - 0.3 * (k % 3), 100.0) for k in range(20)]
+
+
+def test_atr_is_the_wilder_helper_on_bars_up_to_the_signal():
+    calm = make_ohlcv(_VARIED + [DIP, TO_TP1], start="2021-01-04")
+    wild = make_ohlcv(_VARIED + [GAP_UNDER_STOP, GAP_UNDER_STOP], start="2021-01-04")
+    want = float(atr(calm.iloc[:I + 1], 14).iloc[-1]) / float(calm["Close"].iloc[I]) * 100.0
+    assert clr._atr14_pct(calm, I) == pytest.approx(want) == clr._atr14_pct(wild, I)
+    assert clr._atr14_pct(calm, 5) is None             # too few bars for ATR14
+
+
+def test_stop_pct_is_the_planned_distance_from_the_trigger():
+    res = _stub(20, 21, [(1.0, 98.25)], entry_price=100.5)   # market filled above M = 100
+    assert clr._scores(frame(DIP, TO_TP1), ref_plan(), res)["stop_pct"] == pytest.approx(1.75)
 
 
 def test_replay_entries_window_and_cells(monkeypatch):

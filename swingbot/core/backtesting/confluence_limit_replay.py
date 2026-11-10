@@ -14,14 +14,14 @@ passes (the measure script: data/backtest_cache_ext).
 from __future__ import annotations
 
 import dataclasses
-
-import pandas as pd
+import math
 
 from swingbot import config
 from swingbot.core.backtesting.acceptance import planned_rr
 from swingbot.core.backtesting.backtest_scenarios import _replay_params, replay_scenarios
 from swingbot.core.backtesting.instrument.contract import ZERO_COSTS, resolve
 from swingbot.core.edge.frictions import apply_frictions, borrow_r, commission_r
+from swingbot.core.market.indicators import atr
 from swingbot.core.planning.builders import apply_confluence_limit, clamped_distance
 from swingbot.core.planning.exit_sim_v2 import FILLED_STOPPED_GAP, simulate_exit_v2
 from swingbot.core.planning.limit_entry_rule import bar_outcome
@@ -172,14 +172,9 @@ def _gross_r(direction, entry, exit_legs, risk) -> float:
 
 
 def _atr14_pct(df, i) -> float | None:
-    """ATR14 as % of the signal close, bars <= i only."""
-    if i < 14:
-        return None
-    window = df.iloc[i - 14:i + 1]
-    prev = window["Close"].shift(1)
-    tr = pd.concat([window["High"] - window["Low"], (window["High"] - prev).abs(),
-                    (window["Low"] - prev).abs()], axis=1).max(axis=1).iloc[1:]
-    return float(tr.mean() / float(df["Close"].iloc[i]) * 100.0)
+    """ATR14 (indicators.atr, Wilder) as % of the signal close, bars <= i only."""
+    value = float(atr(df.iloc[:i + 1], 14).iloc[-1])
+    return None if math.isnan(value) else value / float(df["Close"].iloc[i]) * 100.0
 
 
 def _wick_through(df, plan, res) -> bool:
@@ -196,12 +191,14 @@ def _days(df, res) -> int:
 
 
 def _scores(df, plan, res) -> dict:
-    """Both R readings on the sizing risk, plus the stop diagnostics."""
+    """Both R readings on the sizing risk, plus the stop diagnostics. stop_pct
+    is the planned distance from the trigger: a gap fill's open lies past the
+    stop, so measuring from it would read as a tight stop."""
     risk = abs(plan.trigger_price - plan.stop_loss)
     legs = [(leg["fraction"], leg["exit_price"]) for leg in res.legs]
     return {"r_gross": _gross_r(plan.direction, res.entry_price, legs, risk),
             "r_net": net_r(plan.direction, res.entry_price, legs, risk, _days(df, res)),
-            "stop_pct": planned_loss_pct(res.entry_price, plan.stop_loss),
+            "stop_pct": planned_loss_pct(plan.trigger_price, plan.stop_loss),
             "early_stop": res.outcome == "loss"
             and res.exit_index - res.entry_index < EARLY_STOP_BARS,
             "wick_through": _wick_through(df, plan, res)}
