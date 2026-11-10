@@ -19,6 +19,9 @@ from tests.helpers import make_ohlcv
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 GOLDEN = FIXTURES / "v212" / "plan_golden.json"
 V191_GOLDEN = FIXTURES / "v191" / "plan_golden.json"
+#: The same SCENARIOS on _ranged frames (market plans), captured from the
+#: pre-wiring builder (0b3bce54) after review; never regenerate.
+MARKET_GOLDEN = FIXTURES / "v212" / "plan_golden_market.json"
 INERT = {"CONFLUENCE_LIMIT_ENTRY_F": 0.0, "CONFLUENCE_ATR_STOP_FLOOR": 0.0,
          "CONFLUENCE_ATR_TARGET_MODE": "rechoose", "LONG_GAP_SIZING": False,
          "CONFLUENCE_STRUCTURAL_STOP_PCT": 0.0, "CONFLUENCE_STOP_DROP_PCT": 0.0,
@@ -71,23 +74,24 @@ def _build(direction, entry, stop, target, f=0.0, df=None):
                                  level_map=None, params=_params(f))
 
 
-def _snapshot(*args, f=0.0):
-    plan = _build(*args, f=f)
+def _snapshot(*args, f=0.0, ranged=False):
+    plan = _build(*args, f=f, df=_ranged(args[1]) if ranged else None)
     if plan is None:
         return None
     d = plan_to_dict(plan)
     return {"keys": list(d), "plan": {k: v for k, v in d.items() if k not in SKIP}}
 
 
-def _capture(f=0.0):
-    return json.loads(json.dumps({name: _snapshot(*a, f=f) for name, a in SCENARIOS.items()}))
+def _capture(f=0.0, ranged=False):
+    return json.loads(json.dumps({name: _snapshot(*a, f=f, ranged=ranged)
+                                  for name, a in SCENARIOS.items()}))
 
 
-def _golden(captured):
-    if os.environ.get("V212_CAPTURE_GOLDEN") == "1" and not GOLDEN.exists():
-        GOLDEN.parent.mkdir(parents=True, exist_ok=True)
-        GOLDEN.write_text(json.dumps(captured, indent=1) + "\n", encoding="utf-8")
-    return json.loads(GOLDEN.read_text(encoding="utf-8"))
+def _golden(captured, path=GOLDEN):
+    if os.environ.get("V212_CAPTURE_GOLDEN") == "1" and not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(captured, indent=1) + "\n", encoding="utf-8")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def test_knob_zero_confluence_plans_match_the_pre_v212_golden():
@@ -99,6 +103,16 @@ def test_knob_zero_confluence_plans_match_the_pre_v212_golden():
     assert captured == golden
 
 
+def test_knob_zero_market_plans_match_the_pre_v212_market_golden():
+    captured = _capture(ranged=True)
+    golden = _golden(captured, MARKET_GOLDEN)
+    built = [snap for snap in golden.values() if snap is not None]
+    assert len(built) >= 7, "the market golden must hold real plans, not a row of Nones"
+    assert all(snap["plan"]["entry_type"] == "market" for snap in built)
+    assert all("limit_entry_f" not in snap["keys"] for snap in built)
+    assert captured == golden
+
+
 def test_golden_agrees_with_the_pre_v191_capture_on_shared_scenarios():
     golden, v191 = (json.loads(p.read_text(encoding="utf-8")) for p in (GOLDEN, V191_GOLDEN))
     shared = set(golden) & set(v191)
@@ -106,11 +120,16 @@ def test_golden_agrees_with_the_pre_v191_capture_on_shared_scenarios():
     assert all(golden[name] == v191[name] for name in shared)
 
 
+@pytest.mark.parametrize("ranged", [False, True], ids=["flat", "ranged"])
 @pytest.mark.parametrize("f", [1 / 3, 0.5, 2 / 3])
-def test_knob_on_leaves_out_of_scope_scenarios_identical(f):
-    golden, captured = _golden(_capture()), _capture(f)
+def test_knob_on_leaves_out_of_scope_scenarios_identical(f, ranged):
+    reference, captured = _capture(ranged=ranged), _capture(f, ranged=ranged)
+    assert reference == _golden(reference, MARKET_GOLDEN if ranged else GOLDEN)
     for name in set(SCENARIOS) - set(IN_SCOPE):
-        assert captured[name] == golden[name], name
+        assert captured[name] == reference[name], name
+    if ranged:   # the clamped market plans do change: a limit, or dropped
+        for name in IN_SCOPE:
+            assert captured[name] != reference[name], name
 
 
 @pytest.mark.parametrize("name", IN_SCOPE)
