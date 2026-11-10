@@ -109,10 +109,7 @@ def build_shock_embed(event: dict) -> discord.Embed:
     """The status embed for one validated market_shock event."""
     payload = event["payload"]
     title = headline(payload)
-    embed = ui.PushEmbed(title=title, description=_body(payload),
-                         colour=discord.Color(COLOURS[payload["label"]]))
-    embed.push_text = title
-    embed.kind = None
+    embed = ui.status_embed(title, _body(payload), COLOURS[payload["label"]])
     embed.set_footer(text=f"Event {event['event_id']}")
     embed.timestamp = datetime.fromisoformat(payload["occurred_at"])
     return embed

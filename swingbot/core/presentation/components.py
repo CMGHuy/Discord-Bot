@@ -130,6 +130,17 @@ def push_embed(kind: Kind, ticker: str = "", direction: str | None = None,
     return embed
 
 
+def status_embed(title: str, description: str, colour: int) -> PushEmbed:
+    """A plain status PushEmbed (no registry kind) striped with ``colour`` (v210).
+
+    Colour is set here, in the presentation package, so scanning code that
+    posts a status notice never touches ``discord.Color`` itself."""
+    embed = PushEmbed(title=title, description=description, colour=discord.Color(colour))
+    embed.push_text = title
+    embed.kind = None
+    return embed
+
+
 def push_kwargs(embed, view=None) -> dict:
     """send() kwargs for one pushed embed: the embed, plus its content line if
     it has one, plus ``view`` only when one is given -- a send with no view
