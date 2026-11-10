@@ -23,6 +23,9 @@ v182: a short or level idea's results doc ends with the short-side blocks
 200-day regime split, and for a level idea the fill depths, null_unfilled and
 the 3 x repricing) -- all printed, none gating; such a run refuses before
 screening when SPY.csv cannot load.
+v211: an idea may declare CONTEXT_KIND = "level" (its context files load without
+the z-coverage floor); --pin-context adds newly registered context files to the
+hash pin, never rewriting a pinned one.
 """
 from __future__ import annotations
 
@@ -348,7 +351,22 @@ def _spy_calendar(cache_dir, end: str) -> pd.DataFrame:
     return calendar
 
 
-def _context_frame(cache_dir, ticker: str, sessions: pd.DatetimeIndex, end: str):
+def _check_z(frame: pd.DataFrame, sessions: pd.DatetimeIndex, ticker: str) -> None:
+    screen_context.check_z_coverage(screen_context.trailing_z(frame["Close"]), sessions,
+                                    ticker, event_start=EVENT_START)
+
+
+def _check_level(frame: pd.DataFrame, sessions: pd.DatetimeIndex, ticker: str) -> None:
+    """v211: a level context (a fraction that is 0.0 on calm days) is never
+    z-scored, so the z-coverage floor does not apply; raw index and session
+    contiguity were already checked."""
+
+
+_KIND_CHECKS: dict[str, Callable] = {"z": _check_z, "level": _check_level}
+
+
+def _context_frame(cache_dir, ticker: str, sessions: pd.DatetimeIndex, end: str,
+                   kind: str = "z"):
     """One context CSV through the v174 load checks, the raw index first
     (load_frame silently repairs tz, order and duplicates)."""
     path = Path(cache_dir) / f"{ticker}.csv"
@@ -359,24 +377,25 @@ def _context_frame(cache_dir, ticker: str, sessions: pd.DatetimeIndex, end: str)
     if frame is None:
         raise screen_context.ContextError(f"{ticker}: no bar in {CONTEXT_START}..{end}")
     screen_context.check_contiguous(frame.index, sessions, ticker)
-    screen_context.check_z_coverage(screen_context.trailing_z(frame["Close"]), sessions,
-                                    ticker, event_start=EVENT_START)
+    _KIND_CHECKS[kind](frame, sessions, ticker)
     return frame, record
 
 
-def load_context(cache_dir, tickers: tuple[str, ...], *, end: str = WINDOW_END) -> screen_context.ContextData:
+def load_context(cache_dir, tickers: tuple[str, ...], *, end: str = WINDOW_END,
+                 kind: str = "z") -> screen_context.ContextData:
     """Every context frame an idea names, checked, from CONTEXT_START to end."""
     calendar = _spy_calendar(cache_dir, end)
     frames, records = {}, {}
     for ticker in tickers:
-        frames[ticker], records[ticker] = _context_frame(cache_dir, ticker, calendar.index, end)
+        frames[ticker], records[ticker] = _context_frame(cache_dir, ticker, calendar.index, end, kind)
     return screen_context.ContextData(frames=frames, calendar=calendar, records=records)
 
 
 def _universe_context(idea: Idea, cache_dir, end: str, context):
     """A context idea run without frames loads them here, once per universe."""
     if idea.context and context is None:
-        return load_context(cache_dir, idea.context, end=end).frames
+        return load_context(cache_dir, idea.context, end=end,
+                            kind=idea.context_kind).frames
     return context
 
 
@@ -609,6 +628,50 @@ def write_hashes(records: Mapping[str, dict], path) -> bool:
     return True
 
 
+def add_context_hashes(records: Mapping[str, dict], path) -> list[str]:
+    """v211: pin context files not yet pinned; a pinned SHA is never rewritten."""
+    path = Path(path)
+    pinned = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    added = {}
+    for ticker, record in sorted(records.items()):
+        sha = record["sha256"]
+        if ticker not in pinned:
+            added[ticker] = sha
+        elif pinned[ticker] != sha:
+            raise screen_context.ContextError(
+                f"{ticker}.csv SHA-256 {sha[:12]} differs from {pinned[ticker][:12]} "
+                f"pinned in {path}; a pin is never rewritten")
+    if not added:
+        return []
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps({**pinned, **added}, indent=2, sort_keys=True)
+    path.write_text(text + "\n", encoding="utf-8", newline="\n")
+    return sorted(added)
+
+
+def run_pin_context(args) -> int:
+    try:
+        records = _hash_records(args.cache_dir)
+        added = add_context_hashes(records, args.context_hashes)
+    except screen_context.ContextError as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+    for ticker in added:
+        print(f"pinned {ticker} {records[ticker]['sha256']} -> {args.context_hashes}")
+    if not added:
+        print(f"nothing to pin: every context file is already pinned in {args.context_hashes}")
+    return 0
+
+
+def _mode_runner(args) -> Callable[[argparse.Namespace], int] | None:
+    """The one-shot modes that replace a screen; later modes are added here."""
+    if args.count_only:
+        return run_count
+    if args.pin_context:
+        return run_pin_context
+    return None
+
+
 def _context_step(args, idea: Idea) -> tuple[screen_context.ContextData | None, str | None]:
     """(ContextData, None), or (None, reason) to refuse; (None, None) for an
     idea without context. Runs for dry and real runs alike."""
@@ -616,7 +679,8 @@ def _context_step(args, idea: Idea) -> tuple[screen_context.ContextData | None, 
         return None, None
     try:
         records = _hash_records(args.cache_dir)
-        data = load_context(args.cache_dir, idea.context, end=args.end)
+        data = load_context(args.cache_dir, idea.context, end=args.end,
+                            kind=idea.context_kind)
         data = replace(data, checked_records=records)
         reason = _context_hash_refusal(args, data)
     except screen_context.ContextError as exc:
@@ -688,6 +752,10 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--count-only", action="store_true",
                       help="v182: count events, drops and full-cap non-overlap (and check 5 "
                            "for a level idea); no race, no R, writes nothing")
+    mode.add_argument("--pin-context", action="store_true",
+                      help="v211: add the SHA-256 of every registered context file missing "
+                           "from --context-hashes; never rewrites a pinned one, screens "
+                           "nothing, writes nothing else")
     return p
 
 
@@ -1264,8 +1332,9 @@ def _utf8_stdout() -> None:
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     _utf8_stdout()
-    if args.count_only:
-        return run_count(args)
+    runner = _mode_runner(args)
+    if runner is not None:
+        return runner(args)
     rows = stats.load_ledger(args.ledger)
     reason = refusal(args, rows)
     if reason is None:
