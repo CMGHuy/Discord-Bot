@@ -307,4 +307,18 @@
   .main { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
   .topbar { gap: var(--space-10); padding: 0 var(--space-10); }
   .tape-strip { display: none; }
+  /* v210: the worst case (viewer badge, SHOCK pill, alarm dot, killswitch)
+     needs ~465px beside the wordmark. The cluster may shrink (the badge
+     ellipsises) so search and the avatar never leave the screen, and while
+     the pill shows the wordmark gives way to the diamond; its words stay in
+     the link's accessible name. */
+  .status-cluster { min-width: 0; }
+  .topbar:has(.shock-pill) .brand .word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }

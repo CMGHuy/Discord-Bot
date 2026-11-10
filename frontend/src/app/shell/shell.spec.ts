@@ -391,6 +391,20 @@ describe('shell.css breakpoints', () => {
   });
 });
 
+describe('shell phone bar worst case (v210)', () => {
+  const css = readFileSync(join(process.cwd(), 'src/app/shell/shell.css'), 'utf8');
+  const phone = css.slice(css.lastIndexOf('@media (max-width: 639px)'));
+
+  it('lets the chip cluster shrink so search and the profile avatar stay on screen', () => {
+    expect(phone).toMatch(/\.status-cluster \{[^}]*min-width: 0;/);
+  });
+
+  it('spends the wordmark on the shock pill: the diamond stays, the words go visually', () => {
+    expect(phone).toMatch(/\.topbar:has\(\.shock-pill\) \.brand \.word \{[^}]*clip-path: inset\(50%\);/);
+    expect(phone).not.toMatch(/\.brand \.word \{[^}]*display: none/);
+  });
+});
+
 describe('shell motion preference (v168 §1)', () => {
   const html = document.documentElement;
 
