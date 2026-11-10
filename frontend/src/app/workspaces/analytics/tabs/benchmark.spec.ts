@@ -94,8 +94,8 @@ describe('BenchmarkTab frame (v208)', () => {
 
   it('renders the Today card, the paper line under it, then range and chips', () => {
     const { el } = renderTab(stubStore(BENCHMARK_FIXTURE));
-    const order = [...el.querySelectorAll('.today, .paper, .range, .chips')].map((n) => n.classList[0]);
-    expect(order).toEqual(['today', 'paper', 'range', 'chips']);
+    const order = [...el.querySelectorAll('.today, .paper, .range, .series-chips')].map((n) => n.classList[0]);
+    expect(order).toEqual(['today', 'paper', 'range', 'series-chips']);
     expect(text(el.querySelector('.today'))).toContain('as of 10:35 ET');
     expect(text(el.querySelector('.today'))).toContain('unrealised · paper');
     expect(text(el.querySelector('.paper'))).toBe(PAPER_LINE);
@@ -108,7 +108,7 @@ describe('BenchmarkTab frame (v208)', () => {
   });
   it('labels the chips exactly, four on by default, the deployed chip carrying its caveat', () => {
     const { el } = renderTab(stubStore(BENCHMARK_FIXTURE));
-    const chips = [...el.querySelectorAll<HTMLButtonElement>('.chips button')];
+    const chips = [...el.querySelectorAll<HTMLButtonElement>('.series-chips button')];
     expect(chips.map((b) => text(b.querySelector('.label')))).toEqual(SERIES_ORDER.map((k) => CHIP_LABELS[k]));
     expect(chips.filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset['key']))
       .toEqual([...DEFAULT_VISIBLE]);
@@ -117,7 +117,7 @@ describe('BenchmarkTab frame (v208)', () => {
   });
   it('toggles a chip on and off', () => {
     const { fixture, el } = renderTab(stubStore(BENCHMARK_FIXTURE));
-    const dow = el.querySelector<HTMLButtonElement>('.chips button[data-key="^DJI"]')!;
+    const dow = el.querySelector<HTMLButtonElement>('.series-chips button[data-key="^DJI"]')!;
     dow.click(); fixture.detectChanges();
     expect(dow.getAttribute('aria-pressed')).toBe('true');
     dow.click(); fixture.detectChanges();
@@ -254,8 +254,8 @@ describe('BenchmarkTab strip and chart (v208)', () => {
   beforeEach(() => TestBed.resetTestingModule());
   it('puts the strip and the chart after the chips, the headline alpha bold', () => {
     const { el } = renderTab(stubStore(BENCHMARK_FIXTURE));
-    const order = [...el.querySelectorAll('.today, .range, .chips, .stats, .chart')].map((n) => n.classList[0]);
-    expect(order).toEqual(['today', 'range', 'chips', 'stats', 'chart']);
+    const order = [...el.querySelectorAll('.today, .range, .series-chips, .stats, .chart')].map((n) => n.classList[0]);
+    expect(order).toEqual(['today', 'range', 'series-chips', 'stats', 'chart']);
     expect(text(el.querySelector('.stats .strip-line'))).toContain('not evidence of edge');
     expect(el.querySelectorAll('.chart sb-line-chart')).toHaveLength(1);
     expect(el.querySelector('.chart sb-exposure-strip')).not.toBeNull();
@@ -275,7 +275,7 @@ describe('BenchmarkTab strip and chart (v208)', () => {
   });
   it('follows the chips: hiding SPY drops its stat group and its line', () => {
     const { fixture, el } = renderTab(stubStore(BENCHMARK_FIXTURE));
-    el.querySelector<HTMLButtonElement>('.chips button[data-key="SPY"]')!.click();
+    el.querySelector<HTMLButtonElement>('.series-chips button[data-key="SPY"]')!.click();
     fixture.detectChanges();
     expect([...el.querySelectorAll('.stats .group h3')].map((h) => text(h))).not.toContain('SPY');
     expect(fixture.componentInstance.chart().map((s) => s.name)).not.toContain('SPY');
@@ -344,9 +344,9 @@ describe('BenchmarkTab table, capture and layout (v208)', () => {
     it(`keeps the approved order and pins the date column at ${width}px`, () => {
       vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(width);
       const { el } = renderTab(stubStore(BENCHMARK_FIXTURE));
-      const order = [...el.querySelectorAll('.today, .range, .chips, .stats, .chart, .daily, .capture, .footnote')]
+      const order = [...el.querySelectorAll('.today, .range, .series-chips, .stats, .chart, .daily, .capture, .footnote')]
         .map((n) => n.classList[0]);
-      expect(order).toEqual(['today', 'range', 'chips', 'stats', 'chart', 'daily', 'capture', 'footnote']);
+      expect(order).toEqual(['today', 'range', 'series-chips', 'stats', 'chart', 'daily', 'capture', 'footnote']);
       expect(el.querySelector('.daily sb-data-table .compact-list')).toBeNull();
       expect(text(el.querySelector('.daily sb-data-table th.pin'))).toContain('Date');
       expect(el.querySelector('.daily sb-data-table .wrap')!.classList.contains('phone')).toBe(width < 640);

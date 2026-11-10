@@ -8,7 +8,8 @@ import { EmptyStateComponent } from '../../../ui/empty-state';
 import { PanelError } from '../../../ui/panel-error';
 import { Segmented } from '../../../ui/segmented';
 import { AnalyticsBenchmark, BenchmarkDailyRow, BenchmarkEstimate, BenchmarkIndexKey, BenchmarkKey, BenchmarkPoint, BenchmarkRange, BenchmarkSeriesStats, BenchmarkStat, BenchmarkVs } from '../../../api/models';
-import { MINUS } from '../../../ui/format';
+import { MINUS, num } from '../../../ui/format';
+import { Button } from '../../../ui/button';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { LineChart, LineChartSeries } from '../../../ui/line-chart';
 import { ExposureStrip } from '../../../ui/exposure-strip';
@@ -95,9 +96,7 @@ function signTone(value: number | null): StatTone {
 }
 
 function money(value: number, currency: string): string {
-  return `${value < 0 ? MINUS : ''}${currency}${Math.abs(value).toLocaleString('en-US', {
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
-  })}`;
+  return `${value < 0 ? MINUS : ''}${currency}${num(Math.abs(value), 2)}`;
 }
 
 function tile(label: string, stat: BenchmarkStat, format: (value: number) => string,
@@ -248,7 +247,7 @@ export function beatLine(p: AnalyticsBenchmark): string {
 @Component({
   selector: 'sb-benchmark-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Segmented, PanelError, EmptyStateComponent, LineChart, ExposureStrip, StatTile, Panel, PanelHeader, DataTable],
+  imports: [Button, Segmented, PanelError, EmptyStateComponent, LineChart, ExposureStrip, StatTile, Panel, PanelHeader, DataTable],
   template: `
     @if (store.benchmarkError(); as error) {
       <sb-panel-error [message]="error" (retry)="store.reload('benchmark')" />
@@ -274,9 +273,9 @@ export function beatLine(p: AnalyticsBenchmark): string {
                       (valueChange)="pickRange($any($event))" />
         @if (p.range.clamped) { <span class="clamp">Live book since {{ p.range.live_since }}</span> }
       </div>
-      <div class="chips" role="group" aria-label="Lines">
+      <div class="series-chips" role="group" aria-label="Lines">
         @for (key of seriesOrder; track key) {
-          <button type="button" [attr.data-key]="key" [attr.aria-pressed]="visible().has(key)" (click)="toggle(key)">
+          <button sb-button type="button" [attr.data-key]="key" [attr.aria-pressed]="visible().has(key)" (click)="toggle(key)">
             <i class="swatch" [class.dashed]="key === 'bot_deployed'" [style.border-top-color]="'var(' + tokens[key] + ')'"> </i>
             <span class="label">{{ labels[key] }}</span>
             @if (key === 'bot_deployed') { <span class="sub">{{ deployedLabel }}</span> }
@@ -293,7 +292,7 @@ export function beatLine(p: AnalyticsBenchmark): string {
 <section class="stats" aria-label="Range statistics">
   @for (g of statTiles(); track g.key) {
     <div class="group">
-      <h3>{{ g.label }} @if (g.note) { <span class="note">{{ g.note }}</span> }</h3>
+      <h3>{{ g.label }} @if (g.note) { <span class="group-note">{{ g.note }}</span> }</h3>
       <div class="tiles">@for (t of g.tiles; track t.label) {
         <div class="tile" [class.bold]="t.bold">
           <sb-stat-tile [label]="t.label" [value]="t.value" [sample]="t.sample" [tone]="t.tone" [hint]="t.hint" [secondary]="t.secondary" />
@@ -317,7 +316,7 @@ export function beatLine(p: AnalyticsBenchmark): string {
   <sb-data-table [rows]="p.daily" [columns]="dailyCols()" [visible]="dailyShown()" [rowKey]="dailyKey"
     clientPaging="analytics.benchmark.daily" [emptyState]="{ title: 'No sessions in this range' }" />
   @if (p.daily_has_more) {
-    <button type="button" class="more" [disabled]="store.benchmarkLoadingMore()" (click)="store.loadMoreBenchmarkDaily()">Load older sessions</button>
+    <button sb-button type="button" class="more" [disabled]="store.benchmarkLoadingMore()" (click)="store.loadMoreBenchmarkDaily()">Load older sessions</button>
   }
 </sb-panel>
 <sb-panel class="capture">
@@ -337,9 +336,9 @@ export function beatLine(p: AnalyticsBenchmark): string {
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-14); }
     .today .cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: var(--space-10); }
     .cell { display: grid; gap: 2px; }
-    .chips { display: flex; flex-wrap: wrap; gap: var(--space-6); }
-    .chips button { min-height: 44px; padding: 0 var(--space-10); border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface); color: var(--text-secondary); text-align: left; }
-    .chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--text); }
+    .series-chips { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+    .series-chips button { min-height: 44px; padding: 0 var(--space-10); border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface); color: var(--text-secondary); text-align: left; }
+    .series-chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--text); }
     .swatch { display: inline-block; width: 14px; border-top: 2px solid; margin-right: var(--space-6); vertical-align: middle; }
     .swatch.dashed { border-top-style: dashed; }
     .sub, .caption, .clamp, .stamp { font-size: var(--text-micro); color: var(--text-faint); }
@@ -347,11 +346,9 @@ export function beatLine(p: AnalyticsBenchmark): string {
     .paper { margin: 0; font-size: var(--text-chip); color: var(--text-secondary); }
     .banner, .stale { margin: 0; font-size: var(--text-chip); color: var(--warn); }
     .range { display: grid; gap: var(--space-6); }
-    .pos { color: var(--pos); }
-    .neg { color: var(--neg); }
     .stats { display: grid; gap: var(--space-10); }
     .group h3 { margin: 0; font-size: var(--text-chip); color: var(--text); }
-    .note { font-weight: normal; color: var(--text-faint); margin-left: var(--space-6); }
+    .group-note { font-weight: normal; color: var(--text-faint); margin-left: var(--space-6); }
     .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-10); }
     .tile.bold { outline: 1px solid var(--accent); border-radius: var(--panel-radius); --figure-weight: 700; }
     .strip-line, .exposure-caption, .markers { margin: 0; font-size: var(--text-micro); color: var(--text-faint); }
