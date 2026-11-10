@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT))
 import pandas as pd
 from swingbot.core.market.earnings_calendar import CSV_FIELDS, EARNINGS_CSV_DIR, UNCONFIRMED, report_from_timestamp
 from swingbot.core.market.session import US_MARKET_TZ
+from swingbot.core.backtesting.screen.context import is_context_only
 
 CACHE_DIR, DEFAULT_LIMIT = ROOT / "data" / "backtest_cache", 60
 # yfinance otherwise opens its SQLite timezone/cookie cache below the active
@@ -43,7 +44,7 @@ def fetch_frame(symbol, limit):
         if frame is not None and not frame.empty: return frame
     return None
 
-def cached_symbols(cache_dir): return sorted(path.stem for path in Path(cache_dir).glob("*.csv"))
+def cached_symbols(cache_dir): return sorted(path.stem for path in Path(cache_dir).glob("*.csv") if not is_context_only(path.stem))
 
 def main(argv=None):
     parser=argparse.ArgumentParser(); parser.add_argument("--tickers"); parser.add_argument("--cache-dir", default=str(CACHE_DIR)); parser.add_argument("--out-dir", default=str(EARNINGS_CSV_DIR)); parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT); parser.add_argument("--force", action="store_true")
