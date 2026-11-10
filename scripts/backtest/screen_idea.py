@@ -32,6 +32,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import pickle
 import sys
 from collections import Counter
 from dataclasses import dataclass, field, replace
@@ -402,22 +404,88 @@ def _universe_context(idea: Idea, cache_dir, end: str, context):
     return context
 
 
+CHECKPOINT_MANIFEST = "manifest.json"
+_EMPTY = object()      # the empty-frame marker (None is a legal monkeypatched result)
+
+
+def _checkpoint_manifest(idea: Idea, start: str, end: str, names: list[str]) -> dict:
+    return {"idea": idea.name, "start": start, "end": end,
+            "tickers_sha256": hashlib.sha256("\n".join(names).encode("utf-8")).hexdigest()}
+
+
+class _Checkpoint:
+    """v211: one pickle per finished ticker; a no-op without a directory."""
+
+    def __init__(self, directory: Path | None):
+        self.directory = directory
+
+    def load(self, ticker: str):
+        if self.directory is None:
+            return None
+        path = self.directory / f"{ticker}.pkl"
+        # pickle is safe here: local scratch files this same script wrote, never shared input
+        return pickle.loads(path.read_bytes()) if path.exists() else None
+
+    def save(self, screen) -> None:
+        if self.directory is None:
+            return
+        final = self.directory / f"{screen.ticker}.pkl"
+        tmp = final.with_name(final.name + ".tmp")
+        tmp.write_bytes(pickle.dumps(screen, protocol=pickle.HIGHEST_PROTOCOL))
+        os.replace(tmp, final)
+
+
+def _open_checkpoint(directory: Path | None, manifest: dict, out) -> _Checkpoint:
+    if directory is None:
+        return _Checkpoint(None)
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / CHECKPOINT_MANIFEST
+    if path.exists():
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        if saved != manifest:
+            raise ValueError(f"checkpoint {directory} belongs to another run: "
+                             f"{saved} != {manifest}")
+    else:
+        path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    done = len(list(directory.glob("*.pkl")))
+    out(f"[{manifest['idea']}] checkpoint {directory}: {done} ticker(s) already screened",
+        flush=True)
+    return _Checkpoint(directory)
+
+
+def _screen_or_resume(idea, ticker, universe, cache_dir, start, end, context, checkpoint):
+    resumed = checkpoint.load(ticker)
+    if resumed is not None:
+        return resumed
+    df = load_frame(Path(cache_dir) / f"{ticker}.csv", start, end)
+    if df is None:
+        return _EMPTY
+    screen = screen_ticker(idea, ticker, df, universe.intervals.get(ticker, []),
+                           context=context)
+    checkpoint.save(screen)
+    return screen
+
+
 def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
                     start: str = WINDOW_START, end: str = WINDOW_END,
-                    tickers=None, out=print, context: Mapping | None = None):
+                    tickers=None, out=print, context: Mapping | None = None,
+                    checkpoint_dir: Path | None = None):
     """Every cached member, one at a time, with flushed percent progress.
-    ``context`` (v174) is handed unchanged to every screen_ticker call."""
+    ``context`` (v174) is handed unchanged to every screen_ticker call.
+    ``checkpoint_dir`` (v211) persists each finished ticker and resumes from it."""
     context = _universe_context(idea, cache_dir, end, context)
     names = universe.cached if tickers is None else [t for t in tickers if t in universe.cached]
+    checkpoint = _open_checkpoint(checkpoint_dir,
+                                  _checkpoint_manifest(idea, start, end, names), out)
     screens, skipped = [], Counter()
     for i, ticker in enumerate(names, start=1):
-        df = load_frame(Path(cache_dir) / f"{ticker}.csv", start, end)
-        if df is None:
+        result = _screen_or_resume(idea, ticker, universe, cache_dir, start, end,
+                                   context, checkpoint)
+        if result is _EMPTY:
             skipped["empty_frame"] += 1
         else:
-            screens.append(screen_ticker(idea, ticker, df,
-                                         universe.intervals.get(ticker, []),
-                                         context=context))
+            screens.append(result)
         if i % PROGRESS_EVERY == 0 or i == len(names):
             out(f"[{idea.name}] {i}/{len(names)} tickers ({100.0 * i / len(names):.0f}%)",
                 flush=True)
@@ -750,7 +818,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--context-hashes", type=Path, default=CONTEXT_HASHES,
                    help="v174 pinned SHA-256 of the context CSVs")
     p.add_argument("--tickers", default=None, help="comma list; smoke test, needs --dry-run")
-    mode = p.add_mutually_exclusive_group()
+    p.add_argument("--checkpoint-dir", type=Path, default=None,
+                   help="v211: persist each finished ticker's screen here; a restart skips "
+                        "them (refuses another run's checkpoint)")
+    mode =p.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="print the doc, write nothing")
     mode.add_argument("--count-only", action="store_true",
                       help="v182: count events, drops and full-cap non-overlap (and check 5 "
@@ -1342,6 +1413,17 @@ def _utf8_stdout() -> None:
             pass    # a capture stream that cannot be reconfigured is already safe
 
 
+def _run_screens(args, idea: Idea, universe: Universe, data, spy) -> dict:
+    """The summary ``main`` publishes (screen, diagnostics, short blocks)."""
+    tickers = args.tickers.split(",") if args.tickers else None
+    screens, skipped = screen_universe(idea, universe, args.cache_dir, start=args.start,
+                                       end=args.end, tickers=tickers,
+                                       context=None if data is None else data.frames,
+                                       checkpoint_dir=args.checkpoint_dir)
+    summary = with_diagnostics(summarise(screens, skipped), screens, idea, data, end=args.end)
+    return with_short_blocks(summary, screens, idea, spy)
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     _utf8_stdout()
@@ -1365,13 +1447,8 @@ def main(argv=None) -> int:
         print(f"refused: {reason}", file=sys.stderr)
         return 2
     idea = IDEAS[args.idea]
-    tickers = args.tickers.split(",") if args.tickers else None
-    screens, skipped = screen_universe(idea, universe, args.cache_dir, start=args.start,
-                                       end=args.end, tickers=tickers,
-                                       context=None if data is None else data.frames)
-    summary = with_diagnostics(summarise(screens, skipped), screens, idea, data, end=args.end)
-    summary = with_short_blocks(summary, screens, idea, spy)
-    return publish(args, idea, universe, summary, rows, data=data)
+    return publish(args, idea, universe, _run_screens(args, idea, universe, data, spy),
+                   rows, data=data)
 
 
 if __name__ == "__main__":
