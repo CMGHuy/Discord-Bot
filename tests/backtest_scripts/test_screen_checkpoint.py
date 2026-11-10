@@ -189,3 +189,35 @@ def test_a_checkpointed_dry_run_prints_the_same_doc(tmp_path, capsys):
     for out in (first, resumed):
         assert [line for line in out.splitlines()
                 if not line.startswith("[turn_of_month]")] == doc
+
+
+def test_a_level_screens_shock_report_survives_the_checkpoint(tmp_path, monkeypatch):
+    from tests.backtest_scripts.test_screen_level_context import (
+        LEVEL, _fake_level_idea, _level_cache)
+    idea = _fake_level_idea()
+    monkeypatch.setitem(screen_idea.IDEAS, idea.name, idea)
+    cache = _level_cache(tmp_path)
+    universe = screen_idea.load_universe(cache, tmp_path / "membership.csv")
+    context = screen_idea.load_context(cache, LEVEL, kind="level").frames
+    full, _ = screen_idea.screen_universe(idea, universe, cache, out=_quiet, context=context)
+    assert full[0].shock and full[0].shock["tags"]
+    directory = tmp_path / "ckpt"
+    real = screen_idea.screen_ticker
+
+    def dies_on_bbb(idea_, ticker, *args, **kwargs):
+        if ticker == "BBB":
+            raise RuntimeError("killed")
+        return real(idea_, ticker, *args, **kwargs)
+
+    monkeypatch.setattr(screen_idea, "screen_ticker", dies_on_bbb)
+    with pytest.raises(RuntimeError, match="killed"):
+        screen_idea.screen_universe(idea, universe, cache, out=_quiet, context=context,
+                                    checkpoint_dir=directory)
+    monkeypatch.setattr(screen_idea, "screen_ticker", real)
+    reloaded = screen_idea._Checkpoint(directory).load("AAA")
+    assert reloaded.shock == full[0].shock
+    resumed, _ = screen_idea.screen_universe(idea, universe, cache, out=_quiet,
+                                             context=context, checkpoint_dir=directory)
+    assert [s.shock for s in resumed] == [s.shock for s in full]
+    assert (screen_idea.with_shock_blocks({"counters": Counter()}, resumed, idea)["shock"]
+            == screen_idea.with_shock_blocks({"counters": Counter()}, full, idea)["shock"])
