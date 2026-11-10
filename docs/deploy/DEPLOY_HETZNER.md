@@ -217,6 +217,19 @@ SWING_BOT_IMAGE=ghcr.io/<owner>/<repo>:sha-<good-sha> ./deploy/deploy.sh
 Find the tag under **your profile → Packages → <repo> → versions**, or in
 the "Publishing as …" line of the run that shipped it.
 
+**Rolling back past v209: downgrade first, from the new image.** The image-only
+path above aborts before `up` when the older image does not know `v209_001`.
+Before switching to an image older than v209, run the downgrade from the image
+that is still running, then deploy the older tag:
+
+    bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot alembic downgrade v204_001"
+
+This drops `market_shock_state` and `market_shock_readings` (the shadow log is
+lost). Plans keep `entry_context.shock_state`; older readers ignore the key.
+Check `alembic history` first: a revision stacked on `v209_001` later is rolled
+back too. `scripts/ops/rollback_to.sh` needs no extra step, because PITR
+restores the database at the target's own revision.
+
 **Rolling back past v184: clear the stop-monitor key.** From v184 the trade
 monitor writes a `monitor` key into the `bot_heartbeat` row, and
 `scripts/ops/heartbeat_watch.sh`, which the checkout keeps across a rollback,
@@ -393,6 +406,36 @@ image (§ Rolling back). Viewer accounts therefore do not survive a rollback;
 re-create them on the Users tab after rolling forward. The other route is
 `scripts/ops/rollback_to.sh` (point-in-time restore), which also discards
 everything written since.
+
+### v209: market shock tables (`market_shock_state`, `market_shock_readings`)
+
+The bot's scheduled `session_scan` takes one shock reading per pass while the
+NYSE regular session is open (no holidays, stops at a half-day close) and steps
+a NORMAL / SHOCK / RECOVERY state. That is about 390 / `SCAN_INTERVAL_MINUTES`
+rows per full session in `market_shock_readings` and one row (`id = 1`) in
+`market_shock_state`. `!check`, the recap, the admin-UI scan and the SHORT lane
+read the stored label and never write. Neither table raises SSE events.
+Every new plan carries `entry_context.shock_state`.
+
+| Flag | Production value | Set |
+|---|---|---|
+| `MARKET_SHOCK_MODE` | `shadow` (measure, record, stamp; **no trade changes**) | explicitly in `.env` right after the v209 deploy (V209-13) |
+
+**Retention.** `daily_recap` deletes readings older than
+`SHOCK_READINGS_KEEP_DAYS` (180) in every mode. It skips the days the recap
+does not run, and the delete is idempotent.
+
+**Read-back:**
+
+    bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T db psql -U swingbot -d swingbot -c \"SELECT session_date, count(*), min(as_of), max(as_of), sum((state_after = 'SHOCK')::int) AS shock FROM market_shock_readings GROUP BY 1 ORDER BY 1 DESC LIMIT 5\""
+    bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T db psql -U swingbot -d swingbot -c \"SELECT label, since, session_date, last_reading_id, updated_at FROM market_shock_state\""
+
+**Rollback, in this order:**
+1. Behaviour: `python3 scripts/ops/env_set.py MARKET_SHOCK_MODE off`, then `docker compose restart bot`. That means no readings, no state writes and no `shock_state` key, as in bot 2.17.3.
+2. Schema: § Rolling back (`alembic downgrade v204_001` from the new image; `v204_001` is the revision `v209_001` revises).
+3. `scripts/ops/rollback_to.sh` (`--dry-run` first), only for damaged data.
+
+The tables stay until a later spec retires the detector.
 
 ## Accessing the admin UI
 
