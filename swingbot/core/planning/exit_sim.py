@@ -86,6 +86,14 @@ class ExitResult:
     # frozen scale-out witness (a hash of asdict over v1 results) stays
     # byte-identical.
     tp1_index = None
+    # v212: why an arm limit (limit_entry_rule.is_arm_limit) ended without a
+    # normal walk -- "limit_expired" | "limit_tp1_cancel" | "filled_stopped_gap",
+    # set per instance by exit_sim_v2. Unannotated for the same reason as
+    # tp1_index: not a dataclass field, so asdict / == / the witness hash hold.
+    exit_reason = None
+    # v212: on a "filled_stopped_gap" row only, the disclosed pessimistic R as
+    # if the fill had been at the limit price. Never the primary score.
+    gap_stop_r_from_limit = None
 
 
 def _not_triggered(cancel_reason: str | None = None) -> ExitResult:
