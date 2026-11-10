@@ -238,8 +238,9 @@ def _restricted(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dic
     """Context ideas only (v174 § 5.2): every event raced again against a
     null pool without the bars closer than CAP sessions to any shock day.
     For a context idea the raw mask IS the shock-day mask on this ticker's
-    dates. Same seed, K and cap; printed, never gating."""
-    if not idea.context:
+    dates. Same seed, K and cap; printed, never gating.
+    v211: a level idea's raw mask is a stock trigger, not a shock-day mask, so the restricted null does not apply."""
+    if not idea.context or idea.context_kind == "level":
         return None
     near = pit.near_mask(ctx["raw"], idea.time_cap_bars)
     kept, _, draw = _books(idea, ticker, df, ctx, costs, exclude=near)
@@ -284,7 +285,8 @@ def ticker_context(idea: Idea, df: pd.DataFrame, spans, context: Mapping | None 
     warm = race.warm_mask(atr, sma200) & (df.index >= pd.Timestamp(EVENT_START))
     return {"raw": np.asarray(raw_events(idea, df, context), dtype=bool),
             "member": member, "warm": warm, "atr": atr,
-            "trend": null.trend_state(df, sma200), "levels": raw_levels(idea, df)}
+            "trend": null.trend_state(df, sma200), "levels": raw_levels(idea, df),
+            "context": context}
 
 
 def _family_partner(idea: Idea) -> Idea | None:
@@ -296,12 +298,13 @@ def _family_partner(idea: Idea) -> Idea | None:
 
 
 def _overlap(idea: Idea, df: pd.DataFrame, ctx: dict) -> dict | None:
-    """v182: raw event bars shared with the family partner, member and warm bars only."""
+    """v182: raw event bars shared with the family partner, member and warm bars only.
+    v211: the partner gets the same context frames (a level family shares CONTEXT); a partner without context ignores them."""
     partner = _family_partner(idea)
     if partner is None:
         return None
     population = np.asarray(ctx["member"], dtype=bool) & np.asarray(ctx["warm"], dtype=bool)
-    other = np.asarray(raw_events(partner, df, None), dtype=bool)
+    other = np.asarray(raw_events(partner, df, ctx.get("context")), dtype=bool)
     return descriptive.event_overlap(ctx["raw"] & population, other & population)
 
 
@@ -853,7 +856,7 @@ def _restricted_pairs(screens):
 def with_diagnostics(summary: dict, screens, idea: Idea, data, *, end: str) -> dict:
     """The summary plus ``"context"`` (v174 § 5) for a context idea; the same
     dict, untouched, for any other. The verdict object is never rebuilt."""
-    if not idea.context or data is None:
+    if not idea.context or idea.context_kind == "level" or data is None:
         return summary
     diag = diagnostics.compute(idea, summary["events"], _restricted_pairs(screens), data,
                                event_start=EVENT_START, event_end=end)
@@ -1211,7 +1214,7 @@ def render_results(idea, summary, universe, run) -> str:
     sections += [_render_years(v), _render_drift(summary)]
     if "short" in summary:
         sections.append(_render_short_blocks(idea, summary, run))
-    if idea.context:
+    if idea.context and idea.context_kind == "z":
         sections.append(_render_context(idea, summary, run))
     return "\n\n".join("\n".join(lines) for lines in sections) + "\n"
 
@@ -1252,9 +1255,19 @@ def _short_hypothesis(idea) -> str:
             "a year, PIT S&P 500 2010-2019, after costs (v182 short screen)")
 
 
+def _level_hypothesis(idea) -> str:
+    """v211: the short text, the level context series, then the frozen scope
+    (the ledger has no note field)."""
+    return (_short_hypothesis(idea)
+            + f", context {', '.join(idea.context)} levels from {CONTEXT_START} "
+              "(v211 shock screen). " + diagnostics.scope_sentence(idea))
+
+
 def hypothesis(idea) -> str:
     """The ledger hypothesis, naming the shape and cap; the fixed text is
     today's, byte for byte."""
+    if idea.context_kind == "level":
+        return _level_hypothesis(idea)
     if idea.context:
         return _context_hypothesis(idea)
     if idea.direction == "short":

@@ -65,9 +65,22 @@ def screen_family_q(rows: list[dict], row: dict, instrument: str) -> float | Non
     return stats.ledger_qvalues(family).get(row["id"])
 
 
+def _level_scope_sentence(idea) -> str:
+    p = idea.params
+    return ("Scope: a daily breadth-shock proxy (SHOCK_D: enter when BREADTH_ATR1 >= "
+            f"{p['enter']:.2f}, release when BREADTH_ATR1 <= {p['release']:.2f} and ^VIX "
+            "closes down), not the live market-shock detector; a pass does not license "
+            "the detector's labels, and a fail closes exactly this frozen definition "
+            f"(short only, the fixed {idea.time_cap_bars}-bar race) and is never re-run "
+            "with a looser one.")
+
+
 def scope_sentence(idea) -> str:
     """The frozen-definition wording of spec § What the two shots can and
-    cannot say, for the ledger hypothesis and the results doc."""
+    cannot say, for the ledger hypothesis and the results doc.
+    v211: a level idea gets its own breadth-shock wording."""
+    if getattr(idea, "context_kind", "z") == "level":
+        return _level_scope_sentence(idea)
     p = idea.params
     op = ">=" if p["z"] > 0 else "<="
     return ("Scope: a shock proxy, not Murphy's intermarket claim itself; a fail "

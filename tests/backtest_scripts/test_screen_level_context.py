@@ -271,3 +271,124 @@ def test_mode_runner_dispatch():
         is screen_idea.run_count
     assert screen_idea._mode_runner(parse(["--idea", "high52w", "--pin-context"])) \
         is screen_idea.run_pin_context
+
+
+# --- V211-5: level branches ---------------------------------------------------
+
+from swingbot.core.backtesting.instrument import stats  # noqa: E402
+from swingbot.core.backtesting.screen import diagnostics  # noqa: E402
+
+GOLDEN = ROOT / "tests" / "backtest_scripts" / "golden" / "hypotheses_pre_v211.json"
+ALWAYS = [("2000-01-01", "9999-12-31")]
+LEVEL_SCOPE = (
+    "Scope: a daily breadth-shock proxy (SHOCK_D: enter when BREADTH_ATR1 >= 0.40, "
+    "release when BREADTH_ATR1 <= 0.10 and ^VIX closes down), not the live "
+    "market-shock detector; a pass does not license the detector's labels, and a "
+    "fail closes exactly this frozen definition (short only, the fixed 10-bar race) "
+    "and is never re-run with a looser one.")
+
+
+def test_every_pre_v211_hypothesis_is_byte_identical():
+    golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    assert len(golden) == 11 and not any(name.startswith("shock_") for name in golden)
+    assert {name: screen_idea.hypothesis(IDEAS[name]) for name in golden} == golden
+
+
+def test_the_z_scope_sentence_is_unchanged():
+    assert "UUP 5-day return z <= -2.0 vs its trailing 252 values, long only, the fixed " \
+           "10-bar race" in diagnostics.scope_sentence(IDEAS["dollar_drop"])
+
+
+def test_the_level_scope_sentence_is_the_frozen_copy():
+    assert diagnostics.scope_sentence(_fake_level_idea()) == LEVEL_SCOPE
+
+
+def test_the_level_hypothesis_names_short_context_and_scope():
+    idea = _fake_level_idea()
+    text = screen_idea.hypothesis(idea)
+    assert text == (screen_idea._short_hypothesis(idea)
+                    + ", context BREADTH_ATR1, ^VIX levels from 2009-06-01 (v211 shock "
+                      "screen). " + LEVEL_SCOPE)
+    assert "SHORT, entry next open, fixed 1.5/3.0 ATR race" in text
+    v = screen_idea.verdict.Verdict("SCREEN-FAIL", 412, 0.01, -0.02, 0.04, 0.3, 4, {},
+                                    {"exp_r": False, "ci": False, "years": False, "n": True})
+    row = screen_idea.ledger_row(idea, v, "docs/x.md", "2026-11-06")
+    stats.validate_ledger_row(row)
+    assert row["hypothesis"] == text
+
+
+def _level_inputs(tmp_path):
+    cache = _level_cache(tmp_path)
+    context = screen_idea.load_context(cache, LEVEL, kind="level")
+    return cache, context, screen_idea.load_frame(cache / "AAA.csv")
+
+
+def test_ticker_context_carries_the_context(tmp_path):
+    _cache, data, df = _level_inputs(tmp_path)
+    ctx = screen_idea.ticker_context(_fake_level_idea(), df, ALWAYS, data.frames)
+    assert ctx["context"] is data.frames and ctx["raw"].any()
+    assert screen_idea.ticker_context(IDEAS["high52w"], df, ALWAYS)["context"] is None
+
+
+def test_overlap_hands_the_real_context_to_a_level_partner(tmp_path, monkeypatch):
+    _cache, data, df = _level_inputs(tmp_path)
+    seen = []
+
+    def partner_events(frame_, context):
+        seen.append(set(context))
+        return _level_events(frame_, context)
+
+    family = ("fake_level", "fake_level_b")
+    own = _fake_level_idea(family=family)
+    monkeypatch.setitem(screen_idea.IDEAS, own.name, own)
+    monkeypatch.setitem(screen_idea.IDEAS, "fake_level_b",
+                        _fake_level_idea(name="fake_level_b", events=partner_events,
+                                         family=family))
+    ctx = screen_idea.ticker_context(own, df, ALWAYS, data.frames)
+    out = screen_idea._overlap(own, df, ctx)
+    assert seen == [set(LEVEL)]
+    assert out["own"] == out["other"] == out["both"] > 0
+
+
+def test_restricted_and_z_diagnostics_skip_a_level_idea(tmp_path, monkeypatch):
+    _cache, data, df = _level_inputs(tmp_path)
+    idea = _fake_level_idea()
+    ctx = screen_idea.ticker_context(idea, df, ALWAYS, data.frames)
+    costs = {"slippage_bps": None, "commission": None}
+    assert screen_idea._restricted(idea, "AAA", df, ctx, costs) is None
+    monkeypatch.setattr(screen_idea.diagnostics, "compute",
+                        lambda *a, **k: pytest.fail("z diagnostics ran for a level idea"))
+    summary = {"verdict": None, "events": []}
+    assert screen_idea.with_diagnostics(summary, [], idea, data, end="2019-12-31") is summary
+
+
+def _level_argv(tmp_path, cache, *extra):
+    return ["--idea", "fake_level", "--cache-dir", str(cache),
+            "--membership", str(tmp_path / "membership.csv"),
+            "--ledger", str(tmp_path / "ledger.jsonl"),
+            "--results-dir", str(tmp_path / "results"), "--date", "2026-11-06",
+            "--context-hashes", str(tmp_path / "hashes.json"), *extra]
+
+
+def test_a_level_dry_run_prints_no_z_diagnostics_and_writes_nothing(tmp_path, capsys,
+                                                                     level_registered):
+    cache = _level_cache(tmp_path)
+    assert screen_idea.main(_level_argv(tmp_path, cache, "--dry-run")) == 0
+    out = capsys.readouterr().out
+    assert "# v140 screen: `fake_level`" in out
+    assert "## Intermarket diagnostics" not in out
+    for written in ("ledger.jsonl", "results", "hashes.json"):
+        assert not (tmp_path / written).exists()
+
+
+def test_a_level_real_run_records_the_level_hypothesis_and_pins_four_files(
+        tmp_path, level_registered):
+    cache = _level_cache(tmp_path)
+    assert screen_idea.main(_level_argv(tmp_path, cache)) == 0
+    (row,) = stats.load_ledger(tmp_path / "ledger.jsonl")
+    assert row["id"] == "screen-fake_level" and row["hypothesis"].endswith(LEVEL_SCOPE)
+    assert (tmp_path / "results" / "2026-11-06-screen-fake_level.md").is_file()
+    pinned = json.loads((tmp_path / "hashes.json").read_text(encoding="utf-8"))
+    # every registered context ticker is pinned (vix_curve_calm also adds ^VIX3M)
+    assert set(pinned) == set(screen_idea.context_tickers())
+    assert {"TLT", "UUP", "BREADTH_ATR1", "^VIX"} <= set(pinned)
