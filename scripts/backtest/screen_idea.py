@@ -55,6 +55,8 @@ from swingbot.core.backtesting.screen.ideas import IDEAS, Idea  # noqa: E402
 from swingbot.core.backtesting.screen import context as screen_context  # noqa: E402
 from swingbot.core.backtesting.screen import context as pit  # noqa: E402
 from swingbot.core.backtesting.screen import descriptive, diagnostics  # noqa: E402
+from swingbot.core.backtesting.screen import shock_readouts  # noqa: E402
+from swingbot.core.backtesting.screen.ideas import _shock_breakdown as sb  # noqa: E402
 from swingbot.core.backtesting.screen.context import CONTEXT_START  # noqa: E402,F401
 from swingbot.core.edge.frictions import BORROW_RATE_ANNUAL, commission_r  # noqa: E402
 from swingbot.core.marketdata import pit_membership  # noqa: E402
@@ -125,6 +127,7 @@ class TickerScreen:
     repriced: list | None = None                          # v182: level only, 3 x slippage pairs
     control: list | None = None                           # v182: rows of the trend-only control book
     overlap: dict | None = None                           # v182: raw-bar overlap with the family partner
+    shock: dict | None = None   # v211: level only, shock-day null, 3 x book, gap/episode tags
 
 
 #: v182: bars from the event bar to the entry bar, per entry mode.
@@ -236,6 +239,41 @@ def _level_report(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: d
             "depths": depths, "repriced": _repriced(idea, ticker, df, ctx, costs)}
 
 
+#: v211: the shock-day null's seed is null_seed(idea + tag, ticker), a stream of its own, so the standard draw is untouched.
+_SHOCK_NULL_TAG = "#shock-null"
+
+
+def _shock_rows(ticker, index, kept, null_mean_r, entry: str) -> list:
+    """The (entry_date, r_event, r_null) projection `_stressed` uses."""
+    return [{"entry_date": row["entry_date"], "r_event": row["r_event"], "r_null": row["r_null"]}
+            for row in _event_rows(ticker, index, kept, null_mean_r,
+                                   entry_offset=_ENTRY_OFFSET[entry])]
+
+
+def _shock_report(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict,
+                  kept) -> dict | None:
+    """v211, level ideas only (spec § Printed alongside each verdict): the shock-day null, the 3 x slippage book and the per-event gap and episode-day tags. Printed, never gating; the standard book is not touched."""
+    if idea.context_kind != "level":
+        return None
+    context = ctx["context"]
+    state = sb.ticker_state(df, context)
+    # SHOCK bars minus every raw event bar: shock_null does not exclude events itself.
+    pool = (_null_pool(idea, ctx) & state["shock"].to_numpy(dtype=bool)
+            & ~np.asarray(ctx["raw"], dtype=bool))
+    draw2 = shock_readouts.shock_null(
+        df, kept.event_pos, pool, null.K,
+        null.null_seed(idea.name + _SHOCK_NULL_TAG, ticker), cap=idea.time_cap_bars,
+        atr=ctx["atr"], shape=idea.race_shape, direction=idea.direction, **costs)
+    null2 = _shock_rows(ticker, df.index, kept.take(np.isin(kept.event_pos, draw2.event_pos)),
+                        draw2.null_mean_r, idea.entry)
+    stress = {"slippage_bps": shock_readouts.SHOCK_STRESS_SLIPPAGE_FACTOR
+              * base_slippage(costs["slippage_bps"]), "commission": costs["commission"]}
+    kept3, _, draw3 = _books(idea, ticker, df, ctx, stress)
+    stress3 = _shock_rows(ticker, df.index, kept3, draw3.null_mean_r, idea.entry)
+    tags = shock_readouts.event_tags(df, state, context[sb.BREADTH]["Close"], kept.event_pos)
+    return {"null2": null2, "null2_dropped": draw2.dropped, "stress3": stress3, "tags": tags}
+
+
 def _restricted(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict):
     """Context ideas only (v174 § 5.2): every event raced again against a
     null pool without the bars closer than CAP sessions to any shock day.
@@ -341,6 +379,7 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
         stressed=_stressed(idea, ticker, df, ctx, costs),
         restricted=_restricted(idea, ticker, df, ctx, costs),
         control=_control(idea, ticker, df, ctx, costs), overlap=_overlap(idea, df, ctx),
+        shock=_shock_report(idea, ticker, df, ctx, costs, kept),
         **_level_report(idea, ticker, df, ctx, costs, kept, draw))
 
 
@@ -994,6 +1033,32 @@ def _level_blocks(screens) -> dict:
                       sum(screen.null_unfilled for screen in screens))}
 
 
+def _shock_split(pairs: list, key: str, labels: tuple) -> dict:
+    """Per label: n, mean r_event and mean paired excess; ``missing`` counts unlabelled tags."""
+    out = {}
+    for label in labels:
+        rows = [row for row, tag in pairs if tag[key] == label]
+        out[label] = {"n": len(rows), "exp_r_event": _mean([r["r_event"] for r in rows]),
+                      "delta_exp_r": _mean([r["r_event"] - r["r_null"] for r in rows])}
+    out["missing"] = sum(tag[key] is None for _, tag in pairs)
+    return out
+
+
+def with_shock_blocks(summary: dict, screens, idea: Idea) -> dict:
+    """v211: the summary plus ``"shock"`` for a level idea; the same dict, untouched, for any other. The verdict object is never rebuilt."""
+    if idea.context_kind != "level":
+        return summary
+    shocked = [s for s in screens if s.shock is not None]
+    pairs = [(row, tag) for s in shocked for row, tag in zip(s.events, s.shock["tags"])]
+    block = {"null2": _decide([r for s in shocked for r in s.shock["null2"]]),
+             "null2_dropped": sum(s.shock["null2_dropped"] for s in shocked),
+             "stress3": _decide([r for s in shocked for r in s.shock["stress3"]]),
+             "gap": _shock_split(pairs, "gap_bucket", shock_readouts.GAP_BUCKETS),
+             "episode_day": _shock_split(pairs, "episode_day", shock_readouts.EPISODE_DAYS),
+             "skipped_overlap": summary["counters"].get("skipped_overlap", 0)}
+    return {**summary, "shock": block}
+
+
 def with_short_blocks(summary: dict, screens, idea: Idea, spy) -> dict:
     """v182: the summary plus ``"short"`` -- overlap, trend-only control, SPY
     regime split and the level blocks -- for a short or level idea; the same
@@ -1442,7 +1507,8 @@ def _run_screens(args, idea: Idea, universe: Universe, data, spy) -> dict:
                                        context=None if data is None else data.frames,
                                        checkpoint_dir=args.checkpoint_dir)
     summary = with_diagnostics(summarise(screens, skipped), screens, idea, data, end=args.end)
-    return with_short_blocks(summary, screens, idea, spy)
+    summary = with_short_blocks(summary, screens, idea, spy)
+    return with_shock_blocks(summary, screens, idea)
 
 
 def main(argv=None) -> int:
