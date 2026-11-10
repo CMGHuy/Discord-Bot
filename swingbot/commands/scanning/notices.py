@@ -236,6 +236,12 @@ def _provider_lines(row: dict) -> tuple[str, str]:
     return fallback, empty
 
 
+def _old_print_line(row: dict) -> str:
+    """v223: display only -- old IEX prints outside regular hours, re-asked
+    from yfinance. A pre-v223 row has no field and reads "—"."""
+    return f"• Old IEX prints: {_rate(row.get('old_print_rate'))} of live-price asks"
+
+
 def provider_degraded_embed(row: dict, fallback_pct: float, empty_pct: float):
     """v148 O4: the newest scan breached a provider threshold."""
     fallback, empty = _provider_lines(row)
@@ -243,6 +249,7 @@ def provider_degraded_embed(row: dict, fallback_pct: float, empty_pct: float):
         f"{fallback}, alert above {fallback_pct:g}%\n"
         f"{empty}, alert above {empty_pct:g}%\n"
         f"• Stale symbols: {_value(row.get('stale_symbols'))}\n"
+        f"{_old_print_line(row)}\n"
         f"• Scan at: {_value(row.get('at'))}\n"
         "Scans continue: fallback tickers ran on yfinance data, empty ones were skipped."))
 
@@ -251,4 +258,5 @@ def provider_recovered_embed(row: dict):
     """v148 O4: a scan is back under both provider thresholds."""
     fallback, empty = _provider_lines(row)
     return system_embed(Kind.HEALTH_RECOVERED, "market-data provider healthy again",
-                        f"{fallback}\n{empty}\n• Scan at: {_value(row.get('at'))}")
+                        f"{fallback}\n{empty}\n{_old_print_line(row)}\n"
+                        f"• Scan at: {_value(row.get('at'))}")
