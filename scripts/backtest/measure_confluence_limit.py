@@ -91,8 +91,10 @@ def stage_path(out_dir, stage) -> Path:
     return Path(out_dir) / f"v212-stage{'M1' if stage == -1 else stage}.json"
 
 
-def rows_file(out_dir, kind, window_name, touch=False) -> Path:
-    return Path(out_dir) / f"v212-{kind}-{window_name}{'-touch' if touch else ''}-rows.json"
+def rows_file(out_dir, kind, window_name, touch=False, subset="") -> Path:
+    """`subset` ('-n5', '-f0.5') marks a smoke or one-cell run, so it can never
+    land on the measured file name a stage loads."""
+    return Path(out_dir) / f"v212-{kind}-{window_name}{'-touch' if touch else ''}{subset}-rows.json"
 
 
 def _previous(out_dir, stage) -> dict:
@@ -168,14 +170,24 @@ def build(kind, window, *, touch=False, cells=clr.F_GRID, tickers=None, workers=
 # --- CLI -------------------------------------------------------------------------
 
 def _cells(names) -> tuple:
-    return tuple(clr.F_GRID[clr.CELLS.index(name)] for name in names) if names else clr.F_GRID
+    """Grid order, no duplicates: the whole grid in any order is the full run."""
+    return tuple(f for f, key in zip(clr.F_GRID, clr.CELLS) if key in names) if names         else clr.F_GRID
+
+
+def _subset(tickers, cells) -> str:
+    """'' for the full measured population, else a suffix naming the subset."""
+    capped = f"-n{tickers}" if tickers else ""
+    picked = "" if cells == clr.F_GRID else "-" + "_".join(clr.cell_key(c) for c in cells)
+    return capped + picked
 
 
 def _cmd_build(args):
     touch = getattr(args, "touch", False)
-    rows = build(args.command, WINDOWS[args.window], touch=touch, cells=_cells(args.cells),
+    cells = _cells(args.cells)
+    rows = build(args.command, WINDOWS[args.window], touch=touch, cells=cells,
                  tickers=args.tickers, workers=args.workers, checkpoint_dir=args.checkpoint_dir)
-    target = rows_file(args.out, args.command, args.window, touch)
+    target = rows_file(args.out, args.command, args.window, touch,
+                       subset=_subset(args.tickers, cells))
     _write(target, rows, indent=None)
     print(f"{args.command} {args.window}: {len(rows)} rows -> {target}", flush=True)
     return 0

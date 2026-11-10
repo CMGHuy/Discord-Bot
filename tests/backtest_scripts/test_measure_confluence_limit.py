@@ -114,7 +114,7 @@ def test_the_cli_writes_the_rows_file(tmp_path, monkeypatch):
                      "--preregistration", "p.md", "--out", str(tmp_path)]) == 0
     assert (seen["kind"], seen["window"], seen["touch"]) == ("rows", mcl.TRAIN, True)
     assert list(seen["cells"]) == [0.5]
-    assert mcl._load(tmp_path / "v212-rows-train-touch-rows.json") == [{"ticker": "AAA"}]
+    assert mcl._load(tmp_path / "v212-rows-train-touch-f0.5-rows.json") == [{"ticker": "AAA"}]
 
 
 def test_the_cli_never_builds_validation_rows(monkeypatch):
@@ -127,8 +127,9 @@ def test_the_cli_never_builds_validation_rows(monkeypatch):
 
 def _git(repo, *args):
     import subprocess
-    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=repo,
-                   check=True, capture_output=True)
+    hermetic = ["-c", "user.name=v212-test", "-c", "user.email=v212@test.invalid",
+                "-c", "commit.gpgsign=false", "-c", "core.hooksPath="]
+    subprocess.run(["git", *hermetic, *args], cwd=repo, check=True, capture_output=True)
 
 
 def test_committed_reads_git_for_real(tmp_path, monkeypatch):
@@ -160,3 +161,68 @@ def test_a_torn_checkpoint_write_is_not_a_finished_ticker(tmp_path, monkeypatch)
                      worker=_fake_worker(calls))
     assert calls == ["AAA"] and rows[0]["ticker"] == "AAA"
     assert [p.name for p in folder.iterdir()] == ["AAA.json"]
+
+
+def _cli_run(tmp_path, monkeypatch, *extra):
+    monkeypatch.setattr(mcl, "require_preregistration", lambda path: None)
+    monkeypatch.setattr(mcl, "build", lambda kind, window, **kw: [{"ticker": "AAA"}])
+    assert mcl.main(["rows", "--window", "train", "--preregistration", "p.md",
+                     "--out", str(tmp_path), *extra]) == 0
+    return sorted(p.name for p in tmp_path.iterdir())
+
+
+def test_a_ticker_subset_never_writes_the_measured_rows_file(tmp_path, monkeypatch):
+    assert _cli_run(tmp_path, monkeypatch, "--tickers", "5") == ["v212-rows-train-n5-rows.json"]
+
+
+def test_a_cell_subset_never_writes_the_measured_rows_file(tmp_path, monkeypatch):
+    names = _cli_run(tmp_path, monkeypatch, "--touch", "--cells", "f0.5")
+    assert names == ["v212-rows-train-touch-f0.5-rows.json"]
+
+
+def test_a_full_run_writes_the_measured_rows_file(tmp_path, monkeypatch):
+    assert _cli_run(tmp_path, monkeypatch) == ["v212-rows-train-rows.json"]
+    every_cell = [*mcl.clr.CELLS]
+    assert _cli_run(tmp_path / "all", monkeypatch, "--cells", *every_cell[::-1])         == ["v212-rows-train-rows.json"]                        # the whole grid is no subset
+
+
+def test_worker_passes_cells_and_touch_only_to_rows(monkeypatch):
+    import measure_arms
+    seen = {}
+
+    def kind(name):
+        def call(ticker, frame, horizons, window, **kw):
+            seen[name] = (ticker, frame, horizons, window, kw)
+            return [{"kind": name}]
+        return call
+
+    monkeypatch.setattr(mcl, "KINDS", {"census": kind("census"), "rows": kind("rows")})
+    monkeypatch.setattr(measure_arms, "load_frame", lambda t: None if t == "NONE" else f"frame-{t}")
+    cells = (0.5,)
+    assert mcl._worker(("census", "AAA", mcl.TRAIN, False, cells)) == ("AAA", [{"kind": "census"}])
+    assert mcl._worker(("rows", "BBB", mcl.TRAIN, True, cells)) == ("BBB", [{"kind": "rows"}])
+    assert seen["census"] == ("AAA", "frame-AAA", mcl.LEGACY_HORIZONS, mcl.TRAIN, {"cells": cells})
+    assert seen["rows"] == ("BBB", "frame-BBB", mcl.LEGACY_HORIZONS, mcl.TRAIN,
+                            {"cells": cells, "touch": True})
+    seen.clear()
+    assert mcl._worker(("rows", "NONE", mcl.TRAIN, False, cells)) == ("NONE", [])
+    assert seen == {}                                            # no frame: nothing replayed
+
+
+def _slow_first_worker(task):
+    """Module level so the process pool can pickle it; the first ticker
+    finishes last, so arrival order differs from ticker order."""
+    import os
+    import time
+    time.sleep(0.6 if task[1] == "AAA" else 0.0)
+    return task[1], [{"ticker": task[1], "pid": os.getpid()}]
+
+
+def test_a_pool_build_returns_ticker_order_and_checkpoints_all(tmp_path, monkeypatch):
+    monkeypatch.setattr(mcl, "universe", lambda: ["CCC", "AAA", "BBB"])
+    rows = mcl.build("rows", mcl.TRAIN, checkpoint_dir=tmp_path, workers=2,
+                     worker=_slow_first_worker)
+    assert [r["ticker"] for r in rows] == ["AAA", "BBB", "CCC"]
+    import os
+    assert os.getpid() not in {r["pid"] for r in rows}            # really ran in the pool
+    assert sorted(p.name for p in tmp_path.rglob("*.json")) == ["AAA.json", "BBB.json", "CCC.json"]
