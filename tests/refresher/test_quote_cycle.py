@@ -87,6 +87,24 @@ def test_scan_running_skips_yfinance_and_the_yahoo_tape(cycle, monkeypatch):
     assert ("clear", ("quote:BAD",), "no quote (yfinance fallback skipped during a scan)") in marks.events
 
 
+def test_scan_running_keeps_yfinance_for_held_symbols_only(cycle, monkeypatch):
+    marks, _published, batches, _tapes = cycle
+    monkeypatch.setattr(loop, "_scan_running", lambda: True)
+    monkeypatch.setattr(loop, "symbol_set",
+                        lambda: SymbolSet(("AAPL", "BAD", "YF"), ("^GSPC",), ("BAD", "YF")))
+    loop.run_cycle(REGULAR)
+    assert batches == [(["BAD", "YF"], 150), (["AAPL"], 0)]
+    # BAD is held and still missed: a plain miss, not "skipped during a scan".
+    assert ("clear", ("quote:BAD",), "no quote") in marks.events
+
+
+def test_scan_running_with_nothing_held_makes_one_batch_without_yfinance(cycle, monkeypatch):
+    _marks, _published, batches, _tapes = cycle
+    monkeypatch.setattr(loop, "_scan_running", lambda: True)
+    loop.run_cycle(REGULAR)
+    assert batches == [(["AAPL", "BAD", "YF"], 0)]
+
+
 def test_nothing_to_do_publishes_nothing(cycle, monkeypatch):
     _marks, published, batches, _tapes = cycle
     monkeypatch.setattr(loop, "symbol_set", lambda: SymbolSet((), ()))

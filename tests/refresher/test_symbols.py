@@ -10,6 +10,7 @@ def test_union_is_upper_cased_deduped_sorted_and_the_tape_is_separate(monkeypatc
     got = symbols.symbol_set()
     assert got.quotes == ("AAPL", "MSFT", "NVDA", "XAUUSD")
     assert got.index == tuple(tape.TAPE_FIXED)
+    assert got.held == ("AAPL", "MSFT", "NVDA")      # the watchlist-only XAUUSD is not held
 
 
 def test_empty_book_still_refreshes_the_tape(monkeypatch):

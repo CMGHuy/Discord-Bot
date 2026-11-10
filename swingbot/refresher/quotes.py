@@ -70,7 +70,10 @@ def _mark(ctx: "CycleContext", keys: list[str]):
 
 def _settle(ctx: "CycleContext", marks, ok: list[str], missed: list[str]) -> None:
     marks.clear(_keys(ok), now=ctx.now)
-    marks.clear(_keys(missed), error=_miss_reason(ctx), now=ctx.now)
+    held = set(ctx.symbols.held)
+    # A held symbol did get its yfinance try during a scan, so its miss is a plain miss.
+    marks.clear(_keys([s for s in missed if s in held]), error=NO_QUOTE, now=ctx.now)
+    marks.clear(_keys([s for s in missed if s not in held]), error=_miss_reason(ctx), now=ctx.now)
 
 
 def quote_step(ctx: "CycleContext") -> None:
@@ -81,12 +84,27 @@ def quote_step(ctx: "CycleContext") -> None:
         _refresh_index(ctx, list(ctx.symbols.index))
 
 
+def _fetch_batches(ctx: "CycleContext", wanted: list[str]) -> dict:
+    """Outside a scan: one batch with the whole yfinance budget. During a scan the
+    watchlist gets no yfinance, but symbols with an open trade or plan keep the
+    budget -- an ACTIVE position must not sit unpriced until the scan ends."""
+    cap = int(config.ADMIN_REFRESH_YF_FALLBACK_CAP)
+    if not ctx.scan_running:
+        return data.refresh_quote_batch(wanted, yf_limit=cap)
+    held_set = set(ctx.symbols.held)
+    held = [s for s in wanted if s in held_set]
+    rest = [s for s in wanted if s not in held_set]
+    got = data.refresh_quote_batch(held, yf_limit=cap) if held else {}
+    if rest:
+        got.update(data.refresh_quote_batch(rest, yf_limit=0))
+    return got
+
+
 def _refresh_quotes(ctx: "CycleContext", wanted: list[str]) -> None:
     keys = _keys(wanted)
     marks = _mark(ctx, keys)
-    limit = 0 if ctx.scan_running else int(config.ADMIN_REFRESH_YF_FALLBACK_CAP)
     try:
-        got = data.refresh_quote_batch(wanted, yf_limit=limit)
+        got = _fetch_batches(ctx, wanted)
     except Exception as exc:
         marks.clear(keys, error=_describe(exc), now=ctx.now)
         raise                                   # loop records it; last values stay cached
