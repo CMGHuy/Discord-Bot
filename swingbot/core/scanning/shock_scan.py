@@ -36,7 +36,8 @@ _NO_VIX = shock.VixTape(None, None, None)
 #: retention, read by loops._prune_shock_readings, not a threshold.
 THRESHOLD_ATTRS = {
     "atr_k": "SHOCK_ATR_K", "breadth_enter": "SHOCK_BREADTH_ENTER",
-    "sectors_frac": "SHOCK_SECTORS_FRAC", "breadth_fast": "SHOCK_BREADTH_FAST",
+    "depth_frac": "SHOCK_DEPTH_FRAC", "breadth_majority": "SHOCK_BREADTH_MAJORITY",
+    "breadth_fast": "SHOCK_BREADTH_FAST",
     "speed_enter": "SHOCK_SPEED_ENTER", "vix_spike_pct": "SHOCK_VIX_SPIKE_PCT",
     "vix_relief": "SHOCK_VIX_RELIEF", "breadth_reenter": "SHOCK_BREADTH_REENTER",
     "breadth_exit": "SHOCK_BREADTH_EXIT",

@@ -12,7 +12,8 @@ V209_FIELDS = {
     "MARKET_SHOCK_MODE": ("select", "shadow"),
     "SHOCK_ATR_K": ("float", "1.0"),
     "SHOCK_BREADTH_ENTER": ("float", "0.40"),
-    "SHOCK_SECTORS_FRAC": ("float", "0.6"),
+    "SHOCK_DEPTH_FRAC": ("float", "0.50"),
+    "SHOCK_BREADTH_MAJORITY": ("float", "0.50"),
     "SHOCK_BREADTH_FAST": ("float", "0.25"),
     "SHOCK_SPEED_ENTER": ("float", "0.10"),
     "SHOCK_VIX_SPIKE_PCT": ("float", "15.0"),
@@ -33,7 +34,8 @@ V209_FIELDS = {
 #: The value each default casts to (spec § Starting thresholds, verbatim).
 CAST_DEFAULTS = {
     "MARKET_SHOCK_MODE": "shadow",
-    "SHOCK_ATR_K": 1.0, "SHOCK_BREADTH_ENTER": 0.40, "SHOCK_SECTORS_FRAC": 0.6,
+    "SHOCK_ATR_K": 1.0, "SHOCK_BREADTH_ENTER": 0.40,
+    "SHOCK_DEPTH_FRAC": 0.50, "SHOCK_BREADTH_MAJORITY": 0.50,
     "SHOCK_BREADTH_FAST": 0.25, "SHOCK_SPEED_ENTER": 0.10, "SHOCK_VIX_SPIKE_PCT": 15.0,
     "SHOCK_VIX_RELIEF": 0.05, "SHOCK_BREADTH_REENTER": 0.30, "SHOCK_BREADTH_EXIT": 0.20,
     "RECOVERY_VIX_OFF_HIGH_PCT": 5.0, "RECOVERY_SPY_RETRACE": 0.5,
@@ -47,9 +49,26 @@ def _field(attr):
     return next(f for f in config.FIELDS if f.attr == attr)
 
 
-def test_nineteen_fields_one_mode_plus_eighteen_thresholds():
-    assert len(V209_FIELDS) == 19
+def test_twenty_fields_one_mode_plus_nineteen_thresholds():
+    # A1: SHOCK_SECTORS_FRAC removed, SHOCK_DEPTH_FRAC and SHOCK_BREADTH_MAJORITY added
+    assert len(V209_FIELDS) == 20
     assert set(V209_FIELDS) == set(CAST_DEFAULTS)
+
+
+def test_sectors_frac_is_gone_from_the_schema_and_the_example():
+    assert not any(f.attr == "SHOCK_SECTORS_FRAC" for f in config.FIELDS)
+    assert all("SHOCK_SECTORS_FRAC" not in (f.help or "") for f in config.FIELDS)
+    assert "SHOCK_SECTORS_FRAC" not in (REPO / ".env.example").read_text(encoding="utf-8")
+
+
+def test_a_stale_sectors_frac_env_key_is_ignored(monkeypatch):
+    monkeypatch.setenv("SHOCK_SECTORS_FRAC", "0.6")
+    try:
+        config._apply_env()
+        assert config.SHOCK_DEPTH_FRAC == 0.50 and config.SHOCK_BREADTH_MAJORITY == 0.50
+    finally:
+        monkeypatch.undo()
+        config._apply_env()
 
 
 @pytest.mark.parametrize("attr", sorted(V209_FIELDS))

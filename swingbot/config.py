@@ -1581,14 +1581,21 @@ FIELDS: list[Field] = [
           type="float", default="1.0", min=0.25, max=5.0, step=0.25,
           help="v209. A name counts as 'down' when (last - prior close) / ATR14 <= -this."),
     Field("SHOCK_BREADTH_ENTER", "SHOCK_BREADTH_ENTER", "Market Shock",
-          "Breadth to enter SHOCK (with sector depth)",
+          "Breadth to enter SHOCK (with weighted depth)",
           type="float", default="0.40", min=0.05, max=1.0, step=0.05,
-          help="v209. NORMAL -> SHOCK when this share of watchlist equities is down and at "
-               "least SHOCK_SECTORS_FRAC of the sectors are down, on two consecutive readings."),
-    Field("SHOCK_SECTORS_FRAC", "SHOCK_SECTORS_FRAC", "Market Shock",
-          "Share of sectors that must be down",
-          type="float", default="0.6", min=0.1, max=1.0, step=0.05,
-          help="v209. Sectors down needed = ceil(this x sectors with >= 2 contributing names)."),
+          help="v209 A1. NORMAL -> SHOCK when this share of watchlist equities is down and at "
+               "least SHOCK_DEPTH_FRAC of the sectored names sit in down sectors, on two "
+               "consecutive readings."),
+    Field("SHOCK_DEPTH_FRAC", "SHOCK_DEPTH_FRAC", "Market Shock",
+          "Share of sectored names in down sectors",
+          type="float", default="0.50", min=0.05, max=1.0, step=0.05,
+          help="v209 A1. Names in sectors with >= 2 contributing members whose median move is "
+               "down, over all names in such sectors. Frozen at 0.50 by the A1 pre-registration."),
+    Field("SHOCK_BREADTH_MAJORITY", "SHOCK_BREADTH_MAJORITY", "Market Shock",
+          "Breadth to enter SHOCK on its own",
+          type="float", default="0.50", min=0.05, max=1.0, step=0.05,
+          help="v209 A1. NORMAL -> SHOCK when this share of watchlist equities is down on two "
+               "consecutive readings, with no depth or speed needed. Frozen at 0.50 by A1."),
     Field("SHOCK_BREADTH_FAST", "SHOCK_BREADTH_FAST", "Market Shock",
           "Breadth to enter SHOCK (fast path)",
           type="float", default="0.25", min=0.05, max=1.0, step=0.05,
@@ -1601,12 +1608,12 @@ FIELDS: list[Field] = [
     Field("SHOCK_VIX_SPIKE_PCT", "SHOCK_VIX_SPIKE_PCT", "Market Shock",
           "VIX day change that eases entry (%)",
           type="float", default="15.0", min=0, max=200, step=1,
-          help="v209. A ^VIX day change at or above this lowers both entry breadth bars by "
+          help="v209. A ^VIX day change at or above this lowers every entry breadth bar by "
                "SHOCK_VIX_RELIEF. VIX never triggers SHOCK on its own."),
     Field("SHOCK_VIX_RELIEF", "SHOCK_VIX_RELIEF", "Market Shock",
           "Breadth relief on a VIX spike",
           type="float", default="0.05", min=0, max=0.5, step=0.01,
-          help="v209. Subtracted from SHOCK_BREADTH_ENTER and SHOCK_BREADTH_FAST on a VIX spike."),
+          help="v209. Subtracted from SHOCK_BREADTH_ENTER, SHOCK_BREADTH_MAJORITY and SHOCK_BREADTH_FAST on a VIX spike (never from SHOCK_DEPTH_FRAC)."),
     Field("SHOCK_BREADTH_REENTER", "SHOCK_BREADTH_REENTER", "Market Shock",
           "Breadth to re-enter SHOCK from RECOVERY",
           type="float", default="0.30", min=0.05, max=1.0, step=0.05,

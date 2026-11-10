@@ -42,11 +42,16 @@ def test_mode_reads_config_and_anything_unknown_is_off(monkeypatch, raw, mode):
 
 def test_thresholds_map_every_field_and_keep_ints_int(monkeypatch):
     assert set(shock_scan.THRESHOLD_ATTRS) == {f.name for f in fields(shock.ShockThresholds)}
-    assert len(set(shock_scan.THRESHOLD_ATTRS.values())) == 17
+    assert len(set(shock_scan.THRESHOLD_ATTRS.values())) == 18
     monkeypatch.setattr(config, "SHOCK_ATR_K", 1.5)
     monkeypatch.setattr(config, "SHOCK_MIN_NAMES", 7.0)
     th = shock_scan.thresholds_from_config()
     assert th.atr_k == 1.5 and th.min_names == 7 and isinstance(th.min_names, int)
+    assert "SHOCK_SECTORS_FRAC" not in shock_scan.THRESHOLD_ATTRS.values()
+    monkeypatch.setattr(config, "SHOCK_DEPTH_FRAC", 0.55)
+    monkeypatch.setattr(config, "SHOCK_BREADTH_MAJORITY", 0.6)
+    th = shock_scan.thresholds_from_config()
+    assert (th.depth_frac, th.breadth_majority) == (0.55, 0.6)
 
 
 @pytest.mark.parametrize("step_shock,mode,now,expected", [
