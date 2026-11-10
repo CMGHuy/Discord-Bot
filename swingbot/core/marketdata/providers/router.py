@@ -22,12 +22,14 @@ from swingbot.core.marketdata import spot_metals
 from swingbot.core.marketdata.providers.alpaca_provider import (
     ROWS_PER_PAGE, AlpacaAuthError, AlpacaMiss, AlpacaProvider, symbols_per_request)
 from swingbot.core.marketdata.providers.base import (
-    SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_SPOT, SOURCE_YF, is_alpaca_eligible)
+    SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_OLD_PRINT, SOURCE_SPOT, SOURCE_YF,
+    is_alpaca_eligible)
 from swingbot.core.marketdata.shared import budget
 from swingbot.core.marketdata.shared.kinds import PROVIDER_ALPACA, Asker, QuoteDetail
 
 log = logging.getLogger(__name__)
-_QUOTE_METHODS = frozenset({"latest_prices", "latest_quotes"})
+_QUOTE_METHODS = frozenset({"latest_prices", "latest_quotes",
+                            "latest_price_answers", "latest_quote_answers"})
 _provider_factory = AlpacaProvider
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="alpaca")
 # Quotes get their own workers: a slow bulk-bars call must never starve the
@@ -114,7 +116,7 @@ _provider = None
 _provider_key = None
 _last_source: dict = {}
 _spot_miss: dict = {}
-_stats = {"alpaca": 0, "yfinance": 0, "fallback": 0, "failures": 0}
+_stats = {"alpaca": 0, "yfinance": 0, "fallback": 0, "old_print": 0, "failures": 0}
 _ASKER: contextvars.ContextVar = contextvars.ContextVar("marketdata_asker", default=Asker.SCAN)
 #: v171: process-local memo of the shared breaker; at most one read per second.
 _SHARED_BREAKER_MEMO_S = 1.0
@@ -344,6 +346,55 @@ def _log_fallback(kind: str, symbols) -> None:
                   kind, len(symbols), ", ".join(list(symbols)[:10]))
 
 
+def _log_unpriced(kind: str, unpriced: list, old: frozenset) -> None:
+    """DEBUG lines keeping real misses and v223 old prints apart."""
+    _log_fallback(kind, [t for t in unpriced if t not in old])
+    if old:
+        log.debug("Alpaca %s: old IEX print for %d symbol(s), re-asked from yfinance: %s",
+                  kind, len(old), ", ".join(sorted(old)[:10]))
+
+
+def _ask_alpaca(kind: str, wanted: list) -> tuple[dict, frozenset]:
+    """v223: Alpaca's live answer for `wanted` plus the tickers it answered
+    with an old print. `kind` is "price" or "quote". Uses
+    latest_<kind>_answers when the active provider has it; without it, or on
+    a failed call, the old-print set is empty so every unpriced symbol counts
+    as a miss -- this can over-report failures, never hide one."""
+    if not wanted:
+        return {}, frozenset()
+    age = int(config.ALPACA_MAX_TRADE_AGE_SECONDS)
+    answers = f"latest_{kind}_answers"
+    if hasattr(_active_provider(), answers):
+        result = _attempt(answers, wanted, age)
+        return (result[0] or {}, frozenset(result[1])) if result is not None else ({}, frozenset())
+    return _attempt(f"latest_{kind}s", wanted, age) or {}, frozenset()
+
+
+def _unpriced(wanted: list, priced, old: frozenset) -> tuple[list, frozenset]:
+    """Eligible tickers with no Alpaca price, in `wanted` order, and the old
+    prints among them."""
+    unpriced = [t for t in wanted if t not in priced]
+    return unpriced, frozenset(t for t in unpriced if t in old)
+
+
+def _yf_answers(yf_fetch, rest: list, unpriced: list, old: frozenset) -> dict:
+    """yfinance for the non-eligible group and the unpriced group (one call
+    each, as before v223); tags each answered ticker's source."""
+    fetched_rest = yf_fetch(rest) if rest else {}
+    fetched_unpriced = yf_fetch(unpriced) if unpriced else {}
+    _last_source.update({t: SOURCE_YF for t in fetched_rest})
+    _last_source.update({t: SOURCE_OLD_PRINT if t in old else SOURCE_FALLBACK
+                         for t in fetched_unpriced})
+    return {**fetched_rest, **fetched_unpriced}
+
+
+def _count_live(n_alpaca: int, n_rest: int, unpriced: list, old: frozenset) -> None:
+    _stats["alpaca"] += n_alpaca
+    _stats["yfinance"] += n_rest
+    _stats["old_print"] += len(old)
+    _stats["fallback"] += len(unpriced) - len(old)
+
+
 def _merge(alpaca: dict, rest: list, misses: list, fetch) -> dict:
     out = _tag(dict(alpaca), SOURCE_ALPACA)
     out.update(_tag(fetch(rest), SOURCE_YF) if rest else {})
@@ -445,19 +496,13 @@ def daily_bars_between(tickers, start, end) -> dict:
 def latest_prices(tickers, yf_fetch):
     spot, tickers = spot_metals.split_spot(tickers)
     wanted, rest = _split(tickers)
-    got = (_attempt("latest_prices", wanted,
-                    int(config.ALPACA_MAX_TRADE_AGE_SECONDS)) or {}) if wanted else {}
-    misses = [t for t in wanted if t not in got]
-    _log_fallback("latest_prices", misses)
+    got, old_set = _ask_alpaca("price", wanted)
+    unpriced, old = _unpriced(wanted, got, old_set)
+    _log_unpriced("latest_prices", unpriced, old)
     out = dict(got)
-    for group, source in ((rest, SOURCE_YF), (misses, SOURCE_FALLBACK)):
-        fetched = yf_fetch(group) if group else {}
-        out.update(fetched)
-        _last_source.update({t: source for t in fetched})
+    out.update(_yf_answers(yf_fetch, rest, unpriced, old))
     _last_source.update({t: SOURCE_ALPACA for t in got})
-    _stats["alpaca"] += len(got)
-    _stats["yfinance"] += len(rest)
-    _stats["fallback"] += len(misses)
+    _count_live(len(got), len(rest), unpriced, old)
     out.update(_spot_prices(spot))
     return out
 
@@ -486,23 +531,19 @@ def _spot_quotes(spot) -> dict:
 def latest_quotes(tickers, yf_fetch):
     """v171: latest_prices' routing with timestamps. A symbol whose Alpaca
     answer has no fresh trade price is re-asked from yfinance, keeping the
-    Alpaca bid/ask on the merged detail."""
+    Alpaca bid/ask on the merged detail; v223 tags an old print
+    yfinance-old-print and a real miss yfinance-fallback."""
     spot, tickers = spot_metals.split_spot(tickers)
     wanted, rest = _split(tickers)
-    got = (_attempt("latest_quotes", wanted,
-                    int(config.ALPACA_MAX_TRADE_AGE_SECONDS)) or {}) if wanted else {}
+    got, old_set = _ask_alpaca("quote", wanted)
     priced = {t: q for t, q in got.items() if q.price is not None}
-    misses = [t for t in wanted if t not in priced]
-    _log_fallback("latest_quotes", misses)
+    unpriced, old = _unpriced(wanted, priced, old_set)
+    _log_unpriced("latest_quotes", unpriced, old)
     out = dict(got)
-    for group, source in ((rest, SOURCE_YF), (misses, SOURCE_FALLBACK)):
-        fetched = yf_fetch(group) if group else {}
-        out.update({t: _with_alpaca_quote(q, got.get(t)) for t, q in fetched.items()})
-        _last_source.update({t: source for t in fetched})
+    fetched = _yf_answers(yf_fetch, rest, unpriced, old)
+    out.update({t: _with_alpaca_quote(q, got.get(t)) for t, q in fetched.items()})
     _last_source.update({t: SOURCE_ALPACA for t in priced})
-    _stats["alpaca"] += len(priced)
-    _stats["yfinance"] += len(rest)
-    _stats["fallback"] += len(misses)
+    _count_live(len(priced), len(rest), unpriced, old)
     out.update(_spot_quotes(spot))
     return out
 

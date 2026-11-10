@@ -20,16 +20,18 @@ code around it.
 
 ## Checklist
 
-- Every function the diff writes or changes is under the limit in `docs/claude/code-complexity.md` (`python -m radon cc -s -n C <files>`); a legacy function already over it got no worse.
+- Every function the diff writes or changes is under the limit in `docs/claude/code-complexity.md` (`scripts/dev/complexity_gate.py` enforces the limit; `python -m radon cc -s -n C <files>` is for iterating); a legacy function already over it got no worse.
 - A refactor changes no behaviour (`code-complexity.md` § A refactor must not change behaviour).
 - Tests came first and failed for the right reason; each asserts behaviour, not implementation.
+- Mutating the fix (reverting the changed line or flipping its condition) makes its test fail; a test that still passes proves nothing.
 - The narrow run (`python scripts/dev/testrun.py file <test>`) passes and its verdict line is quoted; "should pass" is not evidence.
-- Wiring lands where it takes effect: sizing and embed fields in `swingbot/core/scanning/engine.py`, not the posting path in `swingbot/commands/scanning.py` (`.claude/skills/task-brief/SKILL.md` step 3b).
-- Embed fields go through the `sections["headline"]` accumulator in `swingbot/core/scanning/embeds.py`, never a raw `add_field`.
+- A new test file sits in a `tests/` directory that belongs to exactly one suite in `tests/suites.toml`; a new directory joins one in the same commit.
+- A change under `frontend/` ships its own Vitest specs, run with `npx ng test --watch=false --include <spec>` from `frontend/`.
+- Wiring lands where it takes effect: sizing and embed fields in the alert loops before `build_embed()` (`swingbot/core/scanning/scan_run.py`, `short_run.py`, `outlook_run.py`), not the posting package `swingbot/commands/scanning/` (`.claude/skills/task-brief/SKILL.md` step 3b).
+- Embed fields go through the `sections["headline"]` accumulator in `swingbot/core/scanning/alert_embeds.py`, never a raw `add_field`.
 - No silent no-op: no call into a removed shim or an unwired function (`docs/claude/known-traps.md`).
 - Names, error handling and structure match the surrounding module; an existing helper is reused rather than re-written.
 - A stored record changes shape only per `docs/claude/schema-evolution.md`, with no read-time upcasting.
-- Every symbol the brief names exists (`git grep -n`), or the task that creates it is named.
 - No dead code, debug prints or commented-out blocks remain.
 - The edge cases the brief names (empty frame, missing ticker, NaN) each have a test.
 
@@ -51,6 +53,7 @@ code around it.
 Should fire: reviewing one plan task's diff for complexity and test quality.
 Should fire: asking whether a refactor of `scanning/engine.py` preserves behaviour.
 Should fire: checking that a new helper reads like the module around it.
+Should fire: reviewing a task diff that changes an Angular component but adds no spec file.
 Should not fire: reviewing a schema migration's rollback plan.
 Should not fire: checking whether a backtest reads the right OHLCV cache.
 Should not fire: asking whether an alert is tradeable at the open.

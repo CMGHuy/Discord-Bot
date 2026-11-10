@@ -35,6 +35,7 @@ from flask import jsonify, request
 
 from swingbot import config
 from swingbot.admin import dashboard as dash
+from swingbot.admin.queries import analytics_snapshot_read
 from swingbot.core.planning.plan_engine import DEFAULT_EXPIRY_BARS
 from swingbot.core.tracking.performance import TradeLog, expand_realized_legs
 from swingbot.core.marketdata import fx_convert
@@ -46,20 +47,6 @@ from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
 from .money import convert_amount, missing_count, to_account_currency
 
 
-#: v201: with the refresher on, the sparkline reads the snapshot at any age
-#: (the bot's scan loop keeps it fresh) and never rebuilds it on a request.
-_ANY_AGE_S = 10**9
-
-
-def _equity_snapshot():
-    from swingbot.core.analytics.snapshots import load_snapshot
-    from swingbot.core.marketdata.shared import admin_refresh
-    if admin_refresh.refresher_on():
-        return load_snapshot(max_age_seconds=_ANY_AGE_S)
-    from swingbot.core.analytics.snapshots import refresh_snapshot
-    return load_snapshot(max_age_seconds=3600) or refresh_snapshot()
-
-
 def _equity_30d() -> dict:
     """The last 30 balance points, raw, plus the window's change.
 
@@ -67,20 +54,20 @@ def _equity_30d() -> dict:
     before the SVG: the SPA gets the series and draws it itself.
     """
     try:
-        snap = _equity_snapshot()
+        snap, meta = analytics_snapshot_read()
         points = [
             p["balance"]
             for p in ((snap or {}).get("equity_curve") or {}).get("points", [])[-30:]
         ]
     except Exception:
-        points = []
+        points, meta = [], None
 
     first = points[0] if points else None
     change = (
         round((points[-1] - first) / first * 100.0, 2)
         if first else None
     )
-    return {"points": points, "change_pct": change}
+    return {"points": points, "change_pct": change, "market_meta": meta}
 
 
 def _risk_figures(all_trades: list[dict]) -> dict:
@@ -370,6 +357,40 @@ def _open_figures(all_trades: list[dict], account_cfg: dict) -> dict:
     }
 
 
+#: v217 P3-a: the scopes whose response also carries today's figures. Not
+#: `active` or `today`: their own `realized`/`lifecycle` already are today's,
+#: and their frozen goldens (tests/admin_perf/golden/dashboard*.json) must stay
+#: byte-identical. The SPA sends only today/all/range (`scopeToRequest`).
+_TODAY_BLOCK_MODES = ("all", "range")
+
+
+def _today_block(all_raw: list[dict]) -> dict:
+    """Today's `realized` and `lifecycle`, from the trades the request loaded.
+
+    Exactly what `?mode=today` answers for those two keys (same helpers, mode
+    `"today"`, no window), so a wider-scope Dashboard needs no second request
+    for its "today" card. `all_raw` is reused: never a second `get_trades`.
+    `_lifecycle_counts` re-reads plans and the journal, which `@read_scope`
+    serves from the request's memo.
+
+    A day with no closes is a measured zero (`n: 0`, amounts `None`), never a
+    missing block: the SPA reads absence as "older backend, fetch it".
+    """
+    from swingbot.core.tracking.ledger import is_main
+    return {
+        "realized": _realized(_realized_parts([t for t in all_raw if is_main(t)], "today")),
+        "lifecycle": _lifecycle_counts("today", all_raw),
+    }
+
+
+def _today_field(mode: str, all_raw: list[dict]) -> dict:
+    """`{"today": ...}` for the wider scopes, `{}` otherwise; spread into the
+    response so `dashboard()` gains one call and no branch."""
+    if mode not in _TODAY_BLOCK_MODES:
+        return {}
+    return {"today": _today_block(all_raw)}
+
+
 @api_v1.route("/dashboard", methods=["GET"])
 @require_auth
 @read_scope
@@ -427,4 +448,6 @@ def dashboard():
         "fx_missing_count": open_missing + realized["fx_missing_count"],
         "realized_weak": _realized(
             _realized_parts([t for t in all_raw if is_weak(t)], mode, window)),
+        # v217 P3-a: today's figures ride a wider-scope response (all/range).
+        **_today_field(mode, all_raw),
     })

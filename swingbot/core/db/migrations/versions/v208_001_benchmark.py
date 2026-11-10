@@ -5,14 +5,14 @@ and two new tables. Rollback is this revision's downgrade; leaving them after a
 code rollback is also safe (the old code never reads them).
 
 Revision ID: v208_001
-Revises: v207_001
+Revises: v209_001
 """
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "v208_001"
-down_revision = "v207_001"
+down_revision = "v209_001"
 branch_labels = None
 depends_on = None
 

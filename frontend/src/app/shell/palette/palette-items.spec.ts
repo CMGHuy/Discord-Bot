@@ -23,7 +23,7 @@ const trade = (id: string, symbol: string, status: string, created_at: string | 
 
 const labels = (items: readonly PaletteItem[]) => items.map((item) => item.label);
 /** The nav model's pages in rail order: each section, or a single page. */
-const RAIL = ['Dashboard', 'Watchlist', 'Book', 'Calendar', 'Cancels', 'Risk',
+const RAIL = ['Dashboard', 'Watchlist', 'Book', 'Calendar', 'Risk',
   'Analytics', 'Research', 'Reports', 'Health', 'Versions'];
 
 describe('palette items (v195 §3.1)', () => {
@@ -39,7 +39,7 @@ describe('palette items (v195 §3.1)', () => {
 
   it('routes every page to a path of the nav model, never a pre-v202 one', () => {
     expect(pageItems().filter((item) => !item.queryParams).map((item) => item.route)).toEqual([
-      '/dashboard', '/watchlist', '/trades', '/trades/calendar', '/trades/cancels', '/risk',
+      '/dashboard', '/watchlist', '/trades', '/trades/calendar', '/risk',
       '/insights/analytics', '/insights/research', '/insights/reports', '/system', '/system/versions',
     ]);
   });
@@ -53,7 +53,7 @@ describe('palette items (v195 §3.1)', () => {
       .toMatchObject({ route: '/system', queryParams: { tab: 'logs' }, sub: 'System' });
     expect(TAB_PAGES.map((item) => `${item.route}?tab=${item.queryParams!['tab']}`)).toEqual([
       '/insights/analytics?tab=attribution', '/insights/analytics?tab=execution', '/insights/analytics?tab=edge',
-      '/insights/analytics?tab=pipeline', '/insights/analytics?tab=tuning', '/insights/analytics?tab=partials',
+      '/insights/analytics?tab=pipeline', '/insights/analytics?tab=tuning', '/insights/analytics?tab=partials', '/insights/analytics?tab=cancels',
       '/insights/reports?tab=gates',
       '/system?tab=scan', '/system?tab=providers', '/system?tab=logs',
       '/watchlist?tab=earnings',

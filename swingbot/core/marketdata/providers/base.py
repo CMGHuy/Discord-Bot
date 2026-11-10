@@ -12,8 +12,17 @@ NY = ZoneInfo("America/New_York")
 SOURCE_ALPACA = "alpaca"
 SOURCE_YF = "yfinance"
 SOURCE_FALLBACK = "yfinance-fallback"
+#: v223: Alpaca's last IEX trade is older than ALPACA_MAX_TRADE_AGE_SECONDS
+#: while the tape is open outside the regular session, so yfinance was asked
+#: on purpose. Not an Alpaca failure: telemetry.fallback_rate never counts it.
+SOURCE_OLD_PRINT = "yfinance-old-print"
 SOURCE_SPOT = "spot"                 # v109: gold-api.com live spot quote
 SOURCE_SPOT_SCALED = "spot-scaled"   # v109: futures bars x live spot ratio
+
+#: v223: every tag the live-price router path writes to last_source for an
+#: Alpaca-eligible or plain-yfinance ticker. fetch's price buckets are built
+#: from it, so a new tag can never fall silently into "none".
+PRICE_SOURCES = (SOURCE_ALPACA, SOURCE_YF, SOURCE_FALLBACK, SOURCE_OLD_PRINT)
 
 _US_SHAPE = re.compile(r"^[A-Z]{1,5}(-[A-Z])?$")
 _COLS = {"open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"}

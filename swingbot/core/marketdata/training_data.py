@@ -269,13 +269,19 @@ def load_intraday(ticker: str, timeframe: str, session: str = "rth") -> pd.DataF
     return _cut(history_store.load(key, timeframe, session, store=sel.store), sel.until)
 
 
+#: v211: context-only files the idea screen keeps beside the ticker CSVs of a
+#: yfinance cache dir. Mirrors screen.context.CONTEXT_ONLY_STEMS (a test pins
+#: them equal); marketdata may not import the screen (test_import_guard.py).
+_CONTEXT_ONLY_STEMS = frozenset({"BREADTH_ATR1", "^VIX"})
+
+
 def available_tickers() -> list[str]:
     """Tickers the selected source can serve: the manifest's trainable tickers,
     or the file stems of the yfinance cache (safe names, as a glob gives them)."""
     sel = _selection()
     if sel.source == "yfinance":
         folder = backtest_cache.CACHE_DIR
-        return sorted(p.stem for p in folder.glob("*.csv")) if folder.is_dir() else []
+        return sorted(p.stem for p in folder.glob("*.csv") if p.stem not in _CONTEXT_ONLY_STEMS) if folder.is_dir() else []
     return sorted(t for t in (sel.manifest.get("tickers") or {}) if t not in sel.excluded)
 
 

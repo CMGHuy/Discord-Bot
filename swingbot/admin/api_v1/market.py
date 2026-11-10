@@ -803,6 +803,41 @@ def _tape_self_fetch(symbols: list[str]) -> threading.Thread | None:
     return thread
 
 
+def _iso(value):
+    return value.isoformat() if hasattr(value, "isoformat") else value
+
+
+def _shock_fields(state: dict, reading: dict) -> dict:
+    frac = reading.get("breadth_frac")
+    return {"label": state["label"], "since": _iso(state.get("since")),
+            "as_of": _iso(reading.get("as_of")),
+            "breadth_pct": None if frac is None else round(frac * 100, 1),
+            **{key: reading.get(key) for key in ("sectors_down", "sectors_total",
+                                                 "spy_atr_move", "qqq_atr_move",
+                                                 "vix_level", "vix_chg_pct")},
+            "vix_missing": reading.get("vix_level") is None}
+
+
+def _shock_block() -> dict | None:
+    """v210: the tape badge's market-shock state. None under `off`, before the
+    first stepped pass, or when the store cannot be read -- the tape never fails
+    on it. Read-only: the admin never steps the detector."""
+    from swingbot.core.db.repositories import market_shock
+    from swingbot.core.scanning.shock_scan import shock_mode
+
+    if shock_mode() == "off":
+        return None
+    try:
+        repo = market_shock.market_shock_repo()
+        state = repo.current_state()
+        reading = (repo.latest_reading() or {}) if state else {}
+    except Exception as exc:
+        swallowed(logging.getLogger(__name__), "ops.market.tape_shock", exc,
+                  "tape: market-shock state unreadable: %s", exc)
+        return None
+    return _shock_fields(state, reading) if state else None
+
+
 @api_v1.route("/market/tape", methods=["GET"])
 @require_auth
 def tape():
@@ -828,7 +863,7 @@ def tape():
     symbols = _tape_symbols(request.args.get("symbols", ""))
     as_of = datetime.now(timezone.utc).isoformat()
     if not symbols:
-        return jsonify({"as_of": as_of, "rows": []})
+        return jsonify({"as_of": as_of, "rows": [], "shock": _shock_block()})
 
     prices, changes, extras = _tape_quotes(symbols)
 
@@ -862,4 +897,4 @@ def tape():
             "sort_rank": rank,
             **extras.get(symbol, _NO_EXTRAS),
         })
-    return jsonify({"as_of": as_of, "rows": rows})
+    return jsonify({"as_of": as_of, "rows": rows, "shock": _shock_block()})

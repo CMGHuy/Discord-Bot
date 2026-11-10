@@ -58,7 +58,11 @@ function pendingApi(pending: Subject<EquityCandlesResponse>[]) {
 /** A signal-backed PreferencesStore fake: `update` really changes `values()`,
  *  so the store's tf/basis computeds and the onInit effect react to a write
  *  exactly as they do against the real store. */
-function setup(stored: Preferences = {}, api: { equityCandles: ReturnType<typeof vi.fn> } = okApi()) {
+/** Most specs below exercise the daily view, so they store it; the default
+ *  (nothing stored) is the hourly one and has its own spec. */
+const DAILY: Preferences = { 'dashboard.equity.tf': '1D' };
+
+function setup(stored: Preferences = DAILY, api: { equityCandles: ReturnType<typeof vi.fn> } = okApi()) {
   const prefs = signal<Preferences>(stored);
   const scan = signal(0);
   TestBed.configureTestingModule({
@@ -80,10 +84,11 @@ function setup(stored: Preferences = {}, api: { equityCandles: ReturnType<typeof
 }
 
 describe('EquityCandlesStore', () => {
-  it('loads daily mark-to-market candles when nothing is stored', () => {
-    const { api, store } = setup();
+  it('loads hourly mark-to-market candles when nothing is stored', () => {
+    const { api, store } = setup({});
     expect(api.equityCandles).toHaveBeenCalledTimes(1);
-    expect(api.equityCandles).toHaveBeenCalledWith('1D', 'mtm');
+    expect(api.equityCandles).toHaveBeenCalledWith('1H', 'mtm');
+    expect(store.tf()).toBe('1H');
     expect(store.data()?.candles).toEqual([CANDLE]);
     expect(store.loading()).toBe(false);
     expect(store.error()).toBeNull();
@@ -139,14 +144,14 @@ describe('EquityCandlesStore', () => {
 
   it('reports an error when the first load fails', () => {
     const api = { equityCandles: vi.fn().mockReturnValue(throwError(() => new Error('boom'))) };
-    const { store } = setup({}, api);
+    const { store } = setup(DAILY, api);
     expect(store.data()).toBeNull();
     expect(store.error()).toBe(EQUITY_CANDLES_ERROR);
   });
 
   it('drops the previous view candles while a new timeframe loads', () => {
     const pending: Subject<EquityCandlesResponse>[] = [];
-    const { store, tick } = setup({}, pendingApi(pending));
+    const { store, tick } = setup(DAILY, pendingApi(pending));
     pending[0].next(response('1D'));
     expect(store.data()?.tf).toBe('1D');
 
@@ -160,7 +165,7 @@ describe('EquityCandlesStore', () => {
 
   it('applies only the later of two overlapping loads', () => {
     const pending: Subject<EquityCandlesResponse>[] = [];
-    const { store } = setup({}, pendingApi(pending));
+    const { store } = setup(DAILY, pendingApi(pending));
     store.load();
     const stale = pending[0];
     const fresh = pending[1];
@@ -169,13 +174,13 @@ describe('EquityCandlesStore', () => {
     expect(store.data()?.candles[0].c).toBe(2);
   });
   it('starts with has_more from the first answer and the live edge in view', () => {
-    const { store } = setup({}, pagingApi());
+    const { store } = setup(DAILY, pagingApi());
     expect(store.hasMore()).toBe(true);
     expect([store.pageLoading(), store.pageError(), store.atLiveEdge()]).toEqual([false, false, true]);
   });
 
   it('pages 200 candles before the oldest one and prepends them', () => {
-    const { api, store } = setup({}, pagingApi());
+    const { api, store } = setup(DAILY, pagingApi());
     store.loadOlder();
     expect(api.equityCandles).toHaveBeenLastCalledWith('1D', 'mtm', 200, '2026-10-16');
     expect(store.data()?.candles).toEqual([OLDER, CANDLE]);
@@ -191,7 +196,7 @@ describe('EquityCandlesStore', () => {
 
   it('keeps one page in flight at a time', () => {
     const pending: Subject<EquityCandlesResponse>[] = [];
-    const { store } = setup({}, pendingApi(pending));
+    const { store } = setup(DAILY, pendingApi(pending));
     pending[0].next(response('1D', 'mtm', [CANDLE], true));
     store.loadOlder();
     store.loadOlder();
@@ -201,7 +206,7 @@ describe('EquityCandlesStore', () => {
 
   it('drops a page that answers after the timeframe changed', () => {
     const pending: Subject<EquityCandlesResponse>[] = [];
-    const { store, tick } = setup({}, pendingApi(pending));
+    const { store, tick } = setup(DAILY, pendingApi(pending));
     pending[0].next(response('1D', 'mtm', [CANDLE], true));
     store.loadOlder();
     store.setTimeframe('1H');
@@ -215,7 +220,7 @@ describe('EquityCandlesStore', () => {
 
   it('keeps the candles on a failed page, flags it, and clears the flag on retry', () => {
     let fail = true;
-    const { store } = setup({}, pagingApi(() =>
+    const { store } = setup(DAILY, pagingApi(() =>
       fail ? throwError(() => new Error('boom')) : of(response('1D', 'mtm', [OLDER], false))));
     store.loadOlder();
     expect(store.data()?.candles).toEqual([CANDLE]);
@@ -228,7 +233,7 @@ describe('EquityCandlesStore', () => {
 
   it('keeps paged history through a scan refresh and updates the newest candle', () => {
     const api = pagingApi();
-    const { store, scan, tick } = setup({}, api);
+    const { store, scan, tick } = setup(DAILY, api);
     store.loadOlder();
     const grown = { ...CANDLE, c: 10300 };
     api.equityCandles.mockImplementation(() => of(response('1D', 'mtm', [grown], true)));
@@ -240,7 +245,7 @@ describe('EquityCandlesStore', () => {
 
   it('drops an older page when a same-view refresh replaces disconnected history', () => {
     const pending: Subject<EquityCandlesResponse>[] = [];
-    const { api, store } = setup({}, pendingApi(pending));
+    const { api, store } = setup(DAILY, pendingApi(pending));
     pending[0].next(response('1D', 'mtm', [CANDLE], true));
     store.loadOlder();
     store.load();

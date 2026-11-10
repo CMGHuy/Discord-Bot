@@ -10,6 +10,9 @@ from swingbot.core.marketdata.shared import tape
 class SymbolSet:
     quotes: tuple[str, ...]
     index: tuple[str, ...]
+    # Open trades and open plans: money is (or may soon be) resting on these, so
+    # they keep a yfinance fallback even while a scan runs.
+    held: tuple[str, ...] = ()
 
 
 def _open_trade_tickers() -> list:
@@ -33,6 +36,6 @@ def _clean(tickers: Iterable) -> set[str]:
 
 
 def symbol_set() -> SymbolSet:
-    quotes = (_clean(_open_trade_tickers()) | _clean(_open_plan_tickers())
-              | _clean(_watchlist()))
-    return SymbolSet(tuple(sorted(quotes)), tuple(tape.TAPE_FIXED))
+    held = _clean(_open_trade_tickers()) | _clean(_open_plan_tickers())
+    quotes = held | _clean(_watchlist())
+    return SymbolSet(tuple(sorted(quotes)), tuple(tape.TAPE_FIXED), tuple(sorted(held)))

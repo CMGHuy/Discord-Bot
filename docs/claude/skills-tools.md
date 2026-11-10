@@ -215,8 +215,8 @@ refactor questions in the description).
 Moved verbatim from the root `CLAUDE.md` to keep it under 200 lines.
 
 **Repo tooling (`.claude/`):** `/task-brief <id>` extracts one plan task and
-preflights this repo's documented traps. `/gate` is the pre-commit
-verification gate. `.claude/hooks/guardrails.py` is a `PreToolUse` hook that
+preflights this repo's documented traps. `/gate` is the pre-push
+gate: complexity gate, `testrun.py changed`, frontend specs, scoped commits, then a CI watch. `.claude/hooks/guardrails.py` is a `PreToolUse` hook that
 **denies** the patterns this file forbids in prose — now including
 protected-branch deletion, closed-pre-registration knobs, re-runs of a
 screened idea and malformed spec/plan writes — and warns on bare
@@ -229,7 +229,7 @@ default, and `.mcp.json`'s context7 provider: `docs/claude/skills-tools.md`.
 
 ## Expert roles (v145)
 
-Nine role skills each hold one reviewer's lens, in four sections -- Lens,
+Ten role skills each hold one reviewer's lens, in four sections -- Lens,
 Checklist, Red flags, Out of scope -- and are model-invocable, so a review
 from one seat loads its checklist. The `expert-reviewer` agent applies one
 role to a target; `/panel` dispatches several, serially, and merges their
@@ -250,6 +250,7 @@ haiku -- reviewing means judging.
 | `staff-engineer` | opus | Cross-cutting design: seams, migrations, VM ops, blast radius, long-run cost |
 | `quant-engineer` | sonnet | Backtest and data plumbing: lookahead (loads `no-lookahead`), numerics, the OHLCV caches and the v162 training-data store, reproducibility |
 | `senior-engineer` | sonnet | Code-level quality, the complexity limit, reads like its surroundings; `task-reviewer` preloads it |
+| `ux-designer` | sonnet | The admin UI and Discord embeds as a person reads them on phone, tablet and desktop: layout at the three widths, pagers, empty states, embed truncation |
 
 ## Generator roles (v161)
 

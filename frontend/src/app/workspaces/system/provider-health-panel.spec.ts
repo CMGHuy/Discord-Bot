@@ -22,8 +22,8 @@ const ROW = {
 const HEALTH: SystemHealth = {
   providers: [
     { ...ROW, at: '2026-10-09T14:10:00+00:00', provider_fallback_rate: 0.25,
-      empty_symbols: 12, empty_rate: 0.08 },
-    ROW,
+      empty_symbols: 12, empty_rate: 0.08, old_print_rate: 0.42 },
+    { ...ROW, old_print_rate: null },
     { at: '2026-10-09T14:00:00+00:00', tickers: 150, provider_fallback_rate: null,
       stale_symbols: null, empty_symbols: null, empty_rate: null },
   ],
@@ -42,6 +42,14 @@ function render(health: SystemHealth | null, stale = false): HTMLElement {
 }
 
 describe('provider health formatting', () => {
+  it('renders the old-print rate, and a dash when it is null or missing (v223)', () => {
+    const lines = providerLines(HEALTH);
+
+    expect(lines[0].oldPrint).toBe('42.0%');
+    expect(lines[1].oldPrint).toBe('—');
+    expect(lines[2].oldPrint).toBe('—');
+  });
+
   it('renders a fraction as an unsigned one-decimal percentage', () => {
     expect(rateText(0.04)).toBe('4.0%');
     expect(rateText(0)).toBe('0.0%');
@@ -75,6 +83,27 @@ describe('provider health formatting', () => {
 });
 
 describe('ProviderHealthPanel', () => {
+  it('shows an Old prints column with its own hint and no breach mark (v223)', () => {
+    const el = render(HEALTH);
+    const headers = [...el.querySelectorAll('thead th')].map((th) => th.textContent ?? '');
+    const oldHeader = el.querySelectorAll('thead th')[4];
+
+    expect(headers).toHaveLength(6);
+    expect(headers[4]).toContain('Old prints');
+    expect(oldHeader.querySelector('[role="tooltip"]')!.textContent!.trim())
+      .toBe('Old IEX prints re-asked from yfinance, share of live-price asks');
+    const firstRow = el.querySelectorAll('tbody tr')[0].querySelectorAll('td');
+    expect(firstRow).toHaveLength(6);
+    expect(firstRow[4].textContent!.trim()).toBe('42.0%');
+    expect(firstRow[4].classList.contains('breach')).toBe(false);
+    expect(el.querySelectorAll('tbody tr')[2].querySelectorAll('td')[4].textContent!.trim()).toBe('—');
+  });
+
+  it('says the old-print rate is shown, not alerted on', () => {
+    expect(render(HEALTH).querySelector('.explain')!.textContent)
+      .toContain('share of live-price asks; it is shown here, not alerted on');
+  });
+
   beforeEach(() => TestBed.configureTestingModule({
     providers: [provideZonelessChangeDetection()],
   }));

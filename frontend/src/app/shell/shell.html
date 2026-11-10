@@ -75,6 +75,12 @@
         @if (session.isViewer()) {
           <sb-read-only-badge [username]="session.displayName()" [compact]="isPhone()" />
         }
+        <!-- v210 (partner, 2026-11-06): a phone has no tape strip, so the
+             market state rides here -- SHOCK / RECOVERY only, nothing on a
+             calm market. Tablet and desktop read the tape's badge. -->
+        @if (isPhone()) {
+          <sb-shock-pill [shock]="shock()" />
+        }
         <sb-alarm-chip [alarm]="alarm()" (reveal)="dock.reveal()" />
         <sb-killswitch-chip [on]="killswitchOn()" [stale]="killswitchStale()" />
       </div>

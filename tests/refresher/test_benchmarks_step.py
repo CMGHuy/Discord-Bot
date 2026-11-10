@@ -80,9 +80,11 @@ def _ctx(now, state="closed", scan_running=False):
                              loop.CycleReport(state, 30.0))
 
 
-def test_the_step_runs_last_right_after_the_fx_snap():
-    assert loop.STEPS[-1] is step.benchmarks_step
+def test_the_step_runs_after_fx_snap_and_before_snapshots():
+    from swingbot.refresher import snapshot_job
+
     assert loop.STEPS.index(step.benchmarks_step) == loop.STEPS.index(quotes.fx_snap_step) + 1
+    assert loop.STEPS.index(snapshot_job.snapshot_step) > loop.STEPS.index(step.benchmarks_step)
 
 
 def test_a_running_scan_skips_the_step(env):

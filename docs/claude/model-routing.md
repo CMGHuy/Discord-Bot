@@ -5,6 +5,18 @@ Referenced from the root `CLAUDE.md`. Introduced by v145
 Before it, every implementation task ran on `task-implementer`'s pinned
 `sonnet`: a version bump and an entry-signal rewiring got the same model.
 
+## Writing specs and plans is always Opus
+
+The tiers below route *implementation*. **Authoring** is not routed: every spec
+and every implementation plan is written on Claude Opus. That covers the main
+session when it writes the document, `plan-writer` (pinned `model: opus`) and
+any other agent drafting spec or plan text (partner, 2026-11-10). Only
+`plan-briefer`'s code gathering may run on Sonnet, because it writes no
+document text. If the session is on another model when a spec or plan is due,
+switch to Opus (`/model`) or dispatch the writing to an Opus agent. Never
+write it on the cheaper model. The reason is the 2026-10-25 v194 trial: on
+Sonnet, plan writers compressed tasks.
+
 ## The stamp
 
 In every plan numbered **v146 or above**, the first line under each

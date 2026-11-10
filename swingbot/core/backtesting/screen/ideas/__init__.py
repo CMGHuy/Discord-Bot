@@ -18,6 +18,12 @@ v182: a module may also export DIRECTION ("long" default, or "short"), ENTRY
 level per bar from bars <= t-1), control_events(df) (the trend-only control,
 printed, never gating) and FAMILY (names screened as one family). A changed
 DIRECTION or ENTRY is a new idea with a new name.
+
+v211: a module with CONTEXT may also export CONTEXT_KIND ("z" default, or
+"level"). A "level" context is read as raw values (a breadth fraction, a VIX
+close): the runner loads it under the same raw-index and SPY-session checks
+but never z-scores it, and the v174 z diagnostics do not apply. A changed
+CONTEXT_KIND is a new idea with a new name.
 """
 from __future__ import annotations
 
@@ -32,7 +38,8 @@ import pandas as pd
 #: append in the order they were frozen.
 IDEA_MODULES = ("high52w", "uptrend_pullback", "gap_volume", "turn_of_month",
                 "turtle_soup", "quiet_pullback", "bond_spike_rebound", "dollar_drop",
-                "sweep_reclaim_bos", "range_breakdown_close", "range_breakdown_stop")
+                "sweep_reclaim_bos", "range_breakdown_close", "range_breakdown_stop",
+                "vix_curve_calm", "shock_support_break_short", "shock_failed_bounce_short")
 
 #: The race shapes an idea may declare (v163 spec § One shape per idea).
 RACE_SHAPES = ("fixed", "trail")
@@ -44,6 +51,9 @@ DIRECTIONS = ("long", "short")
 #: v182: "next_open" (every idea before v182) or "level" (a resting stop order
 #: that fills on the event bar at levels(df), fixed shape only).
 ENTRY_MODES = ("next_open", "level")
+#: v211: how a context file is read: "z" (trailing z-score, v174) or "level"
+#: (raw values, no z-coverage floor).
+CONTEXT_KINDS = ("z", "level")
 
 
 def _shape_problem(idea: "Idea") -> str | None:
@@ -72,6 +82,14 @@ def _side_problem(idea: "Idea") -> str | None:
     return None
 
 
+def _context_problem(idea: "Idea") -> str | None:
+    if idea.context_kind not in CONTEXT_KINDS:
+        return f"{idea.name}: context kind {idea.context_kind!r} is not one of {CONTEXT_KINDS}"
+    if idea.context_kind == "level" and not idea.context:
+        return f"{idea.name}: a level context idea needs CONTEXT"
+    return None
+
+
 @dataclass(frozen=True)
 class Idea:
     name: str
@@ -87,9 +105,10 @@ class Idea:
     levels: Callable[[pd.DataFrame], pd.Series] | None = None
     control: Callable[[pd.DataFrame], pd.Series] | None = None
     family: tuple[str, ...] = ()
+    context_kind: str = "z"
 
     def __post_init__(self):
-        problem = _side_problem(self) or _shape_problem(self)
+        problem = _side_problem(self) or _shape_problem(self) or _context_problem(self)
         if problem:
             raise ValueError(problem)
         object.__setattr__(self, "params", MappingProxyType(dict(self.params)))
@@ -108,7 +127,8 @@ def _load(name: str) -> Idea:
                 entry=getattr(module, "ENTRY", "next_open"),
                 levels=getattr(module, "levels", None),
                 control=getattr(module, "control_events", None),
-                family=tuple(getattr(module, "FAMILY", ())))
+                family=tuple(getattr(module, "FAMILY", ())),
+                context_kind=getattr(module, "CONTEXT_KIND", "z"))
 
 
 IDEAS: dict[str, Idea] = {name: _load(name) for name in IDEA_MODULES}

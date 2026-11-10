@@ -20,6 +20,12 @@ export function ageText(ageS: number | null): string | null {
 export type MarketTone = 'fresh' | 'stale' | 'closed' | 'stalled';
 export interface MarketAgeLabel { text: string | null; tone: MarketTone; }
 
+interface MarketAgeOptions {
+  kind?: 'price' | 'snapshot';
+  staleInputs?: boolean;
+  computedAt?: string | null;
+}
+
 const ET_FORMAT = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
 });
@@ -45,7 +51,10 @@ function closedLabel(asOf: string, status: MarketStatus): string {
  * than a scary "stale", and otherwise the age is fresh or stale against the
  * server's limit.
  */
-export function marketAgeLabel(asOf: string | null, nowMs: number, status: MarketStatus | null): MarketAgeLabel {
+export function marketAgeLabel(
+  asOf: string | null, nowMs: number, status: MarketStatus | null, opts?: MarketAgeOptions,
+): MarketAgeLabel {
+  if (opts?.kind === 'snapshot') return snapshotLabel(opts.computedAt ?? null, nowMs, status, opts.staleInputs ?? false);
   const age = asOf === null ? null : (nowMs - Date.parse(asOf)) / 1000;
   if (status?.heartbeat.stalled) return { text: ageText(age), tone: 'stalled' };
   if (status?.session === 'closed') {
@@ -53,6 +62,28 @@ export function marketAgeLabel(asOf: string | null, nowMs: number, status: Marke
   }
   const limit = status?.stale_price_s ?? null;
   const stale = limit !== null && age !== null && age > limit;
+  return { text: ageText(age), tone: stale ? 'stale' : 'fresh' };
+}
+
+function snapshotLabel(
+  computedAt: string | null, nowMs: number, status: MarketStatus | null, staleInputs: boolean,
+): MarketAgeLabel {
+  const builtAt = computedAt === null ? null : Date.parse(computedAt);
+  const age = builtAt === null ? null : (nowMs - builtAt) / 1000;
+  if (status?.heartbeat.stalled) return { text: ageText(age), tone: 'stalled' };
+  if (computedAt === null) return { text: null, tone: staleInputs ? 'stale' : 'fresh' };
+  if (status?.session === 'closed') {
+    const closeAt = status.last_close_at;
+    if (staleInputs || (closeAt !== null && Date.parse(computedAt) < Date.parse(closeAt))) {
+      return { text: 'as of ' + etStamp(computedAt) + ' ET', tone: 'stale' };
+    }
+    const text = closeAt === null
+      ? 'as of ' + etStamp(computedAt) + ' ET'
+      : 'as of last close · ' + etStamp(closeAt) + ' ET';
+    return { text, tone: 'closed' };
+  }
+  const limit = status?.stale_snapshot_s ?? null;
+  const stale = staleInputs || (limit !== null && age !== null && age > limit);
   return { text: ageText(age), tone: stale ? 'stale' : 'fresh' };
 }
 

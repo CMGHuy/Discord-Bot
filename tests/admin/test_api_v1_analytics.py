@@ -97,6 +97,7 @@ def test_performance_top_level_shape(seed, logged_in):
         "scratch_n": int, "unscored_n": int, "label_basis_since": NULLABLE_STR,
         # v194 B7 -- rows left out of the money figures for want of an FX rate.
         "fx_missing_count": int,
+        "market_meta": dict,
     })
 
 

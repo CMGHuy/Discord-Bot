@@ -124,7 +124,7 @@ failure. Baseline, and why counts/timings swing with machine load:
 **A failed test is fixed and re-run alone** (`testrun.py file …` or `pytest
 path::test`), never by re-running the whole suite. **No plan or merge runs the
 full suite locally; CI does. After pushing, watch the run and fix failing tests until green** (`working-conventions.md` § Pipeline watch). **Commit in several
-scoped commits, never one big one** (`working-conventions.md`). **Every feature, fix or change you implement ships its own unit tests in the same work** (backend and frontend alike, edge and empty cases included), run green before you call it done; the partner never has to ask (`working-conventions.md` § How the human partner wants work done).
+scoped commits, never one big one** (`working-conventions.md`). **Every feature, fix or change you implement updates the existing unit tests it affects and creates new ones for what is new, in the same work** (backend and frontend alike, edge and empty cases included), run green before you call it done; the partner never has to ask (`working-conventions.md` § How the human partner wants work done).
 
 **Tests live in suites** (`tests/suites.toml`; `testrun.py suite <name>`, `suites`
 lists). A new `tests/` directory joins exactly one suite in the same commit; a
@@ -141,7 +141,7 @@ right before the commit. `Bump:` states a level only, never a version number.
 **No file over 1500 lines, no task over 20 KB, no plan over 20 tasks** — split,
 never compress a task. **No plan schedules a full suite; CI runs it.** Specs and plans are
 committed on `main` **the moment written (each plan index/part once `plan_lint.py` passes), never left uncommitted**; branch only to implement. Run `/new-doc`; detail: `document-conventions.md`, `document-lifecycle.md`.
-**Write a plan in two phases** after `plan-briefer` (Sonnet) gathers the code
+**Every spec and every implementation plan is written on Claude Opus** (main session, `plan-writer` and any agent authoring spec or plan text; partner, 2026-11-10); only `plan-briefer`'s code gathering may run cheaper. **Write a plan in two phases** after `plan-briefer` (Sonnet) gathers the code
 into one brief: `plan-writer` `mode=index`, then one (its **Goal** explains *why* and *what changes*: `document-conventions.md`)
 `mode=part <N>` per part, **at most 2 part writers at once**; each writer appends task by
 task to disk; `scripts/dev/plan_lint.py` must pass. **At most 2 plans in progress per session**; a plan cut off by

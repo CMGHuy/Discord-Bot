@@ -13,7 +13,7 @@ V201_FIELDS = {
     "ADMIN_REFRESH_REGULAR_S": ("number", "30", 10, 300),
     "ADMIN_REFRESH_EXTENDED_S": ("number", "300", 60, 3600),
     "ADMIN_REFRESH_CLOSED_S": ("number", "1800", 300, 7200),
-    "ADMIN_REFRESH_YF_FALLBACK_CAP": ("number", "25", 0, 500),
+    "ADMIN_REFRESH_YF_FALLBACK_CAP": ("number", "150", 0, 500),
     "ADMIN_REFRESH_MARK_TIMEOUT_S": ("number", "120", 30, 900),
     "ADMIN_REFRESH_FX_UNKNOWN_RETRY_S": ("number", "21600", 600, 604800),
     "ADMIN_STALE_PRICE_REGULAR_S": ("number", "120", 30, 1800),

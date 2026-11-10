@@ -113,6 +113,9 @@ async function clickFirst(page, selector, path) {
 async function clipRegion(page, selector, path, viewport) {
   const target = page.locator(selector).first();
   await target.waitFor({ timeout: 10_000 }).catch(() => {}); // late data, as in clickFirst
+  // A page taller than the 8000px viewport cap (the /ui gallery) leaves the target below
+  // the grown viewport: scroll its pane to it first, so the box is measured on screen.
+  if ((await target.count()) > 0) await target.evaluate((el) => el.scrollIntoView({ block: 'center' })).catch(() => {});
   const box = (await target.count()) === 0 ? null : await target.boundingBox();
   const clip = clipBox(box, viewport);
   if (!clip) throw new Error(`--clip matched no visible element on ${path}: ${selector}`);

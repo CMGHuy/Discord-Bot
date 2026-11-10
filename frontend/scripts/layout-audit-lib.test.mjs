@@ -97,11 +97,11 @@ const entry = (over = {}) => ({
   reason: 'canvas internals of a third-party chart', date: '2026-10-19', ...over,
 });
 
-test('ROUTES visits every destination, section and tab once, on the v202 paths only (31)', () => {
-  assert.equal(ROUTES.length, 31);
+test('ROUTES visits every destination, section and tab once, on the v202 paths only (32)', () => {
+  assert.equal(ROUTES.length, 32);
   assert.equal(new Set(ROUTES).size, ROUTES.length);
   assert.ok(ROUTES.every((route) => route.startsWith('/')));
-  for (const tab of ['attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials', 'benchmark']) {
+  for (const tab of ['attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials', 'cancels', 'benchmark']) {
     assert.ok(ROUTES.includes(`/insights/analytics?tab=${tab}`), tab);
   }
   for (const route of ['/dashboard', '/trades', '/trades/:id', '/trades/:id?tab=journal', '/trades/calendar',

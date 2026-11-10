@@ -8,7 +8,7 @@ description: "Dispatch expert role reviewers (/panel role[,role...] target) over
 
 ## Step 1 — Read the authority
 
-`docs/claude/skills-tools.md` § Expert roles holds the roster and each role's
+`docs/claude/skills-tools.md` § Expert roles (v145) holds the roster and each role's
 reviewer model. `docs/claude/document-conventions.md` § The header block holds
 the `**Panel:**` line. This skill is the checklist; the reasoning lives there.
 
@@ -18,6 +18,16 @@ Roles come from the argument, or from the spec's `**Panel:**` line when Claude
 runs this itself. Every role must be a row of the roles table; an unknown role
 stops the panel and names the valid ones -- never substitute a near match. The
 target is one or more paths, or a git range (`main...<branch>`).
+
+With neither (an on-demand panel Claude convenes itself), suggest seats from
+the target's type and say which you picked; an argument always wins.
+
+| Target | Suggested seats |
+|---|---|
+| Spec | its `**Panel:**` line; with none, the default for its `Edge:` (`document-conventions.md` § The header block) |
+| Backtest result, grid or screen verdict | `quant-researcher`, `quant-engineer` |
+| Diff touching `frontend/` or a Discord embed | `ux-designer`, `senior-engineer` |
+| Diff touching `swingbot/core/market/` | `technical-analyst`, `quant-engineer` |
 
 ## Step 3 — Dispatch serially
 
@@ -31,9 +41,11 @@ three roles.
 ## Step 4 — Merge
 
 Drop every finding that cites no `file:line`, git range or doc section. Merge
-duplicates across roles, keeping the stricter tag. List `BLOCKING` first, then
-`ADVISORY`, each line naming its role. A role that returned `CLEAN` is listed
-as clean, not omitted.
+duplicates across roles, keeping the stricter tag. Findings that open with the
+same shared lead (`Shorts:`, `eToro:`) and cite the same evidence are
+duplicates: one line naming every seat that raised them. List `BLOCKING`
+first, then `ADVISORY`, each line naming its role. A role that returned
+`CLEAN` is listed as clean, not omitted.
 
 ## Step 5 — Record the outcome
 

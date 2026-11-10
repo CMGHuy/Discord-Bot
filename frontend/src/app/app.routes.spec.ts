@@ -234,7 +234,6 @@ describe('v202 section routes and redirects', () => {
   it.each([
     ['/calendar', '/trades/calendar'],
     ['/calendar/2026-10-01', '/trades/calendar/2026-10-01'],
-    ['/cancels', '/trades/cancels'],
     ['/analytics', '/insights/analytics'],
     ['/research', '/insights/research'],
     ['/reports', '/insights/reports'],
@@ -244,15 +243,19 @@ describe('v202 section routes and redirects', () => {
     expect((await land(`${from}?tab=tuning&page=2#x`)).url).toBe(`${to}?tab=tuning&page=2#x`);
   });
 
+  it.each(['/cancels', '/trades/cancels'])('sends %s to the Analytics Cancels tab', async (from) => {
+    expect((await land(from)).url).toBe('/insights/analytics?tab=cancels');
+  });
+
   it('redirects a bare old path without inventing a query', async () => {
     expect((await land('/calendar')).url).toBe('/trades/calendar');
   });
 
-  it.each(['/trades/calendar', '/trades/cancels', '/trades/calendar/2026-10-01'])(
+  it.each(['/trades/calendar', '/trades/calendar/2026-10-01'])(
     'matches %s as a section, never as a trade id', async (url) => {
       const { paths } = await land(url);
       expect(paths).not.toContain('trades/:id');
-      expect(paths.some((p) => p === 'trades/calendar' || p === 'trades/cancels')).toBe(true);
+      expect(paths.some((p) => p === 'trades/calendar')).toBe(true);
     });
 
   it('still reads any other second segment as a trade id', async () => {
@@ -269,7 +272,6 @@ describe('v202 section routes and redirects', () => {
 
   it.each([
     ['trades/calendar', 'Calendar', 'P&L by day'],
-    ['trades/cancels', 'Cancels', "Were the bot's own cancels right?"],
     ['insights/analytics', 'Analytics', 'What already happened, measured'],
     ['insights/research', 'Research', 'Every pre-registration and its verdict'],
     ['insights/reports', 'Reports', 'What the measurements say about entries and gates'],
@@ -285,7 +287,6 @@ describe('v202 section routes and redirects', () => {
   it('declares every section before the route that would swallow it', () => {
     const at = (path: string) => routes.findIndex((r) => r.path === path);
     expect(at('trades/calendar')).toBeLessThan(at('trades/:id'));
-    expect(at('trades/cancels')).toBeLessThan(at('trades/:id'));
     expect(at('system/versions')).toBeLessThan(at('system'));
   });
 

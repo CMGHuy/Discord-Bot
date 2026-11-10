@@ -9,9 +9,9 @@ export { SCOPE_PRESETS, type ScopePreset } from '../../../ui/equity-chart-prefs'
  * component, `EquityCandlesStore` and `DashboardStore` only wire chart events
  * and responses to these, so every rule is testable without a canvas.
  *
- * **One clock.** Equity candles are bucketed on the New York wall clock
+ * **One clock.** Equity candles are bucketed on the Berlin wall clock
  * (`swingbot/core/tracking/equity_candles.py`), so every time window here is
- * a run of whole New York buckets.
+ * a run of whole Berlin buckets.
  */
 
 /** A lightweight-charts logical range: bar `i` is centred on `i`. */
@@ -52,16 +52,16 @@ export function inWindowCandles(
   return first > last ? [] : candles.slice(first, last + 1);
 }
 
-/* -- New York bucket edges ----------------------------------------------- */
+/* -- Berlin bucket edges ----------------------------------------------- */
 
 const HOUR_MS = 3_600_000;
 const NY_PARTS = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'America/New_York', hourCycle: 'h23',
+  timeZone: 'Europe/Berlin', hourCycle: 'h23',
   year: 'numeric', month: '2-digit', day: '2-digit',
   hour: '2-digit', minute: '2-digit', second: '2-digit',
 });
 
-/** New York's offset from UTC at `instantMs`, in ms (-4 h in summer). */
+/** Berlin's offset from UTC at `instantMs`, in ms (+2 h in summer). */
 function nyOffsetMs(instantMs: number): number {
   const parts: Record<string, number> = {};
   for (const p of NY_PARTS.formatToParts(new Date(instantMs))) parts[p.type] = Number(p.value);
@@ -70,9 +70,9 @@ function nyOffsetMs(instantMs: number): number {
   return wallAsUtc - Math.floor(instantMs / 1000) * 1000;
 }
 
-/** The instant of New York wall time `isoDate` `hour`:00 (`hour` may be 24).
+/** The instant of Berlin wall time `isoDate` `hour`:00 (`hour` may be 24).
  *  Two passes: the offset at a first guess, then at the candidate itself.
- *  Only called for 00/04/08/12/16/20, which are never skipped or repeated. */
+ *  Only called for 08-21 (and 00 for midnights), which Berlin never skips or repeats. */
 function nyWallInstant(isoDate: string, hour: number): Date {
   const [y, m, d] = isoDate.split('-').map(Number);
   const wall = Date.UTC(y, m - 1, d, hour);
@@ -85,13 +85,13 @@ function addDays(isoDate: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
-/** 00:00 New York on `isoDate` (`YYYY-MM-DD`), as an instant. */
+/** 00:00 Berlin on `isoDate` (`YYYY-MM-DD`), as an instant. */
 export function nyMidnight(isoDate: string): Date {
   return nyWallInstant(isoDate, 0);
 }
 
 /** The instant a candle's bucket starts: its offset-carrying `t` for 1H/4H,
- *  New York midnight of its date for 1D/1W. */
+ *  Berlin midnight of its date for 1D/1W. */
 export function bucketStartInstant(t: string, tf: EquityTimeframe): Date {
   return isIntraday(tf) ? new Date(Date.parse(t)) : nyMidnight(t.slice(0, 10));
 }
@@ -281,7 +281,7 @@ export interface ChartTarget {
 /** The presets that become a `mode=range` window. */
 export type RollingPreset = Exclude<ScopePreset, '1D' | 'All'>;
 
-/** `instant`'s New York calendar date, `YYYY-MM-DD`. */
+/** `instant`'s Berlin calendar date, `YYYY-MM-DD`. */
 function nyDate(instant: Date): string {
   const parts: Record<string, string> = {};
   for (const p of NY_PARTS.formatToParts(instant)) parts[p.type] = p.value;
@@ -317,7 +317,7 @@ const PRESET_START: Record<RollingPreset, (today: string) => string> = {
   '1Y': (today) => addMonths(today, -12),
 };
 
-/** 00:00 New York of today and of tomorrow: the current 1D bucket. */
+/** 00:00 Berlin of today and of tomorrow: the current 1D bucket. */
 function nyDayWindow(now: Date): TimeWindow {
   const today = nyDate(now);
   return {
@@ -326,8 +326,8 @@ function nyDayWindow(now: Date): TimeWindow {
   };
 }
 
-/** A rolling preset's `[from, to)`: from 00:00 New York on the day it
- *  reaches back to, to the next New York midnight -- the end of the current
+/** A rolling preset's `[from, to)`: from 00:00 Berlin on the day it
+ *  reaches back to, to the next Berlin midnight -- the end of the current
  *  1D bucket, also a 1H/4H edge -- so the KPIs move only when a day opens. */
 export function presetBounds(preset: RollingPreset, now: Date): TimeWindow {
   return {
@@ -336,7 +336,7 @@ export function presetBounds(preset: RollingPreset, now: Date): TimeWindow {
   };
 }
 
-/** Where a preset moves the chart. 1D is the New York day (its KPIs stay the
+/** Where a preset moves the chart. 1D is the Berlin day (its KPIs stay the
  *  Berlin day, spec § 6); All is all history (null). */
 export function chartWindowFor(preset: ScopePreset, now: Date): TimeWindow | null {
   if (preset === 'All') return null;
@@ -363,7 +363,7 @@ function dayLabel(isoDate: string, withYear: boolean): string {
   return withYear ? `${d} ${MONTHS[m - 1]} ${y}` : `${d} ${MONTHS[m - 1]}`;
 }
 
-/** The Range chip: first and last New York day of the window (`to` is
+/** The Range chip: first and last Berlin day of the window (`to` is
  *  exclusive), `3 Sep – 18 Oct`; the year only when the two differ. */
 export function rangeChipLabel(window: TimeWindow): string {
   const first = nyDate(new Date(window.from));

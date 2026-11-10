@@ -52,10 +52,14 @@ def _write_csv(path, df):
     df.rename_axis("Date").to_csv(path)
 
 
-def _ctx_cache(tmp_path, *, tickers=("AAA", "BBB"), context=("TLT", "UUP")) -> Path:
+def _ctx_cache(tmp_path, *, tickers=("AAA", "BBB"), context=None) -> Path:
     """tmp_path/cache: stock CSVs from 2010-01-04 (as test_screen_idea), and
     SPY plus every context series on one business-day calendar from
-    2009-06-01. Also writes tmp_path/membership.csv listing ``tickers``."""
+    2009-06-01. ``context`` defaults to TLT, UUP and every ticker a registered
+    idea declares (``context_tickers()`` hashes them all, so a newly frozen idea
+    needs its files here too). Also writes tmp_path/membership.csv listing ``tickers``."""
+    if context is None:
+        context = tuple(dict.fromkeys(("TLT", "UUP") + screen_idea.context_tickers()))
     cache = tmp_path / "cache"
     cache.mkdir()
     for seed, ticker in enumerate(tickers, start=1):
@@ -318,7 +322,8 @@ def test_a_ticker_missing_from_the_hash_file_refuses(tmp_path, monkeypatch, caps
     (tmp_path / "hashes.json").write_text("{}", encoding="utf-8")
     _forbid_screening(monkeypatch)
     assert screen_idea.main(_ctx_argv(tmp_path, cache, "--dry-run")) == 2
-    assert "TLT has no SHA-256" in capsys.readouterr().err
+    # context_tickers() is sorted: since v211 BREADTH_ATR1 is the first one missing
+    assert "BREADTH_ATR1 has no SHA-256" in capsys.readouterr().err
 
 
 def test_matching_hashes_let_a_dry_run_through(tmp_path, capsys, fake_registered):
@@ -583,7 +588,8 @@ def test_a_context_run_writes_the_diagnostics_section_and_the_scope(tmp_path):
         diagnostics.scope_sentence(IDEAS["bond_spike_rebound"]))
     assert f"-> {rows[0]['verdict']}" in text.splitlines()[0]
     pinned = json.loads((tmp_path / "hashes.json").read_text(encoding="utf-8"))
-    assert set(pinned) == {"TLT", "UUP"}
+    assert set(pinned) == set(screen_idea.context_tickers())
+    assert {"TLT", "UUP"} <= set(pinned)
 
 
 def test_a_context_dry_run_prints_the_diagnostics_and_writes_nothing(tmp_path, capsys):
@@ -643,3 +649,33 @@ def test_context_mutation_during_loading_refuses_before_screening(
     assert "TLT.csv SHA-256" in capsys.readouterr().err
     for written in ("ledger.jsonl", "results", "hashes.json"):
         assert not (tmp_path / written).exists()
+
+
+def test_the_shock_support_idea_screens_short_with_its_context_and_control():
+    """v211: a level-context short on the real call path -- events read the
+    context, the control book runs, the v174 restricted null does not."""
+    from swingbot.core.backtesting.screen.ideas import shock_support_break_short as idea_mod
+    from tests.backtesting.screen.helpers import episodes_covering, shock_context
+    df = random_walk(2600)
+    hits = np.flatnonzero(idea_mod.low_break(df).to_numpy())
+    ctx = shock_context(df.index, episodes_covering(hits, len(df)))
+    out = screen_idea.screen_ticker(IDEAS["shock_support_break_short"], "AAA", df,
+                                    ALWAYS, context=ctx)
+    assert out.events                                         # non-vacuous
+    assert out.control                                        # the control book ran
+    assert out.restricted is None and out.depths is None and out.repriced is None
+
+
+def test_the_shock_family_partners_overlap_through_the_real_context():
+    """v211: both shock ideas are level-context partners; _overlap (V211-5)
+    hands each the context, so neither raises and both report an overlap."""
+    from swingbot.core.backtesting.screen.ideas import shock_failed_bounce_short as fb
+    from tests.backtesting.screen.helpers import episodes_covering, shock_context
+    df = random_walk(2600)
+    hits = np.flatnonzero(fb.control_events(df).to_numpy())
+    ctx = shock_context(df.index, episodes_covering(hits, len(df)))
+    outs = {name: screen_idea.screen_ticker(IDEAS[name], "AAA", df, ALWAYS, context=ctx)
+            for name in ("shock_failed_bounce_short", "shock_support_break_short")}
+    assert outs["shock_failed_bounce_short"].events            # non-vacuous
+    for out in outs.values():
+        assert out.overlap is not None and out.control and out.restricted is None

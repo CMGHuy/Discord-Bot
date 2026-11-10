@@ -161,9 +161,15 @@ export const WatchlistStore = signalStore(
 
         patchState(store, { adding: true, addResult: null, addError: null });
         api.addTickers(symbols).subscribe({
-          next: ({ added, already_present, invalid }) => {
+          next: ({ added, already_present, invalid, not_found, details }) => {
             const parts: string[] = [];
-            if (added.length) parts.push(`Added ${added.join(', ')}`);
+            if (added.length) {
+              const names = new Map((details ?? []).map((d) => [d.symbol, d.company_name]));
+              parts.push(`Added ${added.map((s) => (names.get(s) ? `${s} (${names.get(s)})` : s)).join(', ')}`);
+            }
+            if (not_found?.length) {
+              parts.push(`no market data found: ${not_found.join(', ')}`);
+            }
             // Both of these are the reason the endpoint reports per symbol.
             // Dropping either would turn a partial success into a silent one.
             if (already_present.length) {

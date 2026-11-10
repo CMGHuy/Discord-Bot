@@ -3,6 +3,7 @@ import {
   patchState,
   signalStore,
   withComputed,
+  withHooks,
   withMethods,
   withState,
 } from '@ngrx/signals';
@@ -11,6 +12,7 @@ import { ApiClient, BenchmarkParams } from '../api/api-client';
 import { StrategyRow } from '../api/models';
 import { ApiError } from '../api/api-error';
 import { routeRequest } from '../routing/route-request';
+import { CancelsStore } from './cancels.store';
 import { EMPTY, Observable, catchError, defer, filter, throwError } from 'rxjs';
 import {
   AnalyticsBenchmark, BenchmarkRange,
@@ -29,12 +31,32 @@ import {
   BookScope,
   LiveLossRow,
   LiveLossWatch,
+  MarketMeta,
   OverrideFidelity,
   TuneDefaults,
 } from '../api/models';
 import { HistogramBin } from '../ui/histogram';
 import { BarRow } from '../ui/bar-list';
+import { LiveValuesStore } from './live-values.store';
 import { PreferencesStore } from './preferences.store';
+import { followSnapshot, snapshotMeta } from './snapshot-follow';
+
+const AS_OF_DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+/**
+ * v204: the clock of a view computed for the request that asked (a filtered
+ * Analytics view, a filtered Calendar month). A snapshot view has its own
+ * age label, so it gets none here. FX is the one cached input, named when
+ * the server dated it; a timed value prints its date.
+ */
+export function requestAsOfText(meta: MarketMeta | null | undefined): string | null {
+  if (!meta || meta.source === 'snapshot') return null;
+  const at = meta.as_of ? new Date(`${meta.as_of.slice(0, 10)}T00:00:00Z`) : null;
+  if (at === null || Number.isNaN(at.getTime())) return 'as of this request';
+  return `as of this request · FX rates as of ${AS_OF_DAY.format(at)}`;
+}
+
+const SCOPE_FILTERS = ['from', 'to', 'strategy', 'horizon', 'direction'] as const;
 
 /* -- row shapes ---------------------------------------------------------
  *
@@ -189,10 +211,10 @@ function numberOrNull(record: Record<string, unknown> | undefined, key: string):
  *  Attribution and Execution. Tabs, not sub-navigation: a second level of
  *  nav inside one of six workspaces reintroduces exactly the depth the IA
  *  change removed. */
-export type AnalyticsTab = 'overview' | 'attribution' | 'execution' | 'edge' | 'pipeline' | 'tuning' | 'partials' | 'benchmark';
+export type AnalyticsTab = 'overview' | 'attribution' | 'execution' | 'edge' | 'pipeline' | 'tuning' | 'partials' | 'cancels' | 'benchmark';
 
 export const ANALYTICS_TABS: readonly AnalyticsTab[] =
-  ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials', 'benchmark'] as const;
+  ['overview', 'attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials', 'cancels', 'benchmark'] as const;
 
 /** Old `?tab=` values keep working (spec D1). A bookmark or a Discord link
  *  posted before v94 lands on the tab that now answers its question rather
@@ -696,7 +718,31 @@ export const AnalyticsStore = signalStore(
         .map((d) => ({ label: d.decile, count: d.win_rate }))),
   })),
 
-  withMethods((store, api = inject(ApiClient), preferences = inject(PreferencesStore)) => {
+  withComputed((store, live = inject(LiveValuesStore)) => {
+    // Local consts, because computeds in one object cannot read each other
+    // through `store`. Only the unfiltered view is served from a snapshot
+    // row (the server's own default-view rule), so only it has a key.
+    const defaultView = computed(() => SCOPE_FILTERS.every((k) => !store.scope()[k]));
+    const performanceKey = computed(() =>
+      defaultView() ? `analytics.performance:${store.scope().ledger}` : null);
+    const equityCurveKey = computed(() =>
+      defaultView() ? `analytics.equity_curve:${store.scope().ledger}` : null);
+    return {
+      defaultView,
+      performanceKey,
+      equityCurveKey,
+      performanceMeta: computed(() => {
+        const k = performanceKey();
+        return snapshotMeta(store.performance()?.market_meta, k ? live.snapshot(k)() : null);
+      }),
+      equityCurveMeta: computed(() => {
+        const k = equityCurveKey();
+        return snapshotMeta(store.equityCurve()?.market_meta, k ? live.snapshot(k)() : null);
+      }),
+    };
+  }),
+
+  withMethods((store, api = inject(ApiClient), preferences = inject(PreferencesStore), cancels = inject(CancelsStore)) => {
     /** Every failure lands here, and none of them clear the data already on
      *  screen. A table that empties because one refetch failed is worse than
      *  a slightly stale one beside a warning — especially when the event
@@ -961,9 +1007,16 @@ export const AnalyticsStore = signalStore(
     const resolveBenchmark = (): Observable<void> =>
       resolveOne(benchmarkRequest(), 'benchmark', 'benchmarkError');
 
+    // Cancels maintains its own loading and error state.
+    const loadCancels = (): void => { cancels.load().subscribe({ error: () => undefined }); };
+    const resolveCancels = (): Observable<void> => routeRequest(cancels.load(), {
+      start: () => undefined, next: () => undefined, error: () => undefined,
+    });
+
     const RESOLVERS: Record<AnalyticsTab, () => Observable<void>> = {
       overview: resolveOverview, attribution: resolveAttribution, execution: resolveExecution,
-      edge: resolveEdge, pipeline: resolvePipeline, tuning: resolveTuning, partials: resolvePartials, benchmark: resolveBenchmark,
+      edge: resolveEdge, pipeline: resolvePipeline, tuning: resolveTuning, partials: resolvePartials,
+      cancels: resolveCancels, benchmark: resolveBenchmark,
     };
 
     const resolveTab = (tab: AnalyticsTab): Observable<void> => {
@@ -973,7 +1026,8 @@ export const AnalyticsStore = signalStore(
 
     const LOADERS: Record<AnalyticsTab, () => void> = {
       overview: loadOverview, attribution: loadAttribution, execution: loadExecution,
-      edge: loadEdge, pipeline: loadPipeline, tuning: loadTuning, partials: loadPartials, benchmark: loadBenchmark,
+      edge: loadEdge, pipeline: loadPipeline, tuning: loadTuning, partials: loadPartials,
+      cancels: loadCancels, benchmark: loadBenchmark,
     };
 
     const load = (): void => LOADERS[store.tab()]();
@@ -1208,4 +1262,20 @@ export const AnalyticsStore = signalStore(
     };
   }),
 
+  withHooks({
+    onInit(store) {
+      // A key whose route left `request` never gets a row, so it never
+      // reloads; nothing reloads before its first payload either.
+      followSnapshot(
+        store.performanceKey,
+        () => store.performance()?.market_meta?.computed_at ?? null,
+        () => { if (store.performance() !== null) store.reload('performance'); },
+      );
+      followSnapshot(
+        store.equityCurveKey,
+        () => store.equityCurve()?.market_meta?.computed_at ?? null,
+        () => { if (store.equityCurve() !== null) store.reload('equityCurve'); },
+      );
+    },
+  }),
 );

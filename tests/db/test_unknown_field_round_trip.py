@@ -118,6 +118,12 @@ NOT_REPOSITORY_BACKED = {
                                 "round trip is tests/db/test_preregistration_verdicts_repository.py",
     "fx_daily_rates": "composite key (base, account, day), written insert_if_absent only and "
                       "read as promoted columns; its round trip is tests/db/test_v205_fx_daily_rates.py",
+    "market_shock_readings": "written only through MarketShockRepository.record with the whole "
+                             "reading in doc; its round trip is tests/db/test_market_shock_repository.py",
+    "market_shock_state": "single row (id = 1) upserted by MarketShockRepository.record; its "
+                          "round trip is tests/db/test_market_shock_repository.py",
+    "admin_snapshots": "compare-and-set put(key, doc, inputs, computed_at) only, no upsert/list_all; "
+                       "doc is stored whole; its round trip is tests/db/test_v204_admin_snapshots.py",
 }
 
 #: Tables whose rows need the probe plan first (a foreign key into plans).

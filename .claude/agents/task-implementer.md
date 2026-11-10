@@ -33,7 +33,9 @@ with line numbers).
   `testrun.py file` command — never the full suite, never `fast`; the CI
   pipeline owns the full run.
 - Every function you write or change stays below cyclomatic complexity 15:
-  `python -m radon cc -s -n C <files>` must print nothing for your changes.
+  `scripts/dev/complexity_gate.py` enforces the limit;
+  `python -m radon cc -s -n C <files>` is for iterating, and must print
+  nothing for your changes.
 - Area skills (`no-lookahead`, `alert-surface`, `edge-module`,
   `schema-change`) fire on their own when you touch their area — follow them.
 - Never `cd` in a Bash command (it breaks the repo hooks); use absolute paths

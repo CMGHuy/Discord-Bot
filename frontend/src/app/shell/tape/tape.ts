@@ -4,8 +4,9 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { TapeRow } from '../../api/models';
+import { TapeRow, TapeShock } from '../../api/models';
 import { MarketIndexStore } from '../../stores/market-index.store';
+import { TapeFeed } from '../../stores/tape-feed';
 import { TapeStore } from '../../stores/tape.store';
 import { MarketValue } from '../../ui/market-value';
 import { Hint } from '../../ui/hint';
@@ -25,6 +26,28 @@ const INDEX_LABELS: Record<string, string> = {
 
 function proxyLabel(r: TapeRow): string | null {
   return r.is_proxy ? `${r.proxy_symbol ?? 'ETF'} proxy` : null;
+}
+
+const NA = 'n/a';
+const signed = (v: number, digits: number) => `${v >= 0 ? '+' : ''}${v.toFixed(digits)}`;
+const atr = (v: number | null) => (v === null ? NA : `${signed(v, 2)} ATR`);
+
+function sinceUtc(iso: string | null): string {
+  const at = iso ? new Date(iso) : null;
+  return at && !Number.isNaN(at.getTime()) ? ` since ${at.toISOString().slice(11, 16)} UTC` : '';
+}
+
+/** v210: the badge's tooltip -- label, since and the last reading's numbers. */
+export function shockSummary(s: TapeShock): string {
+  const vix = s.vix_missing || s.vix_level === null ? 'VIX missing'
+    : `VIX ${s.vix_level.toFixed(2)} (${s.vix_chg_pct === null ? NA : `${signed(s.vix_chg_pct, 1)}%`})`;
+  const sectors = s.sectors_down === null || s.sectors_total === null
+    ? NA : `${s.sectors_down}/${s.sectors_total}`;
+  return [
+    `Market state ${s.label}${sinceUtc(s.since)}`,
+    `breadth ${s.breadth_pct === null ? NA : `${s.breadth_pct.toFixed(0)}%`}`,
+    `sectors ${sectors}`, `SPY ${atr(s.spy_atr_move)}`, `QQQ ${atr(s.qqq_atr_move)}`, vix,
+  ].join(' · ');
 }
 
 /** One row of either source, reshaped to the one tile template needs. */
@@ -114,11 +137,24 @@ export const TAPE_PROXY_HINT = "Yahoo had no value; an ETF tracking this index s
         </div>
       </div>
     </div>
+    @if (shock(); as s) {
+      <div class="shock-badge" role="status" [attr.data-label]="s.label"
+           [attr.title]="shockTitle()" [attr.aria-label]="shockTitle()">
+        <span class="shock-cap">state</span>
+        <span class="shock-label">{{ s.label }}</span>
+        @if (s.vix_missing) {
+          <span class="shock-vix">VIX missing</span>
+        }
+      </div>
+    }
   `,
 })
 export class Tape {
   private readonly market = inject(MarketIndexStore);
   private readonly tape = inject(TapeStore);
+  private readonly feed = inject(TapeFeed);
+  protected readonly shock = this.feed.shock;
+  protected readonly shockTitle = computed(() => { const s = this.shock(); return s ? shockSummary(s) : null; });
   protected readonly num = num;
   protected readonly pct = pct;
   protected readonly ABSENT = ABSENT;

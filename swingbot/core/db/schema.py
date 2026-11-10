@@ -424,6 +424,20 @@ refresher_heartbeat = register(sa.Table("refresher_heartbeat", METADATA,
     *standard_columns()),
     ("key", "beat_at", "cadence_s", "session", "cycle_ms", "last_error"))
 
+# v204: the admin snapshot pages' stored payloads, one row per key (risk,
+# analytics.snapshot, analytics.performance:<ledger>, analytics.equity_curve:<ledger>,
+# calendar.pnl:<YYYY-MM>). Written only by the refresher's snapshot worker,
+# compare-and-set on computed_at. Read by the admin request door. No SSE trigger:
+# the worker raises `market` itself.
+admin_snapshots = register(sa.Table("admin_snapshots", METADATA,
+    sa.Column("key", sa.Text, primary_key=True),
+    sa.Column("computed_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("stale_inputs", sa.Boolean, nullable=False, server_default=sa.false()),
+    sa.Column("inputs", JSONB, nullable=False),
+    *standard_columns(),
+    sa.Index("admin_snapshots_updated_idx", "updated_at")),
+    ("key", "computed_at", "stale_inputs", "inputs"))
+
 
 # v171: the shared market-data layer (spec D1/D6/D9). No SSE event; none in TABLE_CHANNELS.
 market_cache = register(sa.Table("market_cache", METADATA,
@@ -459,6 +473,46 @@ market_fetch_counts = register(sa.Table("market_fetch_counts", METADATA,
     sa.UniqueConstraint("hour", "provider", "kind", "asker", "outcome",
                         name="market_fetch_counts_key_uq")),
     ("hour", "provider", "kind", "asker", "outcome", "n"))
+
+# v209: the market-shock detector (core/market/shock.py). One reading per stepped
+# scan pass and the single current-state row, written together in one transaction
+# by repositories/market_shock.py. A reading's doc holds its whole as_row() (null
+# promoted columns would otherwise vanish on merge). No SSE trigger.
+market_shock_readings = register(sa.Table("market_shock_readings", METADATA,
+    sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("as_of", sa.TIMESTAMP(timezone=True), nullable=False),
+    sa.Column("session_date", sa.Date, nullable=False),
+    sa.Column("state_after", sa.Text, nullable=False),
+    sa.Column("breadth_frac", sa.Float(53)),
+    sa.Column("breadth_speed", sa.Float(53)),
+    sa.Column("spy_atr_move", sa.Float(53)),
+    sa.Column("qqq_atr_move", sa.Float(53)),
+    sa.Column("vix_level", sa.Float(53)),
+    sa.Column("vix_chg_pct", sa.Float(53)),
+    sa.Column("vix_off_high_pct", sa.Float(53)),
+    sa.Column("sectors_down", sa.Integer, nullable=False),
+    sa.Column("sectors_total", sa.Integer, nullable=False),
+    sa.Column("n_names", sa.Integer, nullable=False),
+    sa.Column("insufficient", sa.Boolean, nullable=False),
+    *standard_columns(),
+    sa.Index("market_shock_readings_as_of_idx", "as_of")),
+    ("as_of", "session_date", "state_after", "breadth_frac", "breadth_speed",
+     "spy_atr_move", "qqq_atr_move", "vix_level", "vix_chg_pct", "vix_off_high_pct",
+     "sectors_down", "sectors_total", "n_names", "insufficient"))
+
+market_shock_state = register(sa.Table("market_shock_state", METADATA,
+    sa.Column("id", sa.SmallInteger, primary_key=True, autoincrement=False),
+    sa.Column("label", sa.Text, nullable=False),
+    sa.Column("since", sa.TIMESTAMP(timezone=True)),
+    sa.Column("session_date", sa.Date),
+    sa.Column("vix_session_high", sa.Float(53)),
+    sa.Column("last_reading_id", sa.BigInteger,
+              sa.ForeignKey("market_shock_readings.id", ondelete="SET NULL")),
+    sa.Column("last_notice_at", sa.TIMESTAMP(timezone=True)),
+    *standard_columns(),
+    sa.CheckConstraint("id = 1", name="market_shock_state_single_row")),
+    ("label", "since", "session_date", "vix_session_high", "last_reading_id",
+     "last_notice_at"))
 
 
 #: Why each promoted column is a column and not a `doc` field. A promotion
@@ -676,5 +730,38 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "session": "NOT NULL market session the cadence was chosen for",
         "cycle_ms": "duration of the last cycle in /system/health; NULL before the first",
         "last_error": "last cycle failure in /system/health; NULL when clean",
+    },
+    "admin_snapshots": {
+        "key": "primary key; one row per snapshot key, so the table never grows with time",
+        "computed_at": "the compare-and-set WHERE in put (newer computed_at wins) and the "
+                       "closed-market stale rule",
+        "stale_inputs": "bars older than the last completed session; read by /market/updates "
+                        "without the doc",
+        "inputs": "recorded inputs (quotes, FX, bar fingerprints, thresholds, code version), "
+                  "apart from doc",
+    },
+    "market_shock_readings": {
+        "as_of": "market_shock_readings_as_of_idx: latest_reading's sort key and the prune WHERE",
+        "session_date": "NOT NULL US session the reading belongs to; per-session SQL review",
+        "state_after": "NOT NULL label after this reading; shadow-log cohort queries",
+        "breadth_frac": "headline: share of names down >= SHOCK_ATR_K ATR; NULL when none contribute",
+        "breadth_speed": "headline: same-session breadth change; NULL across sessions",
+        "spy_atr_move": "headline: SPY move in ATRs; NULL without SPY",
+        "qqq_atr_move": "headline: QQQ move in ATRs; NULL without QQQ",
+        "vix_level": "headline: fresh ^VIX tape level; NULL when missing or stale",
+        "vix_chg_pct": "headline: ^VIX day change %; NULL when missing or stale",
+        "vix_off_high_pct": "headline: % below the VIX session high; RECOVERY clause review",
+        "sectors_down": "NOT NULL sectors whose median move is down >= SHOCK_ATR_K ATR",
+        "sectors_total": "NOT NULL sectors with >= 2 contributing names",
+        "n_names": "NOT NULL contributing names; the insufficient test",
+        "insufficient": "NOT NULL True when n_names < SHOCK_MIN_NAMES (state held)",
+    },
+    "market_shock_state": {
+        "label": "NOT NULL current NORMAL/SHOCK/RECOVERY label read by every plan stamp",
+        "since": "time the current label began; the dwell clocks and the admin badge",
+        "session_date": "session of the last stepped reading; the overnight-carry test",
+        "vix_session_high": "running VIX high this session; the admin badge",
+        "last_reading_id": "FK to market_shock_readings.id (SET NULL on prune); never dangles",
+        "last_notice_at": "time of the last market_shock notice; the rate limit",
     },
 }

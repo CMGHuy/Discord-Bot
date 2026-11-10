@@ -176,8 +176,8 @@ export class ApiClient {
     return this.http.get<MarketUpdates>(`${this.base}/market/updates`, options);
   }
 
-  /** Ask the refresher for fresh quotes; the answer arrives as a market event. */
-  refreshMarket(body: { symbols: string[] }): Observable<{ queued: number }> {
+  /** Ask the refresher for fresh quotes or snapshots. The answer arrives as a market event. */
+  refreshMarket(body: { symbols: string[]; snapshots?: string[] }): Observable<{ queued: number }> {
     return this.http.post<{ queued: number }>(`${this.base}/market/refresh`, body, this.skipRouteRefresh);
   }
 

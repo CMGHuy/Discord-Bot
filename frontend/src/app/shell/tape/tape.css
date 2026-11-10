@@ -14,12 +14,13 @@
    so the same `:host` rule applies once per component that includes it. */
 :host {
   display: flex;
+  flex-wrap: wrap;
   flex: 1 1 0%;
   min-width: 0;
 }
 
 /* One lane. The viewport clips; the track slides inside it. */
-.lane { display: flex; align-items: stretch; min-width: 0; max-width: 100%;
+.lane { display: flex; flex: 1 1 0%; align-items: stretch; min-width: 0; max-width: 100%;
         height: 32px; overflow: hidden;
         border-bottom: 1px solid var(--border); background: var(--surface); }
 .cap-row { flex: none; display: flex; align-items: center; gap: var(--space-4);
@@ -84,4 +85,22 @@
   .lane { font-size: var(--text-micro); height: 28px; }
   .tile { padding: 0 var(--space-10); }
   .px { display: none; }
+}
+
+/* v210: the market-shock badge. A sibling of .lane, never inside .viewport,
+   so the tape's clip can never cut it: right of the tape from md (1024px),
+   on its own line under the tape below that. */
+.shock-badge { flex: none; display: flex; align-items: center; gap: var(--space-6);
+               height: 32px; padding: 0 var(--space-10); white-space: nowrap;
+               border-bottom: 1px solid var(--border); border-left: 1px solid var(--border);
+               background: var(--surface); color: var(--text-muted);
+               font-size: var(--text-micro); letter-spacing: .06em; text-transform: uppercase; }
+.shock-label { font-weight: 650; color: var(--text-secondary); }
+.shock-badge[data-label='SHOCK'] .shock-label { color: var(--neg); }
+.shock-badge[data-label='RECOVERY'] .shock-label,
+.shock-vix { color: var(--warn); }
+
+@media (max-width: 1023px) {
+  .lane { flex-basis: 100%; }
+  .shock-badge { flex: 1 1 100%; height: 24px; border-left: none; }
 }

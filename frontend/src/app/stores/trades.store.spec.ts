@@ -217,7 +217,7 @@ describe('TradesStore', () => {
   it('rows take a newer live quote in place', () => {
     store.setQuery({ page: 1, per_page: 25 });
     tick();
-    respond({ items: [{ ...ROW, ticker: 'MSFT', current_price: 410, price_as_of: '2026-10-29T14:00:00Z' }] });
+    respond({ items: [{ ...ROW, status: 'ACTIVE', ticker: 'MSFT', current_price: 410, price_as_of: '2026-10-29T14:00:00Z' }] });
     expect(store.rows()[0].current_price).toBe(410);
 
     live.set('MSFT', { price: 412, as_of: '2026-10-29T14:01:00Z' });
@@ -229,9 +229,33 @@ describe('TradesStore', () => {
   it('an older live quote never replaces a newer row price', () => {
     store.setQuery({ page: 1, per_page: 25 });
     tick();
-    respond({ items: [{ ...ROW, ticker: 'MSFT', current_price: 410, price_as_of: '2026-10-29T14:00:00Z' }] });
+    respond({ items: [{ ...ROW, status: 'ACTIVE', ticker: 'MSFT', current_price: 410, price_as_of: '2026-10-29T14:00:00Z' }] });
     live.set('MSFT', { price: 399, as_of: '2026-10-29T13:00:00Z' });
     expect(store.rows()[0].current_price).toBe(410);
+  });
+
+  it('a closed row never takes a live quote, its age or its refresh mark', () => {
+    store.setQuery({ page: 1, per_page: 25 });
+    tick();
+    respond({ items: [
+      { ...ROW, ticker: 'MSFT', status: 'CLOSED', current_price: null, price_as_of: null },
+      { ...ROW, ticker: 'MSFT', status: 'ACTIVE', current_price: 410, price_as_of: '2026-10-29T14:00:00Z' },
+    ] });
+    live.set('MSFT', { price: 412, as_of: '2026-10-29T14:01:00Z', refreshing: true });
+
+    const [closed, open] = store.rows();
+    expect(closed.price_as_of ?? null).toBeNull();
+    expect(closed.price_refreshing ?? false).toBe(false);
+    expect(closed.current_price).toBeNull();
+    expect(open.price_as_of).toBe('2026-10-29T14:01:00Z');
+  });
+
+  it('a page of only closed rows is returned untouched', () => {
+    store.setQuery({ page: 1, per_page: 25 });
+    tick();
+    respond({ items: [{ ...ROW, ticker: 'AAPL', status: 'CLOSED', price_as_of: null }] });
+    live.set('AAPL', { price: 190, as_of: '2026-10-29T14:01:00Z', refreshing: true });
+    expect(store.rows()[0].price_as_of ?? null).toBeNull();
   });
 
   it('meta follows the server meta and the patched rows', () => {
@@ -239,7 +263,7 @@ describe('TradesStore', () => {
     tick();
     const market_meta = { as_of: '2026-10-29T14:00:00Z', refreshing: false, stale_count: 0, missing_count: 0,
       incomplete: false, source: 'request', error: null } as MarketMeta;
-    respond({ items: [{ ...ROW, ticker: 'MSFT', current_price: 410, price_as_of: '2026-10-29T14:00:00Z' }], market_meta } as Partial<Collection<TradeRow>>);
+    respond({ items: [{ ...ROW, status: 'ACTIVE', ticker: 'MSFT', current_price: 410, price_as_of: '2026-10-29T14:00:00Z' }], market_meta } as Partial<Collection<TradeRow>>);
     expect(store.meta()?.refreshing).toBe(false);
     live.set('MSFT', { price: 410, as_of: '2026-10-29T14:00:00Z', refreshing: true });
     expect(store.meta()?.refreshing).toBe(true);

@@ -498,6 +498,14 @@ const SWIPE_CLOSE_PX = 80;
       padding: 0;
       color: var(--text);
     }
+    /* The body is the scroller: the dialog is a column that never scrolls
+       itself, so the header stays put and \`.body\` gets a bounded height.
+       Without this \`.body\` grew to its content, the dialog scrolled instead,
+       and the phone sheet's \`overscroll-behavior: contain\` on \`.body\` (a
+       scroll container that never overflowed) swallowed the scroll before it
+       reached the dialog -- a long day on the Calendar could not be scrolled.
+       \`[open]\` keeps a closed dialog display:none. */
+    .drawer[open] { display: flex; flex-direction: column; overflow: hidden; }
     .drawer::backdrop { background: var(--scrim); }
     /* elev-overlay's border-radius and 4-sided border assume a panel that
      * floats clear of the viewport on every edge. This one doesn't -- right,
@@ -514,6 +522,7 @@ const SWIPE_CLOSE_PX = 80;
        density); its surface and shadow are .elev-overlay's alone. */
     header {
       display: flex;
+      flex: none;
       flex-wrap: wrap;
       align-items: baseline;
       gap: var(--space-10);
@@ -534,12 +543,12 @@ const SWIPE_CLOSE_PX = 80;
       cursor: pointer;
     }
     .close:hover { color: var(--text); }
-    .body { padding: var(--panel-pad); overflow-y: auto; }
+    .body { flex: 1 1 auto; min-height: 0; padding: var(--panel-pad); overflow-y: auto; }
     /* v168 §3a: below 640px the drawer is a bottom sheet rising from the
        foot of the screen, with a drag handle and rounded top corners (its
        other edges sit flush, as on desktop); 640-1023px it is 85vw from the
        right; from 1024px the width above. */
-    .drag-handle { display: none; }
+    .drag-handle { display: none; flex: none; }
     @media (max-width: 639px) {
       .drawer { margin: auto 0 0; width: 100vw; height: auto; max-height: 85dvh; }
       .drawer.elev-overlay { border-radius: var(--panel-radius) var(--panel-radius) 0 0; border-width: 1px 0 0; }

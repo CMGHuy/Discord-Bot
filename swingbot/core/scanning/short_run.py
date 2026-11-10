@@ -37,7 +37,7 @@ from swingbot.core.planning.account import load_account_config
 from swingbot.scan_params import ScanParams
 
 from . import (analyze, dedup, fetch, lane_overlap, qualify, rejection_recorder, runstate, scan_run,
-               short_funnel, telemetry)
+               shock_scan, short_funnel, telemetry)
 from .requote import Requote
 from .embeds import (build_embed, build_simple_alert, notify_closed_trades,
                      notify_near_close, plan_numbers_for_display)
@@ -147,7 +147,8 @@ def _qualify_context(require_confirmation, frames, lane) -> qualify.QualifyConte
         etf_symbol_of=lane["etf_symbol_of"], sector_frames=lane["sector_frames"],
         regime=lane["regime"], regimes=lane["regimes"],
         confirmations=state if require_confirmation else None,
-        required_confirmations=config.SIGNAL_CONFIRMATION_SCANS)
+        required_confirmations=config.SIGNAL_CONFIRMATION_SCANS,
+        shock_state=lane.get("shock_state"))
 
 
 def _qualified_items(items, require_confirmation, frames, lane) -> list:
@@ -313,10 +314,11 @@ def _alert_for(item, frames, spy_df, account_cfg, alerts, funnel=None, requote=N
     notify_secondary(item, plan, conf)
 
 
-def _bare_context(frames) -> qualify.QualifyContext:
+def _bare_context(frames, shock_state=None) -> qualify.QualifyContext:
     """A context with no lane state, for callers that pass none (tests)."""
     return qualify.QualifyContext(frames=frames, spy=None, sector_of={}, etf_symbol_of={},
-                                  sector_frames={}, regime=None, regimes=None)
+                                  sector_frames={}, regime=None, regimes=None,
+                                  shock_state=shock_state)
 
 
 def _rescenario_for(item, frames):
@@ -401,6 +403,9 @@ def _lane_inputs(base_tickers, now, funnel=None):
 
 
 def _lane_state(reference, snapshot, regime) -> dict:
+    """The lane's run-wide inputs. v209: the stored market-shock label is read
+    here, once per SHORT run, never inside planning (None under off or when the
+    store is unreadable: those plans carry no shock_state key)."""
     regimes = None
     try:
         regimes = regime2.regime_series(reference.spy)
@@ -409,7 +414,7 @@ def _lane_state(reference, snapshot, regime) -> dict:
                   level=logging.DEBUG, exc_info=True)
     return {"sector_of": snapshot.sector_of, "etf_symbol_of": fetch._etf_symbol_of_sector(),
             "sector_frames": dict(reference.sector_frames), "spy": reference.spy,
-            "regime": regime, "regimes": regimes}
+            "regime": regime, "regimes": regimes, "shock_state": shock_scan.current_label()}
 
 
 def _analyze_candidates(candidates, frames, ctx, progress) -> list:

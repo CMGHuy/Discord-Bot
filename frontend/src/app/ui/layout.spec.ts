@@ -534,6 +534,28 @@ describe('sb-drawer header slot (v179 §3.2)', () => {
   });
 });
 
+describe('sb-drawer scrolls its body, not the dialog', () => {
+  // A long day on the Calendar could not be scrolled on a phone: .body grew to
+  // its content, the dialog scrolled instead, and the sheet's
+  // `overscroll-behavior: contain` on .body (never overflowing) swallowed the scroll.
+  it('is a column that never scrolls itself while open, and a closed one stays hidden', () => {
+    const open = drawerRule('.drawer[open]');
+    expect(open).toContain('display: flex');
+    expect(open).toContain('flex-direction: column');
+    expect(open).toContain('overflow: hidden');
+    expect(drawerRule('.drawer')).not.toContain('display:');
+  });
+
+  it('gives .body a bounded height so it is the scroller, and keeps the header and handle fixed', () => {
+    const body = drawerRule('.body');
+    expect(body).toContain('flex: 1 1 auto');
+    expect(body).toContain('min-height: 0');
+    expect(body).toContain('overflow-y: auto');
+    expect(drawerRule('header')).toContain('flex: none');
+    expect(drawerRule('.drag-handle')).toContain('flex: none');
+  });
+});
+
 describe('sb-drawer swipe down to close (phone sheet)', () => {
   function setup(phone: boolean) {
     installDialogPolyfill();

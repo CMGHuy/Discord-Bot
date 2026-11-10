@@ -10,6 +10,7 @@ from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest, StockSnapshotRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
+from swingbot.core.market import session
 from swingbot.core.marketdata.providers.base import (
     NY, to_alpaca_symbol, to_yf_daily, to_yf_hourly)
 from swingbot.core.marketdata.shared.kinds import QuoteDetail
@@ -74,9 +75,12 @@ def symbols_per_request(period: str, now: datetime = None) -> int:
     return max(1, ROWS_PER_PAGE // rows)
 
 
-def _in_regular_session(now: datetime) -> bool:
-    ny = now.astimezone(NY)
-    return ny.weekday() < 5 and dtime(9, 30) <= ny.time() < dtime(16, 0)
+def _tape_is_live(now: datetime) -> bool:
+    """A live US tape (pre-market, regular, after-hours; holiday aware). Inside
+    it an old IEX print is not served: in the regular session it is a miss, in
+    pre-market and after-hours an old print (v223), both re-asked from
+    yfinance. Outside it (weekend, overnight) the last print IS the latest one."""
+    return session.is_tape_open(now)
 
 
 class AlpacaProvider:
@@ -152,13 +156,23 @@ class AlpacaProvider:
         df = _frames_from_raw(raw).get(symbol)
         return None if df is None or df.empty else df
 
-    def _fresh_price(self, snap, now, max_age_s):
+    def _price_verdict(self, snap, now, max_age_s):
+        """(price, old_print) for one snapshot -- the one place a trade is
+        classified (v223). A positive trade is a hit when fresh or when no
+        tape is live. An old one while the tape is live is an old print
+        outside the NYSE regular session (pre-market, after-hours, the
+        afternoon of an early close) and a miss inside it, so a frozen
+        regular-hours feed still counts as an Alpaca failure. No trade or a
+        non-positive price is a miss."""
         trade = getattr(snap, "latest_trade", None)
         if trade is None or not trade.price or trade.price <= 0:
-            return None
-        if _in_regular_session(now) and (now - trade.timestamp).total_seconds() > max_age_s:
-            return None
-        return float(trade.price)
+            return None, False
+        if (now - trade.timestamp).total_seconds() <= max_age_s or not _tape_is_live(now):
+            return float(trade.price), False
+        return None, not session.is_nyse_regular_session(now)
+
+    def _fresh_price(self, snap, now, max_age_s):
+        return self._price_verdict(snap, now, max_age_s)[0]
 
     def _quote_sides(self, snap):
         """(bid, ask, quote_at) from the snapshot's latest quote; a missing or
@@ -171,38 +185,54 @@ class AlpacaProvider:
         return bid, ask, (quote.timestamp if bid and ask else None)
 
     def _detail(self, ticker, snap, now, max_age_s):
-        price = self._fresh_price(snap, now, max_age_s)
+        """(QuoteDetail or None, old_print). An old print with no two-sided
+        quote has no detail but keeps its old_print flag."""
+        price, old_print = self._price_verdict(snap, now, max_age_s)
         bid, ask, quote_at = self._quote_sides(snap)
         if price is None and quote_at is None:
-            return None
+            return None, old_print
         trade_at = snap.latest_trade.timestamp if price is not None else None
         return QuoteDetail(symbol=ticker, price=price, trade_at=trade_at, bid=bid, ask=ask,
-                           quote_at=quote_at, source=f"alpaca-{self._live_feed.value}")
+                           quote_at=quote_at, source=f"alpaca-{self._live_feed.value}"), old_print
+
+    def _snapshots(self, tickers):
+        """One get_stock_snapshot call: ([(our ticker, snap), ...], now)."""
+        by_symbol = {to_alpaca_symbol(t): t for t in tickers}
+        req = StockSnapshotRequest(symbol_or_symbols=list(by_symbol), feed=self._live_feed)
+        snaps = self._call("get_stock_snapshot", req) or {}
+        pairs = [(by_symbol[sym], snap) for sym, snap in snaps.items() if sym in by_symbol]
+        return pairs, self._now()
+
+    def latest_quote_answers(self, tickers, max_trade_age_s):
+        """v223: (details, old-print tickers) from one snapshot call. A pure
+        return value: the provider is shared across quote threads."""
+        pairs, now = self._snapshots(tickers)
+        out, old = {}, set()
+        for ticker, snap in pairs:
+            detail, old_print = self._detail(ticker, snap, now, max_trade_age_s)
+            if detail is not None:
+                out[ticker] = detail
+            if old_print:
+                old.add(ticker)
+        return out, frozenset(old)
 
     def latest_quotes(self, tickers, max_trade_age_s):
-        """v171: latest_prices with timestamps and the IEX bid/ask. One snapshot call."""
-        by_symbol = {to_alpaca_symbol(t): t for t in tickers}
-        req = StockSnapshotRequest(symbol_or_symbols=list(by_symbol), feed=self._live_feed)
-        snaps = self._call("get_stock_snapshot", req) or {}
-        now = self._now()
-        out = {}
-        for sym, snap in snaps.items():
-            detail = self._detail(by_symbol[sym], snap, now, max_trade_age_s) if sym in by_symbol else None
-            if detail is not None:
-                out[detail.symbol] = detail
-        return out
+        return self.latest_quote_answers(tickers, max_trade_age_s)[0]
 
-    def latest_prices(self, tickers, max_trade_age_s):
-        by_symbol = {to_alpaca_symbol(t): t for t in tickers}
-        req = StockSnapshotRequest(symbol_or_symbols=list(by_symbol), feed=self._live_feed)
-        snaps = self._call("get_stock_snapshot", req) or {}
-        now = self._now()
-        out = {}
-        for sym, snap in snaps.items():
-            price = self._fresh_price(snap, now, max_trade_age_s) if sym in by_symbol else None
+    def latest_price_answers(self, tickers, max_trade_age_s):
+        """v223: (prices, old-print tickers) from one snapshot call."""
+        pairs, now = self._snapshots(tickers)
+        out, old = {}, set()
+        for ticker, snap in pairs:
+            price, old_print = self._price_verdict(snap, now, max_trade_age_s)
             if price is not None:
-                out[by_symbol[sym]] = price
-        missing = [t for t in tickers if t not in out]
+                out[ticker] = price
+            elif old_print:
+                old.add(ticker)
+        missing = [t for t in tickers if t not in out and t not in old]
         if missing:
             log.debug("Alpaca snapshot: no fresh price for %s", ", ".join(missing[:10]))
-        return out
+        return out, frozenset(old)
+
+    def latest_prices(self, tickers, max_trade_age_s):
+        return self.latest_price_answers(tickers, max_trade_age_s)[0]

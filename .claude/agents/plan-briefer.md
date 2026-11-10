@@ -28,7 +28,8 @@ Write it to the path you were given, in this order:
    exact signature or definition line.
 3. **Excerpts** — the code a task will edit or call, ≤ 60 lines each, with
    `path:start-end` so a writer can cite line ranges. Current complexity of
-   any function to be changed (`python -m radon cc -s <file>`) — note which
+   any function to be changed (`scripts/dev/complexity_gate.py` enforces the
+   limit; `python -m radon cc -s -n C <files>` is for iterating) — note which
    are already ≥ 15.
 4. **Test patterns** — for each test file a task will extend or mirror: its
    path, fixtures and helpers used, and one representative test verbatim.

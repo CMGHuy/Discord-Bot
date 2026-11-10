@@ -19,6 +19,9 @@ ROW_BAD = {**ROW_OK, "provider_fallback_rate": 0.25, "empty_symbols": 6, "empty_
            "stale_symbols": 2}
 ROW_PRE_V148 = {"at": "2026-10-01T14:55:00+00:00", "duration_s": 60.0, "tickers": 100}
 
+#: v223: a pre-market scan -- every unanswered symbol was an old print, not a failure.
+ROW_PRE_MARKET = {**ROW_OK, "provider_fallback_rate": 0.0, "old_print_rate": 0.92}
+
 
 def _ago(minutes: int) -> str:
     return (NOW - dt.timedelta(minutes=minutes)).isoformat()
@@ -73,6 +76,8 @@ def test_booted_at_is_an_aware_utc_moment():
     ({**ROW_OK, "provider_fallback_rate": None, "empty_rate": 0.5}, False, "alert"),
     (ROW_PRE_V148, False, None),
     (ROW_PRE_V148, True, None),                                   # unknown never recovers
+    (ROW_PRE_MARKET, False, None),                                # old prints never alert
+    ({**ROW_PRE_MARKET, "provider_fallback_rate": 0.25}, False, "alert"),   # real misses still do
     (None, True, None),
     ({}, False, None),
 ])
@@ -379,3 +384,22 @@ def test_failure_without_an_exception_leaves_the_last_error_alone(heartbeat):
     heartbeat["last_error"] = "old"
     runstate.record_tick_failure()
     assert heartbeat["last_error"] == "old"
+
+
+def test_the_provider_alert_shows_the_old_print_rate_of_live_price_asks():
+    embed = notices.provider_degraded_embed({**ROW_BAD, "old_print_rate": 0.42}, 20.0, 5.0)
+    assert "• Old IEX prints: 42.0% of live-price asks" in embed.description
+    assert "Stale symbols: 2" in embed.description
+
+
+def test_the_provider_recovery_shows_the_old_print_rate():
+    embed = notices.provider_recovered_embed(ROW_PRE_MARKET)
+    assert "• Old IEX prints: 92.0% of live-price asks" in embed.description
+
+
+@pytest.mark.parametrize("build", [
+    lambda row: notices.provider_degraded_embed(row, 20.0, 5.0),
+    notices.provider_recovered_embed,
+])
+def test_a_row_without_the_old_print_rate_reads_as_a_dash(build):
+    assert "• Old IEX prints: — of live-price asks" in build(ROW_BAD).description

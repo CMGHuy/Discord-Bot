@@ -37,6 +37,11 @@ interface TradesSlice {
    *  Dashboard could end up showing the same (unfiltered, CLOSED-included)
    *  trades in all three status panels. */
   queryReady: boolean;
+  /** The query `data` answered. A refetch keeps the old rows on screen (a
+   *  skeleton belongs on the first load only), so a consumer that switches to
+   *  a different result set -- a lifecycle tab -- compares this to tell rows
+   *  that belong to the new query from the previous one's. */
+  dataQuery: TradeQuery | null;
   loading: boolean;
   error: string | null;
 
@@ -74,6 +79,15 @@ const LIVE_STATUSES = new Set(['PENDING', 'ACTIVE', 'PARTIAL']);
 /** v201: the unique tickers of rows whose price still moves (Refresh asks for these). */
 export function liveTickers(rows: readonly { ticker: string; status: string }[]): string[] {
   return [...new Set(rows.filter((r) => LIVE_STATUSES.has(r.status)).map((r) => r.ticker))];
+}
+
+/** Lay live quotes over the still-live rows only; closed rows come back as-is. */
+export function patchLiveRows<T extends RowQuoteFields & { ticker: string; status: string }>(
+  live: Pick<LiveValuesStore, 'patchRows'>, rows: T[],
+): T[] {
+  const patched = live.patchRows(rows.filter((r) => LIVE_STATUSES.has(r.status)), (r) => r.ticker);
+  let next = 0;
+  return rows.map((r) => (LIVE_STATUSES.has(r.status) ? patched[next++] : r));
 }
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -133,6 +147,7 @@ export const TradesStore = signalStore(
     data: null,
     query: { page: 1, per_page: DEFAULT_PER_PAGE },
     queryReady: false,
+    dataQuery: null,
     loading: false,
     error: null,
     clearing: null,
@@ -142,8 +157,9 @@ export const TradesStore = signalStore(
     clearRefusal: null,
   }),
   withComputed(({ data, query }, live = inject(LiveValuesStore)) => {
-    // v201: live prices patch the rows in place, for every consumer.
-    const rows = computed(() => live.patchRows(data()?.items ?? [], (r) => r.ticker));
+    // v201: live prices patch the rows in place, for every consumer. A closed
+    // row's P&L is final: it never takes a quote's age or refresh mark.
+    const rows = computed(() => patchLiveRows(live, data()?.items ?? []));
     return {
     rows,
     meta: computed(() => liveMeta(data()?.market_meta, rows())),
@@ -197,17 +213,18 @@ export const TradesStore = signalStore(
     resolve(): Observable<void> {
       return routeRequest(api.trades(store.query()), {
         start: () => patchState(store, { loading: true }),
-        next: (data) => patchState(store, { data, loading: false, error: null }),
+        next: (data) => patchState(store, { data, dataQuery: store.query(), loading: false, error: null }),
         error: (error) => patchState(store, { loading: false, error: error.code === 'unavailable' ? 'The admin is not responding.' : error.message }),
       });
     },
     load(): void {
       const request = ++latestRequest;
+      const query = store.query();
       patchState(store, { loading: true });
-      api.trades(store.query()).subscribe({
+      api.trades(query).subscribe({
         next: (data) => {
           if (request !== latestRequest) return;
-          patchState(store, { data, loading: false, error: null });
+          patchState(store, { data, dataQuery: query, loading: false, error: null });
         },
         error: (error: ApiError) => {
           if (request !== latestRequest) return;

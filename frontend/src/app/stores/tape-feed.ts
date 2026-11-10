@@ -2,7 +2,7 @@ import { Injectable, Signal, computed, effect, inject, signal } from '@angular/c
 
 import { ApiClient } from '../api/api-client';
 import { EventStream, MARKET_DATA_MIN_INTERVAL_MS } from '../api/event-stream';
-import { TapeRow } from '../api/models';
+import { TapeRow, TapeShock } from '../api/models';
 
 function sameSymbols(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((symbol, i) => symbol === b[i]);
@@ -38,6 +38,7 @@ export class TapeFeed {
   private readonly merged = computed(() => unionOf(this.owners()), { equal: sameSymbols });
   private readonly _rows = signal<Record<string, TapeRow>>({});
   private readonly _asOf = signal<string | null>(null);
+  private readonly _shock = signal<TapeShock | null>(null);
   private readonly _loading = signal(false);
   private latestRequest = 0;
   private queued = false;
@@ -46,6 +47,7 @@ export class TapeFeed {
 
   readonly rows = this._rows.asReadonly();
   readonly asOf = this._asOf.asReadonly();
+  readonly shock = this._shock.asReadonly();
   readonly loading = this._loading.asReadonly();
 
   constructor() {
@@ -93,6 +95,7 @@ export class TapeFeed {
         if (!response || !Array.isArray(response.rows)) return;
         this._rows.set(Object.fromEntries(response.rows.map((r) => [r.symbol.toUpperCase(), r])));
         this._asOf.set(response.as_of ?? null);
+        this._shock.set(response.shock ?? null);
         this._loading.set(false);
       },
       // Silent and non-destructive: see the class comment.

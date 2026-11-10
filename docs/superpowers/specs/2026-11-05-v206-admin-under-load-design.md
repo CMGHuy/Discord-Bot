@@ -511,7 +511,7 @@ quiet.
 
 ### Plan 1 baseline (committed probe)
 
-**Not evidence yet.** One run so far, and it is labelled `quiet`, so it does
+**Superseded by `### Plan 1 after` below: the scan baseline was never taken and is no longer owed.** One run so far, and it is labelled `quiet`, so it does
 not count toward the Goal (only `scan` runs do). The `scan` baseline is still
 owed: rerun the probe during a US-session scan (`--date 2026-11-03`, same
 flags) before V206-13 pushes, then replace this note with that run's table.
@@ -520,11 +520,23 @@ flags) before V206-13 pushes, then replace this note with that run's table.
 |---|---|---|---|---|---|
 | `v206-baseline-quiet-1` | quiet (not evidence) | 2026-11-05 22:03 UTC, no scan running | `ghcr.io/cmghuy/discord-bot:sha-d0500efab0cc` | 36 | 17 requests in 120 s = 8.5/min |
 | `v206-baseline-mixed-1` | mixed (not evidence) | 2026-11-06 12:39 Berlin, scan ended mid-run | `ghcr.io/cmghuy/discord-bot:sha-d5f56464e217` | 36 | 79 requests in 120 s = 39.5/min |
+| `v206-baseline-scan-1` (labelled mixed) | mixed (not evidence) | 2026-11-06 15:44 Berlin, session scans every 5 min (~286 s each), gaps between them hit some samples | `ghcr.io/cmghuy/discord-bot:sha-68927fbd8cc2` (ui 1.40.0 / bot 2.17.0, pre-Plan-1), probe `92d2b3f7` | 36 | 38 requests in 120 s = 19.0/min |
 
 The mixed run (scan stopped partway) still shows the load: `/cancel-precision`
 43.0 s max, `/analytics/performance` 35.6 s, `/dashboard` median 10.8 s /
 p90 23.9 s over 27 samples, `/market/tape` 169 calls (median 4.3 s, max 51.8 s)
 and an idle tab at 39.5 requests/min. The `scan` baseline is still owed.
+
+The second mixed run (15:44 Berlin, mostly inside scans) is worse: 27 of 36
+pages hit the 90 s cap in round 1. `/system/scan` 289 calls (median 1.1 s,
+p90 34.7 s, max 50.4 s), `/health` 351 calls (p90 32.8 s, max 50.2 s),
+`/dashboard` median 17.0 s / p90 33.1 s over 15 samples, `/market/tape` 76
+calls (median 10.7 s, p90 23.3 s, max 49.1 s), `/trades` median 13.8 s, and
+`/insights/*`, `/risk`, `/system/versions` page loads timed out. A strict
+`scan` label looks unreachable with back-to-back 5-minute session scans: the
+few seconds between scans catch at least one sample per hour-long run. The
+Plan 1 after-run (V206-13) should be compared against this run with that
+caveat, using the same flags.
 
 Worth knowing from the quiet run: with no scan running the idle tab already
 sits near the Plan 1 target (under 10/min), as expected since the polling
@@ -534,3 +546,114 @@ under repair is scan-driven. Heavy calls were still slow with the scan off
 not the only load on the single admin worker. Plans 2-4 own those calls. The
 probe's `/health` had no `sse_streams` yet (it ships in V206-4), so the
 stream count reads `-`.
+
+### Plan 2 boot merge (V217-1)
+
+**Verdict: no merge. Both boot `/trades` calls stay.** Pinned by
+`frontend/src/app/workspaces/dashboard/dashboard.spec.ts` ("Dashboard boot
+/trades calls (v217 V217-1)") and
+`frontend/src/app/workspaces/dashboard/panels/exposure-by-horizon.spec.ts`
+("exposure by horizon vs the Open tab (v217 V217-1)").
+
+The Dashboard boot sends two `/trades` requests, as § Plan 2 says:
+
+| Caller | Query | Feeds |
+|---|---|---|
+| `dashboard.ts` `recent` (activity feed) | `sort=-opened_at&page=1&per_page=20`, no status | `deriveActivity` (at most 6 events), `liveSymbols` for Refresh, the trade drawer's lookups, the `recentSettled` redirect rule |
+| `positions-table.ts` own `TradesStore` | `status=ACTIVE&sort=-opened_at&page=1&per_page=<10 desktop, 5 tablet/phone, or saved>` | the Open tab, its server pager, its own `trades`-event refetch |
+
+Why they cannot merge under this section's rule ("the same rows in the same
+order, asserted by a spec"):
+
+1. The feed is not a superset of the Open tab. It holds the 20 newest rows of
+   every status, so an ACTIVE position opened before those 20 is rendered by
+   the table and missing from the feed (the spec seeds exactly that case).
+2. The page sizes differ (20 vs 10/5/saved), and the table pages on the
+   server and refetches on its own events. A shared response would have to
+   carry both windows.
+
+The brief behind plan v217 counted a third call, `sb-exposure-by-horizon`
+(`status=open&per_page=200`). That panel is not mounted. It left the
+Dashboard template in `d9fef9eb` (2026-09-12), and the boot spec asserts no
+such element and no such tag in `dashboard.ts`. Had it been mounted, it still
+could not share the Open tab's call: `status=open` is ACTIVE plus PARTIAL at
+200 rows unpaged, `status=ACTIVE` is ACTIVE only and paged, so a PARTIAL
+runner lands in one and not the other. Deleting the unmounted panel
+(`panels/exposure-by-horizon.ts`, its spec and its `PANEL_HELP` entry) is a
+follow-up outside plan v217.
+
+### Plan 1 after (committed probe)
+
+**Not evidence for the Goal.** The scan baseline (V206-3) was never taken: Plan 1
+deployed before it, so production no longer runs the code it had to measure.
+Scans also run back to back every ~5 minutes (about 4 min each), so a strict
+`scan`-labelled run is not reachable. Partner decision 2026-11-06: record the
+`mixed` after-run and compare it with the old-image `mixed` run above.
+
+| Run | Label | When | Image | Pages |
+|---|---|---|---|---|
+| `v206-after-mixed-1` | mixed (not evidence) | 2026-11-06 17:17 Berlin | `ghcr.io/cmghuy/discord-bot:sha-2365278852ec` | 36 |
+
+Old-image mixed run → after-run (same probe, same flags):
+
+| Measure | Before | After |
+|---|---|---|
+| `/dashboard` p90 | 23.9 s | 14.8 s |
+| `/cancel-precision` max | 43.0 s | 11.7 s |
+| `/analytics/performance` max | 35.6 s | 0.33 s |
+| `/market/tape` calls / max | 169 / 51.8 s | 73 / 9.2 s |
+| Idle tab | 39.5 req/min | 22.5 req/min |
+
+Confound: the after image also carries v204 (Risk/Analytics/Calendar read stored snapshots), so `/analytics/performance` and part of `/cancel-precision` are v204's effect, not Plan 1's. Indicative improvement, but the idle rate still sits above the under-10/min
+target and ten endpoints still exceed 5 s p90. The heavy calls (`/dashboard`,
+`/trades`, `/live`, `/market/tape`) are owned by the later v206 plans.
+
+## Panel review (pre-close-out, Plan 1)
+
+staff-engineer, senior-engineer, quant-engineer over `bfde298c^1...bfde298c`: 0 blocking, 16 advisory.
+
+- staff: after-table credits Plan 1 with v204's effect -- applied (confound named)
+- staff: baseline note contradicts the after section -- applied (marked superseded)
+- staff: probe keeps results in memory until the end -- carried to the later plans (probe checkpointing)
+- staff/senior: scan-event progress read runs on the listener thread, side pool budget undocumented -- carried (bounded by 250 ms statement timeout)
+- staff: lint was red after the merge -- rejected: fixed on main by 472da417/13920002 before this close-out
+- staff: `sse_streams` counts one process -- rejected: spec pins one gunicorn worker
+- senior: `summarise` complexity 13, `payload(_name)` comment -- rejected: under the limit, cosmetic
+- quant: hung/failed calls and page-with-no-calls bias the probe low; scan label ignores the idle window; meta lacks probe dirtiness/host; raw probe.json not committed -- carried to the later plans' probe work
+
+### Plan 2 after (committed probe)
+
+**Not a strict `scan` run:** labelled `mixed`, like both pre-Plan-1 runs (scans run
+back to back, so the gap between two scans always catches a sample). Run
+2026-11-06 17:43 Berlin, `--date 2026-11-03`, 3 rounds x 12 pages, image
+`ghcr.io/cmghuy/discord-bot:sha-7b17ccc000ae` (ui 1.40.3 / bot 2.17.3: v206
+Plan 1 + v217), credentials absent from the output. Compared with the
+second pre-Plan-1 run (15:44 Berlin, image `sha-68927fbd8cc2`, same flags);
+the two share a label and a time of day, so the comparison is fair but not
+a strict A/B. Output: `.superpowers/probe/v217-after-1/` (git-ignored).
+
+| Endpoint | Before p90 / max | After p90 / max |
+|---|---|---|
+| `/system/scan` | 34.7 s / 50.4 s (289 calls) | 0.7 s / 2.2 s (78 calls) |
+| `/health` | 32.8 s / 50.2 s (351 calls) | 0.15 s / 0.43 s (78 calls) |
+| `/session` | 16.3 s / 39.8 s | 0.10 s / 0.21 s |
+| `/dashboard` | 33.1 s / 35.8 s (median 17.0 s) | 11.4 s / 16.2 s (median 9.0 s) |
+| `/market/tape` | 23.3 s / 49.1 s (76 calls) | 6.9 s / 9.3 s (78 calls) |
+| `/trades` | 20.5 s / 21.0 s | 11.1 s / 11.4 s |
+| `/market/updates` | 12.3 s / 43.4 s (171 calls) | 1.9 s / 5.0 s (229 calls) |
+| `/live` | 10.8 s / 17.2 s | 8.8 s / 10.1 s |
+| Idle tab | 38 requests / 120 s = 19.0 per min | 33 requests / 120 s = 16.5 per min |
+
+The scan-time polling Plan 1 removed is gone: `/system/scan` and `/health` calls
+fell by 73% and 78%, and both are fast again. No page load timed out this
+time (the baseline had `/risk`, `/insights/*` and `/system/versions` loads at
+the 90 s cap). Still slow and owned by Plans 3 and 4: `/dashboard` (median
+9 s), `/trades` (9 s median) and `/live` (5.5 s median), plus
+`/cancel-precision` (36 s max, 3 calls). The idle tab at 16.5 per minute
+is still above the Plan 1 target of under 10 per minute, so that target is
+not met in a mixed run and needs a look in Plan 3.
+
+The probe cannot show v217's own savings: it opens the Dashboard on 1D, which
+sent one `/dashboard` before v217 too, and a mid-month day page made no extra
+month call before either. The wider-scope Dashboard request and the
+day-edge month lookup are pinned by their specs (V217-3, V217-4, V217-5, V217-5b).

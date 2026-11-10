@@ -245,7 +245,8 @@ def test_equity_sparkline_is_numbers_not_svg(seed, logged_in):
     would take that decision away from it."""
     seed()
     equity = logged_in.get("/api/v1/dashboard").get_json()["equity_30d"]
-    assert_shape(equity, {"points": list, "change_pct": NULLABLE_NUMBER}, where="equity_30d")
+    assert_shape(equity, {"points": list, "change_pct": NULLABLE_NUMBER,
+                          "market_meta": (dict, type(None))}, where="equity_30d")
     assert all(isinstance(p, (int, float)) for p in equity["points"])
     assert "svg" not in equity
 
@@ -896,3 +897,93 @@ def test_range_counts_partial_legs_by_their_own_close(seed, logged_in):
     assert body["win_rate_n"] == 2
     assert body["expectancy_n"] == 2
     assert body["lifecycle"]["CLOSED"] == 2
+
+
+# --------------------------------------------------------- v217 the today block
+#
+# A wider-scope Dashboard used to send /dashboard twice: once for its scope and
+# once with mode=today for the "today" card. Modes all and range now carry the
+# today figures themselves, computed from the same loaded trades. active and
+# today never carry them: their own figures are today's, and their frozen
+# goldens (tests/admin_perf/golden/dashboard*.json) must stay byte-identical.
+
+_REALIZED_SHAPE = {
+    "amount": NULLABLE_NUMBER, "pct": NULLABLE_NUMBER,
+    "n": int, "wins": int, "losses": int, "fx_missing_count": int,
+}
+
+
+def test_today_block_modes_are_exactly_all_and_range(admin_app):
+    from swingbot.admin.api_v1.dashboard import _TODAY_BLOCK_MODES
+    assert _TODAY_BLOCK_MODES == ("all", "range")
+
+
+@pytest.mark.parametrize("query", ["", "?mode=active", "?mode=today"])
+def test_today_block_is_absent_for_active_and_today(seed, logged_in, query):
+    seed(**_parity_book())
+    body = logged_in.get(f"/api/v1/dashboard{query}").get_json()
+    assert "today" not in body
+
+
+def test_today_block_is_present_and_shaped_for_all_and_range(seed, logged_in):
+    seed(**_parity_book())
+    for body in (logged_in.get("/api/v1/dashboard?mode=all").get_json(),
+                 _range(logged_in).get_json()):
+        assert_shape(body["today"], {"realized": dict, "lifecycle": dict}, where="today")
+        assert_shape(body["today"]["realized"], _REALIZED_SHAPE, where="today.realized")
+        assert set(body["today"]["lifecycle"]) == set(body["lifecycle"])
+
+
+def test_today_block_equals_mode_today_for_all(seed, logged_in):
+    seed(**_parity_book())
+    all_days = logged_in.get("/api/v1/dashboard?mode=all").get_json()
+    today = logged_in.get("/api/v1/dashboard?mode=today").get_json()
+    assert all_days["today"] == {"realized": today["realized"], "lifecycle": today["lifecycle"]}
+    # The parity book closes a win and a loss today on the main ledger.
+    assert all_days["today"]["realized"]["n"] == 2
+    # ... and the scoped figures beside it are still all-time.
+    assert all_days["realized"]["n"] == 3
+
+
+def test_today_block_equals_mode_today_for_a_range_that_excludes_today(seed, logged_in):
+    """The range (5 Jan 2026) holds only the old loss; the block is still today's."""
+    seed(**_parity_book())
+    ranged = _range(logged_in, RANGE_FROM, RANGE_TO).get_json()
+    today = logged_in.get("/api/v1/dashboard?mode=today").get_json()
+    assert ranged["today"] == {"realized": today["realized"], "lifecycle": today["lifecycle"]}
+    assert ranged["realized"]["n"] == 1
+    assert ranged["today"]["realized"]["n"] == 2
+
+
+def test_a_day_with_no_closes_is_a_measured_zero_block_not_an_absent_one(seed, logged_in):
+    seed(trades=[_closed("a" * 16, closed_at="2026-01-05T15:00:00+00:00", amount=40.0)])
+    body = logged_in.get("/api/v1/dashboard?mode=all").get_json()
+    assert body["today"]["realized"] == {
+        "amount": None, "pct": None, "n": 0, "wins": 0, "losses": 0, "fx_missing_count": 0}
+    assert body["today"]["lifecycle"]["CLOSED"] == 0
+    assert body["realized"]["n"] == 1
+
+
+def test_today_block_on_an_empty_book(seed, logged_in):
+    seed()
+    body = logged_in.get("/api/v1/dashboard?mode=all").get_json()
+    assert body["today"]["realized"]["n"] == 0
+    assert body["today"]["realized"]["amount"] is None
+    assert isinstance(body["today"]["lifecycle"], dict)
+
+
+def test_all_mode_with_the_today_block_reads_the_trade_log_once(seed, logged_in, monkeypatch):
+    from swingbot.core.tracking.performance import TradeLog
+
+    seed(**_parity_book())
+    calls = []
+    original = TradeLog.get_trades
+
+    def counting(self, *args, **kwargs):
+        calls.append(kwargs.get("status"))
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(TradeLog, "get_trades", counting)
+    body = logged_in.get("/api/v1/dashboard?mode=all").get_json()
+    assert "today" in body
+    assert len(calls) == 1, f"get_trades called {len(calls)} times: {calls}"

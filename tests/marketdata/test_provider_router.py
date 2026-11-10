@@ -286,3 +286,93 @@ def test_daily_bars_between_disabled_returns_nothing(monkeypatch):
     from datetime import date
     assert router.daily_bars_between(["AAPL"], date(2026, 10, 1), date(2026, 10, 16)) == {}
     assert prov.calls == 0
+
+
+# --- v223: old prints are tagged apart from misses ----------------------------------
+
+class AnswersProvider(FakeProvider):
+    """A provider with the v223 *_answers contract; `old` names old prints."""
+    def __init__(self, old=(), **kw):
+        super().__init__(**kw)
+        self.old = frozenset(old)
+    def latest_price_answers(self, tickers, max_age):
+        return self.latest_prices(tickers, max_age), self.old & set(tickers)
+    def latest_quote_answers(self, tickers, max_age):
+        return self.latest_quotes(tickers, max_age), self.old & set(tickers)
+
+
+def yf_prices(calls, prices):
+    def f(tickers):
+        calls.append(list(tickers))
+        return {t: prices[t] for t in tickers if t in prices}
+    return f
+
+
+def test_answers_methods_run_on_the_quote_pool():
+    assert {"latest_price_answers", "latest_quote_answers"} <= router._QUOTE_METHODS
+
+
+def test_latest_prices_tags_old_prints_and_misses_apart(enabled, monkeypatch):
+    _use(monkeypatch, AnswersProvider(prices={"AAPL": 190.0}, old={"MSFT"})); calls = []
+    out = router.latest_prices(["AAPL", "MSFT", "NVDA"],
+                               yf_prices(calls, {"MSFT": 410.0, "NVDA": 120.0}))
+    assert calls == [["MSFT", "NVDA"]]                     # one yfinance call, as before
+    assert out == {"AAPL": 190.0, "MSFT": 410.0, "NVDA": 120.0}
+    assert router.last_source("AAPL") == "alpaca"
+    assert router.last_source("MSFT") == "yfinance-old-print"
+    assert router.last_source("NVDA") == "yfinance-fallback"
+    s = router.stats()
+    assert (s["alpaca"], s["fallback"], s["old_print"]) == (1, 1, 1)
+
+
+def test_latest_quotes_tags_old_prints_and_keeps_alpaca_bid_ask(enabled, monkeypatch):
+    old = _q("MSFT", None, bid=409.0, ask=411.0)
+    _use(monkeypatch, AnswersProvider(quotes={"AAPL": _q("AAPL", 190.0), "MSFT": old},
+                                      old={"MSFT"})); calls = []
+    out = router.latest_quotes(["AAPL", "MSFT", "NVDA"],
+                               yf_quotes(calls, {"MSFT": 410.2, "NVDA": 120.0}))
+    assert calls == [["MSFT", "NVDA"]]
+    assert (out["MSFT"].price, out["MSFT"].source) == (410.2, "yfinance-1m")
+    assert (out["MSFT"].bid, out["MSFT"].ask, out["MSFT"].quote_at) == (409.0, 411.0, _T)
+    assert router.last_source("MSFT") == "yfinance-old-print"
+    assert router.last_source("NVDA") == "yfinance-fallback"
+    s = router.stats()
+    assert (s["alpaca"], s["fallback"], s["old_print"]) == (1, 1, 1)
+
+
+def test_an_old_print_yfinance_cannot_answer_has_no_source(enabled, monkeypatch):
+    _use(monkeypatch, AnswersProvider(old={"MSFT"})); calls = []
+    out = router.latest_prices(["MSFT"], yf_prices(calls, {}))
+    assert out == {} and router.last_source("MSFT") is None
+    assert router.stats()["old_print"] == 1
+
+
+@pytest.mark.parametrize("entry", ["prices", "quotes"])
+def test_a_failed_answers_call_makes_every_symbol_a_miss(enabled, monkeypatch, entry):
+    _use(monkeypatch, AnswersProvider(old={"MSFT"}, exc=AlpacaMiss("500"))); calls = []
+    if entry == "prices":
+        router.latest_prices(["AAPL", "MSFT"], yf_prices(calls, {"AAPL": 1.0, "MSFT": 2.0}))
+    else:
+        router.latest_quotes(["AAPL", "MSFT"], yf_quotes(calls, {"AAPL": 1.0, "MSFT": 2.0}))
+    assert calls == [["AAPL", "MSFT"]]
+    assert router.last_source("AAPL") == router.last_source("MSFT") == "yfinance-fallback"
+    s = router.stats()
+    assert (s["fallback"], s["old_print"]) == (2, 0)
+
+
+@pytest.mark.parametrize("entry", ["prices", "quotes"])
+def test_a_provider_without_answers_tags_every_miss_fallback(enabled, monkeypatch, entry):
+    _use(monkeypatch, FakeProvider()); calls = []
+    if entry == "prices":
+        router.latest_prices(["MSFT"], yf_prices(calls, {"MSFT": 2.0}))
+    else:
+        router.latest_quotes(["MSFT"], yf_quotes(calls, {"MSFT": 2.0}))
+    assert router.last_source("MSFT") == "yfinance-fallback"
+    assert router.stats()["old_print"] == 0
+
+
+def test_reset_zeroes_the_old_print_count(enabled, monkeypatch):
+    _use(monkeypatch, AnswersProvider(old={"MSFT"}))
+    router.latest_prices(["MSFT"], yf_prices([], {"MSFT": 2.0}))
+    router.reset()
+    assert router.stats()["old_print"] == 0

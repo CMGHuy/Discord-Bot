@@ -1,12 +1,17 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { CalendarDay, CalendarTrade, CalendarWeekday } from '../../api/models';
+import { requestAsOfText } from '../../stores/analytics.store';
 import { CalendarMetric, CalendarStore } from '../../stores/calendar.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
-import { Hint } from '../../ui/hint';
+import { IncompleteNote } from '../../ui/incomplete-note';
+import { MarketValue } from '../../ui/market-value';
+import { PnlBasis } from '../../ui/pnl-basis';
+import { Spinner } from '../../ui/spinner';
 import { Viewport, ViewportService } from '../../ui/breakpoints';
 import { ABSENT, dateTime, money, rMultiple } from '../../ui/format';
 import { ControlRow, Drawer, Panel } from '../../ui/layout';
@@ -18,7 +23,8 @@ import { StatStrip } from '../../ui/stat-strip';
 import { cellValue, GridCell, localIsoDate, monthLabel, monthMatrix } from './calendar.helpers';
 import { fxMissingText } from '../analytics/scope-bar';
 import { PAPER_CAPTION, legsSampleNote } from './day/day-copy';
-import { LEG_HINT_TEXT, legLabel } from '../trades/leg-label';
+import { legExplanation, legLabel } from '../trades/leg-label';
+import { LegName } from '../trades/leg-name';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
 const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -29,7 +35,10 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
 @Component({
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Drawer, Hint, Panel, Page, RouterLink, Select, StatStrip, StatTile, Async],
+  imports: [
+    Button, ControlRow, Drawer, LegName, Panel, Page, RouterLink, Select, StatStrip, StatTile, Async,
+    IncompleteNote, MarketValue, NgTemplateOutlet, PnlBasis, Spinner,
+  ],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
   // so this workspace defaults to the presentation register. On the host
   // (a static class, not a template wrapper) because :host IS the grid
@@ -51,6 +60,23 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
         @if (store.error(); as message) {
           <span class="stale" role="status">{{ message }}</span>
         }
+        <!-- v204: the snapshot age of a default month, or the request clock of
+             a filtered one; wraps under the title on a phone. -->
+        <ng-template #asOf let-meta>
+          @if (meta) {
+            <span class="as-of">
+              @if (meta.source === 'snapshot') {
+                <sb-market-value kind="snapshot" [asOf]="null" [computedAt]="meta.computed_at"
+                  [staleInputs]="meta.stale_inputs" [refreshing]="meta.refreshing" [error]="meta.error" />
+              } @else {
+                <span class="req-as-of">{{ requestAsOf(meta) }}</span>
+                @if (meta.refreshing) { <sb-spinner label="Refreshing" /> }
+              }
+              <sb-incomplete-note [missing]="meta.missing_count" />
+            </span>
+          }
+        </ng-template>
+        <ng-container *ngTemplateOutlet="asOf; context: { $implicit: store.meta() }" />
       </div>
 
       <!-- v195 §5.2: the scope bar holds the month and the filters only. -->
@@ -123,6 +149,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
             <sb-stat-tile class="longest-hold" label="Longest holding time"
                           [value]="longestHoldValue()" [hint]="store.longestHold()?.ticker ?? undefined" />
           </sb-stat-strip>
+          <p class="pnl-basis-line"><sb-pnl-basis /></p>
         </sb-panel>
         @if (monthFxMissing() > 0) {
           <p class="fx-caveat" role="note">{{ fxText(monthFxMissing()) }}</p>
@@ -230,23 +257,44 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
          so a THIS MONTH empty state cannot hide it (see the head-status
          comment). Degrades safely via weekdays()'s own [] default before
          the first load. -->
-      <sb-panel page-secondary class="weekday-panel" heading="By weekday (all history)" [divided]="true">
-      <table class="dow">
-        <thead>
-          <tr><th>Day</th><th class="num">Avg</th><th class="num">Win rate</th><th class="num">n</th></tr>
-        </thead>
-        <tbody>
-          @for (weekday of store.weekdays(); track weekday.weekday) {
-            <tr class="dow-row">
-              <th scope="row">{{ weekday.weekday }}</th>
-              <td class="num">{{ weekdayValue(weekday) }}</td>
-              <td class="num">{{ weekdayWinRate(weekday) }}</td>
-              <td class="num">{{ weekday.trade_count }}</td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </sb-panel>
+      <!-- Two tables, one row from tablet width up (stacked on a phone): all
+           history on the left, the month on show on the right. -->
+      <div page-secondary class="weekday-pair">
+        <sb-panel class="weekday-panel" heading="By weekday (all history)" [divided]="true">
+          <table class="dow">
+            <thead>
+              <tr><th>Day</th><th class="num">Avg</th><th class="num">Win rate</th><th class="num">n</th></tr>
+            </thead>
+            <tbody>
+              @for (weekday of store.weekdays(); track weekday.weekday) {
+                <tr class="dow-row">
+                  <th scope="row">{{ weekday.weekday }}</th>
+                  <td class="num">{{ weekdayValue(weekday) }}</td>
+                  <td class="num">{{ weekdayWinRate(weekday) }}</td>
+                  <td class="num">{{ weekday.trade_count }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </sb-panel>
+        <sb-panel class="weekday-panel month-weekday-panel" [heading]="'By weekday (' + label() + ')'" [divided]="true">
+          <table class="dow">
+            <thead>
+              <tr><th>Day</th><th class="num">Avg</th><th class="num">Win rate</th><th class="num">n</th></tr>
+            </thead>
+            <tbody>
+              @for (weekday of store.monthWeekdays(); track weekday.weekday) {
+                <tr class="dow-row month-dow-row">
+                  <th scope="row">{{ weekday.weekday }}</th>
+                  <td class="num">{{ weekdayValue(weekday) }}</td>
+                  <td class="num">{{ weekdayWinRate(weekday) }}</td>
+                  <td class="num">{{ weekday.trade_count }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </sb-panel>
+      </div>
 
     <sb-drawer
       [open]="store.selectedDay() !== null"
@@ -313,7 +361,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
             <p class="meta">Opened {{ dateTime(trade.opened_at) }} · Closed {{ dateTime(trade.closed_at) }}</p>
             <p class="meta">
               @if (legLabel(trade); as leg) {
-                <span class="leg">{{ leg }}</span> <sb-hint [text]="legHint" label="About leg rows" /> ·
+                <span class="leg"><sb-leg-name [label]="leg" [help]="legHelp(trade)" /></span> ·
               }
               {{ trade.outcome }} · {{ rLabel(trade.r_multiple) }}
               @if (trade.mfe_r !== null) { · MFE {{ rLabel(trade.mfe_r) }} }
@@ -341,8 +389,14 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     :host { display: block; min-width: 0; }
     /* contents: sb-page's actions slot lays the status out. */
     .head-status { display: contents; }
-    /* All-time, so it reads across the whole width beside nothing. */
-    .weekday-panel { grid-column: 1 / -1; }
+    .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-faint); min-width: 0; }
+    .pnl-basis-line { margin: var(--space-6) 0 0; min-width: 0; }
+    /* All history beside the month on show: two columns from tablet (640px), one on a phone. */
+    .weekday-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-14); grid-column: 1 / -1; }
+    .weekday-panel { min-width: 0; }
+    @media (min-width: 640px) {
+      .weekday-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
 
     /* The month stepper: two buttons with the month between them. Centred
        rather than bottom-aligned like the controls around it, because the
@@ -493,6 +547,7 @@ export class Calendar {
   readonly store = inject(CalendarStore);
   private readonly connection = inject(ConnectionStore);
   private readonly viewportService = inject(ViewportService);
+  protected readonly requestAsOf = requestAsOfText;
 
   /** Test override — jsdom resolves no media query. */
   readonly viewportAt = input<Viewport | null>(null);
@@ -510,7 +565,8 @@ export class Calendar {
   /** v194 B3 -- the one leg name (shared with Trades and the Dashboard). */
   protected readonly legLabel = legLabel;
   /** v194 A4: the calendar counts each realised leg (`pnl_calendar` rows). */
-  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
+  protected readonly legHelp = (trade: CalendarTrade): string => legExplanation(trade,
+    'On this page win rate and N count each realised leg as its own trade; Analytics counts plans.');
 
   protected readonly async = computed(() =>
     asyncInputs(this.store, { isEmpty: (data) => data.totals.trade_count === 0 }),

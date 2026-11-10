@@ -97,3 +97,38 @@ describe('exposure by horizon panel', () => {
     expect(el.textContent).toContain('No open exposure yet');
   });
 });
+
+/* v217 V217-1: if this unmounted panel ever came back, could it share the
+ * positions table's Open-tab call? No: it asks `status=open` (ACTIVE plus
+ * PARTIAL) at the server cap of 200, unpaged, while the Open tab asks
+ * `status=ACTIVE` one page at a time. A PARTIAL runner counts here and is
+ * absent from the Open tab, so identical rows cannot be asserted. */
+describe('exposure by horizon vs the Open tab (v217 V217-1)', () => {
+  it('asks a different query from the Open tab: status=open at 200 rows', () => {
+    const { backend } = seed();
+    const req = backend.expectOne((r) => r.url === '/api/v1/trades');
+    expect(req.request.params.get('status')).toBe('open');
+    expect(req.request.params.get('status')).not.toBe('ACTIVE');
+    expect(req.request.params.get('per_page')).toBe('200');
+    req.flush({ items: [], total: 0, page: 1, per_page: 200 });
+  });
+
+  it('counts a PARTIAL runner the Open tab never lists', () => {
+    const { fixture, backend } = seed();
+    backend.expectOne((r) => r.url === '/api/v1/trades').flush({
+      items: [
+        row({ id: 'a', status: 'ACTIVE', horizon: '2w', entry: 100, stop_loss: 95, open_shares: 10 }),
+        row({ id: 'p', status: 'PARTIAL', status_label: 'PARTIAL', horizon: '1m',
+              entry: 200, stop_loss: 190, open_shares: 2 }),
+      ],
+      total: 2, page: 1, per_page: 200,
+    });
+    fixture.detectChanges();
+    // 2w: (100-95)*10 = 50 from the ACTIVE row; 1m: (200-190)*2 = 20 from the
+    // PARTIAL row, which an ACTIVE-only response would have dropped.
+    expect(slicesOf(fixture)).toEqual([
+      { label: '2w', count: 50 },
+      { label: '1m', count: 20 },
+    ]);
+  });
+});

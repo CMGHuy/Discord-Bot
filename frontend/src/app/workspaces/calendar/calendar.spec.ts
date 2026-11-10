@@ -14,12 +14,15 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { of } from 'rxjs';
 import { describe, expect, it } from 'vitest';
 
+import { LiveValuesStore } from '../../stores/live-values.store';
+import { FakeLiveValues } from '../../testing/fake-live-values';
+
 import {
   authInterceptor,
   errorInterceptor,
   loadingInterceptor,
 } from '../../api/interceptors';
-import { CalendarTrade, PnlCalendar } from '../../api/models';
+import { CalendarTrade, MarketMeta, PnlCalendar } from '../../api/models';
 import { BACKGROUND_REFRESH_INFO } from '../../routing/route-loading.service';
 import { PreferencesStore } from '../../stores/preferences.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
@@ -31,6 +34,14 @@ import { PAPER_CAPTION } from './day/day-copy';
 import { By } from '@angular/platform-browser';
 import { RouteTitleService } from '../../routing/route-title.service';
 import { PERFORMANCE_CAVEAT, StatTile } from '../../ui/stat-tile';
+
+const SNAP_META: MarketMeta = {
+  as_of: '2026-10-29', refreshing: false, stale_count: 0, missing_count: 0, incomplete: false,
+  computed_at: '2026-10-29T14:00:00Z', stale_inputs: false, source: 'snapshot', error: null,
+};
+const REQ_META: MarketMeta = {
+  ...SNAP_META, computed_at: null, source: 'request', as_of: '2026-10-28', missing_count: 1, incomplete: true,
+};
 
 const RESPONSE: PnlCalendar = {
   as_of: '2026-08-10T12:00:00Z',
@@ -45,6 +56,13 @@ const RESPONSE: PnlCalendar = {
     { weekday: 'Mon', avg_pnl_amount: 15, avg_r: 0.6, win_rate: 50, trade_count: 2 },
     { weekday: 'Tue', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
     { weekday: 'Wed', avg_pnl_amount: -90, avg_r: -1.8, win_rate: 0, trade_count: 1 },
+    { weekday: 'Thu', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
+    { weekday: 'Fri', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
+  ],
+  month_day_of_week: [
+    { weekday: 'Mon', avg_pnl_amount: 30, avg_r: 1.2, win_rate: 100, trade_count: 1 },
+    { weekday: 'Tue', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
+    { weekday: 'Wed', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
     { weekday: 'Thu', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
     { weekday: 'Fri', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
   ],
@@ -77,6 +95,7 @@ export function seed(payload: PnlCalendar = RESPONSE): ComponentFixture<Calendar
         withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor]),
       ),
       provideHttpClientTesting(),
+      { provide: LiveValuesStore, useClass: FakeLiveValues },
       CalendarStore,
     ],
   });
@@ -224,7 +243,7 @@ describe('Calendar summary strip', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const rows = el(fixture).querySelectorAll('.dow-row');
+    const rows = el(fixture).querySelectorAll('.weekday-panel:not(.month-weekday-panel) .dow-row');
     expect(rows).toHaveLength(5);
     expect(rows[0].textContent).toContain('Mon');
     // Tuesday has n=0 and must read as absent, never as 0.00.
@@ -393,8 +412,9 @@ describe('Calendar day drawer', () => {
 
     const rows = el(fixture).querySelectorAll('.day-row');
     expect(rows).toHaveLength(2);
-    expect(rows[0].querySelector('.leg')?.textContent).toContain('Leg 1 of 2');
-    expect(rows[1].querySelector('.leg')?.textContent).toContain('Leg 2 of 2');
+    expect(rows[0].querySelector('.leg .name')?.textContent).toContain('Leg 1 of 2');
+    expect(rows[1].querySelector('.leg .name')?.textContent).toContain('Leg 2 of 2');
+    expect(rows[0].querySelector('.leg button')).toBeNull();   // no info icon beside the label
     // A4 audit: the Calendar counts each realised leg as a trade, and says so.
     expect(rows[0].querySelector('sb-hint [role="tooltip"]')?.textContent).toContain('count each realised leg as its own trade');
   });
@@ -495,6 +515,7 @@ function seedUnflushed(): { fixture: ComponentFixture<Calendar>; backend: HttpTe
       provideRouter([]),
       provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
       provideHttpClientTesting(),
+      { provide: LiveValuesStore, useClass: FakeLiveValues },
       CalendarStore,
     ],
   });
@@ -545,7 +566,8 @@ describe('Calendar states', () => {
     expect(host.querySelector('.skeleton')).toBeNull();
     // All-time, deliberately outside the this-month empty gate.
     expect(host.textContent).toContain('By weekday (all history)');
-    expect(host.querySelectorAll('.dow-row').length).toBe(RESPONSE.day_of_week.length);
+    expect(host.querySelectorAll('.weekday-panel:not(.month-weekday-panel) .dow-row').length)
+      .toBe(RESPONSE.day_of_week.length);
   });
 });
 
@@ -671,6 +693,7 @@ describe('Calendar URL (v165 D6)', () => {
         provideLocationMocks(),
         provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
         provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         // The real one would first ask /api/v1/preferences inside startRoute.
         { provide: PreferencesStore, useValue: {
           resolve: () => of(undefined), values: () => ({}), update: () => undefined,
@@ -986,15 +1009,30 @@ describe('Calendar on sb-page (v195 Phase 4, §5.2)', () => {
     expect(el(fixture).querySelector('[page-kpis] .totals')).not.toBeNull();
   });
 
-  it('keeps the all-history weekday table as the one secondary panel, the drawer in the default slot', async () => {
+  it('keeps both weekday tables in the one secondary slot, the drawer in the default slot', async () => {
     const fixture = seed();
     await fixture.whenStable();
     fixture.detectChanges();
     const secondary = el(fixture).querySelectorAll('sb-page [page-secondary]');
     expect(secondary).toHaveLength(1);
     expect(secondary[0].textContent).toContain('By weekday (all history)');
-    expect(secondary[0].querySelectorAll('.dow-row')).toHaveLength(RESPONSE.day_of_week.length);
+    expect(secondary[0].querySelectorAll('.weekday-panel')).toHaveLength(2);
+    expect(secondary[0].querySelectorAll('.weekday-panel:not(.month-weekday-panel) .dow-row'))
+      .toHaveLength(RESPONSE.day_of_week.length);
     expect(el(fixture).querySelector('sb-page > sb-drawer')).not.toBeNull();
+  });
+
+  it('adds a second weekday table for the month on show, beside the all-history one', async () => {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const panel = el(fixture).querySelector('.month-weekday-panel') as HTMLElement;
+    expect(panel.textContent).toContain('By weekday (');
+    expect(panel.textContent).not.toContain('all history');
+    const rows = panel.querySelectorAll('.month-dow-row');
+    expect(rows).toHaveLength(RESPONSE.month_day_of_week.length);
+    expect(rows[0].textContent).toContain('Mon');
+    expect(rows[0].textContent).toContain('100%');
   });
 
   it('imports Page and no SectionHead', () => {
@@ -1002,5 +1040,32 @@ describe('Calendar on sb-page (v195 Phase 4, §5.2)', () => {
     expect(SOURCE).toMatch(/import \{ Page \} from '\.\.\/\.\.\/ui\/page';/);
     expect(SOURCE).not.toContain('<sb-section-head');
     expect(SOURCE).not.toMatch(/import \{ SectionHead \}/);
+  });
+});
+
+describe('Calendar as-of and basis (v204)', () => {
+  it('head shows the snapshot age', () => {
+    const f = seed({ ...RESPONSE, market_meta: SNAP_META });
+    expect(el(f).querySelectorAll('.head-status sb-market-value')).toHaveLength(1);
+    expect(el(f).querySelector('.head-status .req-as-of')).toBeNull();
+  });
+
+  it('a filtered month shows the request as-of and the incomplete note', () => {
+    const f = seed({ ...RESPONSE, market_meta: REQ_META });
+    const head = el(f).querySelector('.head-status')!;
+    expect(head.querySelector('.req-as-of')?.textContent?.trim()).toBe('as of this request · FX rates as of Oct 28');
+    expect(head.textContent).toContain('incomplete: 1 position unpriced');
+    expect(head.querySelector('sb-market-value')).toBeNull();
+  });
+
+  it('shows no as-of without a meta', () => {
+    const f = seed();
+    expect(el(f).querySelector('.head-status .as-of')).toBeNull();
+  });
+
+  it('the totals carry the P&L basis', () => {
+    const f = seed();
+    expect(el(f).querySelector('.pnl-basis-line sb-pnl-basis')?.textContent?.trim())
+      .toBe('pre-tax, before modelled frictions');
   });
 });

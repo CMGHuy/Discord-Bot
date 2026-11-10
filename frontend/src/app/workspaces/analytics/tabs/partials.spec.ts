@@ -49,6 +49,17 @@ describe('PartialsTab hint copy (A4 audit)', () => {
       expect(hintText(fixture, `${title} definition`), title).toContain(PERFORMANCE_CAVEAT);
     }
   });
+
+  it('shows no (i) button on any panel; each of the eight titles carries its own tooltip', () => {
+    const { el } = render(PARTIALS_FIXTURE);
+    expect(el.querySelectorAll('sb-panel-header sb-hint button')).toHaveLength(0);
+    const titles = [...el.querySelectorAll('sb-panel-header h2.tip')];
+    expect(titles).toHaveLength(8);
+    for (const title of titles) {
+      expect(title.getAttribute('tabindex')).toBe('0');
+      expect(title.closest('.heading')!.querySelector('[role="tooltip"]')!.textContent!.trim()).not.toBe('');
+    }
+  });
 });
 
 describe('partials helpers', () => {

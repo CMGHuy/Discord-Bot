@@ -727,12 +727,16 @@ def _noted_ids() -> set:
     """
     try:
         from swingbot.core.analytics.journal import JournalStore
+        from swingbot.core.infra import read_memo
         from swingbot.core.tracking.origin import ALL
-        return {
-            e.get("trade_id")
-            for e in JournalStore().entries(cohort=ALL)
-            if e.get("note")
-        }
+
+        def load() -> list[dict]:
+            return [{"trade_id": e.get("trade_id")}
+                    for e in JournalStore().entries(cohort=ALL) if e.get("note")]
+
+        # v217 V217-3: memoised per request, so a second build_rows pass (the
+        # dashboard's today block) does not read the journal again.
+        return {e["trade_id"] for e in read_memo.records(read_memo.NOTED_IDS, load)}
     except Exception:
         return set()
 
@@ -1415,6 +1419,11 @@ def _attach_door_prices(live: list[dict]) -> None:
     quotes = market_values.read_quotes([r["ticker"] for r in live])
     for r in live:
         r.update(market_values.quote_fields(quotes.get(str(r["ticker"]).upper())))
+    unpriced = [r["ticker"] for r in live if r.get("current_price") is None]
+    closes = market_values.last_close_fields(unpriced)
+    for r in live:
+        if r.get("current_price") is None:
+            r.update(closes.get(str(r["ticker"]).upper(), {}))
 
 
 def _attach_current_prices(rows: list[dict]) -> None:

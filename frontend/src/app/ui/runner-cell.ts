@@ -46,7 +46,11 @@ export function runnerCellInputs(row: TradeRow): RunnerCellInputs {
       trailExitPct: row.stop_pnl_pct ?? null,
     };
   }
-  if (row.status === 'CLOSED' && row.runner_exit_price != null) {
+  // A leg row of a scaled-out plan keeps its OWN target (TP1 for leg 1, TP2
+  // for leg 2); the runner's exit would put the same figure in both rows, and
+  // the cell's closed icon already shows where each leg actually exited.
+  const isLegRow = (row.leg_total ?? 1) > 1;
+  if (row.status === 'CLOSED' && row.runner_exit_price != null && !isLegRow) {
     return {
       ...NO_RUNNER_CELL,
       runnerExit: row.runner_exit_price,

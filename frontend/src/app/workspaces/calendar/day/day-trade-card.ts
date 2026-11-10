@@ -6,7 +6,8 @@ import { ConnectionStore } from '../../../stores/connection.store';
 import { Chip, ChipTone } from '../../../ui/chip';
 import { ABSENT, held, money, num, pct, rMultiple } from '../../../ui/format';
 import { Hint } from '../../../ui/hint';
-import { LEG_HINT_TEXT, legLabel } from '../../trades/leg-label';
+import { legExplanation, legLabel } from '../../trades/leg-label';
+import { LegName } from '../../trades/leg-name';
 import { R_TOOLTIP } from './day-copy';
 import { TradeSparkline } from './trade-sparkline';
 
@@ -33,7 +34,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
 @Component({
   selector: 'sb-day-trade-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Chip, Hint, RouterLink, TradeSparkline],
+  imports: [Chip, Hint, LegName, RouterLink, TradeSparkline],
   template: `
     @let t = trade();
     <article class="card">
@@ -42,8 +43,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
         <span class="direction">{{ direction() }}</span>
         <span class="setup">{{ t.strategy }} · {{ t.horizon ?? absent }}</span>
         @if (leg(); as label) {
-          <span class="leg">{{ label }}</span>
-          <sb-hint [text]="legHint" label="About leg rows" />
+          <span class="leg"><sb-leg-name [label]="label" [help]="legHelp()" /></span>
         }
         <sb-chip [label]="t.exit_reason" [tone]="exitTone()" [caps]="false" />
         <span class="figures">
@@ -131,7 +131,9 @@ export class DayTradeCard {
   protected readonly leg = computed(() =>
     legLabel({ leg_index: this.trade().leg_index, leg_total: this.trade().leg_total }));
   /** v194 A4: the calendar counts each realised leg (`pnl_calendar` rows). */
-  protected readonly legHint = LEG_HINT_TEXT + ' On this page win rate and N count each realised leg as its own trade; Analytics counts plans.';
+  protected readonly legHelp = computed(() => legExplanation(
+    { leg_index: this.trade().leg_index, leg_total: this.trade().leg_total, exit_reason: this.trade().exit_reason },
+    'On this page win rate and N count each realised leg as its own trade; Analytics counts plans.'));
   protected readonly direction = computed(() => DIRECTIONS[this.trade().direction ?? ''] ?? ABSENT);
   protected readonly exitTone = computed<ChipTone>(() =>
     this.trade().exit_reason === 'other' ? 'muted' : 'neutral',

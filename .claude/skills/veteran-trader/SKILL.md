@@ -22,15 +22,18 @@ alert time, before the open, by someone who is not watching the screen.
 
 - The partner places resting orders at alert time: entry, stop and targets can be entered as orders without re-deriving anything (`swingbot/core/scanning/alert_embeds.py`, `execution_embeds.py`).
 - A gap through the entry or the stop is handled, and the simulated fill on a gap matches what an order gets (`swingbot/core/planning/exit_sim.py`).
+- A limit-at-level entry states what a partial fill does to the stop and the targets.
 - Slippage and commission come from `swingbot/core/edge/frictions.py`, are not zero, and apply to the same trades the claim rests on.
 - Liquidity suits the size; futures skipped for dollar volume stay skipped by design (`docs/claude/known-traps.md` § Futures skipped for dollar volume is deliberate).
-- Alert timing fits the session (`known-traps.md` § The full state machine now runs across the whole Berlin-local active window; `swingbot/core/market/session.py`).
+- Shorts: long plans stay byte-identical; a short on a hard-to-borrow name is flagged, and its borrow fee is priced in `swingbot/core/edge/frictions.py`.
+- Alert timing fits the session, and alert volume is one a person can act on before the open (`known-traps.md` § The full state machine now runs across the whole Berlin-local active window; `swingbot/core/market/session.py`).
+- Berlin-time alerts line up with the US session calendar: the open, half-days, holidays and the frozen weekend bar.
 - The stop survives normal noise for its horizon (`swingbot/core/market/strategy_types.py:HORIZONS`) and does not land in the empty band of `known-traps.md` § Stop floor and 2% cap.
 - Regime is considered: how the setup behaves in trend versus chop (`swingbot/core/edge/regime2.py`, `swingbot/core/scanning/regime.py`).
 - Earnings, OPEX and macro dates inside the holding window are named (`swingbot/core/market/events.py`, `opex.py`); depth goes to `fundamental-analyst`.
 - Expiry and time exits are stated, so no resting order works past the plan's validity (`swingbot/core/planning/time_exit.py`).
 - A silent stop move, a missing expiry or a lost send on the alert channel is real-money divergence and is `Edge: harvest` (`docs/claude/edge-priorities.md`).
-- Alert volume is one a person can act on before the open.
+- eToro: demo only, never `account: real`; the plan says whether it assumes an eToro CFD fill or a stock fill, which differ in spread and overnight cost.
 - A gap between the backtest and live paths is named, not assumed away (`known-traps.md` § The dead-cat-bounce veto is invisible to `run_backtest_range.py`).
 
 ## Red flags
@@ -52,6 +55,7 @@ alert time, before the open, by someone who is not watching the screen.
 Should fire: asking whether an alert's entry could be filled if the stock gaps at the open.
 Should fire: reviewing an alert embed change for whether the plan can be placed as resting orders.
 Should fire: asking whether a new setup is tradeable in thinly traded names.
+Should fire: asking whether a short alert on a hard-to-borrow name can be borrowed and filled at its entry.
 Should not fire: checking the bootstrap interval on a grid result.
 Should not fire: checking a new helper function's cyclomatic complexity.
 Should not fire: reviewing an Alembic migration's downgrade path.

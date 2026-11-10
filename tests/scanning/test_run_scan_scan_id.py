@@ -21,7 +21,8 @@ def data_dir(tmp_path, monkeypatch):
 def _record_ids(monkeypatch):
     seen = []
 
-    def fake_sync_run(horizon_filter, require_confirmation, progress, min_confluence):
+    def fake_sync_run(horizon_filter, require_confirmation, progress, min_confluence,
+                      step_shock=False):
         seen.append(scan_id_var.get())
         return [], [], []
 
@@ -48,7 +49,7 @@ def test_two_scans_get_their_own_ids(data_dir, monkeypatch):
 
 
 def test_a_scan_that_raises_still_resets_the_id(data_dir, monkeypatch):
-    def boom(*args):
+    def boom(*args, **kwargs):
         raise RuntimeError("fetch died")
 
     monkeypatch.setattr(scan_run, "_sync_run_scan", boom)

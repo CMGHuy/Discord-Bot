@@ -68,6 +68,7 @@ export const TAB_PAGES: readonly PaletteItem[] = [
   tab('/insights/analytics', 'Analytics', 'pipeline', 'Pipeline'),
   tab('/insights/analytics', 'Analytics', 'tuning', 'Tuning'),
   tab('/insights/analytics', 'Analytics', 'partials', 'Partials'),
+  tab('/insights/analytics', 'Analytics', 'cancels', 'Cancels'),
   tab('/insights/reports', 'Reports', 'gates', 'Gate counterfactual'),
   tab('/system', 'System', 'scan', 'Scan'),
   tab('/system', 'System', 'providers', 'Providers'),

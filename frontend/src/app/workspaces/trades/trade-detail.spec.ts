@@ -74,7 +74,7 @@ class FakeEventStream {
   }
 
   /** v206: ConnectionStore patches the strip from this; null = fetch instead. */
-  payload(_name: 'scan'): Signal<ScanEventProgress | null> {
+  payload(): Signal<ScanEventProgress | null> {
     return signal<ScanEventProgress | null>(null).asReadonly();
   }
 }
@@ -705,7 +705,7 @@ describe('TradeDetail — the shared Why components (v151)', () => {
     expect(refresh).not.toBeNull();
     refresh!.click();
     const live = TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues;
-    expect(live.requestRefresh).toHaveBeenCalledWith(['AAPL']);
+    expect(live.requestRefresh).toHaveBeenCalledWith(['AAPL'], []);
   });
 
   it('no Refresh on a closed trade', () => {

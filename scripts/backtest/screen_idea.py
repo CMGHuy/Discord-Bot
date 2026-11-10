@@ -18,17 +18,25 @@ prints the results doc and writes nothing; --tickers needs --dry-run.
 --count-only (v182) prints the event count before the shot (the real events,
 drops and null draw, full-cap non-overlap) and, for a level idea, check 5; it
 races nothing, writes nothing and never reads the ledger.
+v211: a level-context idea counts with its context loaded and checked like the
+real run, and the report ends with the outcome-blind preflight (shock days, ISO
+shock weeks and events per year).
 v182: a short or level idea's results doc ends with the short-side blocks
 (event overlap with its family partner, the trend-only control, the SPY
 200-day regime split, and for a level idea the fill depths, null_unfilled and
 the 3 x repricing) -- all printed, none gating; such a run refuses before
 screening when SPY.csv cannot load.
+v211: an idea may declare CONTEXT_KIND = "level" (its context files load without
+the z-coverage floor); --pin-context adds newly registered context files to the
+hash pin, never rewriting a pinned one.
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import os
+import pickle
 import sys
 from collections import Counter
 from dataclasses import dataclass, field, replace
@@ -50,6 +58,8 @@ from swingbot.core.backtesting.screen.ideas import IDEAS, Idea  # noqa: E402
 from swingbot.core.backtesting.screen import context as screen_context  # noqa: E402
 from swingbot.core.backtesting.screen import context as pit  # noqa: E402
 from swingbot.core.backtesting.screen import descriptive, diagnostics  # noqa: E402
+from swingbot.core.backtesting.screen import shock_readouts  # noqa: E402
+from swingbot.core.backtesting.screen.ideas import _shock_breakdown as sb  # noqa: E402
 from swingbot.core.backtesting.screen.context import CONTEXT_START  # noqa: E402,F401
 from swingbot.core.edge.frictions import BORROW_RATE_ANNUAL, commission_r  # noqa: E402
 from swingbot.core.marketdata import pit_membership  # noqa: E402
@@ -120,6 +130,7 @@ class TickerScreen:
     repriced: list | None = None                          # v182: level only, 3 x slippage pairs
     control: list | None = None                           # v182: rows of the trend-only control book
     overlap: dict | None = None                           # v182: raw-bar overlap with the family partner
+    shock: dict | None = None   # v211: level only, shock-day null, 3 x book, gap/episode tags
 
 
 #: v182: bars from the event bar to the entry bar, per entry mode.
@@ -231,12 +242,48 @@ def _level_report(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: d
             "depths": depths, "repriced": _repriced(idea, ticker, df, ctx, costs)}
 
 
+#: v211: the shock-day null's seed is null_seed(idea + tag, ticker), a stream of its own, so the standard draw is untouched.
+_SHOCK_NULL_TAG = "#shock-null"
+
+
+def _shock_rows(ticker, index, kept, null_mean_r, entry: str) -> list:
+    """The (entry_date, r_event, r_null) projection `_stressed` uses."""
+    return [{"entry_date": row["entry_date"], "r_event": row["r_event"], "r_null": row["r_null"]}
+            for row in _event_rows(ticker, index, kept, null_mean_r,
+                                   entry_offset=_ENTRY_OFFSET[entry])]
+
+
+def _shock_report(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict,
+                  kept) -> dict | None:
+    """v211, level ideas only (spec § Printed alongside each verdict): the shock-day null, the 3 x slippage book and the per-event gap and episode-day tags. Printed, never gating; the standard book is not touched."""
+    if idea.context_kind != "level":
+        return None
+    context = ctx["context"]
+    state = sb.ticker_state(df, context)
+    # SHOCK bars minus every raw event bar: shock_null does not exclude events itself.
+    pool = (_null_pool(idea, ctx) & state["shock"].to_numpy(dtype=bool)
+            & ~np.asarray(ctx["raw"], dtype=bool))
+    draw2 = shock_readouts.shock_null(
+        df, kept.event_pos, pool, null.K,
+        null.null_seed(idea.name + _SHOCK_NULL_TAG, ticker), cap=idea.time_cap_bars,
+        atr=ctx["atr"], shape=idea.race_shape, direction=idea.direction, **costs)
+    null2 = _shock_rows(ticker, df.index, kept.take(np.isin(kept.event_pos, draw2.event_pos)),
+                        draw2.null_mean_r, idea.entry)
+    stress = {"slippage_bps": shock_readouts.SHOCK_STRESS_SLIPPAGE_FACTOR
+              * base_slippage(costs["slippage_bps"]), "commission": costs["commission"]}
+    kept3, _, draw3 = _books(idea, ticker, df, ctx, stress)
+    stress3 = _shock_rows(ticker, df.index, kept3, draw3.null_mean_r, idea.entry)
+    tags = shock_readouts.event_tags(df, state, context[sb.BREADTH]["Close"], kept.event_pos)
+    return {"null2": null2, "null2_dropped": draw2.dropped, "stress3": stress3, "tags": tags}
+
+
 def _restricted(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict):
     """Context ideas only (v174 § 5.2): every event raced again against a
     null pool without the bars closer than CAP sessions to any shock day.
     For a context idea the raw mask IS the shock-day mask on this ticker's
-    dates. Same seed, K and cap; printed, never gating."""
-    if not idea.context:
+    dates. Same seed, K and cap; printed, never gating.
+    v211: a level idea's raw mask is a stock trigger, not a shock-day mask, so the restricted null does not apply."""
+    if not idea.context or idea.context_kind == "level":
         return None
     near = pit.near_mask(ctx["raw"], idea.time_cap_bars)
     kept, _, draw = _books(idea, ticker, df, ctx, costs, exclude=near)
@@ -281,7 +328,8 @@ def ticker_context(idea: Idea, df: pd.DataFrame, spans, context: Mapping | None 
     warm = race.warm_mask(atr, sma200) & (df.index >= pd.Timestamp(EVENT_START))
     return {"raw": np.asarray(raw_events(idea, df, context), dtype=bool),
             "member": member, "warm": warm, "atr": atr,
-            "trend": null.trend_state(df, sma200), "levels": raw_levels(idea, df)}
+            "trend": null.trend_state(df, sma200), "levels": raw_levels(idea, df),
+            "context": context}
 
 
 def _family_partner(idea: Idea) -> Idea | None:
@@ -293,12 +341,13 @@ def _family_partner(idea: Idea) -> Idea | None:
 
 
 def _overlap(idea: Idea, df: pd.DataFrame, ctx: dict) -> dict | None:
-    """v182: raw event bars shared with the family partner, member and warm bars only."""
+    """v182: raw event bars shared with the family partner, member and warm bars only.
+    v211: the partner gets the same context frames (a level family shares CONTEXT); a partner without context ignores them."""
     partner = _family_partner(idea)
     if partner is None:
         return None
     population = np.asarray(ctx["member"], dtype=bool) & np.asarray(ctx["warm"], dtype=bool)
-    other = np.asarray(raw_events(partner, df, None), dtype=bool)
+    other = np.asarray(raw_events(partner, df, ctx.get("context")), dtype=bool)
     return descriptive.event_overlap(ctx["raw"] & population, other & population)
 
 
@@ -333,6 +382,7 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
         stressed=_stressed(idea, ticker, df, ctx, costs),
         restricted=_restricted(idea, ticker, df, ctx, costs),
         control=_control(idea, ticker, df, ctx, costs), overlap=_overlap(idea, df, ctx),
+        shock=_shock_report(idea, ticker, df, ctx, costs, kept),
         **_level_report(idea, ticker, df, ctx, costs, kept, draw))
 
 
@@ -348,7 +398,22 @@ def _spy_calendar(cache_dir, end: str) -> pd.DataFrame:
     return calendar
 
 
-def _context_frame(cache_dir, ticker: str, sessions: pd.DatetimeIndex, end: str):
+def _check_z(frame: pd.DataFrame, sessions: pd.DatetimeIndex, ticker: str) -> None:
+    screen_context.check_z_coverage(screen_context.trailing_z(frame["Close"]), sessions,
+                                    ticker, event_start=EVENT_START)
+
+
+def _check_level(frame: pd.DataFrame, sessions: pd.DatetimeIndex, ticker: str) -> None:
+    """v211: a level context (a fraction that is 0.0 on calm days) is never
+    z-scored, so the z-coverage floor does not apply; raw index and session
+    contiguity were already checked."""
+
+
+_KIND_CHECKS: dict[str, Callable] = {"z": _check_z, "level": _check_level}
+
+
+def _context_frame(cache_dir, ticker: str, sessions: pd.DatetimeIndex, end: str,
+                   kind: str = "z"):
     """One context CSV through the v174 load checks, the raw index first
     (load_frame silently repairs tz, order and duplicates)."""
     path = Path(cache_dir) / f"{ticker}.csv"
@@ -359,43 +424,131 @@ def _context_frame(cache_dir, ticker: str, sessions: pd.DatetimeIndex, end: str)
     if frame is None:
         raise screen_context.ContextError(f"{ticker}: no bar in {CONTEXT_START}..{end}")
     screen_context.check_contiguous(frame.index, sessions, ticker)
-    screen_context.check_z_coverage(screen_context.trailing_z(frame["Close"]), sessions,
-                                    ticker, event_start=EVENT_START)
+    _KIND_CHECKS[kind](frame, sessions, ticker)
     return frame, record
 
 
-def load_context(cache_dir, tickers: tuple[str, ...], *, end: str = WINDOW_END) -> screen_context.ContextData:
+def load_context(cache_dir, tickers: tuple[str, ...], *, end: str = WINDOW_END,
+                 kind: str = "z") -> screen_context.ContextData:
     """Every context frame an idea names, checked, from CONTEXT_START to end."""
     calendar = _spy_calendar(cache_dir, end)
     frames, records = {}, {}
     for ticker in tickers:
-        frames[ticker], records[ticker] = _context_frame(cache_dir, ticker, calendar.index, end)
+        frames[ticker], records[ticker] = _context_frame(cache_dir, ticker, calendar.index, end, kind)
     return screen_context.ContextData(frames=frames, calendar=calendar, records=records)
 
 
 def _universe_context(idea: Idea, cache_dir, end: str, context):
     """A context idea run without frames loads them here, once per universe."""
     if idea.context and context is None:
-        return load_context(cache_dir, idea.context, end=end).frames
+        return load_context(cache_dir, idea.context, end=end,
+                            kind=idea.context_kind).frames
     return context
+
+
+CHECKPOINT_MANIFEST = "manifest.json"
+_EMPTY = object()      # the empty-frame marker (None is a legal monkeypatched result)
+
+
+def _json_sha256(value) -> str:
+    text = json.dumps(value, sort_keys=True, default=str)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _context_sha256(context) -> str | None:
+    """sha256 over every context series' records, in ticker order; None without one."""
+    if not context:
+        return None
+    digest = hashlib.sha256()
+    for ticker in sorted(context):
+        digest.update(ticker.encode("utf-8"))
+        digest.update(pd.util.hash_pandas_object(context[ticker], index=True).values.tobytes())
+    return digest.hexdigest()
+
+
+def _checkpoint_manifest(idea: Idea, start: str, end: str, names: list[str],
+                         context=None, intervals=None) -> dict:
+    return {"idea": idea.name, "start": start, "end": end,
+            "tickers_sha256": hashlib.sha256("\n".join(names).encode("utf-8")).hexdigest(),
+            "context_sha256": _context_sha256(context),
+            "intervals_sha256": _json_sha256(intervals or {}),
+            "params_sha256": _json_sha256(dict(idea.params))}
+
+
+class _Checkpoint:
+    """v211: one pickle per finished ticker; a no-op without a directory."""
+
+    def __init__(self, directory: Path | None):
+        self.directory = directory
+
+    def load(self, ticker: str):
+        if self.directory is None:
+            return None
+        path = self.directory / f"{ticker}.pkl"
+        # pickle is safe here: local scratch files this same script wrote, never shared input
+        return pickle.loads(path.read_bytes()) if path.exists() else None
+
+    def save(self, screen) -> None:
+        if self.directory is None:
+            return
+        final = self.directory / f"{screen.ticker}.pkl"
+        tmp = final.with_name(final.name + ".tmp")
+        tmp.write_bytes(pickle.dumps(screen, protocol=pickle.HIGHEST_PROTOCOL))
+        os.replace(tmp, final)
+
+
+def _open_checkpoint(directory: Path | None, manifest: dict, out) -> _Checkpoint:
+    if directory is None:
+        return _Checkpoint(None)
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / CHECKPOINT_MANIFEST
+    if path.exists():
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        if saved != manifest:
+            raise ValueError(f"checkpoint {directory} belongs to another run: "
+                             f"{saved} != {manifest}")
+    else:
+        path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    done = len(list(directory.glob("*.pkl")))
+    out(f"[{manifest['idea']}] checkpoint {directory}: {done} ticker(s) already screened",
+        flush=True)
+    return _Checkpoint(directory)
+
+
+def _screen_or_resume(idea, ticker, universe, cache_dir, start, end, context, checkpoint):
+    resumed = checkpoint.load(ticker)
+    if resumed is not None:
+        return resumed
+    df = load_frame(Path(cache_dir) / f"{ticker}.csv", start, end)
+    if df is None:
+        return _EMPTY
+    screen = screen_ticker(idea, ticker, df, universe.intervals.get(ticker, []),
+                           context=context)
+    checkpoint.save(screen)
+    return screen
 
 
 def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
                     start: str = WINDOW_START, end: str = WINDOW_END,
-                    tickers=None, out=print, context: Mapping | None = None):
+                    tickers=None, out=print, context: Mapping | None = None,
+                    checkpoint_dir: Path | None = None):
     """Every cached member, one at a time, with flushed percent progress.
-    ``context`` (v174) is handed unchanged to every screen_ticker call."""
+    ``context`` (v174) is handed unchanged to every screen_ticker call.
+    ``checkpoint_dir`` (v211) persists each finished ticker and resumes from it."""
     context = _universe_context(idea, cache_dir, end, context)
     names = universe.cached if tickers is None else [t for t in tickers if t in universe.cached]
+    checkpoint = _open_checkpoint(checkpoint_dir,
+                                  _checkpoint_manifest(idea, start, end, names, context,
+                                                      universe.intervals), out)
     screens, skipped = [], Counter()
     for i, ticker in enumerate(names, start=1):
-        df = load_frame(Path(cache_dir) / f"{ticker}.csv", start, end)
-        if df is None:
+        result = _screen_or_resume(idea, ticker, universe, cache_dir, start, end,
+                                   context, checkpoint)
+        if result is _EMPTY:
             skipped["empty_frame"] += 1
         else:
-            screens.append(screen_ticker(idea, ticker, df,
-                                         universe.intervals.get(ticker, []),
-                                         context=context))
+            screens.append(result)
         if i % PROGRESS_EVERY == 0 or i == len(names):
             out(f"[{idea.name}] {i}/{len(names)} tickers ({100.0 * i / len(names):.0f}%)",
                 flush=True)
@@ -410,11 +563,13 @@ def _count_depths(idea: Idea, df: pd.DataFrame, ctx: dict, booked: np.ndarray):
     return np.asarray(_event_depths(df, booked, ctx, idea.direction), dtype=float)
 
 
-def count_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans) -> dict:
+def count_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans,
+                 context: Mapping | None = None) -> dict:
     """v182 --count-only for one ticker: the real run's events, drops and
     null draw, with a race-free exit bound (every trade lasts the full cap).
-    Nothing is raced; no R is computed."""
-    ctx = ticker_context(idea, df, spans)
+    Nothing is raced; no R is computed. v211: ``event_dates`` lists the ISO
+    signal date of every counted event, ascending."""
+    ctx = ticker_context(idea, df, spans, context)
     cap = idea.time_cap_bars
     cand, counts = race.candidate_events(ctx["raw"], ctx["member"], ctx["warm"], cap,
                                          entry=idea.entry)
@@ -429,13 +584,14 @@ def count_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans) -> dict:
     matched = np.isin(booked, groups.event_pos)
     return {"ticker": ticker, "counters": Counter(counts),
             "raw": int(np.count_nonzero(ctx["raw"])), "events": int(matched.sum()),
+            "event_dates": [d.strftime("%Y-%m-%d") for d in df.index[booked[matched]]],
             "event_depths": [] if depth is None else [float(d) for d in depth[matched]],
             "null_depths": [float(d) for d in groups.null_depths],
             "null_slots": int(groups.null_slots), "null_unfilled": int(groups.null_unfilled)}
 
 
 _COUNT_SUMS = ("raw", "events", "null_slots", "null_unfilled")
-_COUNT_LISTS = ("event_depths", "null_depths")
+_COUNT_LISTS = ("event_dates", "event_depths", "null_depths")
 
 
 def _add_count(total: dict, one: dict) -> None:
@@ -449,19 +605,22 @@ def _add_count(total: dict, one: dict) -> None:
 
 
 def count_universe(idea: Idea, universe: Universe, cache_dir, *,
-                   start: str = WINDOW_START, end: str = WINDOW_END, out=print) -> dict:
+                   start: str = WINDOW_START, end: str = WINDOW_END, out=print,
+                   context: Mapping | None = None) -> dict:
     """v182 --count-only over every cached member, the screen_universe loop
-    and progress line, summed into one dict."""
+    and progress line, summed into one dict. ``context`` (v211) is handed
+    unchanged to every count_ticker call."""
     total = {"tickers": 0, "members": len(universe.members), "missing": len(universe.missing),
              "skipped": Counter(), "counters": Counter(), "raw": 0, "events": 0,
-             "event_depths": [], "null_depths": [], "null_slots": 0, "null_unfilled": 0}
+             "event_dates": [], "event_depths": [], "null_depths": [], "null_slots": 0, "null_unfilled": 0}
     names = universe.cached
     for i, ticker in enumerate(names, start=1):
         df = load_frame(Path(cache_dir) / f"{ticker}.csv", start, end)
         if df is None:
             total["skipped"]["empty_frame"] += 1
         else:
-            _add_count(total, count_ticker(idea, ticker, df, universe.intervals.get(ticker, [])))
+            _add_count(total, count_ticker(idea, ticker, df,
+                                           universe.intervals.get(ticker, []), context=context))
         if i % PROGRESS_EVERY == 0 or i == len(names):
             out(f"[{idea.name}] {i}/{len(names)} tickers ({100.0 * i / len(names):.0f}%)",
                 flush=True)
@@ -509,8 +668,44 @@ def _check5_block(idea: Idea, counts: dict) -> list[str]:
             + [f"- {line}" for line in lines] + ["", verdict_line])
 
 
-def render_counts(idea: Idea, counts: dict, args) -> str:
-    """The --count-only report: counts, the N gate and (level ideas) check 5."""
+#: v211: the outcome-blind preflight's table header (spec § Track 2).
+PREFLIGHT_HEADER = "| year | shock days | shock weeks | events |"
+
+
+def _preflight_block(table: dict[int, dict]) -> list[str]:
+    """v211 (spec § Track 2, Outcome-blind preflight): shock days, ISO shock
+    weeks (the bootstrap's clusters) and counted events per year, then the
+    totals. Printed only."""
+    empty = sum(1 for row in table.values() if row["shock_days"] == 0)
+    totals = {key: sum(row[key] for row in table.values())
+              for key in ("shock_days", "shock_weeks", "events")}
+    return (["", "## Preflight — shock days, weeks and events per year (outcome-blind)", "",
+             "Printed before the shot from the context and the counted events only; it never "
+             "decides whether the shot runs (the shot runs as registered). A shock week is an "
+             "ISO week; a week spanning New Year counts once in each year.",
+             f"Years without a shock day: {empty} of {len(table)}.", "",
+             PREFLIGHT_HEADER, "|---:|---:|---:|---:|"]
+            + [f"| {year} | {row['shock_days']} | {row['shock_weeks']} | {row['events']} |"
+               for year, row in table.items()]
+            + [f"| **total** | **{totals['shock_days']}** | **{totals['shock_weeks']}** | "
+               f"**{totals['events']}** |"])
+
+
+def _count_preflight(idea: Idea, data, counts: dict) -> dict | None:
+    """v211: the per-year preflight table for a level-context idea, from the
+    market-wide SHOCK state on the context calendar (not any ticker's) and the
+    counted events' signal dates; None for every other idea, before reading
+    anything."""
+    if idea.context_kind != "level":
+        return None
+    frames = data.frames
+    state = sb.shock_state(frames[sb.BREADTH]["Close"], frames[sb.VIX]["Close"])
+    return shock_readouts.preflight_years(state, counts["event_dates"])
+
+
+def render_counts(idea: Idea, counts: dict, args, *, preflight: dict | None = None) -> str:
+    """The --count-only report: counts, the N gate, (level ideas) check 5 and
+    (v211 level-context ideas) the preflight table."""
     cap = idea.time_cap_bars
     lines = [f"# v182 count: `{idea.name}` (outcome-blind: no race, no R)", "",
              f"**Window:** {args.start}..{args.end} (events from {EVENT_START}). "
@@ -527,12 +722,15 @@ def render_counts(idea: Idea, counts: dict, args) -> str:
               _count_gate(counts["events"])]
     if idea.entry == "level":
         lines += _check5_block(idea, counts)
+    if preflight is not None:
+        lines += _preflight_block(preflight)
     return "\n".join(lines) + "\n"
 
 
 def count_refusal(args, idea: Idea) -> str | None:
     """Why this count must not happen, or None. Checked before any data is
-    read; never reads the ledger."""
+    read; never reads the ledger. v211: a level-context idea is counted (its
+    context loads in run_count); a z idea is still refused."""
     if args.end > WINDOW_END:
         return f"window end {args.end} is after {WINDOW_END}; the screen never reads 2020+"
     if (args.start, args.end) != (WINDOW_START, WINDOW_END):
@@ -541,26 +739,33 @@ def count_refusal(args, idea: Idea) -> str | None:
     if args.tickers:
         return ("--count-only counts the whole universe; --tickers belongs to a --dry-run "
                 "smoke test")
-    if idea.context:
+    if idea.context and idea.context_kind == "z":
         return (f"--count-only counts ideas without context series; {idea.name} reads "
                 f"{', '.join(idea.context)}")
     return None
 
 
 def run_count(args) -> int:
-    """v182 --count-only: refuse, or print the count report. Writes nothing."""
+    """v182 --count-only: refuse, or print the count report. Writes nothing.
+    v211: a context idea's series load and are checked (SHA pin included)
+    exactly as the real run; nothing is pinned or written."""
     idea = IDEAS[args.idea]
+    data = None
     reason = count_refusal(args, idea)
     if reason is None:
         try:
             universe = load_universe(args.cache_dir, args.membership, args.start, args.end)
         except ValueError as exc:
             reason = str(exc)
+    if reason is None:
+        data, reason = _context_step(args, idea)
     if reason:
         print(f"refused: {reason}", file=sys.stderr)
         return 2
-    counts = count_universe(idea, universe, args.cache_dir, start=args.start, end=args.end)
-    print(render_counts(idea, counts, args))
+    context = None if data is None else data.frames
+    counts = count_universe(idea, universe, args.cache_dir, start=args.start, end=args.end,
+                            context=context)
+    print(render_counts(idea, counts, args, preflight=_count_preflight(idea, data, counts)))
     return 0
 
 
@@ -609,6 +814,50 @@ def write_hashes(records: Mapping[str, dict], path) -> bool:
     return True
 
 
+def add_context_hashes(records: Mapping[str, dict], path) -> list[str]:
+    """v211: pin context files not yet pinned; a pinned SHA is never rewritten."""
+    path = Path(path)
+    pinned = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    added = {}
+    for ticker, record in sorted(records.items()):
+        sha = record["sha256"]
+        if ticker not in pinned:
+            added[ticker] = sha
+        elif pinned[ticker] != sha:
+            raise screen_context.ContextError(
+                f"{ticker}.csv SHA-256 {sha[:12]} differs from {pinned[ticker][:12]} "
+                f"pinned in {path}; a pin is never rewritten")
+    if not added:
+        return []
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps({**pinned, **added}, indent=2, sort_keys=True)
+    path.write_text(text + "\n", encoding="utf-8", newline="\n")
+    return sorted(added)
+
+
+def run_pin_context(args) -> int:
+    try:
+        records = _hash_records(args.cache_dir)
+        added = add_context_hashes(records, args.context_hashes)
+    except screen_context.ContextError as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+    for ticker in added:
+        print(f"pinned {ticker} {records[ticker]['sha256']} -> {args.context_hashes}")
+    if not added:
+        print(f"nothing to pin: every context file is already pinned in {args.context_hashes}")
+    return 0
+
+
+def _mode_runner(args) -> Callable[[argparse.Namespace], int] | None:
+    """The one-shot modes that replace a screen; later modes are added here."""
+    if args.count_only:
+        return run_count
+    if args.pin_context:
+        return run_pin_context
+    return None
+
+
 def _context_step(args, idea: Idea) -> tuple[screen_context.ContextData | None, str | None]:
     """(ContextData, None), or (None, reason) to refuse; (None, None) for an
     idea without context. Runs for dry and real runs alike."""
@@ -616,7 +865,8 @@ def _context_step(args, idea: Idea) -> tuple[screen_context.ContextData | None, 
         return None, None
     try:
         records = _hash_records(args.cache_dir)
-        data = load_context(args.cache_dir, idea.context, end=args.end)
+        data = load_context(args.cache_dir, idea.context, end=args.end,
+                            kind=idea.context_kind)
         data = replace(data, checked_records=records)
         reason = _context_hash_refusal(args, data)
     except screen_context.ContextError as exc:
@@ -683,11 +933,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--context-hashes", type=Path, default=CONTEXT_HASHES,
                    help="v174 pinned SHA-256 of the context CSVs")
     p.add_argument("--tickers", default=None, help="comma list; smoke test, needs --dry-run")
+    p.add_argument("--checkpoint-dir", type=Path, default=None,
+                   help="v211: persist each finished ticker's screen here; a restart skips "
+                        "them (refuses another run's checkpoint)")
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="print the doc, write nothing")
     mode.add_argument("--count-only", action="store_true",
                       help="v182: count events, drops and full-cap non-overlap (and check 5 "
                            "for a level idea); no race, no R, writes nothing")
+    mode.add_argument("--pin-context", action="store_true",
+                      help="v211: add the SHA-256 of every registered context file missing "
+                           "from --context-hashes; never rewrites a pinned one, screens "
+                           "nothing, writes nothing else")
     return p
 
 
@@ -785,7 +1042,7 @@ def _restricted_pairs(screens):
 def with_diagnostics(summary: dict, screens, idea: Idea, data, *, end: str) -> dict:
     """The summary plus ``"context"`` (v174 § 5) for a context idea; the same
     dict, untouched, for any other. The verdict object is never rebuilt."""
-    if not idea.context or data is None:
+    if not idea.context or idea.context_kind == "level" or data is None:
         return summary
     diag = diagnostics.compute(idea, summary["events"], _restricted_pairs(screens), data,
                                event_start=EVENT_START, event_end=end)
@@ -829,6 +1086,32 @@ def _level_blocks(screens) -> dict:
                 for side in ("event", "null")},
             "slots": (sum(screen.null_slots for screen in screens),
                       sum(screen.null_unfilled for screen in screens))}
+
+
+def _shock_split(pairs: list, key: str, labels: tuple) -> dict:
+    """Per label: n, mean r_event and mean paired excess; ``missing`` counts unlabelled tags."""
+    out = {}
+    for label in labels:
+        rows = [row for row, tag in pairs if tag[key] == label]
+        out[label] = {"n": len(rows), "exp_r_event": _mean([r["r_event"] for r in rows]),
+                      "delta_exp_r": _mean([r["r_event"] - r["r_null"] for r in rows])}
+    out["missing"] = sum(tag[key] is None for _, tag in pairs)
+    return out
+
+
+def with_shock_blocks(summary: dict, screens, idea: Idea) -> dict:
+    """v211: the summary plus ``"shock"`` for a level idea; the same dict, untouched, for any other. The verdict object is never rebuilt."""
+    if idea.context_kind != "level":
+        return summary
+    shocked = [s for s in screens if s.shock is not None]
+    pairs = [(row, tag) for s in shocked for row, tag in zip(s.events, s.shock["tags"])]
+    block = {"null2": _decide([r for s in shocked for r in s.shock["null2"]]),
+             "null2_dropped": sum(s.shock["null2_dropped"] for s in shocked),
+             "stress3": _decide([r for s in shocked for r in s.shock["stress3"]]),
+             "gap": _shock_split(pairs, "gap_bucket", shock_readouts.GAP_BUCKETS),
+             "episode_day": _shock_split(pairs, "episode_day", shock_readouts.EPISODE_DAYS),
+             "skipped_overlap": summary["counters"].get("skipped_overlap", 0)}
+    return {**summary, "shock": block}
 
 
 def with_short_blocks(summary: dict, screens, idea: Idea, spy) -> dict:
@@ -1040,6 +1323,20 @@ def _render_control(summary, block) -> list:
             "credited to the range."]
 
 
+def _render_shock_control(summary, block) -> list:
+    """v211: the unconditional control, the same trigger with the shock state ignored."""
+    c = block["control"]
+    margin = _minus(summary["verdict"].delta_exp_r, c.delta_exp_r)
+    return ["**Unconditional control** (`control_events`: the same trigger with the shock "
+            "state ignored; same race, same matched null): "
+            f"N = {c.n}, ΔExpR {_fmt(c.delta_exp_r)}R, 95% week-clustered interval "
+            f"{_fmt(c.ci_low)}R to {_fmt(c.ci_high)}R. The idea's ΔExpR minus the control's: "
+            f"{_fmt(margin)}R. A pass whose ΔExpR is not clearly above the control is not "
+            "credited to the shock condition."]
+
+
+_CONTROL_TEXT: dict[str, Callable] = {"z": _render_control, "level": _render_shock_control}
+
 _REGIME_ROWS = (("above", "above its 200-day average"), ("below", "below its 200-day average"))
 
 
@@ -1087,7 +1384,7 @@ def _render_short_blocks(idea, summary, run) -> list:
     if block["overlap"] is not None:
         parts.append(_render_overlap(idea, block))
     if block["control"] is not None:
-        parts.append(_render_control(summary, block))
+        parts.append(_CONTROL_TEXT[idea.context_kind](summary, block))
     parts.append(_render_regime(block))
     if block["depths"] is not None:
         parts.append(_render_level(summary, block, run))
@@ -1133,6 +1430,74 @@ def _render_context(idea, summary, run) -> list:
                               scope=diagnostics.scope_sentence(idea))
 
 
+def _render_split(title: str, column: str, split: dict, labels: tuple,
+                  missing_label: str) -> list:
+    """v211: one labelled split table and its missing-count line."""
+    lines = [title, "", f"| {column} | N | mean R_event | ΔExpR (standard null) |",
+             "|---|---:|---:|---:|"]
+    for label in labels:
+        cell = split[label]
+        lines.append(f"| {label} | {cell['n']} | {_fmt(cell['exp_r_event'])}R | "
+                     f"{_fmt(cell['delta_exp_r'])}R |")
+    return lines + ["", f"{missing_label}: {split['missing']}."]
+
+
+def _render_shock_blocks(idea, summary, run) -> list:
+    """v211: the shock read-outs, descriptive and never gating."""
+    b, v = summary["shock"], summary["verdict"]
+    n2, s3 = b["null2"], b["stress3"]
+    factor = shock_readouts.SHOCK_STRESS_SLIPPAGE_FACTOR
+    parts = [
+        [f"Kept events N = {v.n}; skipped as overlapping an open race (`skipped_overlap`) "
+         f"= {b['skipped_overlap']}."],
+        [f"**Shock-day null** (K = {null.K} bars drawn only from this ticker's SHOCK days, "
+         "no month or trend match; its own seeded stream): "
+         f"N = {n2.n}, ΔExpR {_fmt(n2.delta_exp_r)}R, 95% week-clustered interval "
+         f"{_fmt(n2.ci_low)}R to {_fmt(n2.ci_high)}R; events dropped for fewer than "
+         f"{null.MIN_CANDIDATES} SHOCK-day candidates: {b['null2_dropped']}. "
+         f"The standard ΔExpR minus this one: {_fmt(_minus(v.delta_exp_r, n2.delta_exp_r))}R. "
+         "An edge that vanishes against this null is the market's drift after a shock day, "
+         "not the stock trigger."],
+        [f"**Re-priced at {factor} x slippage** ({factor * run['slippage_bps']} bps a side, "
+         "both fills, events and standard null; shock-day spreads widen 2-5x): "
+         f"ΔExpR {_fmt(s3.delta_exp_r)}R, 95% week-clustered interval "
+         f"{_fmt(s3.ci_low)}R to {_fmt(s3.ci_high)}R; change vs the base book "
+         f"{_fmt(_minus(s3.delta_exp_r, v.delta_exp_r))}R. Printed, never gating."],
+        _render_split("**Gap split** (next open vs the signal close; the race fills the "
+                      "entry at that open, gap included, and a gap through the stop at the "
+                      "open):", "gap", b["gap"], shock_readouts.GAP_BUCKETS,
+                      "Events with no next open"),
+        _render_split("**Day of the episode** (`peak`: the signal close is the episode's "
+                      "highest BREADTH_ATR1 so far, so the entry is the session after the "
+                      "breadth peak; `later`: any other SHOCK day of the episode):",
+                      "day", b["episode_day"], shock_readouts.EPISODE_DAYS,
+                      "Events on a NORMAL day"),
+    ]
+    lines = ["## Shock read-outs (v211; descriptive, never gating)"]
+    for part in parts:
+        lines += [""] + part
+    return lines
+
+
+def _render_level_context(idea, summary, run) -> list:
+    """v211: the level idea's context series and the short-family BH q."""
+    lines = ["## Context series (v211 level)", "", diagnostics.scope_sentence(idea), "",
+             "| series | rows | first | last | SHA-256 |", "|---|---:|---|---|---|"]
+    for _, r in sorted(run["context"].records.items()):
+        lines.append(f"| {r['ticker']} | {r['rows']} | {r['first']} | {r['last']} | "
+                     f"`{r['sha256'][:12]}` |")
+    lines += ["", "**Short-family BH q** (every short idea screened so far, "
+              "`SHORT_SCREEN_IDS`, this run's row included; reported, never gating):",
+              "", "| ledger id | q |", "|---|---:|"]
+    lines += [f"| `{i}` | {_fmt(q, '.4f')} |" for i, q in run["short_q"].items()] \
+        or ["| (no short idea in the ledger yet) | n/a |"]
+    return lines
+
+
+_CONTEXT_SECTIONS: dict[str, Callable] = {"z": _render_context,
+                                          "level": _render_level_context}
+
+
 def render_results(idea, summary, universe, run) -> str:
     v = summary["verdict"]
     sections = [_render_head(idea, v, run), _render_universe(universe, summary),
@@ -1143,8 +1508,10 @@ def render_results(idea, summary, universe, run) -> str:
     sections += [_render_years(v), _render_drift(summary)]
     if "short" in summary:
         sections.append(_render_short_blocks(idea, summary, run))
+    if "shock" in summary:
+        sections.append(_render_shock_blocks(idea, summary, run))
     if idea.context:
-        sections.append(_render_context(idea, summary, run))
+        sections.append(_CONTEXT_SECTIONS[idea.context_kind](idea, summary, run))
     return "\n\n".join("\n".join(lines) for lines in sections) + "\n"
 
 
@@ -1184,9 +1551,19 @@ def _short_hypothesis(idea) -> str:
             "a year, PIT S&P 500 2010-2019, after costs (v182 short screen)")
 
 
+def _level_hypothesis(idea) -> str:
+    """v211: the short text, the level context series, then the frozen scope
+    (the ledger has no note field)."""
+    return (_short_hypothesis(idea)
+            + f", context {', '.join(idea.context)} levels from {CONTEXT_START} "
+              "(v211 shock screen). " + diagnostics.scope_sentence(idea))
+
+
 def hypothesis(idea) -> str:
     """The ledger hypothesis, naming the shape and cap; the fixed text is
     today's, byte for byte."""
+    if idea.context_kind == "level":
+        return _level_hypothesis(idea)
     if idea.context:
         return _context_hypothesis(idea)
     if idea.direction == "short":
@@ -1217,11 +1594,30 @@ def _run_info(args, q) -> dict:
             "commission": commission_r()}
 
 
+#: v211 (spec § Track 2): every short idea screened so far; the results doc
+#: prints BH q across them. range_breakdown_stop is unspent and simply absent
+#: from q until it runs.
+SHORT_SCREEN_IDS = ("v104-b-short-mechanisms", "screen-range_breakdown_close",
+                    "screen-range_breakdown_stop", "screen-shock_support_break_short",
+                    "screen-shock_failed_bounce_short")
+
+
+def short_family_q(rows: list[dict], row: dict) -> dict[str, float | None]:
+    """BH q over the short ideas in the ledger plus this run's row, in
+    SHORT_SCREEN_IDS order; a row with p = None maps to None."""
+    family = {r["id"]: r for r in [*rows, row] if r["id"] in SHORT_SCREEN_IDS}
+    q = stats.ledger_qvalues(list(family.values()))
+    return {i: q[i] for i in SHORT_SCREEN_IDS if i in q}
+
+
 def _context_run(run: dict, idea, rows, row: dict, data) -> dict:
     """A context idea's run dict also carries its ContextData and the
-    screen-family BH q (§ 5.5); any other idea's run dict is returned as is."""
+    screen-family BH q (§ 5.5); any other idea's run dict is returned as is.
+    v211: a level idea carries the short-family q instead (§ Track 2)."""
     if not idea.context:
         return run
+    if idea.context_kind == "level":
+        return {**run, "context": data, "short_q": short_family_q(rows, row)}
     return {**run, "context": data,
             "screen_q": diagnostics.screen_family_q(rows, row, INSTRUMENT)}
 
@@ -1261,11 +1657,24 @@ def _utf8_stdout() -> None:
             pass    # a capture stream that cannot be reconfigured is already safe
 
 
+def _run_screens(args, idea: Idea, universe: Universe, data, spy) -> dict:
+    """The summary ``main`` publishes (screen, diagnostics, short blocks)."""
+    tickers = args.tickers.split(",") if args.tickers else None
+    screens, skipped = screen_universe(idea, universe, args.cache_dir, start=args.start,
+                                       end=args.end, tickers=tickers,
+                                       context=None if data is None else data.frames,
+                                       checkpoint_dir=args.checkpoint_dir)
+    summary = with_diagnostics(summarise(screens, skipped), screens, idea, data, end=args.end)
+    summary = with_short_blocks(summary, screens, idea, spy)
+    return with_shock_blocks(summary, screens, idea)
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     _utf8_stdout()
-    if args.count_only:
-        return run_count(args)
+    runner = _mode_runner(args)
+    if runner is not None:
+        return runner(args)
     rows = stats.load_ledger(args.ledger)
     reason = refusal(args, rows)
     if reason is None:
@@ -1283,13 +1692,8 @@ def main(argv=None) -> int:
         print(f"refused: {reason}", file=sys.stderr)
         return 2
     idea = IDEAS[args.idea]
-    tickers = args.tickers.split(",") if args.tickers else None
-    screens, skipped = screen_universe(idea, universe, args.cache_dir, start=args.start,
-                                       end=args.end, tickers=tickers,
-                                       context=None if data is None else data.frames)
-    summary = with_diagnostics(summarise(screens, skipped), screens, idea, data, end=args.end)
-    summary = with_short_blocks(summary, screens, idea, spy)
-    return publish(args, idea, universe, summary, rows, data=data)
+    return publish(args, idea, universe, _run_screens(args, idea, universe, data, spy),
+                   rows, data=data)
 
 
 if __name__ == "__main__":

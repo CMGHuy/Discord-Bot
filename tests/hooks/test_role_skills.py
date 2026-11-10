@@ -1,4 +1,4 @@
-"""v145 § 1: the expert role skills -- one shape for nine lenses.
+"""v145 § 1: the expert role skills -- one shape for ten lenses (v213 adds ux-designer).
 
 Each role skill carries Lens, Checklist, Red flags and Out of scope in that
 order, states the hard boundaries every seat shares, and ships trigger cases
@@ -7,6 +7,7 @@ docs/claude/skills-tools.md, which /panel reads. See
 docs/superpowers/specs/2026-10-09-v145-expert-roles-model-routing.md
 """
 import pathlib
+import re
 import sys
 
 import pytest
@@ -31,6 +32,7 @@ ROLES = {
     "staff-engineer": "opus",
     "quant-engineer": "sonnet",
     "senior-engineer": "sonnet",
+    "ux-designer": "sonnet",
 }
 
 SECTIONS = ("## Lens", "## Checklist", "## Red flags", "## Out of scope")
@@ -41,6 +43,60 @@ REVIEWER_MODELS = {"sonnet", "opus"}   # no reviewer runs on haiku
 CASE_FILES = ("prompt.md", "graders/skill-fired.md")
 # Characters of the parsed description value -- the text inside the quotes.
 MAX_ROLE_DESCRIPTION = 260
+
+# v213 § C: the boundary paragraph every seat opens with, pinned whole. It
+# stays inside each skill because a role skill also loads on its own, without
+# expert-reviewer. Wrapped in the files exactly as these six lines.
+BOUNDARY = " ".join((
+    "You are one seat on a review panel. You raise findings; you never decide, and",
+    "you never lower a gate (`docs/claude/persona.md`). No seat's intuition",
+    "overrides the `backtest-gate` skill, the `pooled-numbers` skill or a closed",
+    "pre-registration, and you quote no pooled figure you did not re-derive. Every",
+    "finding cites `file:line`, a git range or a doc section, and is tagged",
+    "`BLOCKING` (it matches a red flag below) or `ADVISORY`.",
+))
+
+# v213 § C: a cross-cutting checklist item opens with one shared lead, then
+# the seat's own angle, so /panel can merge the same concern across seats.
+LEADS = {
+    "Shorts:": "Shorts: long plans stay byte-identical; ",
+    "eToro:": "eToro: demo only, never `account: real`; ",
+}
+# role -> the LEADS keys its checklist must carry (one item each).
+CROSS_CUTTING: dict[str, frozenset[str]] = {
+    "risk-manager": frozenset({"Shorts:", "eToro:"}),
+    "veteran-trader": frozenset({"Shorts:", "eToro:"}),
+    "quant-researcher": frozenset({"Shorts:"}),
+    "staff-engineer": frozenset({"eToro:"}),
+    "financial-advisor": frozenset({"eToro:"}),
+}
+
+# v213 § C: the anchors each seat's new checklist items must carry -- words
+# and paths, never whole sentences, so a reword inside the item still passes.
+COVERAGE: dict[str, tuple[str, ...]] = {
+    "risk-manager": ("level-lifecycle", "current stop",
+                     "`swingbot/core/planning/gap_sizing.py`",
+                     "squeeze notice", "`swingbot/core/market/short_interest.py`",
+                     "without its stop"),
+    "veteran-trader": ("act on before the open", "half-days",
+                       "frozen weekend bar", "partial fill", "hard-to-borrow",
+                       "CFD"),
+    "quant-researcher": ("badge tier", "`swingbot/core/backtesting/validation_registry.json`",
+                         "Total R", "trade count", "live-book gap"),
+    "quant-engineer": ("§ Long runs must checkpoint", "skips finished units on restart",
+                       "`swingbot/core/marketdata/providers/router.py`",
+                       "`swingbot/core/marketdata/training_data.py`"),
+    "staff-engineer": ("`deploy/gunicorn.conf.py`", "`tests/suites.toml`",
+                       "`scripts/ops/pitr_backup.sh`", "§ Scheduling far-off work",
+                       "idempotent"),
+    "senior-engineer": ("`tests/suites.toml`", "Vitest", "Mutating the fix"),
+    "financial-advisor": ("overnight fees", "minimum position size"),
+    "technical-analyst": ("`confirmed_pivots`", "BOS/CHoCH", "significance tier",
+                          "`swingbot/core/market/turtle_soup.py`",
+                          "`swingbot/core/market/atr_band.py`",
+                          "Volume counts as confirmation",
+                          "`swingbot/core/market/explain.py`"),
+}
 
 
 def _text(path):
@@ -59,6 +115,38 @@ def _section(body, heading):
     start = body.index(heading + "\n") + len(heading)
     end = body.find("\n## ", start)
     return body[start:] if end == -1 else body[start:end]
+
+
+def _boundary(role):
+    """The first paragraph after the `# ` title line, lines joined by spaces."""
+    lines = _body(role).splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("# ")) + 1
+    while start < len(lines) and not lines[start].strip():
+        start += 1
+    paragraph = []
+    for line in lines[start:]:
+        if not line.strip():
+            break
+        paragraph.append(line.strip())
+    return " ".join(paragraph)
+
+
+def _checklist(role):
+    return [line for line in _section(_body(role), "## Checklist").splitlines()
+            if line.startswith("- ")]
+
+
+def _lead_problems(item):
+    """Why a checklist item that opens with a lead word misuses the lead."""
+    for key, lead in LEADS.items():
+        if not item.startswith("- " + key.rstrip(":")):
+            continue
+        if not item.startswith("- " + lead):
+            return [f"lead not exact: {item[:60]!r}"]
+        angle = item[len("- " + lead):]
+        if not angle.strip() or not item.endswith("."):
+            return [f"no angle or no full stop: {item[:60]!r}"]
+    return []
 
 
 def lens_skills(skills_dir=SKILLS_DIR):
@@ -130,7 +218,7 @@ def test_reviewer_model_is_recorded_in_the_roles_table(role):
 
 PANEL_PHRASES = ("expert-reviewer", "serially", "skills-tools.md", "BLOCKING",
                  "## Panel review", "applied", "rejected: <why>", "/close-out",
-                 "Model tiers")
+                 "Model tiers", "`Shorts:`", "`eToro:`")
 
 
 def test_panel_dispatches_the_expert_reviewer_serially():
@@ -169,3 +257,69 @@ def test_role_description_keeps_its_seat_and_a_hand_off(role):
     assert [other for other in ROLES if other != role and f"({other})" in value]
     # expert-reviewer invokes the skill by name; the clause bought nothing.
     assert "expert-reviewer" not in value
+
+
+@pytest.mark.parametrize("role", sorted(ROLES))
+def test_boundary_paragraph_is_canonical(role):
+    assert _boundary(role) == BOUNDARY
+
+
+@pytest.mark.parametrize("role", sorted(ROLES))
+def test_cross_cutting_items_use_the_shared_lead(role):
+    assert [p for item in _checklist(role) for p in _lead_problems(item)] == []
+
+
+def test_cross_cutting_seats_carry_their_leads():
+    assert set(CROSS_CUTTING) <= set(ROLES)
+    wrong = {}
+    for role, keys in sorted(CROSS_CUTTING.items()):
+        assert keys <= set(LEADS), (role, keys)
+        for key in sorted(keys):
+            hits = [i for i in _checklist(role) if i.startswith("- " + LEADS[key])]
+            if len(hits) != 1:
+                wrong[f"{role} {key}"] = len(hits)
+    assert wrong == {}, "each listed seat carries each lead exactly once"
+
+
+@pytest.mark.parametrize("role", sorted(COVERAGE))
+def test_seat_names_its_coverage_items(role):
+    checklist = "\n".join(_checklist(role))
+    assert [a for a in COVERAGE[role] if a not in checklist] == []
+
+
+def test_dropped_items_stay_with_their_owners():
+    """v213 § C: these checks moved to the skill that owns them."""
+    assert "`Bump:`" not in "\n".join(_checklist("staff-engineer"))      # /close-out
+    assert "Every symbol the brief names" not in "\n".join(_checklist("senior-engineer"))  # task-brief
+
+
+# v213 § D: /panel suggests seats from the target's type, so the area seats
+# (technical-analyst, ux-designer) are picked when their area is touched.
+PANEL_STEP_2 = "## Step 2 — Resolve the roles and the target"
+
+
+def _panel_seat_rows():
+    """Target cell -> seats cell of the seat-picking table in /panel Step 2."""
+    rows = {}
+    for line in _section(_body("panel"), PANEL_STEP_2).splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if line.startswith("|") and len(cells) == 2 and set(cells[0]) - set("-: "):
+            rows[cells[0]] = cells[1]
+    rows.pop("Target", None)
+    return rows
+
+
+def test_panel_seat_table_names_area_seats():
+    rows = _panel_seat_rows()
+    named = {seat for cell in rows.values()
+             for seat in re.findall(r"`([a-z-]+)`", cell)}
+    assert named and named <= set(ROLES), sorted(named - set(ROLES))
+
+    def seats_for(area):
+        return " ".join(cell for target, cell in rows.items() if area in target)
+
+    assert "`ux-designer`" in seats_for("`frontend/`")
+    assert "`ux-designer`" in seats_for("embed")
+    assert "`technical-analyst`" in seats_for("`swingbot/core/market/`")
+    assert "`quant-researcher`" in seats_for("Backtest")
+    assert "**Panel:**" in seats_for("Spec") and "`Edge:`" in seats_for("Spec")

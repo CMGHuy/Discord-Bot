@@ -962,7 +962,7 @@ FIELDS: list[Field] = [
           min=300, max=7200, step=1,
           help="v201. Seconds between refresher quote cycles while the market is closed."),
     Field("ADMIN_REFRESH_YF_FALLBACK_CAP", "ADMIN_REFRESH_YF_FALLBACK_CAP", "Data Sources",
-          "Refresher: yfinance fallback cap per cycle", type="number", default="25",
+          "Refresher: yfinance fallback cap per cycle", type="number", default="150",
           min=0, max=500, step=1,
           help="v201. Most symbols one refresher cycle may fetch from yfinance when Alpaca has no quote."),
     Field("ADMIN_REFRESH_MARK_TIMEOUT_S", "ADMIN_REFRESH_MARK_TIMEOUT_S", "Data Sources",
@@ -981,6 +981,36 @@ FIELDS: list[Field] = [
           "Price stale after: pre/after hours (s)", type="number", default="900",
           min=60, max=7200, step=1,
           help="v201. A stored price older than this is labelled stale in pre-market and after-hours."),
+    Field("ADMIN_SNAPSHOT_REGULAR_S", "ADMIN_SNAPSHOT_REGULAR_S", "Data Sources",
+          "Snapshot cadence: regular hours (s)", type="number", default="300",
+          min=60, max=3600, step=1,
+          help="v204. Seconds between admin snapshot rebuilds (risk, analytics, calendar) "
+               "during the NYSE regular session."),
+    Field("ADMIN_SNAPSHOT_EXTENDED_S", "ADMIN_SNAPSHOT_EXTENDED_S", "Data Sources",
+          "Snapshot cadence: pre/after hours (s)", type="number", default="900",
+          min=60, max=7200, step=1,
+          help="v204. Seconds between admin snapshot rebuilds in pre-market and after-hours."),
+    Field("ADMIN_SNAPSHOT_CLOSED_S", "ADMIN_SNAPSHOT_CLOSED_S", "Data Sources",
+          "Snapshot cadence: market closed (s)", type="number", default="3600",
+          min=300, max=21600, step=1,
+          help="v204. Seconds between admin snapshot rebuilds while the market is closed."),
+    Field("ADMIN_SNAPSHOT_BUDGET_S", "ADMIN_SNAPSHOT_BUDGET_S", "Data Sources",
+          "Snapshot build budget (s)", type="number", default="90",
+          min=10, max=600, step=1,
+          help="v204. Most seconds one snapshot build may take. An in-flight snapshot "
+               "mark is treated as abandoned after this budget + 30 s."),
+    Field("ADMIN_STALE_SNAPSHOT_REGULAR_S", "ADMIN_STALE_SNAPSHOT_REGULAR_S", "Data Sources",
+          "Snapshot stale after: regular hours (s)", type="number", default="600",
+          min=60, max=3600, step=1,
+          help="v204. A snapshot older than this is labelled stale during the regular "
+               "session. While the market is closed, a snapshot is stale when it was built "
+               "before the last regular close, or when its inputs are stale."),
+    Field("ADMIN_STALE_SNAPSHOT_EXTENDED_S", "ADMIN_STALE_SNAPSHOT_EXTENDED_S", "Data Sources",
+          "Snapshot stale after: pre/after hours (s)", type="number", default="1800",
+          min=300, max=7200, step=1,
+          help="v204. A snapshot older than this is labelled stale in pre-market and "
+               "after-hours. While the market is closed, a snapshot is stale when it was "
+               "built before the last regular close, or when its inputs are stale."),
     # v148: ops alerts (spec O3/O4).
     Field("PROVIDER_FALLBACK_ALERT_PCT", "PROVIDER_FALLBACK_ALERT_PCT", "Data Sources",
           "Ops alert: provider fallback above (%)", type="number", default="20",
@@ -1536,6 +1566,107 @@ FIELDS: list[Field] = [
           type="float", default="0", min=0, max=3, step=0.1,
           help="When above 0, the bounce must be quieter than the decline by "
                "this ratio -- a conviction test. 0 turns the arm off."),
+    # --- Market Shock (v209) ---
+    Field("MARKET_SHOCK_MODE", "MARKET_SHOCK_MODE", "Market Shock",
+          "Market-shock detector (v209)",
+          type="select", default="shadow",
+          options=[("off", "Off -- no reading, no state, no notice, no shock_state stamp"),
+                   ("shadow", "Shadow -- measure, record, notify; change no trade"),
+                   ("live", "Live -- identical to shadow until a screened follow-on spec")],
+          help="v209. Each scheduled scan pass in US regular hours takes one reading of the "
+               "watchlist (share of names down >= SHOCK_ATR_K ATR from the prior close, sectors "
+               "down, the speed of that drop, SPY/QQQ ATR moves, VIX) and steps a NORMAL -> "
+               "SHOCK -> RECOVERY -> NORMAL state machine. shadow: readings and state are "
+               "stored, every new plan's entry_context gains shock_state, and a notice goes to "
+               "the ops channel on each transition -- no long is blocked, no short issued, no "
+               "stop moved. live: in v209 exactly the same as shadow. off: a byte-identical "
+               "kill switch. An unknown value falls back to off."),
+    Field("SHOCK_ATR_K", "SHOCK_ATR_K", "Market Shock", "Down-move size, in ATR14",
+          type="float", default="1.0", min=0.25, max=5.0, step=0.25,
+          help="v209. A name counts as 'down' when (last - prior close) / ATR14 <= -this."),
+    Field("SHOCK_BREADTH_ENTER", "SHOCK_BREADTH_ENTER", "Market Shock",
+          "Breadth to enter SHOCK (with weighted depth)",
+          type="float", default="0.40", min=0.05, max=1.0, step=0.05,
+          help="v209 A1. NORMAL -> SHOCK when this share of watchlist equities is down and at "
+               "least SHOCK_DEPTH_FRAC of the sectored names sit in down sectors, on two "
+               "consecutive readings."),
+    Field("SHOCK_DEPTH_FRAC", "SHOCK_DEPTH_FRAC", "Market Shock",
+          "Share of sectored names in down sectors",
+          type="float", default="0.50", min=0.05, max=1.0, step=0.05,
+          help="v209 A1. Names in sectors with >= 2 contributing members whose median move is "
+               "down, over all names in such sectors. Frozen at 0.50 by the A1 pre-registration."),
+    Field("SHOCK_BREADTH_MAJORITY", "SHOCK_BREADTH_MAJORITY", "Market Shock",
+          "Breadth to enter SHOCK on its own",
+          type="float", default="0.50", min=0.05, max=1.0, step=0.05,
+          help="v209 A1. NORMAL -> SHOCK when this share of watchlist equities is down on two "
+               "consecutive readings, with no depth or speed needed. Frozen at 0.50 by A1."),
+    Field("SHOCK_BREADTH_FAST", "SHOCK_BREADTH_FAST", "Market Shock",
+          "Breadth to enter SHOCK (fast path)",
+          type="float", default="0.25", min=0.05, max=1.0, step=0.05,
+          help="v209. NORMAL -> SHOCK when this share is down and breadth rose by at least "
+               "SHOCK_SPEED_ENTER since the previous reading of the same session."),
+    Field("SHOCK_SPEED_ENTER", "SHOCK_SPEED_ENTER", "Market Shock",
+          "Breadth speed for the fast path, per reading",
+          type="float", default="0.10", min=0.01, max=1.0, step=0.01,
+          help="v209. Rise in breadth since the previous same-session reading."),
+    Field("SHOCK_VIX_SPIKE_PCT", "SHOCK_VIX_SPIKE_PCT", "Market Shock",
+          "VIX day change that eases entry (%)",
+          type="float", default="15.0", min=0, max=200, step=1,
+          help="v209. A ^VIX day change at or above this lowers every entry breadth bar by "
+               "SHOCK_VIX_RELIEF. VIX never triggers SHOCK on its own."),
+    Field("SHOCK_VIX_RELIEF", "SHOCK_VIX_RELIEF", "Market Shock",
+          "Breadth relief on a VIX spike",
+          type="float", default="0.05", min=0, max=0.5, step=0.01,
+          help="v209. Subtracted from SHOCK_BREADTH_ENTER, SHOCK_BREADTH_MAJORITY and SHOCK_BREADTH_FAST on a VIX spike (never from SHOCK_DEPTH_FRAC)."),
+    Field("SHOCK_BREADTH_REENTER", "SHOCK_BREADTH_REENTER", "Market Shock",
+          "Breadth to re-enter SHOCK from RECOVERY",
+          type="float", default="0.30", min=0.05, max=1.0, step=0.05,
+          help="v209. RECOVERY -> SHOCK (second leg) on one reading at or above this with "
+               "breadth rising since the previous reading, or on a new SPY session low."),
+    Field("SHOCK_BREADTH_EXIT", "SHOCK_BREADTH_EXIT", "Market Shock",
+          "Breadth at or below which SHOCK can end",
+          type="float", default="0.20", min=0, max=1.0, step=0.05,
+          help="v209. One of the SHOCK -> RECOVERY clauses (with dwell, VIX and SPY retrace)."),
+    Field("RECOVERY_VIX_OFF_HIGH_PCT", "RECOVERY_VIX_OFF_HIGH_PCT", "Market Shock",
+          "VIX off its session high for RECOVERY (%)",
+          type="float", default="5.0", min=0, max=100, step=0.5,
+          help="v209. The VIX clause holds when VIX is this far below its session high, or "
+               "below its prior close. A missing VIX leaves the clause unmet."),
+    Field("RECOVERY_SPY_RETRACE", "RECOVERY_SPY_RETRACE", "Market Shock",
+          "Share of SPY's session drop regained",
+          type="float", default="0.5", min=0, max=1.0, step=0.05,
+          help="v209. SPY must regain this share of its drop from the prior close to the "
+               "session low."),
+    Field("SHOCK_MIN_DWELL_MIN", "SHOCK_MIN_DWELL_MIN", "Market Shock",
+          "Minimum minutes in SHOCK; notice rate limit",
+          type="number", default="45", min=0, max=600, step=5,
+          help="v209. SHOCK cannot end sooner; also at most one notice per this many minutes, "
+               "except a transition into SHOCK, which is always sent."),
+    Field("RECOVERY_MIN_DWELL_MIN", "RECOVERY_MIN_DWELL_MIN", "Market Shock",
+          "Minutes RECOVERY must hold before NORMAL",
+          type="number", default="30", min=0, max=600, step=5,
+          help="v209. The RECOVERY conditions must hold on every reading for this long."),
+    Field("SHOCK_MIN_NAMES", "SHOCK_MIN_NAMES", "Market Shock",
+          "Minimum contributing names per reading",
+          type="number", default="20", min=1, max=1000, step=1,
+          help="v209. Below this a reading is 'insufficient' and the state holds."),
+    Field("SHOCK_VIX_MAX_AGE_S", "SHOCK_VIX_MAX_AGE_S", "Market Shock",
+          "Oldest usable ^VIX tape row (seconds)",
+          type="number", default="600", min=30, max=86400, step=30,
+          help="v209. An older or missing ^VIX row leaves every VIX field empty."),
+    Field("SHOCK_OPEN_SETTLE_MIN", "SHOCK_OPEN_SETTLE_MIN", "Market Shock",
+          "Minutes after the US open before entry counts",
+          type="number", default="15", min=0, max=120, step=1,
+          help="v209. Readings earlier than this never count toward entering or re-entering "
+               "SHOCK."),
+    Field("SHOCK_QUOTE_MAX_AGE_S", "SHOCK_QUOTE_MAX_AGE_S", "Market Shock",
+          "Oldest usable live quote (seconds)",
+          type="number", default="300", min=10, max=3600, step=10,
+          help="v209. When the pass's live quotes are older than this, no name contributes."),
+    Field("SHOCK_READINGS_KEEP_DAYS", "SHOCK_READINGS_KEEP_DAYS", "Market Shock",
+          "Days of readings to keep",
+          type="number", default="180", min=1, max=3650, step=1,
+          help="v209. The nightly recap prunes market_shock_readings older than this."),
     # --- Database ---
     Field("DATABASE_URL", "DATABASE_URL", "Database", "Postgres connection URL",
           type="password", sensitive=True, hot_reloadable=False,
@@ -1636,6 +1767,7 @@ _MODE_VALUES = {
     "FVG_LEVELS_MODE": ("all", "displacement", "off"),
     "TRAINING_DATA_SOURCE": ("alpaca", "yfinance"),
     "ADMIN_REFRESHER": ("on", "off"),
+    "MARKET_SHOCK_MODE": ("off", "shadow", "live"),
 }
 
 # v128: "off" is a signal change for FVG_LEVELS_MODE (it removes a level

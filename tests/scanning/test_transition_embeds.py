@@ -162,7 +162,7 @@ def test_close_reasons_map_to_result_kinds_with_their_outcome():
 
 def test_a_stopped_close_is_red_and_says_loss():
     e = _embed("closed", {"reason": "loss", "exit_price": 94.0}, entry_price=100.0)
-    assert e.title == "🏁 ▲ LONG AAPL · STOPPED · ❌ LOSS −1.2R"
+    assert e.title == "🏁 ▲ LONG AAPL · TAKE STOPLOSS · ❌ LOSS −1.2R"
     assert e.color.value in kinds.RESULT_REDS
     assert e.footer.text == "RESULT · plan p1"
 
@@ -174,7 +174,7 @@ def test_a_terminal_target_close_reads_as_a_win():
     assert "🟢" not in e.title
     assert any("111" in (f.value or "") for f in e.fields)
     assert e.color.value == kinds.RESULT_GREENS[2]        # (111 - 100) / 5 = +2.2R
-    assert e.push_text.startswith("🏁 RESULT · ▲ LONG AAPL · WIN")
+    assert e.push_text.startswith("🏁 RESULT · ▲ LONG AAPL · TAKE PROFIT")
     assert ansi.paint("2.2R", "green") in e.description
 
 

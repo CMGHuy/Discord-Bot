@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-06 14:29:08 UTC",
+  "generated_at": "2026-11-10 18:48:21 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.40.1",
-    "bot": "2.17.1"
+    "ui": "1.40.5",
+    "bot": "2.18.2"
   },
   "releases": [
     {
@@ -2427,6 +2427,125 @@
         "bot": "2.17.1"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "last_seen": "2026-11-06",
+      "commit": "55d8fa22",
+      "subject": "release(ui): 1.40.2 -- admin snapshot pages: Risk/Analytics/Calendar/sparkline read stored snapshots, two clocks, lower bounds, P&L basis (v204)",
+      "versions": {
+        "ui": "1.40.2",
+        "bot": "2.17.1"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "last_seen": "2026-11-06",
+      "commit": "aca25660",
+      "subject": "release(bot): 2.17.2 -- admin snapshot pages: refresher snapshot worker, admin_snapshots table, Risk/Analytics/Calendar never compute on the request (v204)",
+      "versions": {
+        "ui": "1.40.2",
+        "bot": "2.17.2"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "last_seen": "2026-11-06",
+      "commit": "cdcdd52d",
+      "subject": "release(ui): 1.40.2 -- the Dashboard lands today from its scoped answer, the day page takes its neighbours from the server (v217)",
+      "versions": {
+        "ui": "1.40.2",
+        "bot": "2.17.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "last_seen": "2026-11-06",
+      "commit": "3cfd3c3a",
+      "subject": "release(bot): 2.17.2 -- /dashboard carries today for all/range, /calendar/pnl/day carries prev_day/next_day (v217)",
+      "versions": {
+        "ui": "1.40.2",
+        "bot": "2.17.2"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "last_seen": "2026-11-06",
+      "commit": "8bf3e79c",
+      "subject": "merge: main into v217 -- versions 1.40.3 / 2.17.3 (main took 1.40.2 / 2.17.2 for v204)",
+      "versions": {
+        "ui": "1.40.3",
+        "bot": "2.17.3"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-10",
+      "last_seen": "2026-11-10",
+      "commit": "c492ef33",
+      "subject": "release(bot): 2.18.0 -- v209 market-shock detector (shadow)",
+      "versions": {
+        "ui": "1.40.3",
+        "bot": "2.18.0"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-10",
+      "last_seen": "2026-11-10",
+      "commit": "1b9bd986",
+      "subject": "release(bot): 2.18.1 -- provider alert counts only real Alpaca failures; old IEX prints tagged apart (v223)",
+      "versions": {
+        "ui": "1.40.3",
+        "bot": "2.18.1"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-10",
+      "last_seen": "2026-11-10",
+      "commit": "f9400b4f",
+      "subject": "release(ui): 1.40.4 -- Provider health Old prints column, watchlist old-print hint (v223)",
+      "versions": {
+        "ui": "1.40.4",
+        "bot": "2.18.1"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-11-10",
+      "last_seen": "2026-11-10",
+      "commit": "b3d2ce5b",
+      "subject": "release(bot,ui): bot 2.18.2 / ui 1.40.5 -- market-shock notice and tape badge (v210)",
+      "versions": {
+        "ui": "1.40.5",
+        "bot": "2.18.2"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }

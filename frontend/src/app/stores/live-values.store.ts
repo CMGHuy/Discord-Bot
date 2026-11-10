@@ -2,7 +2,7 @@ import { DestroyRef, Injectable, Signal, computed, effect, inject, signal, untra
 
 import { ApiClient } from '../api/api-client';
 import { EventStream } from '../api/event-stream';
-import { MarketStatus, MarketUpdates, QuoteUpdate, RowQuoteFields } from '../api/models';
+import { MarketStatus, MarketUpdates, QuoteUpdate, RowQuoteFields, SnapshotUpdate } from '../api/models';
 
 /** How often status is re-read when no event arrives: the only thing that
  *  notices a dead refresher, which raises no events. */
@@ -12,6 +12,7 @@ export const STATUS_POLL_MS = 60_000;
 export const LOCAL_REFRESH_TIMEOUT_MS = 120_000;
 
 const localKey = (symbol: string) => 'quote:' + symbol;
+const snapshotKey = (key: string) => 'snapshot:' + key;
 
 /** True when the update carries a price strictly newer than the row's own. */
 function isNewer(row: RowQuoteFields, update: QuoteUpdate): boolean {
@@ -58,10 +59,12 @@ export class LiveValuesStore {
   private inFlight = false;
   private again = false;
   private readonly memo = new Map<string, Signal<QuoteUpdate | null>>();
+  private readonly snapshotMemo = new Map<string, Signal<SnapshotUpdate | null>>();
 
   readonly status = signal<MarketStatus | null>(null);
   private readonly quotes = signal<Record<string, QuoteUpdate>>({});
-  /** 'quote:SYM' -> request time in ms, for refreshes this tab asked for. */
+  private readonly snapshots = signal<Record<string, SnapshotUpdate>>({});
+  /** 'quote:SYM' or 'snapshot:key' -> request time in ms for this tab. */
   private readonly local = signal<Record<string, number>>({});
 
   readonly stalled = computed(() => this.status()?.heartbeat.stalled === true);
@@ -84,17 +87,28 @@ export class LiveValuesStore {
     return found;
   }
 
+  /** The stored update for a snapshot, refreshing while this tab awaits it. */
+  snapshot(key: string): Signal<SnapshotUpdate | null> {
+    let found = this.snapshotMemo.get(key);
+    if (!found) {
+      found = computed(() => this.resolveSnapshot(key));
+      this.snapshotMemo.set(key, found);
+    }
+    return found;
+  }
+
   /** Rows with each symbol's live quote laid over them. Reads signals, so a
    *  computed calling it re-runs on updates. */
   patchRows<T extends RowQuoteFields>(rows: T[], symbolOf: (r: T) => string): T[] {
     return rows.map((row) => overlayQuote(row, this.quote(symbolOf(row))()));
   }
 
-  requestRefresh(symbols: string[]): void {
+  requestRefresh(symbols: string[], snapshots: string[] = []): void {
     const at = Date.now();
-    const keys = symbols.map((s) => localKey(s.toUpperCase()));
+    const keys = [...symbols.map((s) => localKey(s.toUpperCase())), ...snapshots.map(snapshotKey)];
     this.local.update((m) => ({ ...m, ...Object.fromEntries(keys.map((k) => [k, at])) }));
-    this.api.refreshMarket({ symbols }).subscribe({ error: () => this.clearLocal(keys) });
+    const body = snapshots.length === 0 ? { symbols } : { symbols, snapshots };
+    this.api.refreshMarket(body).subscribe({ error: () => this.clearLocal(keys, at) });
     setTimeout(() => this.clearLocal(keys, at), LOCAL_REFRESH_TIMEOUT_MS);
   }
 
@@ -104,6 +118,13 @@ export class LiveValuesStore {
     const stored = this.quotes()[sym] ?? null;
     if (this.local()[localKey(sym)] === undefined) return stored;
     return { ...(stored ?? { symbol: sym, price: null, as_of: null, error: null }), refreshing: true };
+  }
+
+  private resolveSnapshot(key: string): SnapshotUpdate | null {
+    const snapshots = this.snapshots();
+    const stored = Object.hasOwn(snapshots, key) ? snapshots[key] : null;
+    if (this.local()[snapshotKey(key)] === undefined) return stored;
+    return { ...(stored ?? { key, computed_at: null, stale_inputs: false, error: null }), refreshing: true };
   }
 
   private sync(): void {
@@ -135,8 +156,27 @@ export class LiveValuesStore {
       });
       this.clearLocal(reply.quotes.filter((u) => !u.refreshing || u.error).map((u) => localKey(u.symbol.toUpperCase())));
     }
+    this.mergeSnapshots(reply.snapshots ?? []);
     this.status.set(reply.status);
     this.cursor = reply.cursor;
+  }
+
+  private mergeSnapshots(updates: SnapshotUpdate[]): void {
+    if (updates.length === 0) return;
+    const latest = Object.fromEntries(updates.map((update) => [update.key, update]));
+    this.snapshots.update((stored) => ({ ...stored, ...latest }));
+    this.clearSnapshotMarks(Object.values(latest));
+  }
+
+  private clearSnapshotMarks(updates: SnapshotUpdate[]): void {
+    const local = this.local();
+    const done = updates.filter((update) => {
+      const requestedAt = local[snapshotKey(update.key)];
+      if (requestedAt === undefined) return false;
+      if (update.error !== null) return true;
+      return !update.refreshing && update.computed_at !== null && Date.parse(update.computed_at) >= requestedAt;
+    });
+    this.clearLocal(done.map((update) => snapshotKey(update.key)));
   }
 
   /** Drop local marks; with `at`, only those still carrying that request time. */

@@ -26,6 +26,8 @@ export const TITLE_INPUT_ELEMENTS: readonly string[] = ['sb-panel-header', 'sb-e
 
 export const TITLE_ALLOW: readonly TitleSite[] = [
   // -- shell ---------------------------------------------------------------
+  { file: 'shell/shock-pill.ts', binding: '[attr.title]="summary()"', kind: 'echo', note: 'same sentence as its aria-label: the market-shock summary (v210)' },
+  { file: 'shell/tape/tape.ts', binding: '[attr.title]="shockTitle()"', kind: 'echo', note: 'same sentence as its aria-label: the market-shock summary (v210)' },
   { file: 'shell/read-only-badge.ts', binding: '[attr.title]="spoken()"', kind: 'echo', note: 'full sentence the badge says in its visually hidden span (v207)' },
   { file: 'shell/profile-menu.ts', binding: '[attr.title]="haloTitle()"', kind: 'control-name', note: 'the avatar menu button: bot up/down beside its aria-label' },
   { file: 'shell/tape/tape.ts', binding: "[attr.title]=\"asOfTime() === ABSENT ? null : 'Tape data as of ' + asOfTime()\"", kind: 'echo', note: 'as-of time; each tile shows its own age' },
@@ -50,6 +52,7 @@ export const TITLE_ALLOW: readonly TitleSite[] = [
   { file: 'workspaces/system/swallowed-errors-panel.ts', binding: '[attr.title]="line.lastSeenAt"', kind: 'echo', note: 'exact timestamp of the relative time shown' },
   // -- trades ----------------------------------------------------------------
   { file: 'workspaces/trades/trade-detail.ts', binding: "[title]=\"'Trade ID: ' + trade.id\"", kind: 'echo', note: 'the id printed beside it' },
+  { file: 'workspaces/trades/trades.ts', binding: "[title]=\"'No live quote -- last close, ' + (row.last_close_date ?? 'date unknown')\"", kind: 'echo', note: 'restates the greyed "close MM-DD" tag the cell prints' },
   { file: 'workspaces/trades/trades.ts', binding: 'title="Trailing stop"', kind: 'control-name', note: 'names the trailing-stop icon' },
   // -- versions / watchlist --------------------------------------------------
   { file: 'workspaces/versions/versions.ts', binding: "[attr.title]=\"component + ' ' + version + ' — click to filter'\"", kind: 'control-name', note: 'filter chip button: names what a click does' },

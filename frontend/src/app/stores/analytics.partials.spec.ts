@@ -10,6 +10,8 @@ import { authInterceptor, errorInterceptor, loadingInterceptor } from '../api/in
 import { PARTIALS_FIXTURE } from '../workspaces/analytics/tabs/partials.fixture';
 import { scopeFromParams } from '../workspaces/analytics/scope-url';
 import { ANALYTICS_TABS, AnalyticsStore } from './analytics.store';
+import { FakeLiveValues } from '../testing/fake-live-values';
+import { LiveValuesStore } from './live-values.store';
 
 /* v142 — the Partials slice: one payload, its own error, the one scope. */
 
@@ -32,6 +34,7 @@ describe('AnalyticsStore — partials slice', () => {
         provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor])),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: new FakeEventStream() },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
         AnalyticsStore,
       ],
     });
@@ -39,8 +42,10 @@ describe('AnalyticsStore — partials slice', () => {
     backend = TestBed.inject(HttpTestingController);
   });
 
-  it('is a tab and routes from ?tab=partials', () => {
+  it('routes both Partials and Cancels', () => {
     expect(ANALYTICS_TABS).toContain('partials');
+    expect(ANALYTICS_TABS).toContain('cancels');
+    expect(scopeFromParams(convertToParamMap({ tab: 'cancels' })).tab).toBe('cancels');
     expect(scopeFromParams(convertToParamMap({ tab: 'partials' })).tab).toBe('partials');
   });
 

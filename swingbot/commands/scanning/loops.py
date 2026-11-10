@@ -15,6 +15,7 @@ from swingbot.core.scanning.fetch import _run_bounded
 from swingbot.core.infra.silent_channel import silence
 from swingbot.core.infra.logsetup import apply_log_level
 from swingbot.core.db import write_failure
+from swingbot.core.db.repositories.market_shock import market_shock_repo
 from swingbot.core.infra import pitr_watch
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core import presentation as ui
@@ -170,6 +171,20 @@ async def _prune_alert_posts() -> None:
         log.warning("daily_recap: could not prune alert_posts", exc_info=True)
 
 
+async def _prune_shock_readings() -> None:
+    """v209: drop market_shock_readings older than SHOCK_READINGS_KEEP_DAYS. Retention,
+    not detector behaviour, so it runs in every MARKET_SHOCK_MODE; idempotent when a
+    recap is skipped. A failure is logged, never raised."""
+    try:
+        cutoff = (dt.datetime.now(dt.timezone.utc)
+                  - dt.timedelta(days=int(config.SHOCK_READINGS_KEEP_DAYS)))
+        removed = await asyncio.to_thread(market_shock_repo().prune_before, cutoff)
+        log.info("daily_recap: pruned %d market_shock_readings row(s)", removed)
+    except Exception as exc:
+        swallowed(log, "ops.prune_shock_readings", exc,
+                  "daily_recap: could not prune market_shock_readings", exc_info=True)
+
+
 @tasks.loop(minutes=config.SCAN_INTERVAL_MINUTES)
 async def session_scan():
     # The entire tick's real work is wrapped in a try/except (see below) so
@@ -250,8 +265,9 @@ async def _session_scan_tick():
     log.info("Running session scan at %s…", now_str)
     runstate.record_tick_start("scan")
     progress = scan_engine.ScanProgress()
+    # v209: the only caller that steps the market-shock state (spec § Gating).
     alerts = await _run_scan_posting_partial(
-        channel, require_confirmation=True, bot=bot, progress=progress)
+        channel, require_confirmation=True, bot=bot, progress=progress, step_shock=True)
     # v152 D3: the only caller that applies the per-symbol cooldown -- the
     # admin-UI scan, !check and the store-write-halt re-post never do.
     held = await send_then_short(channel, alerts, bot=bot, require_confirmation=True,
@@ -894,6 +910,7 @@ async def daily_recap():
         log.exception("daily_recap: failed to post retrospective")
     await _post_live_loss_flags(today)
     await _prune_alert_posts()
+    await _prune_shock_readings()
 
 
 

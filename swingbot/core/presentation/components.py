@@ -121,11 +121,23 @@ class PushEmbed(discord.Embed):
 
 
 def push_embed(kind: Kind, ticker: str = "", direction: str | None = None,
-               detail: str = "", *, description: str | None = None) -> PushEmbed:
+               detail: str = "", *, description: str | None = None,
+               factual: bool = False) -> PushEmbed:
     """A PushEmbed whose title and push line both come from the registry."""
-    embed = PushEmbed(title=kinds.title(kind, ticker, direction, detail), description=description)
-    embed.push_text = kinds.content_line(kind, ticker, direction, detail)
+    embed = PushEmbed(title=kinds.title(kind, ticker, direction, detail, factual=factual), description=description)
+    embed.push_text = kinds.content_line(kind, ticker, direction, detail, factual=factual)
     embed.kind = kind
+    return embed
+
+
+def status_embed(title: str, description: str, colour: int) -> PushEmbed:
+    """A plain status PushEmbed (no registry kind) striped with ``colour`` (v210).
+
+    Colour is set here, in the presentation package, so scanning code that
+    posts a status notice never touches ``discord.Color`` itself."""
+    embed = PushEmbed(title=title, description=description, colour=discord.Color(colour))
+    embed.push_text = title
+    embed.kind = None
     return embed
 
 

@@ -7,6 +7,7 @@ import {
   ApplicationRef,
   Signal,
   WritableSignal,
+  computed,
   provideZonelessChangeDetection,
   signal,
 } from '@angular/core';
@@ -20,8 +21,9 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { PnlCalendar, Preferences } from '../api/models';
+import { MarketMeta, PnlCalendar, Preferences, SnapshotUpdate } from '../api/models';
 import { CalendarStore } from './calendar.store';
+import { LiveValuesStore } from './live-values.store';
 import { PreferencesStore } from './preferences.store';
 
 class FakeEventStream {
@@ -45,6 +47,17 @@ class FakeEventStream {
   }
 }
 
+function fakeLive(snaps = signal<Record<string, SnapshotUpdate>>({})) {
+  const live = {
+    snaps,
+    status: signal(null),
+    snapshot: (k: string) => computed(() => snaps()[k] ?? null),
+    quote: () => signal(null),
+    requestRefresh: vi.fn(),
+  };
+  return { live, provider: { provide: LiveValuesStore, useValue: live } };
+}
+
 const RESPONSE: PnlCalendar = {
   as_of: '2026-08-10T12:00:00Z',
   month: '2026-08',
@@ -58,6 +71,13 @@ const RESPONSE: PnlCalendar = {
     { weekday: 'Mon', avg_pnl_amount: 15, avg_r: 0.6, win_rate: 50, trade_count: 2 },
     { weekday: 'Tue', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
     { weekday: 'Wed', avg_pnl_amount: -90, avg_r: -1.8, win_rate: 0, trade_count: 1 },
+    { weekday: 'Thu', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
+    { weekday: 'Fri', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
+  ],
+  month_day_of_week: [
+    { weekday: 'Mon', avg_pnl_amount: 15, avg_r: 0.6, win_rate: 50, trade_count: 2 },
+    { weekday: 'Tue', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
+    { weekday: 'Wed', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
     { weekday: 'Thu', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
     { weekday: 'Fri', avg_pnl_amount: null, avg_r: null, win_rate: null, trade_count: 0 },
   ],
@@ -85,6 +105,7 @@ describe('CalendarStore', () => {
         ),
         provideHttpClientTesting(),
         { provide: EventStream, useValue: events },
+        fakeLive().provider,
         { provide: PreferencesStore, useValue: {
           values: () => preferences(),
           update: (mutate: (current: Preferences) => Preferences) => preferences.set(mutate(preferences())),
@@ -315,5 +336,80 @@ describe('CalendarStore', () => {
     expect(navigate).toHaveBeenLastCalledWith([], expect.objectContaining({
       queryParams: { month: '2026-09', strategy: null, horizon: '4w' },
     }));
+  });
+});
+
+describe('CalendarStore snapshots (v204)', () => {
+  const SNAP_META: MarketMeta = {
+    as_of: '2026-10-29', refreshing: false, stale_count: 0, missing_count: 0, incomplete: false,
+    computed_at: '2026-10-29T14:00:00Z', stale_inputs: false, source: 'snapshot', error: null,
+  };
+  const upd = (key: string, computed_at: string | null, refreshing = false): SnapshotUpdate =>
+    ({ key, computed_at, stale_inputs: false, refreshing, error: null });
+  const CAL_URL = (r: { url: string }) => r.url === '/api/v1/calendar/pnl';
+  const KEY = 'calendar.pnl:2026-10';
+
+  let live: ReturnType<typeof fakeLive>['live'];
+  let backend: HttpTestingController;
+  let store: InstanceType<typeof CalendarStore>;
+  const tick = () => TestBed.inject(ApplicationRef).tick();
+
+  const setup = () => {
+    const fake = fakeLive();
+    live = fake.live;
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor])),
+        provideHttpClientTesting(),
+        { provide: EventStream, useValue: new FakeEventStream() },
+        { provide: PreferencesStore, useValue: { values: () => ({}), update: () => undefined } },
+        fake.provider,
+        CalendarStore,
+      ],
+    });
+    store = TestBed.inject(CalendarStore);
+    backend = TestBed.inject(HttpTestingController);
+  };
+  const loadMonth = () => {
+    store.setMonth('2026-10');
+    tick();
+    backend.match(CAL_URL).forEach((r) => r.flush({ ...RESPONSE, month: '2026-10', market_meta: SNAP_META }));
+  };
+
+  it('follows the shown month snapshot key', () => {
+    setup();
+    loadMonth();
+    expect(store.snapshotKey()).toBe(KEY);
+    live.snaps.set({ [KEY]: upd(KEY, '2026-10-29T14:05:00Z') });
+    tick();
+    expect(backend.match(CAL_URL)).toHaveLength(1);
+  });
+
+  it('a filtered month follows nothing', () => {
+    setup();
+    store.setStrategy('VWAP');
+    expect(store.snapshotKey()).toBeNull();
+    store.setStrategy('');
+    store.setHorizon('4w');
+    expect(store.snapshotKey()).toBeNull();
+  });
+
+  it('no reload before data loads', () => {
+    setup();
+    store.setMonth('2026-10');
+    backend.match(CAL_URL);
+    live.snaps.set({ [KEY]: upd(KEY, '2026-10-29T14:05:00Z') });
+    tick();
+    expect(backend.match(CAL_URL)).toHaveLength(0);
+    expect(store.data()).toBeNull();
+  });
+
+  it('meta ORs refreshing from the live snapshot on the unfiltered month', () => {
+    setup();
+    loadMonth();
+    live.snaps.set({ [KEY]: upd(KEY, null, true) });
+    expect(store.meta()?.refreshing).toBe(true);
   });
 });

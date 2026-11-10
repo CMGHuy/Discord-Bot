@@ -77,8 +77,10 @@ def test_task_brief_fills_only_the_two_slots():
     assert "`## Task`" in skill
     assert "12 KB" in skill and "path:line-range" in skill
     assert '"^### Task <id>:"' in skill
-    for check in "abcdefgh":
+    for check in "abcdefghijkl":
         assert f"**3{check}." in skill, f"trap check 3{check} must stay"
+    assert "every 3a-3l result" in skill
+    assert "358-822 KB" not in skill, "the pre-v196 plan sizes are gone"
 
 
 def test_docs_name_the_handoff_route_cost_check_and_ui_rules():

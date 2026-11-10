@@ -46,7 +46,7 @@ describe('SectionTabs (sb-section-tabs, v202 §1)', () => {
   it("draws a destination's sections as links, in order, in a labelled nav", () => {
     render(entry('/trades'), section('/trades/calendar'));
     expect(el().querySelector('nav')!.getAttribute('aria-label')).toBe('Trades sections');
-    expect(tabs()).toEqual([['Book', '/trades'], ['Calendar', '/trades/calendar'], ['Cancels', '/trades/cancels']]);
+    expect(tabs()).toEqual([['Book', '/trades'], ['Calendar', '/trades/calendar']]);
   });
 
   it('marks only the active section as the current page', () => {

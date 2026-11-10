@@ -50,8 +50,8 @@ def test_cadence_and_staleness_read_config_at_call_time(monkeypatch):
     assert ar.stale_after_s("price", "closed") is None
     with pytest.raises(ValueError):
         ar.cadence_s("lunch")
-    with pytest.raises(ValueError):          # snapshot staleness is v204's
-        ar.stale_after_s("snapshot", "regular")
+    with pytest.raises(ValueError):
+        ar.stale_after_s("bogus", "regular")
 
 
 def test_heartbeat_stalled_after_three_cadences():

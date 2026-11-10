@@ -233,7 +233,7 @@ the header records the final choice.
 | Alert volume or cadence (`Edge: volume`) | veteran-trader, financial-advisor, risk-manager |
 | Earnings, catalysts, sector filters | fundamental-analyst, quant-researcher, risk-manager |
 | Infra, schema, ops (`Edge: none (integrity)`) | staff-engineer, quant-engineer |
-| Admin UI | staff-engineer, financial-advisor |
+| Admin UI | ux-designer, staff-engineer, financial-advisor |
 
 The panel runs through the `panel` skill at two fixed points. **Spec review:**
 after the spec is committed and before the partner reviews it, the roles run

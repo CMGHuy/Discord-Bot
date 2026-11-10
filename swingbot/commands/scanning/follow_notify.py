@@ -268,7 +268,7 @@ def build_notify_embed(plan, notify_event: str, transition: str, detail: dict) -
     """Build a registry-styled factual update, linked to the current admin URL."""
     kind = kind_for(PlanEvent(plan.plan_id, transition, detail), notify_event)
     line = message_line(plan, notify_event, transition, detail)
-    embed = ui.push_embed(kind, plan.ticker, plan.direction, description=line)
+    embed = ui.push_embed(kind, plan.ticker, plan.direction, description=line, factual=True)
     embed.push_text = line
     close_r = _close_r(plan, transition, detail)
     ui.apply_chrome(embed, kind=kind, plan_id=plan.plan_id, r=close_r,

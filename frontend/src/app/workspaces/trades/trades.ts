@@ -58,7 +58,9 @@ import { runnerCellInputs } from '../../ui/runner-cell';
 import { StatusCell, partialOpenTitle } from '../../ui/status-cell';
 import { Hint } from '../../ui/hint';
 import { fxMissingText } from '../analytics/scope-bar';
-import { LEG_HINT_TEXT, legLabel } from './leg-label';
+import { legExplanation, legLabel } from './leg-label';
+import { LegName } from './leg-name';
+import { TradeDrawer } from '../dashboard/trade-drawer';
 import {
   ACTION_LABELS,
   ACTION_TITLES,
@@ -174,6 +176,8 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
     Flash,
     StatusCell,
     Hint,
+    LegName,
+    TradeDrawer,
     DirectionArrow,
     PlanCell,
     ConfidenceCell,
@@ -456,6 +460,11 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
         @if (row.current_price !== null && row.current_price !== undefined) {
           <sb-market-value [asOf]="row.price_as_of ?? null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null">{{ fmtNum(row.current_price) }}</sb-market-value>
         } @else {
+          @if (row.last_close !== null && row.last_close !== undefined) {
+            <!-- No live quote: the last cached daily close, greyed and dated so
+                 it is never read as a live price. Nothing is derived from it. -->
+            <span class="last-close" [title]="'No live quote -- last close, ' + (row.last_close_date ?? 'date unknown')"><span class="last-close-value">{{ fmtNum(row.last_close) }}</span> <span class="last-close-tag">close {{ row.last_close_date ? row.last_close_date.slice(5) : '' }}</span></span>
+          }
           <sb-market-value [asOf]="null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null" />
         }
       </ng-template>
@@ -478,7 +487,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
              is, and the hint (outside the link: a button cannot sit in an
              anchor) says what a leg row's P&L and the page's N mean. -->
         @if (legLabel(row); as leg) {
-          <span class="leg">{{ leg }}<sb-hint [text]="legHint" [label]="'About ' + leg" align="left" /></span>
+          <span class="leg"><sb-leg-name [label]="leg" [help]="legHelp(row)" /></span>
         }
       </ng-template>
 
@@ -511,6 +520,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
           [planTp1]="rc.planTp1" [planStop]="rc.planStop"
           [trailBest]="rc.trailBest" [trailBestPct]="rc.trailBestPct" [trailExitPct]="rc.trailExitPct"
           [runnerExit]="rc.runnerExit" [runnerExitPct]="rc.runnerExitPct" [runnerExitReason]="rc.runnerExitReason"
+          [closedAt]="row.status === 'CLOSED' ? row.exit_price : null"
           [currency]="connection.currency()"
         />
       </ng-template>
@@ -594,7 +604,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
             @if (legLabel(row); as leg) {
               <div class="leg-detail">
                 <dt>Leg</dt>
-                <dd>{{ leg }} <sb-hint [text]="legHint" label="About leg rows" align="left" /></dd>
+                <dd><sb-leg-name [label]="leg" [help]="legHelp(row)" /></dd>
               </div>
             }
           </dl>
@@ -634,6 +644,11 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
         (confirmed)="runForceReset()"
         (cancelled)="forceOpen.set(false)"
       />
+      <!-- A row click opens this overview on every device; the "#" link (and
+           the drawer's "Open full trade") is what goes to the trade page. -->
+      @if (drawerTrade(); as trade) {
+        <sb-trade-drawer [row]="trade" (closed)="closeDrawer()" (actionDone)="onDrawerAction()" />
+      }
     </sb-page>
   `,
   styles: `
@@ -681,16 +696,11 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
        so the two read as one family, not a mismatched addition. */
     .count { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
     .fx-caveat { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
+    /* Last close shown while there is no live quote: muted, never the live colour. */
+    .last-close { color: var(--text-faint); display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-4); }
+    .last-close-value { font-family: var(--font-mono); }
+    .last-close-tag { font-size: var(--text-micro); }
     .leg { display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
-    /* sb-hint's trigger grows to --control-h (44px) on coarse / tablet
-       widths while its glyph stays 14px. In this stacked cell that padding
-       is empty box under the label, so the cell's ink sat ~7px above its
-       middle (layout audit vcenter, /trades at 768). Pull it back with a
-       negative block margin: the tap area still overlaps the row, it just
-       stops adding height. */
-    @media (pointer: coarse), (max-width: 1023px) {
-      .leg sb-hint { margin-block: calc((var(--control-h) - 14px) / -2); }
-    }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); }
 
@@ -1124,9 +1134,9 @@ export class Trades {
   /** v194 B3: "Leg N of M[ · reason]" for a leg row, null otherwise. */
   protected readonly legLabel = legLabel;
   /** v194 A4: this page has no win rate; say how the pages that do count. */
-  protected readonly legHint = LEG_HINT_TEXT
-    + ' Win rate and N count plans on Analytics; the Dashboard and the Calendar count each realised '
-    + 'leg as its own trade.';
+  protected readonly legNote = 'Win rate and N count plans on Analytics; the Dashboard and the Calendar count '
+    + 'each realised leg as its own trade.';
+  protected readonly legHelp = (row: TradeRow): string => legExplanation(row, this.legNote);
   protected readonly exportHint = EXPORT_HINT;
 
   /**
@@ -1236,17 +1246,32 @@ export class Trades {
     });
   }
 
+  /** The row whose overview drawer is open (component state, like the
+   *  table's own row drawer). */
+  protected readonly drawerTrade = signal<TradeRow | null>(null);
+
+  /** A tablet/desktop row click opens the overview drawer; going to the
+   *  trade page is the `#` link's job. */
   protected open(row: TradeRow): void {
-    this.router.navigate(['/trades', row.id]);
+    this.drawerTrade.set(row);
   }
 
-  /** v179 §6b.4: on a phone a tap opens the row drawer instead of `open()`;
-   *  this link keeps the old destination. Tablet and desktop still navigate
-   *  through `rowActivate` → `open()`. */
+  /** On a phone a tap opens the table's own row drawer instead (every
+   *  visible column stays reachable); this is its "Open full trade" link. */
   protected readonly tradeLink = (row: TradeRow): DetailLink => ({
     commands: ['/trades', row.id],
     label: 'Open full trade →',
   });
+
+  protected closeDrawer(): void {
+    this.drawerTrade.set(null);
+  }
+
+  /** A drawer action (close, cancel ...) changed the trade: reload and close. */
+  protected onDrawerAction(): void {
+    this.store.load();
+    this.closeDrawer();
+  }
 
   protected ask(kind: TradeActionKind, row: TradeRow): void {
     this.pending.set({ kind, row });

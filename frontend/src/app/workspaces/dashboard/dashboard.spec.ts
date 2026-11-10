@@ -481,11 +481,11 @@ describe('Dashboard Plan cell for runners (v177)', () => {
     expect(cell.querySelector('.runner')).toBeNull();
   });
 
-  it('shows a closed runner\'s exit and names the give-back stop', async () => {
+  it('keeps a closed runner leg\'s own target and shows where it closed', async () => {
     const [cell] = (await loadedWithRows([closedRunner])).querySelectorAll('sb-plan-cell');
-    expect(cell.textContent!.replace(/\s+/g, ' ').trim()).toBe('60.67 → 52.44 / 61.85 (+13.6% - 1.9%)');
-    expect(cell.querySelector('[title]')!.getAttribute('title'))
-      .toContain('Runner exit (give-back stop): 52.44');
+    expect(cell.textContent!.replace(/\s+/g, ' ').trim()).toBe('60.67 → 58.33 / 61.85 (3.9% - 1.9%) · 52.44');
+    expect(cell.querySelector('.closed-icon')).not.toBeNull();
+    expect(cell.querySelector('[title]')!.getAttribute('title')).toContain('Target 58.33');
   });
 });
 
@@ -730,6 +730,12 @@ describe('Dashboard price age (v201)', () => {
     expect(cell).not.toBeNull();
     expect(cell!.querySelector('.mv-age')?.textContent?.trim()).toBe('1 min ago');
     expect(el.querySelector('sb-age-hint')).toBeNull();
+  });
+
+  it('a closed row\'s final P&L carries no age or refresh mark', async () => {
+    const el = await withActiveRow({ status: 'CLOSED', pnl_pct: 2.5, price_as_of: null, price_refreshing: false });
+    expect(el.querySelector('sb-positions-table tbody sb-market-value')).toBeNull();
+    expect(el.querySelector('sb-positions-table tbody .mv-age')).toBeNull();
   });
 
   it('a projected (pending) P&L cell also renders through sb-market-value', async () => {
@@ -993,6 +999,9 @@ describe('Dashboard lifecycle tab counts (v194 B1)', () => {
       if (req.request.params.get('mode') === 'today') fail(req);
       else req.flush(payload({ scope: { mode: 'range' }, lifecycle: { ...LIFECYCLE, CLOSED: 40 } as never }));
     }
+    // v217: the 1M answer has no `today` block (an older backend) and no today
+    // answer has landed, so the store falls back to a today request: it fails too.
+    for (const req of backend.match('/api/v1/dashboard?mode=today')) fail(req);
     await fixture.whenStable();
     fixture.detectChanges();
     return fixture;
@@ -1029,10 +1038,13 @@ describe('Dashboard — leg rows and missing FX rates (v194 B3, B7)', () => {
       tradeRow({ id: 'p1', leg_index: 1, leg_total: 2, leg_exit_reason: null }),
     ]);
     const legs = [...el.querySelectorAll('sb-positions-table .leg')];
-    expect(legs.map((n) => n.firstChild!.textContent!.trim())).toEqual([
+    expect(legs.map((n) => n.querySelector('.name')!.textContent!.trim())).toEqual([
       expect.stringMatching(/^Leg 1 of 2 · /),
       'Leg 2 of 2',
     ]);
+    // The explanation rides on the label itself: no info-icon button beside it.
+    expect(legs[0].querySelector('button')).toBeNull();
+    expect(legs[0].querySelector('sb-hint')!.textContent).toContain('Leg 1 of 2 is the first part of the plan to close');
     expect(legs[0].querySelector('sb-hint')!.textContent).toContain(LEG_HINT_TEXT);
     expect(legs[0].querySelector('sb-hint')!.textContent).toContain('count each realised leg as its own trade');   // A4 audit
     expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
@@ -1240,5 +1252,90 @@ describe('Dashboard for a viewer (v207)', () => {
     role = 'viewer';
     const el = (await loaded()).nativeElement as HTMLElement;
     expect(el.querySelector('sb-page div.scope.slot')!.children).toHaveLength(0);
+  });
+});
+
+/* v217 V217-1 (v206 § Plan 2 boot merge): the Dashboard boot sends two
+ * /api/v1/trades requests, the activity feed's (newest 20 of every status)
+ * and the positions table's Open tab (status=ACTIVE, its own page size).
+ * The merge would need the feed to hold every row the Open tab shows, in the
+ * same order. It does not: a position opened before the 20 newest rows is in
+ * the table and missing from the feed. These specs are the recorded reason
+ * the two calls stay separate. */
+describe('Dashboard boot /trades calls (v217 V217-1)', () => {
+  /** The feed's answer: the 20 newest rows of every status, none of them the
+   *  long-held position below. */
+  const FEED: TradeRow[] = Array.from({ length: 20 }, (_, i) => tradeRow({
+    id: `feed-${i}`, ticker: `FEED${i}`, status: 'CLOSED', status_label: 'CLOSED',
+    opened_at: '2026-10-20T10:00:00Z', closed_at: '2026-10-21T10:00:00Z',
+  }));
+  /** Opened in August, still ACTIVE: older than every feed row. */
+  const OLD_ACTIVE = tradeRow({
+    id: 'old-active', ticker: 'OLDPOS', status: 'ACTIVE', status_label: 'Open',
+    opened_at: '2026-08-01T10:00:00Z', closed_at: null, exit_price: null,
+    realized_pnl_amount: null, pnl_pct: 0.4, open_shares: 5,
+  });
+
+  async function boot() {
+    const { fixture, backend } = seed();
+    fixture.detectChanges();
+    const trades = backend.match((r) => r.url === '/api/v1/trades');
+    for (const req of trades) {
+      const open = req.request.params.get('status') === 'ACTIVE';
+      req.flush({
+        items: open ? [OLD_ACTIVE] : FEED,
+        total: open ? 1 : 21,
+        page: 1,
+        per_page: Number(req.request.params.get('per_page')),
+      });
+    }
+    backend.expectOne('/api/v1/dashboard?mode=today')
+      .flush(payload({ lifecycle: { ACTIVE: 1 } as never }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, trades };
+  }
+
+  it('sends exactly two /trades requests: the activity feed and the Open tab', async () => {
+    const { trades } = await boot();
+    const params = trades.map((req) => req.request.params);
+    expect(params).toHaveLength(2);
+
+    const feed = params.find((p) => !p.has('status'));
+    const open = params.find((p) => p.get('status') === 'ACTIVE');
+    expect(feed).toBeDefined();
+    expect(open).toBeDefined();
+    expect(feed!.get('sort')).toBe('-opened_at');
+    expect(feed!.get('page')).toBe('1');
+    expect(feed!.get('per_page')).toBe('20');
+    expect(open!.get('sort')).toBe('-opened_at');
+    expect(open!.get('page')).toBe('1');
+    // The table's own page size (10 desktop, 5 tablet/phone, or a saved
+    // choice): never the feed's 20, so one response cannot serve both.
+    expect(open!.get('per_page')).not.toBe('20');
+  });
+
+  it('mounts no exposure-by-horizon panel, so there is no third boot call', async () => {
+    const { fixture } = await boot();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('sb-exposure-by-horizon')).toBeNull();
+    const src = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/dashboard.ts'), 'utf8');
+    expect(src).not.toContain('sb-exposure-by-horizon');
+  });
+
+  it('shows an ACTIVE position older than the feed window in the table, not in the feed', async () => {
+    const { fixture } = await boot();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // The positions table renders the position from its own request ...
+    expect(el.querySelector('sb-positions-table tbody')?.textContent).toContain('OLDPOS');
+    // ... while the feed's population (all 20 rows it fetched) does not hold
+    // it, so the table cannot take its rows from the feed's call.
+    const recent = (fixture.componentInstance as unknown as {
+      recent: { rows: () => TradeRow[] };
+    }).recent.rows();
+    expect(recent).toHaveLength(20);
+    expect(recent.some((r) => r.id === 'old-active')).toBe(false);
+    expect(el.querySelector('sb-recent-activity')?.textContent ?? '').not.toContain('OLDPOS');
   });
 });

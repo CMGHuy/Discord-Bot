@@ -52,16 +52,26 @@ export interface QuoteUpdate {
   error: string | null;
 }
 
+export interface SnapshotUpdate {
+  key: string;
+  computed_at: string | null;
+  stale_inputs: boolean;
+  refreshing: boolean;
+  error: string | null;
+}
+
 export interface MarketStatus {
   session: 'regular' | 'extended' | 'closed';
   last_close_at: string | null;
   stale_price_s: number | null;
+  stale_snapshot_s?: number | null;
   heartbeat: { beat_at: string | null; cadence_s: number; stalled: boolean };
 }
 
 export interface MarketUpdates {
   cursor: string;
   quotes: QuoteUpdate[];
+  snapshots?: SnapshotUpdate[];
   status: MarketStatus;
 }
 
@@ -73,6 +83,10 @@ export interface RowQuoteFields {
   price_age_s?: number | null;
   price_refreshing?: boolean;
   price_error?: string | null;
+  /** Sent only while `current_price` is null: the last cached daily close and its
+   *  bar date (YYYY-MM-DD). Shown greyed as a close, never as a live price. */
+  last_close?: number | null;
+  last_close_date?: string | null;
 }
 
 export interface TradeCollection extends Collection<TradeRow> { prices_as_of?: string | null; market_meta?: MarketMeta; }
@@ -497,6 +511,8 @@ export const TRADE_SORTABLE = [
 export interface EquitySeries {
   points: unknown[];
   change_pct: number | null;
+  /** v204: `source: "snapshot"`, or null/absent when the series build failed. */
+  market_meta?: MarketMeta | null;
 }
 
 export interface Dashboard {
@@ -546,6 +562,18 @@ export interface Dashboard {
    *  projected from the server's own DEFAULT_EXPIRY_BARS constant rather
    *  than the SPA hardcoding a second copy that could drift from it. */
   default_expiry_bars: number;
+  /** v217 (v205 P3-a): today's figures inside a wider-scope response (modes
+   *  `all` and `range` only), so the SPA needs no second `mode=today` call.
+   *  Missing on modes `active`/`today` and on a backend older than v217. */
+  today?: DashboardToday;
+}
+
+/** v217: `Dashboard.today` -- the same two blocks `GET /dashboard?mode=today`
+ *  answers, computed from the same trades. A day with no closes is a
+ *  measured zero (`n: 0`, amounts null), never a missing block. */
+export interface DashboardToday {
+  realized: Dashboard['realized'];
+  lifecycle: Dashboard['lifecycle'];
 }
 
 /** Date scopes: active is today plus open positions, today is the Berlin
@@ -576,6 +604,7 @@ export type DashboardScope = 'active' | 'today' | 'all' | 'range';
  * each holding one `StatRow` per group.
  */
 export interface AnalyticsSnapshot {
+  market_meta?: MarketMeta;
   built_at: string | null;
   overall: Record<string, unknown>;
   equity_curve: { points?: unknown[]; skipped_n?: number } | null;
@@ -663,6 +692,7 @@ export interface BookScope { from: string | null; to: string | null; ledger: Led
 export interface Scoped { scope: BookScope; n: number; }
 
 export interface AnalyticsEquityCurve extends Scoped {
+  market_meta?: MarketMeta;
   points: EquityCurvePoint[];
   points_n: number;
   as_of: string | null;
@@ -738,6 +768,7 @@ export interface AnalyticsByDimension extends Scoped {
 }
 
 export interface AnalyticsPerformance extends Scoped {
+  market_meta?: MarketMeta;
   totals: Record<string, unknown>;
   relocated: Record<string, unknown>;
   win_rate: number | null;
@@ -1449,9 +1480,11 @@ export interface Ticker extends RowQuoteFields {
    *  when the cache has nothing for this symbol yet. */
   price: number | null;
   /** v106 -- which provider served `price` when it is the live overlay;
-   *  null when `price` is the cached close. Only `yfinance-fallback` is
-   *  flagged in the table: Alpaca missed and yfinance answered instead. */
-  price_source?: 'alpaca' | 'yfinance' | 'yfinance-fallback' | null;
+   *  null when `price` is the cached close. Only the yfinance answers for an
+   *  Alpaca-eligible symbol are flagged in the table: `yfinance-fallback`
+   *  (Alpaca missed) and, from v223, `yfinance-old-print` (Alpaca's last IEX
+   *  trade was too old outside regular hours). */
+  price_source?: 'alpaca' | 'yfinance' | 'yfinance-fallback' | 'yfinance-old-print' | null;
   /** v171 D2: seconds since `price` was fetched; null when unknown. */
   price_age_s?: number | null;
   /** ISO-8601 UTC instant of that fetch. */
@@ -1487,6 +1520,10 @@ export interface TickerAddResult {
   added: string[];
   already_present: string[];
   invalid: string[];
+  /** Well-formed symbols the market-data provider has no price bars for. */
+  not_found: string[];
+  /** What the bot found out about each added symbol. */
+  details: { symbol: string; company_name: string | null; bars: number }[];
   /** The watchlist size after the add. */
   total: number;
 }
@@ -1556,6 +1593,7 @@ export interface RiskAvailability {
   distribution_metrics?: DomainAvailability;
   drawdown_r?: DomainAvailability;
   drawdown_amount?: DomainAvailability;
+  beta_spy?: DomainAvailability | 'zero_variance';
 }
 
 export interface LastKnownKillswitch {
@@ -1580,7 +1618,8 @@ export interface Killswitch {
 
 /** v106 -- the live data provider and how often Alpaca misses.
  *  `fallback_rate` is yfinance-fallback over everything Alpaca was asked for
- *  across the last `scans` scans that logged it; null when none did. */
+ *  across the last `scans` scans that logged it; null when none did. From
+ *  v223 on, old IEX prints outside regular hours are excluded. */
 export interface DataSourcesHealth {
   enabled: boolean;
   feed: string;
@@ -1641,10 +1680,35 @@ export interface RiskMetrics {
  *  zero correlation is a finding, no data is not. */
 export interface Correlation {
   labels: string[];
-  values: (number | null)[][];
+  values: (number | null)[][] | null;
+  reason?: string | null;
+}
+
+export interface RiskBarsMeta {
+  per_symbol: Record<string, string>;
+  oldest: string | null;
+  newest: string | null;
+  stale_inputs: boolean;
+  missing: { symbol: string; reason: string }[];
+}
+
+export interface RiskFxMeta {
+  as_of: string | null;
+  missing: string[];
+}
+
+export interface RiskAccount {
+  balance: number | null;
+  currency: string;
 }
 
 export interface Risk {
+  market_meta?: MarketMeta;
+  computed_at?: string | null;
+  bars_meta?: RiskBarsMeta;
+  fx_meta?: RiskFxMeta;
+  lower_bound?: string[];
+  account?: RiskAccount;
   availability: RiskAvailability;
   heat: RiskHeat;
   positions: RiskPosition[] | null;
@@ -1813,14 +1877,19 @@ export interface ScanCommandResult {
 /* -- system health (v148) ------------------------------------------------ */
 
 /** One scheduled scan's provider figures, from `GET /system/health`.
- *  Rates are fractions (0.05 = 5%). The four figures are null on a row
- *  written before v148 -- render "—", never 0. */
+ *  Rates are fractions (0.05 = 5%). The figures are null on a row written
+ *  before v148 (`old_print_rate`: before v223) -- render "—", never 0. */
 export interface ProviderHealthRow {
   at: string;
   tickers: number;
   /** yfinance-fallback / (alpaca + yfinance-fallback), daily frames and live
-   *  prices pooled; null when Alpaca was asked for nothing. */
+   *  prices pooled; null when Alpaca was asked for nothing. From v223 on,
+   *  old IEX prints outside regular hours are excluded. */
   provider_fallback_rate: number | null;
+  /** v223: old IEX prints re-asked from yfinance, as a share of live-price
+   *  asks only (not the fallback rate's wider pool). Display only: no alert
+   *  reads it. Optional: older rows and fixtures do not carry it. */
+  old_print_rate?: number | null;
   /** Frames whose last bar is before the previous NYSE session. Display
    *  only: no alert reads it. */
   stale_symbols: number | null;
@@ -2272,6 +2341,7 @@ export interface CalendarLongestHold {
 }
 
 export interface PnlCalendar {
+  market_meta?: MarketMeta;
   /** Instant the server composed this filtered calendar response. */
   as_of: string;
   month: string;
@@ -2279,6 +2349,8 @@ export interface PnlCalendar {
   totals: CalendarTotals;
   longest_hold: CalendarLongestHold | null;
   day_of_week: CalendarWeekday[];
+  /** The same weekday breakdown, restricted to `month`. */
+  month_day_of_week: CalendarWeekday[];
   best_day: CalendarDay | null;
   worst_day: CalendarDay | null;
   streak: CalendarStreak;
@@ -2310,6 +2382,13 @@ export interface CalendarDayTrades {
   breakdown: DayBreakdown;
   /** v194 B7: rows left out of the money figures (no exchange rate for the exit date). */
   fx_missing_count?: number;
+  /** v217 (v205 P3-b): the nearest trading days before and after `date`
+   *  under the same strategy/horizon filter, across all history. `null` is
+   *  measured: no trading day on that side. Missing (`undefined`) only from
+   *  a backend older than v217: the store then looks up the adjacent month
+   *  itself. */
+  prev_day?: string | null;
+  next_day?: string | null;
 }
 
 /** A difference from a reference day. Null when either side has no figure. */
@@ -2401,17 +2480,37 @@ export interface TapeRow extends RowQuoteFields {
   age_s?: number | null;
 }
 
+/** v210: the market-shock detector's state, shown beside the tape. */
+export type ShockLabel = 'NORMAL' | 'SHOCK' | 'RECOVERY';
+
+export interface TapeShock {
+  label: ShockLabel;
+  since: string | null;
+  /** The last reading's instant; null before any reading. */
+  as_of: string | null;
+  breadth_pct: number | null;
+  sectors_down: number | null;
+  sectors_total: number | null;
+  spy_atr_move: number | null;
+  qqq_atr_move: number | null;
+  vix_level: number | null;
+  vix_chg_pct: number | null;
+  vix_missing: boolean;
+}
+
 export interface TapeResponse {
   /** ISO-8601 UTC instant the server composed this answer at. Rendered in the
    *  pinned end-cap; never inside the moving track. */
   as_of: string;
   rows: TapeRow[];
+  /** v210: null under MARKET_SHOCK_MODE=off or before the first stepped pass. */
+  shock?: TapeShock | null;
 }
 
 /* -- equity candles (v172) ------------------------------------------------ */
 
-/** Candle width. Buckets are New York wall clock: 4H starts at
- *  00/04/08/12/16/20 NY, 1W on Monday. */
+/** Candle width. Buckets are Berlin wall clock, weekdays 08:00-22:00: 4H starts at
+ *  08/12/16/20, 1W on Monday. */
 export type EquityTimeframe = '1H' | '4H' | '1D' | '1W';
 
 /** `mtm` = realized balance + open positions' unrealized P&L ("Open +

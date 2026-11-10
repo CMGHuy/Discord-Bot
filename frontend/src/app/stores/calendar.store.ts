@@ -22,7 +22,9 @@ import {
 } from '../api/models';
 import { SelectOption } from '../ui/form-controls';
 import { CalendarCellMetric, cellValue } from '../workspaces/calendar/calendar.helpers';
+import { LiveValuesStore } from './live-values.store';
 import { PreferencesStore } from './preferences.store';
+import { followSnapshot, snapshotMeta } from './snapshot-follow';
 
 /** Which figure the grid shows and colours by. Money is the default: the
  *  dollar swing is what the page is for, and R lives one toggle away for
@@ -108,6 +110,7 @@ export const CalendarStore = signalStore(
     days: computed<CalendarDay[]>(() => data()?.days ?? []),
     totals: computed<CalendarTotals | null>(() => data()?.totals ?? null),
     weekdays: computed(() => data()?.day_of_week ?? []),
+    monthWeekdays: computed(() => data()?.month_day_of_week ?? []),
     bestDay: computed(() => data()?.best_day ?? null),
     worstDay: computed(() => data()?.worst_day ?? null),
     streak: computed(() => data()?.streak ?? null),
@@ -143,6 +146,21 @@ export const CalendarStore = signalStore(
     /** This selector is account state, not a browser-local display whim. */
     preferredMetric: computed(() => preferenceMetric(preferences.values()['calendarMetric'])),
   })),
+  withComputed((store, live = inject(LiveValuesStore)) => {
+    // Local const: computeds in one object cannot read each other through
+    // `store`. Only an unfiltered month is served from a snapshot row, and
+    // the server keeps rows for the current and previous month alone, so a
+    // key for an older month simply never gets one.
+    const snapshotKey = computed(() =>
+      !store.strategy() && !store.horizon() ? `calendar.pnl:${store.month()}` : null);
+    return {
+      snapshotKey,
+      meta: computed(() => {
+        const k = snapshotKey();
+        return snapshotMeta(store.data()?.market_meta, k ? live.snapshot(k)() : null);
+      }),
+    };
+  }),
   withMethods((store, api = inject(ApiClient), preferences = inject(PreferencesStore), router = inject(Router)) => {
     const fetchDay = (date: string): void => {
       patchState(store, { dayLoading: true });
@@ -304,6 +322,11 @@ export const CalendarStore = signalStore(
         const metric = store.preferredMetric();
         if (store.metric() !== metric) patchState(store, { metric });
       });
+      followSnapshot(
+        store.snapshotKey,
+        () => store.data()?.market_meta?.computed_at ?? null,
+        () => { if (store.data() !== null) store.load(); },
+      );
     },
   }),
 );

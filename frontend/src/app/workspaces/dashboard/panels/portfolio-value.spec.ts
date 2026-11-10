@@ -6,8 +6,10 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { describe, expect, it, beforeEach } from 'vitest';
 
-import { EquityCandlesResponse } from '../../../api/models';
+import { EquityCandlesResponse, MarketMeta } from '../../../api/models';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
+import { LiveValuesStore } from '../../../stores/live-values.store';
+import { FakeLiveValues } from '../../../testing/fake-live-values';
 import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.stub';
 import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
 import { EquityCandles } from './equity-candles';
@@ -15,6 +17,11 @@ import { PortfolioValue } from './portfolio-value';
 
 // sb-equity-candles creates a real lightweight-charts chart.
 installMatchMediaPolyfill();
+
+const SNAP_META: MarketMeta = {
+  as_of: '2026-10-29', refreshing: false, stale_count: 0, missing_count: 0, incomplete: false,
+  computed_at: '2026-10-29T14:00:00Z', stale_inputs: false, source: 'snapshot', error: null,
+};
 
 const CANDLES: EquityCandlesResponse = {
   tf: '1D', basis: 'mtm', currency_symbol: '€', has_more: false, recording_since: '2026-10-20T13:35:00Z',
@@ -29,6 +36,7 @@ describe('portfolio value panel', () => {
       providers: [
         provideZonelessChangeDetection(),
         { provide: EquityCandlesStore, useValue: equityCandlesStoreStub(CANDLES) },
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
       ],
     });
   });
@@ -39,6 +47,23 @@ describe('portfolio value panel', () => {
     f.detectChanges();
     return f.nativeElement as HTMLElement;
   }
+
+  it('the sparkline figure carries the snapshot age and the P&L basis', () => {
+    const el = render({ balance: 1, changePct: 0.5, currency: '€', meta: SNAP_META });
+    expect(el.querySelector('.as-of sb-market-value')).not.toBeNull();
+    expect(el.querySelector('.as-of sb-pnl-basis')?.textContent?.trim()).toBe('pre-tax, before modelled frictions');
+  });
+
+  it('an empty series still shows the refreshing spinner', () => {
+    const el = render({ balance: 1, changePct: null, currency: '€', meta: { ...SNAP_META, computed_at: null, refreshing: true } });
+    expect(el.querySelector('.change')).toBeNull();
+    expect(el.querySelector('.as-of sb-spinner')).not.toBeNull();
+  });
+
+  it('no meta renders no label', () => {
+    const el = render({ balance: 1, changePct: 0.5, currency: '€' });
+    expect(el.querySelector('.as-of')).toBeNull();
+  });
 
   it('leaves a flat day uncoloured', () => {
     const change = render({ balance: 1, changePct: 0, currency: '€' }).querySelector('.change')!;

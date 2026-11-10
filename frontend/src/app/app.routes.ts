@@ -1,4 +1,5 @@
-import { Routes } from '@angular/router';
+import { inject } from '@angular/core';
+import { Router, Routes } from '@angular/router';
 
 import { adminGuard } from './auth/admin.guard';
 import { authGuard } from './shell/auth.guard';
@@ -20,6 +21,8 @@ import { authGuard } from './shell/auth.guard';
  * fourth copy of the truth. That lands with the real Trades workspace
  * (NG42); the route shape here is what allows it.
  */
+const toCancelsTab = () => inject(Router).parseUrl('/insights/analytics?tab=cancels');
+
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   // SR4: the workspace was `/cockpit` until 2026-08-13. The `**` route below
@@ -51,13 +54,10 @@ export const routes: Routes = [
     data: { subtitle: 'P&L by day' },
     loadChildren: () => import('./workspaces/calendar/calendar.routes').then((m) => m.calendarRoutes),
   },
-  {
-    path: 'trades/cancels',
-    canMatch: [authGuard],
-    title: 'Cancels',
-    data: { subtitle: "Were the bot's own cancels right?" },
-    loadChildren: () => import('./workspaces/cancels/cancels.routes').then((m) => m.cancelsRoutes),
-  },
+  // The Cancels page became Analytics' Cancels tab. A string redirectTo cannot
+  // carry a query, so these two build the UrlTree (an incoming query string
+  // is dropped: nothing linked to this page with one).
+  { path: 'trades/cancels', pathMatch: 'full', redirectTo: toCancelsTab },
   {
     // Trade Detail has its own route-scoped store and resolver.
     path: 'trades/:id',
@@ -83,7 +83,7 @@ export const routes: Routes = [
   // their names in spa.py's WORKSPACES.
   { path: 'calendar', pathMatch: 'full', redirectTo: 'trades/calendar' },
   { path: 'calendar/:date', redirectTo: 'trades/calendar/:date' },
-  { path: 'cancels', pathMatch: 'full', redirectTo: 'trades/cancels' },
+  { path: 'cancels', pathMatch: 'full', redirectTo: toCancelsTab },
   { path: 'analytics', pathMatch: 'full', redirectTo: 'insights/analytics' },
   { path: 'research', pathMatch: 'full', redirectTo: 'insights/research' },
   { path: 'reports', pathMatch: 'full', redirectTo: 'insights/reports' },

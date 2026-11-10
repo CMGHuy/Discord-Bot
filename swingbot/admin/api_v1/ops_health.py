@@ -39,8 +39,8 @@ from .auth import require_auth
 log = logging.getLogger(__name__)
 
 _WINDOW = 20
-_PROVIDER_KEYS = ("at", "tickers", "provider_fallback_rate", "stale_symbols",
-                  "empty_symbols", "empty_rate")
+_PROVIDER_KEYS = ("at", "tickers", "provider_fallback_rate", "old_print_rate",
+                  "stale_symbols", "empty_symbols", "empty_rate")
 
 
 def _provider_rows() -> list[dict]:

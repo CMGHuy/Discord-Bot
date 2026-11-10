@@ -13,7 +13,9 @@ and the clock. It opens no network, journal, open-trade store or wall clock.
 Config knobs (RS_GATE, RS_LAGGARD_PERCENTILE, PLAN_ENGINE_V2) are read the way
 every gate reads them, which is what lets `apply_knobs()` vary them per arm.
 The only mutation is on the supplied objects: the item and the confirmation
-store (confirm, and revoke when the plan is rejected).
+store (confirm, and revoke when the plan is rejected). The v209
+shock label arrives in the context too; this module never reads the shock
+store.
 """
 from __future__ import annotations
 
@@ -58,6 +60,7 @@ class QualifyContext:
     open_tickers: frozenset | None = None  # prior-open state; None = the caller decides after dedup
     issued_at: str | None = None           # plan clock; None = wall clock (live only)
     now: object = None
+    shock_state: str | None = None         # v209: the run's stored shock label; None = no key
 
 
 def _confirmed(item, context: QualifyContext) -> str | None:
@@ -92,7 +95,7 @@ def _attach_plan(item, context: QualifyContext) -> bool:
         item, item.plan, frame, item.result.ticker, item.result.horizon_key,
         level_map=item.level_map, regime=context.regime, rs_percentile=item.rs_percentile,
         breadth=context.breadth, regime2_state=analyze._regime_at(context.regimes, when),
-        issued_at=context.issued_at, now=context.now)
+        issued_at=context.issued_at, now=context.now, shock_state=context.shock_state)
     if item.plan_v2 is not None:
         item.plan_v2.regime_aligned = not (item.htf_info and item.htf_info.get("counter_trend", False))
     return not (config.PLAN_ENGINE_V2 == "on" and getattr(item, "plan_v2_rejected", None))

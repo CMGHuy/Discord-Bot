@@ -28,8 +28,8 @@ def _instruction(**kwargs):
 
 def test_render_title_and_body_order():
     embed = execution_embeds.render(_instruction(warnings=("⚠ heat",)), Kind.MOVE_STOP)
-    assert embed.title == "✂️ ▲ LONG NVDA · MOVE STOP"
-    assert embed.push_text == "✂️ MANAGE · ▲ LONG NVDA · MOVE STOP"
+    assert embed.title == "✂️ ▲ LONG NVDA · MOVE STOPLOSS"
+    assert embed.push_text == "✂️ MOVE STOPLOSS · ▲ LONG NVDA"
     assert embed.description.splitlines() == ["⚠ heat", "**MOVE STOP → 107.30 now**", "trail; +0.6R"]
     assert embed.footer.text == "MANAGE · plan plan-123"
 
@@ -75,7 +75,7 @@ def test_risk_cap_cancel_is_its_own_manage_kind():
     event = execution_embeds.build_instruction_embed(plan, PlanEvent(
         plan.plan_id, "cancelled_risk_cap", {"entry_price": 102.5, "stop_loss": 98.4,
                                              "planned_loss_pct": 4.0, "max_planned_loss_pct": 2.0}))
-    assert event.title == "🚫 ▲ LONG NVDA · RISK CAP"
+    assert event.title == "🚫 ▲ LONG NVDA · CANCEL ORDER (RISK CAP)"
 
 
 def test_filled_event_is_an_entry_with_a_price_block():
@@ -101,13 +101,13 @@ def test_move_stop_events_split_into_break_even_tp1_and_move_stop():
     plan = make_plan_v2()
     be = execution_embeds.build_instruction_embed(
         plan, PlanEvent(plan.plan_id, "be_moved", {"working_stop": 100.0}))
-    assert be.title == "🛡️ ▲ LONG NVDA · BREAK-EVEN"
+    assert be.title == "🛡️ ▲ LONG NVDA · MOVE STOPLOSS TO BREAKEVEN"
     tp1 = execution_embeds.build_instruction_embed(plan, PlanEvent(plan.plan_id, "tp1_partial", {
         "fraction": 0.5, "exit_price": 105.0, "r": 1.0, "working_stop": 100.0}))
-    assert tp1.title == "💰 ▲ LONG NVDA · TP1"
+    assert tp1.title == "💰 ▲ LONG NVDA · TAKE PROFIT (TP1)"
     moved = execution_embeds.build_instruction_embed(plan, PlanEvent(plan.plan_id, "stop_moved", {
         "new": 102.0, "r_moved": 0.4}))
-    assert moved.title == "✂️ ▲ LONG NVDA · MOVE STOP"
+    assert moved.title == "✂️ ▲ LONG NVDA · MOVE STOPLOSS"
 
 
 def test_closed_loss_is_a_red_result():

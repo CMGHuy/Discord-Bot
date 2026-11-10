@@ -23,7 +23,7 @@ export const isChangePart = (part: string): boolean => part.endsWith(CHANGE_PART
 
 export const CHANGE_PCT_TOOLTIP = `Change from the previous candle's close, not a return on capital. ${PERFORMANCE_CAVEAT}`;
 
-const NY = 'America/New_York';
+const NY = 'Europe/Berlin';
 const DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });
 const NY_DAY = new Intl.DateTimeFormat('en-US', { timeZone: NY, month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -37,11 +37,19 @@ export function isIntraday(tf: EquityTimeframe): boolean {
   return tf === '1H' || tf === '4H';
 }
 
-/** Business-day string for 1D/1W; for 1H/4H the New York wall time read as
- *  if it were UTC, so the axis shows New York hours in every viewer zone. */
+/** Business-day string for 1D/1W; for 1H/4H the Berlin wall time read as
+ *  if it were UTC, so the axis shows Berlin hours in every viewer zone. */
 export function toChartTime(t: string, tf: EquityTimeframe): Time {
   if (!isIntraday(tf)) return t.slice(0, 10) as Time;
   return Math.floor(Date.parse(`${t.slice(0, 19)}Z`) / 1000) as UTCTimestamp;
+}
+
+/** A candle with no movement at all (O = H = L = C) draws nothing useful. */
+export const isFlatCandle = (c: EquityCandle): boolean => c.o === c.h && c.h === c.l && c.l === c.c;
+
+/** The candles worth drawing, in every view: flat ones are dropped. */
+export function changedCandles(candles: readonly EquityCandle[]): EquityCandle[] {
+  return candles.filter((c) => !isFlatCandle(c));
 }
 
 export function toSeriesData(
@@ -75,7 +83,7 @@ function dayLabel(ymd: string): string {
   return DAY.format(new Date(`${ymd}T00:00:00Z`));
 }
 
-/** The New York calendar date of an instant. */
+/** The Berlin calendar date of an instant. */
 function recordingDate(iso: string): string {
   return NY_DAY.format(new Date(iso));
 }
@@ -83,7 +91,7 @@ function recordingDate(iso: string): string {
 export function candleLabel(t: string, tf: EquityTimeframe): string {
   if (tf === '1W') return `Week of ${dayLabel(t.slice(0, 10))}`;
   if (tf === '1D') return dayLabel(t.slice(0, 10));
-  return `${dayLabel(t.slice(0, 10))} ${t.slice(11, 16)} ET`;
+  return `${dayLabel(t.slice(0, 10))} ${t.slice(11, 16)} Berlin`;
 }
 
 function skippedNote(skipped: number): string {
@@ -202,7 +210,7 @@ const NY_ISO_DAY = new Intl.DateTimeFormat('en-CA', {
   timeZone: NY, year: 'numeric', month: '2-digit', day: '2-digit',
 });
 
-/** A run of whole buckets on the New York wall clock, `[from, to)`, in
+/** A run of whole buckets on the Berlin wall clock, `[from, to)`, in
  *  seconds read as if UTC — the same convention as `toChartTime`. */
 export interface WallSpan {
   from: number;

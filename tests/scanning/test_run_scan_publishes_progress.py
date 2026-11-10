@@ -33,7 +33,8 @@ def _capture_during(monkeypatch, *, raises=False):
     """
     seen = {}
 
-    def fake_sync_run(horizon_filter, require_confirmation, progress, min_confluence):
+    def fake_sync_run(horizon_filter, require_confirmation, progress, min_confluence,
+                      step_shock=False):
         seen["during"] = progress_store.read()
         if raises:
             raise RuntimeError("fetch died")

@@ -161,22 +161,22 @@ export function monthTrend(rows: readonly PartialsBreakdownRow[]): LineChartSeri
           </div>
         }</div>
         <div class="panels">
-          <sb-panel><sb-panel-header title="Funnel" [n]="p.n" hint="Share of filled trades reaching each stage." />
+          <sb-panel><sb-panel-header [titleTip]="true" title="Funnel" [n]="p.n" hint="Share of filled trades reaching each stage." />
             <sb-bar-list [rows]="funnel()" mode="rate" [format]="pctFmt" /></sb-panel>
-          <sb-panel><sb-panel-header title="Runner outcome mix" [n]="p.population.partial" hint="How each runner ended, with its average runner R." />
+          <sb-panel><sb-panel-header [titleTip]="true" title="Runner outcome mix" [n]="p.population.partial" hint="How each runner ended, with its average runner R." />
             <sb-share-bar label="Runner outcomes" [segments]="outcomes()" /></sb-panel>
-          <sb-panel><sb-panel-header title="Does the runner pay?" [n]="p.kpis.beat_all_out_n" [hint]="runnerPayHint" />
+          <sb-panel><sb-panel-header [titleTip]="true" title="Does the runner pay?" [n]="p.kpis.beat_all_out_n" [hint]="runnerPayHint" />
             <sb-waterfall [steps]="waterfall()" [format]="rFmt" totalLabel="Actual ExpR" /></sb-panel>
-          <sb-panel><sb-panel-header title="TP2 ladder" [n]="ladderN()" [hint]="ladderHint" />
+          <sb-panel><sb-panel-header [titleTip]="true" title="TP2 ladder" [n]="ladderN()" [hint]="ladderHint" />
             <sb-bar-list [rows]="ladder()" [format]="rFmt" />
             <sb-bar-list [rows]="touches()" mode="rate" [format]="pctFmt" /></sb-panel>
-          <sb-panel><sb-panel-header title="Split what-if" [n]="p.kpis.beat_all_out_n" [hint]="splitHint" />
+          <sb-panel><sb-panel-header [titleTip]="true" title="Split what-if" [n]="p.kpis.beat_all_out_n" [hint]="splitHint" />
             <sb-bar-list [rows]="split()" [format]="rFmt" /></sb-panel>
-          <sb-panel><sb-panel-header title="Giveback" [n]="p.counterfactuals.giveback.length" hint="Best R the runner saw minus the R it banked." />
+          <sb-panel><sb-panel-header [titleTip]="true" title="Giveback" [n]="p.counterfactuals.giveback.length" hint="Best R the runner saw minus the R it banked." />
             <sb-histogram [bins]="giveback()" /></sb-panel>
-          <sb-panel class="wide"><sb-panel-header title="Hold times" [n]="p.population.partial" hint="Trading sessions per stage; open runners count only before TP1." />
+          <sb-panel class="wide"><sb-panel-header [titleTip]="true" title="Hold times" [n]="p.population.partial" hint="Trading sessions per stage; open runners count only before TP1." />
             <sb-strip-plot [groups]="holds()" unit=" sessions" /></sb-panel>
-          <sb-panel class="wide"><sb-panel-header title="Breakdown" [n]="p.population.partial" [hint]="thinHint()" />
+          <sb-panel class="wide"><sb-panel-header [titleTip]="true" title="Breakdown" [n]="p.population.partial" [hint]="thinHint()" />
             <sb-segmented label="Group by" [options]="dimensions" [value]="dimension()" (valueChange)="dimension.set($any($event))" />
             @if (dimension() === 'month') { <sb-line-chart [series]="trend()" [valueFormat]="pctFmt" /> }
             <div class="table-scroll"><table class="breakdown">

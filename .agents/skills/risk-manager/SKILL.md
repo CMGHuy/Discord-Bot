@@ -21,18 +21,21 @@ rule is dollar risk on the account, not a percentage of price.
 
 ## Checklist
 
-- Dollar risk is sized from the entry-to-stop distance against the account, and the stop cap (`MAX_STOP_LOSS_PCT` in `swingbot/config.py`) still binds (`docs/claude/known-traps.md` § Stop floor and 2% cap).
-- A structural or level-lifecycle stop respects the cap in the backtest as well as live (`known-traps.md` § The level-lifecycle stop breaches the 2% cap in the backtest).
+- Dollar risk is sized from the entry-to-stop distance against the account, and the stop cap (`MAX_STOP_LOSS_PCT` in `swingbot/config.py`) binds live and in the backtest, structural and level-lifecycle stops included (`docs/claude/known-traps.md` § Stop floor and 2% cap; `known-traps.md` § The level-lifecycle stop breaches the 2% cap in the backtest).
 - Portfolio heat including the new trade stays under `PORTFOLIO_HEAT_CAP_PCT`, computed by `swingbot/core/edge/heat.py`.
+- Heat is computed from each open plan's current stop, never from the initial risk stored at entry.
 - Clustered names count together against `CORRELATED_HEAT_CAP_PCT` (`swingbot/core/edge/correlation.py`).
 - The sizing mode in `swingbot/core/edge/sizing.py` agrees with the suggested size the alert shows.
+- Shorts: long plans stay byte-identical; a short is sized from its gap-aware floor (`swingbot/core/planning/gap_sizing.py`), so an overnight gap through the stop stays inside the dollar cap.
+- A short alert on a heavily shorted name carries the squeeze notice, its short-interest facts read from `swingbot/core/market/short_interest.py`.
 - Stop logic (`swingbot/core/edge/stops.py`, `swingbot/core/planning/stop_scope.py`) never widens a stop after entry.
 - A change that raises per-trade risk or trade count states its drawdown and ruin effect (`swingbot/core/edge/ruin.py`, `swingbot/core/analytics/risk_metrics.py`).
 - Throttles and limits (`swingbot/core/edge/throttle.py`, `swingbot/core/risk_limits.py`) apply on every path that issues an alert.
 - A gap through the stop is counted in R as the loss it is, not as the planned loss.
 - A rejected plan logs why (the "plan rejected (" lines), so a quiet day caused by the cap is diagnosable.
 - An ExpR gain bought with wider stops is also shown in dollars at fixed risk.
-- The admin risk view (`swingbot/admin/api_v1/risk.py`) shows the same heat the scanner enforces.
+- The admin risk view shows the same heat the scanner enforces: since v204 the payload is built in `swingbot/core/analytics/risk_payload.py` (by the refresher's snapshot worker, stored in `admin_snapshots`) and `swingbot/admin/api_v1/risk.py` serves it.
+- eToro: demo only, never `account: real`; no order is sent without its stop attached.
 
 ## Red flags
 
@@ -51,6 +54,7 @@ rule is dollar risk on the account, not a percentage of price.
 Should fire: reviewing a change to `edge/sizing.py` or `edge/heat.py`.
 Should fire: asking whether a new stop rule still respects the 2% dollar-risk cap.
 Should fire: asking whether three open trades in one sector are too much correlated exposure.
+Should fire: asking whether gap-aware sizing on short alerts keeps an overnight gap through the stop inside the dollar-risk cap.
 Should not fire: asking whether an alert's entry can be filled at the open.
 Should not fire: asking how swing turnover affects after-tax results.
 Should not fire: reviewing a migration's rollback plan.

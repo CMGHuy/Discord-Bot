@@ -217,6 +217,19 @@ SWING_BOT_IMAGE=ghcr.io/<owner>/<repo>:sha-<good-sha> ./deploy/deploy.sh
 Find the tag under **your profile → Packages → <repo> → versions**, or in
 the "Publishing as …" line of the run that shipped it.
 
+**Rolling back past v209: downgrade first, from the new image.** The image-only
+path above aborts before `up` when the older image does not know `v209_001`.
+Before switching to an image older than v209, run the downgrade from the image
+that is still running, then deploy the older tag:
+
+    bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot alembic downgrade v204_001"
+
+This drops `market_shock_state` and `market_shock_readings` (the shadow log is
+lost). Plans keep `entry_context.shock_state`; older readers ignore the key.
+Check `alembic history` first: a revision stacked on `v209_001` later is rolled
+back too. `scripts/ops/rollback_to.sh` needs no extra step, because PITR
+restores the database at the target's own revision.
+
 **Rolling back past v184: clear the stop-monitor key.** From v184 the trade
 monitor writes a `monitor` key into the `bot_heartbeat` row, and
 `scripts/ops/heartbeat_watch.sh`, which the checkout keeps across a rollback,
@@ -321,12 +334,44 @@ pages only read what it stored.
 - Health: the admin's `/system` page `refresher` line (`ok` / `stalled` / `off`).
 - Kill switch: `python3 scripts/ops/env_set.py ADMIN_REFRESHER off`, then
   `docker compose restart admin refresher`. The admin pages go back to
-  request-time fetching exactly as before v201.
+  request-time fetching as before v201, and (from v204) Risk, Analytics,
+  Calendar and the dashboard sparkline go back to request-time compute: their
+  pre-v204 cost was 30 s+ page loads under load
+  (`docs/superpowers/results/2026-10-29-v204-page-timing.md`, Before).
   `MARKETDATA_LAYER=off` does the same. The refresher process stays up, holds its
   lock and keeps beating, but fetches nothing and drains no queue; it picks a
   flip back to `on` up from `.env` within one poll tick, with no restart needed.
 - `scripts/ops/rollback_to.sh` stops it with the other writers and starts it only
   when the target image has `swingbot.refresher`.
+
+### v204: admin snapshots (`admin_snapshots`)
+
+The refresher also builds the Risk, Analytics, Calendar and dashboard-sparkline
+payloads in a snapshot worker thread and stores one row per key in
+`admin_snapshots` (revision `v204_001`); those pages read the stored row and
+never compute on the request.
+
+- No manual step on deploy; the worker fills every key within a few cycles.
+- Cadence and staleness (`.env`, hot-reloaded): `ADMIN_SNAPSHOT_REGULAR_S`,
+  `ADMIN_SNAPSHOT_EXTENDED_S`, `ADMIN_SNAPSHOT_CLOSED_S` (rebuild interval per
+  session), `ADMIN_SNAPSHOT_BUDGET_S` (a build past it is abandoned, its thread
+  left to finish and its late write rejected unless newer),
+  `ADMIN_STALE_SNAPSHOT_REGULAR_S`, `ADMIN_STALE_SNAPSHOT_EXTENDED_S`.
+- It reads daily bars read-only from the `./market_data` mount; with that
+  mount missing, Risk shows clusters/correlation unavailable rather than
+  fetching.
+- Check: `docker compose exec -T bot python -c "..."` over
+  `select key, computed_at, stale_inputs from admin_snapshots`.
+
+Rollback: an image-only rollback to a pre-v204 image is **not** safe once
+`v204_001` is applied: that image does not know the revision, so `deploy.sh`
+aborts before `up` with bot, admin and refresher stopped (§ Rolling back).
+In this order: (1) with the writers stopped, run the downgrade from the
+**v204** image: `docker compose run --rm --no-deps bot alembic downgrade v207_001`
+(the revision `v204_001` revises). It drops only `admin_snapshots` (rebuilt
+on roll-forward) and keeps `admin_users`; check `alembic history` first for
+revisions stacked on top. (2) Then redeploy the previous image (§ Rolling back).
+Rolling back past v207 as well is the v207 step below, run after this one.
 
 ### v205: daily FX rates (`fx_daily_rates`)
 
@@ -372,6 +417,49 @@ image (§ Rolling back). Viewer accounts therefore do not survive a rollback;
 re-create them on the Users tab after rolling forward. The other route is
 `scripts/ops/rollback_to.sh` (point-in-time restore), which also discards
 everything written since.
+
+### v209: market shock tables (`market_shock_state`, `market_shock_readings`)
+
+The bot's scheduled `session_scan` takes one shock reading per pass while the
+NYSE regular session is open (no holidays, stops at a half-day close) and steps
+a NORMAL / SHOCK / RECOVERY state. That is about 390 / `SCAN_INTERVAL_MINUTES`
+rows per full session in `market_shock_readings` and one row (`id = 1`) in
+`market_shock_state`. `!check`, the recap, the admin-UI scan and the SHORT lane
+read the stored label and never write. Neither table raises SSE events.
+Every new plan carries `entry_context.shock_state`.
+
+| Flag | Production value | Set |
+|---|---|---|
+| `MARKET_SHOCK_MODE` | `shadow` (measure, record, stamp; **no trade changes**) | explicitly in `.env` right after the v209 deploy (V209-13) |
+
+**Retention.** `daily_recap` deletes readings older than
+`SHOCK_READINGS_KEEP_DAYS` (180) in every mode. It skips the days the recap
+does not run, and the delete is idempotent.
+
+**Read-back:**
+
+    bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T db psql -U swingbot -d swingbot -c \"SELECT session_date, count(*), min(as_of), max(as_of), sum((state_after = 'SHOCK')::int) AS shock FROM market_shock_readings GROUP BY 1 ORDER BY 1 DESC LIMIT 5\""
+    bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T db psql -U swingbot -d swingbot -c \"SELECT label, since, session_date, last_reading_id, updated_at FROM market_shock_state\""
+
+**Rollback, in this order:**
+1. Behaviour: `python3 scripts/ops/env_set.py MARKET_SHOCK_MODE off`, then `docker compose restart bot`. That means no readings, no state writes and no `shock_state` key, as in bot 2.17.3.
+2. Schema: § Rolling back (`alembic downgrade v204_001` from the new image; `v204_001` is the revision `v209_001` revises).
+3. `scripts/ops/rollback_to.sh` (`--dry-run` first), only for damaged data.
+
+The tables stay until a later spec retires the detector.
+
+**v210: market-shock notice and tape badge.** No revision, no new setting:
+a stepped pass that changes the market state enqueues one `market_shock`
+event in the v197 notify queue (`manual_close_notify`), delivered as a plain
+status embed to `DISCORD_CHANNEL_OPS_ID` (falls back to the trades channel);
+`GET /api/v1/market/tape` carries a `shock` object and the shell tape shows
+a NORMAL / SHOCK / RECOVERY badge at 640 px and wider; below 640 px the
+phone header shows a SHOCK / RECOVERY pill instead. `MARKET_SHOCK_MODE=off`
+silences both (no reading, no notice, `shock: null`). Rollback is image-only
+(§ Rolling back): the previous image does not know the third queue kind, so
+after a rollback check
+`SELECT count(*) FROM manual_close_notify WHERE delivered_at IS NULL AND doc::text LIKE '%market_shock%'`
+and, if it is not `0`, ask before deleting those rows.
 
 ## Accessing the admin UI
 

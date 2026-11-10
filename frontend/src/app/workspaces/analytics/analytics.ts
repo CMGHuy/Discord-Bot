@@ -11,6 +11,7 @@ import { ScopeBar, fxMissingOf } from './scope-bar';
 import { scopeToQueryParams } from './scope-url';
 import { BenchmarkTab } from './tabs/benchmark';
 import { AttributionTab } from './tabs/attribution';
+import { CancelsTab } from './tabs/cancels';
 import { EdgeTab } from './tabs/edge';
 import { ExecutionTab } from './tabs/execution';
 import { OverviewTab } from './tabs/overview';
@@ -29,7 +30,7 @@ export const ANALYTICS_TAB_LIST: readonly Tab[] = [
   { id: 'overview', label: 'Overview' }, { id: 'attribution', label: 'Attribution' },
   { id: 'execution', label: 'Execution' }, { id: 'edge', label: 'Edge' },
   { id: 'pipeline', label: 'Pipeline' }, { id: 'tuning', label: 'Tuning' },
-  { id: 'partials', label: 'Partials' }, { id: 'benchmark', label: 'Benchmark' },
+  { id: 'partials', label: 'Partials' }, { id: 'cancels', label: 'Cancels' }, { id: 'benchmark', label: 'Benchmark' },
 ];
 
 /** v207: Tuning runs tune jobs and saves proposals, an admin tool (spec
@@ -56,7 +57,7 @@ export function visibleAnalyticsTabs(isAdmin: boolean): readonly Tab[] {
   // the tabs are projected into this host, and a register declared six times
   // is six chances for two tabs to disagree about their own density.
   host: { class: 'register-instrument' },
-  imports: [Page, TabBar, ScopeBar, OverviewTab, AttributionTab, ExecutionTab, EdgeTab, PipelineTab, TuningTab, PartialsTab, BenchmarkTab, IfAdminDirective],
+  imports: [Page, TabBar, ScopeBar, OverviewTab, AttributionTab, ExecutionTab, EdgeTab, PipelineTab, TuningTab, PartialsTab, CancelsTab, BenchmarkTab, IfAdminDirective],
   template: `
     <!-- v195 Phase 4: the route title is the page's one h1. The tab strip
          and the one scope bar are the page's scope (filters and tabs only);
@@ -64,11 +65,13 @@ export function visibleAnalyticsTabs(isAdmin: boolean): readonly Tab[] {
     <sb-page>
       <div page-scope class="scope">
         <sb-tab-bar [tabs]="tabs()" [active]="store.tab()" (activeChange)="goToTab($event)" />
+        @if (store.tab() !== 'cancels') {
         <sb-scope-bar
           [benchmark]="store.tab() === 'benchmark'" [scope]="store.scope()" [unit]="store.unit()" [n]="store.scopeN()"
           [allTimePanels]="store.allTimePanelCount()" [strategies]="strategyNames()"
           [horizons]="horizons()" [asOf]="store.asOf()" [fxMissing]="fxMissing()" [tuning]="store.tab() === 'tuning' && session.isAdmin()"
           (scopeChange)="onScope($event)" (unitChange)="onUnit($event)" (cleared)="store.clearScope()" />
+        }
       </div>
       <div page-primary class="tab-body">
         @switch (store.tab()) {
@@ -79,6 +82,7 @@ export function visibleAnalyticsTabs(isAdmin: boolean): readonly Tab[] {
           @case ('pipeline') { <sb-pipeline-tab /> }
           @case ('tuning') { <sb-tuning-tab *sbIfAdmin /> }
           @case ('partials') { <sb-partials-tab /> }
+          @case ('cancels') { <sb-cancels-tab /> }
           @case ('benchmark') { <sb-benchmark-tab /> }
         }
       </div>

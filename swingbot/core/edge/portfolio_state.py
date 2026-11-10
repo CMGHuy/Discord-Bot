@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from swingbot import config
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.edge.growth import growth_path
+from swingbot.core.marketdata.daily_readonly import DailyCacheUnavailable
 from swingbot.core.planning import account as account_module
 from swingbot.core.tracking.performance import TradeLog
 
@@ -71,6 +72,8 @@ def _availability(state: str, checked_at: str, reason=None) -> dict:
 def _observed(read, checked_at: str, reason: str) -> tuple:
     try:
         return read(), _availability("ok", checked_at)
+    except DailyCacheUnavailable:
+        raise  # v204: a missing volume escapes the collector, never "clusters_unavailable"
     except Exception as exc:
         if reason == "sector_heat_unavailable":
             swallowed(log, "ops.portfolio_state.sector_heat", exc, level=logging.WARNING)
@@ -128,9 +131,23 @@ def _sector_state(trades, balance, sectors, checked_at, dependencies) -> tuple:
     return values, status
 
 
-def _daily_frames(trades: list) -> tuple[dict, int]:
-    from swingbot.core.marketdata.data import get_daily_data
+def _reader_frames(tickers: list, bars_reader) -> dict:
+    """v204: one reader call for every ticker, frames keyed by the trade's own string."""
+    got = bars_reader(sorted({str(t).upper().strip() for t in tickers}))
+    frames = {}
+    for ticker in tickers:
+        frame = got.get(ticker.upper().strip())
+        if frame is not None and not frame.empty:
+            frames[ticker] = frame
+    return frames
+
+
+def _daily_frames(trades: list, bars_reader=None) -> tuple[dict, int]:
     tickers = sorted({t.get("ticker") for t in trades if t.get("ticker")})
+    if bars_reader is not None:
+        frames = _reader_frames(tickers, bars_reader)
+        return frames, len(tickers) - len(frames)
+    from swingbot.core.marketdata.data import get_daily_data
     frames = {}
     for ticker in tickers:
         try:
@@ -142,13 +159,14 @@ def _daily_frames(trades: list) -> tuple[dict, int]:
     return frames, len(tickers) - len(frames)
 
 
-def _clusters_state(trades, balance, sectors, checked_at, dependencies) -> tuple:
+def _clusters_state(trades, balance, sectors, checked_at, dependencies, bars_reader=None) -> tuple:
     failed = next((s for s in dependencies if s["state"] == "unavailable"), None)
     if failed is not None:
         return None, _availability("unavailable", checked_at, failed["reason"])
     if not trades:
         return [], _availability("ok", checked_at)
-    collected, status = _observed(lambda: _daily_frames(trades), checked_at, "clusters_unavailable")
+    collected, status = _observed(
+        lambda: _daily_frames(trades, bars_reader), checked_at, "clusters_unavailable")
     if collected is None:
         return None, status
     frames, missing = collected
@@ -217,7 +235,9 @@ def open_heat_state(checked_at: str | None = None) -> dict:
     }
 
 
-def collect_portfolio_state() -> dict:
+def collect_portfolio_state(*, bars_reader=None) -> dict:
+    """The survival state. `bars_reader` (v204 snapshots) supplies the cluster
+    bars read-only; without it the clusters read `data.get_daily_data` as before."""
     checked = datetime.now(timezone.utc).isoformat()
     base = open_heat_state(checked)
     trades, balance = base["open_trades"], base["balance"]
@@ -227,7 +247,7 @@ def collect_portfolio_state() -> dict:
     sector_heat, sector_status = _sector_state(
         trades, balance, sectors, checked, dependencies + [map_status])
     clusters, cluster_status = _clusters_state(
-        trades, balance, sectors, checked, dependencies + [map_status])
+        trades, balance, sectors, checked, dependencies + [map_status], bars_reader=bars_reader)
     control, throttle_status = _observed(_throttle_state, checked, "throttle_unavailable")
     mult, paused = control if control is not None else (None, None)
     kill, kill_status = _observed(_kill_state, checked, "killswitch_unavailable")

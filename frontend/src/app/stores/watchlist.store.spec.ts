@@ -150,7 +150,7 @@ describe('WatchlistStore', () => {
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({ tickers: ['NVDA'] });
 
-    request.flush({ added: ['NVDA'], already_present: [], invalid: [], total: 3 });
+    request.flush({ added: ['NVDA'], already_present: [], invalid: [], not_found: [], details: [], total: 3 });
     backend.expectOne('/api/v1/watchlist/tickers').flush(TICKERS);
   });
 
@@ -165,6 +165,8 @@ describe('WatchlistStore', () => {
       added: ['NVDA'],
       already_present: ['AAPL'],
       invalid: ['NOT-A-TICKER'],
+      not_found: [],
+      details: [{ symbol: 'NVDA', company_name: 'NVIDIA Corporation', bars: 800 }],
       total: 3,
     });
     backend.expectOne('/api/v1/watchlist/tickers').flush(TICKERS);
@@ -173,6 +175,19 @@ describe('WatchlistStore', () => {
     expect(message).toContain('NVDA');
     expect(message).toContain('AAPL');
     expect(message).toContain('NOT-A-TICKER');
+    expect(message).toContain('NVDA (NVIDIA Corporation)');
+  });
+
+  it('names a symbol the provider has no market data for', () => {
+    boot();
+
+    store.addTickers('ZZZZ');
+    backend.expectOne('/api/v1/watchlist/tickers').flush({
+      added: [], already_present: [], invalid: [], not_found: ['ZZZZ'], details: [], total: 3,
+    });
+    backend.expectOne('/api/v1/watchlist/tickers').flush(TICKERS);
+
+    expect(store.addResult()).toBe('no market data found: ZZZZ');
   });
 
   it('does not post an empty box', () => {

@@ -1678,3 +1678,35 @@ def test_in_closed_scope_keeps_open_rows_and_windows_terminal_ones():
     assert _in_closed_scope("CLOSED", _INSIDE, window)
     assert not _in_closed_scope("CLOSED", _AFTER, window)
     assert not _in_closed_scope("CANCELLED", None, window)
+
+
+# ------------------------------------------------- v217 _noted_ids is memoised
+
+def _count_journal_reads(monkeypatch):
+    from swingbot.core.analytics.journal import JournalStore
+    calls = []
+
+    def fake(self, *args, **kwargs):
+        calls.append(1)
+        return [{"trade_id": "t1", "note": "x"}, {"trade_id": "t2", "note": ""}]
+
+    monkeypatch.setattr(JournalStore, "entries", fake)
+    return calls
+
+
+def test_noted_ids_reads_the_journal_once_inside_a_read_scope(monkeypatch):
+    from swingbot.admin.api_v1.trades import _noted_ids
+    from swingbot.core.infra import read_memo
+    calls = _count_journal_reads(monkeypatch)
+    with read_memo.scope():
+        assert _noted_ids() == {"t1"}
+        assert _noted_ids() == {"t1"}
+    assert len(calls) == 1
+
+
+def test_noted_ids_reads_the_journal_every_time_outside_a_scope(monkeypatch):
+    from swingbot.admin.api_v1.trades import _noted_ids
+    calls = _count_journal_reads(monkeypatch)
+    assert _noted_ids() == {"t1"}
+    assert _noted_ids() == {"t1"}
+    assert len(calls) == 2

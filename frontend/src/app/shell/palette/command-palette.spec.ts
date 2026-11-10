@@ -126,7 +126,7 @@ describe('CommandPalette (v195 §3.1)', () => {
     const shown = optionLabels(el);
     expect(shown.slice(0, 3)).toEqual(['Dashboard', 'Watchlist', 'Book']);
     expect(shown.slice(-2)).toEqual(['AMD #901', 'NVDA #812']);
-    expect(shown).toHaveLength(13);
+    expect(shown).toHaveLength(12);
   });
 
   it('ranks as the query is typed, with the first result active', async () => {

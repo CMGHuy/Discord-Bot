@@ -406,6 +406,20 @@ describe('Trades - price age and Refresh (v201)', () => {
     expect(cellText(cells[0])).toContain('100.00');
   });
 
+  it('an unpriced row shows its last close greyed and dated, not as a live price', () => {
+    const el = renderPriced([row({ id: 'a', ticker: 'ASTS', status: 'ACTIVE', current_price: null,
+      last_close: 36.86, last_close_date: '2026-11-09' })]);
+    const lc = el.querySelector('tbody .last-close')!;
+    expect(cellText(lc)).toContain('36.86');
+    expect(cellText(lc)).toContain('close 11-09');
+  });
+
+  it('a priced row shows no last-close note', () => {
+    const el = renderPriced([row({ id: 'a', ticker: 'MSFT', status: 'ACTIVE', current_price: 100, price_as_of: AT,
+      last_close: 99, last_close_date: '2026-11-09' })]);
+    expect(el.querySelector('tbody .last-close')).toBeNull();
+  });
+
   it('the header shows prices as-of, the incomplete note and Refresh', () => {
     const el = renderPriced([priced('a', 'MSFT', 'ACTIVE')]);
     const header = el.querySelector('sb-page [page-actions]')!;
@@ -423,7 +437,7 @@ describe('Trades - price age and Refresh (v201)', () => {
     const el = renderPriced([priced('a', 'MSFT', 'ACTIVE'), priced('b', 'AAPL', 'CLOSED')]);
     el.querySelector<HTMLButtonElement>('sb-page [page-actions] sb-market-refresh button')!.click();
     const live = TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues;
-    expect(live.requestRefresh).toHaveBeenCalledWith(['MSFT']);
+    expect(live.requestRefresh).toHaveBeenCalledWith(['MSFT'], []);
   });
 });
 
@@ -446,11 +460,12 @@ describe('Trades — the Plan cell for runners (v177)', () => {
     expect(cellText(runner.querySelector('.l2')!)).toBe('Trail 49.94 → 52.44 (+17.7% / +13.6%)');
   });
 
-  it('shows the closed runner\'s exit in the target slot', () => {
+  it('keeps the closed runner leg\'s own target and shows its exit after the icon', () => {
     const closed = renderRows(RUNNER_ROWS).querySelectorAll('sb-plan-cell')[2];
-    expect(cellText(closed)).toBe('60.67 → 52.44 / 61.85 (+13.6% - 1.9%)');
-    expect(closed.querySelector('[title]')!.getAttribute('title'))
-      .toContain('Runner exit (trailing stop): 52.44');
+    // Target 58.33 is the leg's own; 52.44 is where it actually closed.
+    expect(cellText(closed)).toBe('60.67 → 58.33 / 61.85 (3.9% - 1.9%) · 52.44');
+    expect(closed.querySelector('.closed-icon')).not.toBeNull();
+    expect(closed.querySelector('[title]')!.getAttribute('title')).toContain('Target 58.33');
   });
 });
 
@@ -525,6 +540,37 @@ describe('Trades on a phone (v179 §3.1)', () => {
 });
 
 
+describe('Trades row click vs the # link', () => {
+  const desktopRows = () => {
+    const el = renderLegRows([row({ id: 'plan-aaa111' })]);
+    return el;
+  };
+
+  it('opens the overview drawer on a row click without navigating', () => {
+    const el = desktopRows();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate');
+    expect(el.querySelector('sb-trade-drawer')).toBeNull();
+    (el.querySelector('tbody tr') as HTMLElement).click();
+    TestBed.tick();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(document.querySelector('sb-trade-drawer') ?? el.querySelector('sb-trade-drawer')).not.toBeNull();
+  });
+
+  it('keeps the # link pointing at the trade page, and a click on it opens no drawer', () => {
+    const el = desktopRows();
+    const link = el.querySelector('sb-row-link a') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe('/trades/plan-aaa111');
+    // RouterLink navigates asynchronously on click; stub it so nothing runs
+    // after the TestBed is torn down (NG0205 in CI).
+    const go = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    link.click();
+    expect(go).toHaveBeenCalledTimes(1);
+    TestBed.tick();
+    expect(el.querySelector('sb-trade-drawer')).toBeNull();
+  });
+});
+
+
 describe('Trades page-size URL precedence (v194 B2)', () => {
   afterEach(() => preferencesStub.values.set({}));
 
@@ -571,44 +617,37 @@ describe('Trades — leg rows (v194 B3)', () => {
       row({ id: 'plan-aaaaaa', leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }),
       row({ id: 'plan-aaaaaa', leg_index: 1, leg_total: 2, leg_exit_reason: 'stop' }),
     ]);
-    const labels = [...el.querySelectorAll('.leg')].map((n) => n.firstChild!.textContent!.trim());
+    const labels = [...el.querySelectorAll('.leg .name')].map((n) => n.textContent!.trim());
     expect(labels[0]).toMatch(/^Leg 1 of 2 · /);
     expect(labels[1]).toMatch(/^Leg 2 of 2 · /);
   });
 
   it('labels a leg with no recorded reason by its position alone', () => {
     const el = renderLegRows([row({ leg_index: 2, leg_total: 3, leg_exit_reason: null })]);
-    expect(el.querySelector('.leg')!.firstChild!.textContent!.trim()).toBe('Leg 3 of 3');
+    expect(el.querySelector('.leg .name')!.textContent!.trim()).toBe('Leg 3 of 3');
   });
 
-  it('shows no label and no leg hint on a single-leg trade', () => {
+  it('shows no label and no leg tooltip on a single-leg trade', () => {
     const el = renderLegRows([row({ leg_index: 0, leg_total: 1 })]);
     expect(el.querySelector('.leg')).toBeNull();
-    expect(el.querySelector('.leg sb-hint')).toBeNull();
+    expect(el.querySelector('sb-leg-name')).toBeNull();
   });
 
-  it('puts an sb-hint naming plans-not-legs on every leg row, in place of the old icon', () => {
+  it('explains each leg in a tooltip on its own text, with no info icon beside it', () => {
     const el = renderLegRows([
-      row({ leg_index: 0, leg_total: 2 }),
-      row({ leg_index: 1, leg_total: 2 }),
+      row({ leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' }),
+      row({ leg_index: 1, leg_total: 2, leg_exit_reason: 'tp1_runner_tp2' }),
     ]);
-    const hints = [...el.querySelectorAll('.leg sb-hint')];
-    expect(hints).toHaveLength(2);
-    expect(hints[0].textContent).toContain(LEG_HINT_TEXT);
-    expect(hints[0].textContent).toContain('count plans on Analytics');   // A4 audit
-    expect(hints[0].textContent).not.toContain('plans, not legs');
-    expect(el.querySelector('[title="Closed after an earlier partial exit of the same position"]')).toBeNull();
-  });
-
-  it('keeps the 44px hint tap area out of the leg line height (layout audit vcenter at 768)', () => {
-    // jsdom lays nothing out, so the contract is source text: on coarse /
-    // tablet widths sb-hint's trigger grows to --control-h, and unless the
-    // .leg rule pulls that padding back with a negative block margin the
-    // cell's box is ~14px taller than the ink it shows (content sits high).
-    const css = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trades.ts'), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(css).toMatch(/\.leg sb-hint\s*\{[^}]*margin-block:\s*calc\(\(var\(--control-h\) - 14px\) \/ -2\)/);
-    expect(css).toMatch(/@media \(pointer: coarse\), \(max-width: 1023px\)\s*\{\s*\.leg sb-hint/);
+    const names = [...el.querySelectorAll('.leg sb-leg-name')];
+    expect(names).toHaveLength(2);
+    expect(el.querySelector('.leg button.trigger')).toBeNull();
+    const tips = names.map((n) => n.querySelector('[role="tooltip"]')!.textContent!);
+    expect(tips[0]).toContain('Leg 1 of 2 is the first part of the plan to close');
+    expect(tips[0]).toContain('first target was reached');
+    expect(tips[1]).toContain('Leg 2 of 2 is the last part of the plan to close');
+    expect(tips[1]).toContain('second target, T2');
+    expect(tips[1]).toContain(LEG_HINT_TEXT);
+    expect(tips[1]).toContain('count plans on Analytics');   // A4 audit
   });
 
   it('carries the label into the expansion the phone drawer reuses', () => {

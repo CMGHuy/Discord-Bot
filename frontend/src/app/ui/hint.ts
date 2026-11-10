@@ -216,6 +216,8 @@ export function placeBeside(
     :host(.anchored) { display: contents; }
     .pop.label { padding: var(--space-4) var(--space-8); font-size: var(--text-table); white-space: nowrap; }
     .pop.wide { max-width: min(420px, 90vw); }
+    /* A label that explains (wide anchor mode) is a paragraph, not a name. */
+    .pop.label.wide { white-space: normal; font-size: var(--text-chip); padding: var(--space-8) var(--space-10); }
     /* 50% past .wide, on request (2026-09-14) -- for a hint whose content
        (a diagram, not a sentence) reads as cramped even at .wide's 420px. */
     .pop.xl { max-width: min(630px, 90vw); font-size: var(--text-table); }

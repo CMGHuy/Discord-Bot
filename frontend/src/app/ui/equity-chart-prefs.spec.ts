@@ -9,8 +9,8 @@ import {
 } from './equity-chart-prefs';
 
 describe('equity-chart-prefs', () => {
-  it('defaults to daily candles on the open + closed basis', () => {
-    expect(readEquityChartPrefs({})).toEqual({ tf: '1D', basis: 'mtm' });
+  it('defaults to hourly candles on the open + closed basis', () => {
+    expect(readEquityChartPrefs({})).toEqual({ tf: '1H', basis: 'mtm' });
   });
 
   it('reads a stored timeframe and basis', () => {
@@ -20,13 +20,13 @@ describe('equity-chart-prefs', () => {
 
   it('falls back per key when a stored value is unreadable', () => {
     expect(readEquityChartPrefs({ 'dashboard.equity.tf': '1M', 'dashboard.equity.basis': 7 }))
-      .toEqual({ tf: '1D', basis: 'mtm' });
+      .toEqual({ tf: '1H', basis: 'mtm' });
     expect(readEquityChartPrefs({ 'dashboard.equity.tf': '1W', 'dashboard.equity.basis': null }))
       .toEqual({ tf: '1W', basis: 'mtm' });
   });
 
   it('tolerates a missing preferences object', () => {
-    expect(readEquityChartPrefs(undefined as never)).toEqual({ tf: '1D', basis: 'mtm' });
+    expect(readEquityChartPrefs(undefined as never)).toEqual({ tf: '1H', basis: 'mtm' });
   });
 
   it('writes both keys and leaves every other key alone', () => {
@@ -38,7 +38,7 @@ describe('equity-chart-prefs', () => {
 
   it('never writes a value the reader would reject', () => {
     const next = writeEquityChartPrefs({}, { tf: 'bogus' as never, basis: 'mtm' });
-    expect(next[EQUITY_TF_KEY]).toBe('1D');
+    expect(next[EQUITY_TF_KEY]).toBe('1H');
   });
 });
 

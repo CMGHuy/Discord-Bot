@@ -231,24 +231,23 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 
 | Situation | Read |
 |---|---|
-| About to run, re-run or interpret a backtest, grid, walk-forward or validation, or call a result a pass | `backtest-gate` |
-| Editing entry-signal, feature or indicator code under `swingbot/core/market/`, `edge/`, `scanning/`, `planning/` | `no-lookahead` |
+| About to run or interpret a backtest, grid, walk-forward or validation, or call a result a pass | `backtest-gate` |
+| Editing entry-signal or indicator code under `swingbot/core/market/`, `edge/`, `scanning/`, `planning/` | `no-lookahead` |
 | About to state a pooled ExpR, win rate, N, R-multiple or badge tier | `pooled-numbers` |
 | Editing the scan engine, `scan_embeds`, `embeds.py` or anything rendering an alert | `alert-surface` |
 | Adding or changing a strategy or edge module or its registry entry | `edge-module` |
 | Changing the Postgres schema, a store's read/write path or a migration | `schema-change` |
 | About to change anything on the Hetzner VM | `mirror-prod` |
 | Creating, merging or removing a git worktree | `worktree-lifecycle` |
-| Mining the live book for ranked hypotheses: `trade-scout` dispatches the read-only `scout` agent per generator role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
-| Using the eToro Public API MCP (portfolio, instruments, real or demo trades) (not paper-only) | `etoro-public-api-operations` |
+| Live-book hypotheses: `trade-scout` runs the `scout` agent per role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
+| Using the eToro Public API MCP (portfolio, instruments, demo or real trades) | `etoro-public-api-operations` |
 
-`task-brief` (fill a plan task's handoff with trap preflight) is not explicit-only: run it right after `task_handoff.py` writes a handoff.
+`task-brief` (trap preflight for a plan task's handoff) is not explicit-only: run it right after `task_handoff.py` writes one.
 
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
-whenever Claude would run `/<name>`: `gate` (pre-commit gate), `deploy` (Hetzner deploy
-sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM
-backup pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
-output returned verbatim, never judged),
+whenever Claude would run `/<name>`: `gate` (pre-push: complexity gate, changed tests, CI watch), `deploy` (Hetzner deploy
+sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
+output verbatim, never judged),
 `handoff` (write the plan's `## Handoff` block before a session stops),
 `screen` (one real idea-screen run per idea, after the definition, ledger and
 results-doc checks), `prereg` (commit a pre-registration stub before the
@@ -268,8 +267,9 @@ Expert role skills (v145) each hold one reviewer's lens (Lens, Checklist, Red
 flags, Out of scope) and load when you review from that seat: `quant-researcher`,
 `risk-manager`, `financial-advisor` (educational, not personal financial advice),
 `veteran-trader`, `technical-analyst`, `fundamental-analyst`, `staff-engineer`,
-`quant-engineer` (lookahead, numerics, the OHLCV caches) and `senior-engineer`
-(code quality, the complexity limit). A role raises cited `BLOCKING`/`ADVISORY`
+`quant-engineer` (lookahead, numerics, the OHLCV caches), `senior-engineer`
+(code quality, the complexity limit) and `ux-designer` (screens and embeds at
+three widths). A role raises cited `BLOCKING`/`ADVISORY`
 findings; it never decides.
 
 Claude Code plugins switched off in `.claude/settings.json` `enabledPlugins` load no
@@ -380,13 +380,13 @@ Detail: `docs/claude/testing-cost.md` § Test suites.
 `pytest path::test`), never by re-running the whole suite; a fix touching other
 files widens to `testrun.py changed`. **No full suite after merging back to
 `main`**: it ran once, before the merge.
-Every feature, fix or change you implement ships its own unit tests in the same
-work (backend and frontend, edge and empty cases included), run green before
-you call it done; the partner never has to ask.
+Every feature, fix or change updates the unit tests it affects and adds new ones
+for what is new, in the same work (backend and frontend, edge and empty cases),
+run green before you call it done; the partner never has to ask.
 
 **Green means `0 failed` and `0 xfailed`.** A changed pass count is not itself a
-failure; read the output. Timings swing 2-4x with machine load, so do not
-re-measure to justify a change. Backtests and grids run minutes to hours; chunk
+failure. Timings swing 2-4x with machine load; do not re-measure to justify
+a change. Backtests and grids run minutes to hours; chunk
 them per strategy, no casual broad sweeps. Any script past a couple of minutes
 prints flushed per-unit progress; past 15 minutes, a percent-complete figure
 rewritten each unit (never summed by the reader) in a log deleted on completion.
@@ -402,15 +402,15 @@ same work to them so bulk output stays out of your context:
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
 symbols exist), `task-implementer` then `task-reviewer` (one plan task each: `task_handoff.py <plan> <id>` writes the handoff; `agent_cost.py` checks cost),
 `plan-briefer` (gathers a spec's code context into
-`.superpowers/briefs/<plan base>.md` first), `plan-writer` (a plan from an
-approved spec and that brief: `mode=index` (index and task ledger) first,
+`.superpowers/briefs/<plan base>.md` first), `plan-writer` (specs and plans are written at the `opus` tier only, partner 2026-11-10; a plan from a
+spec and that brief: `mode=index` (index and task ledger) first,
 then one `mode=part <N>` per part, one at a time here, each appending task by
 task to disk; at most 2 plans in progress per session; a plan cut off
 mid-write resumes from its first missing task, never skipped or restarted. The
 SessionStart hook prints `PLAN WIP` for such a plan: resume it before new work.
-Record partner decisions in the index's `## Handoff` section as made, and commit
-the index, each part and partial files (`docs(vN): plan WIP`) as you go --
-progress lives in the repo, never in session memory;
+Record partner decisions in the index's `## Handoff` as made; commit the index,
+each part and partials (`docs(vN): plan WIP`) as you go -- progress lives in the
+repo, never in session memory;
 `python scripts/dev/plan_lint.py <index>` must print PASS before the plan is
 committed as finished), and
 `expert-reviewer` (one expert role's read-only review, `role=<name>`, cited
@@ -443,13 +443,13 @@ Detail: `docs/claude/code-complexity.md`.
 
 ## Concurrent sessions and stale checkouts
 
-Other sessions work in this same working tree and commit on their own schedule,
-and other Claude worktrees live under `.claude/worktrees/`.
+Other sessions work in this same working tree and commit on their own schedule;
+other Claude worktrees live under `.claude/worktrees/`.
 
 - Before any status claim or commit, run `git fetch origin && git status -sb`
   (or `git rev-list --left-right --count main...origin/main`). A checkout that is
   behind describes the wrong project; a branch 0 ahead / N behind cannot be
-  "published" by force, since the push only deletes.
+  "published" by force (the push only deletes).
 - Before committing, run `git log --oneline -5` and `git status --porcelain --
   <your paths>`; empty status on files you never committed means someone else
   did. Stage files by name, never `git add -A` or `git commit -a`, and commit
@@ -534,10 +534,10 @@ destructive git commands unless the user clearly authorized the exact action.
 For v74-style parameter searches use `config.searchable_attrs()` only.
 `ScanParams` is frozen and picklable for process-pool safety; replay blind spots
 must be recorded in the observability test, never hidden by a grid change. Live
-scan and replay gating differ through OPEX and manual-scan behaviour, so do not
+scan and replay gating differ through OPEX and manual-scan behaviour; do not
 unify them without a separate behaviour-change decision.
 
 Make focused, isolated changes that preserve module seams and surrounding code
-style. Run proportionate verification and report the actual command and result;
-do not claim a change works without evidence. For edits, finish with the concise
-file summary your global Codex instructions require.
+style. Run proportionate verification and report the command and result;
+never claim a change works without evidence. For edits, end with the file summary
+your global Codex instructions require.

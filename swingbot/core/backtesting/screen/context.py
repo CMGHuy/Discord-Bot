@@ -30,6 +30,16 @@ STD_FLOOR = 1e-12
 #: the file would spend a shot on an idea that can hardly fire (v174 § 1).
 MIN_Z_COVERAGE = 0.95
 
+#: v211: context series stored in a cache dir beside the ticker CSVs (the
+#: runner reads <cache_dir>/<stem>.csv literally) that are never tickers.
+#: SPY/TLT/UUP are context *and* tickers, so they are not in this set.
+CONTEXT_ONLY_STEMS = frozenset({"BREADTH_ATR1", "^VIX"})
+
+
+def is_context_only(stem: str) -> bool:
+    """True for a cache-dir file stem that no ticker listing may return."""
+    return stem in CONTEXT_ONLY_STEMS
+
 
 def r_lookback(close: pd.Series, lookback: int = LOOKBACK) -> pd.Series:
     """close(t) / close(t - lookback) - 1, by row offset (the contiguity

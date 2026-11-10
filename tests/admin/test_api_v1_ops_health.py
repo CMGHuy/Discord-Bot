@@ -17,6 +17,7 @@ _PROVIDER_ROW = {
     "at": str,
     "tickers": NUMBER,
     "provider_fallback_rate": NULLABLE_NUMBER,
+    "old_print_rate": NULLABLE_NUMBER,
     "stale_symbols": NULLABLE_NUMBER,
     "empty_symbols": NULLABLE_NUMBER,
     "empty_rate": NULLABLE_NUMBER,
@@ -162,9 +163,24 @@ def test_a_pre_v148_row_reads_as_null_and_deploy_markers_are_skipped(logged_in, 
     assert [r["at"] for r in rows] == ["2026-10-09T14:03:00+00:00",
                                        "2026-10-09T14:01:00+00:00"]
     assert rows[1] == {"at": "2026-10-09T14:01:00+00:00", "tickers": 150,
-                       "provider_fallback_rate": None, "stale_symbols": None,
-                       "empty_symbols": None, "empty_rate": None}
+                       "provider_fallback_rate": None, "old_print_rate": None,
+                       "stale_symbols": None, "empty_symbols": None, "empty_rate": None}
     assert rows[0]["empty_symbols"] == 0 and rows[0]["provider_fallback_rate"] is None
+
+
+def test_the_old_print_rate_is_carried_and_a_pre_v223_row_reads_null(logged_in, telemetry_rows):
+    telemetry_rows(
+        _scan_row(1, provider_fallback_rate=0.02, stale_symbols=0,
+                  empty_symbols=0, empty_rate=0.0),                       # pre-v223
+        _scan_row(2, provider_fallback_rate=0.0, old_print_rate=0.9195, stale_symbols=0,
+                  empty_symbols=1, empty_rate=0.0067),
+    )
+
+    rows = _health(logged_in)["providers"]
+
+    assert [r["old_print_rate"] for r in rows] == [0.9195, None]
+    for row in rows:
+        assert_shape(row, _PROVIDER_ROW, where="provider row")
 
 
 def test_thresholds_follow_the_live_config(logged_in, telemetry_rows, monkeypatch):
