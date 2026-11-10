@@ -136,3 +136,36 @@ def test_prune_keeps_rows_at_or_after_the_cutoff(repo, db_conn):
 def test_prune_refuses_a_naive_cutoff(repo, db_conn):
     with pytest.raises(ValueError):
         repo.prune_before(datetime(2026, 1, 1), conn=db_conn)
+
+
+def test_a_real_market_shock_notice_enqueues_beside_the_committed_state(
+        repo, db_conn, monkeypatch):
+    """The payload nests a reading dict with float/None fields; the queue must
+    accept it (no conflicting_event) and the state row commits with it."""
+    from swingbot import config
+    from swingbot.core.db.repositories.notify_queue import NotifyQueueRepository
+    from swingbot.core.scanning import shock_notices
+
+    monkeypatch.setattr(config, "DISCORD_CHANNEL_OPS_ID", "123", raising=False)
+    reading = shock.ShockReading(
+        as_of=T0, session_date=D0, minutes_since_open=75.0, breadth_frac=0.45, sectors_down=3,
+        sectors_total=5, depth_frac=0.3, breadth_speed=None, spy_atr_move=-1.2, qqq_atr_move=None,
+        spy_last=495.0, spy_prev_close=500.0, spy_session_low=495.0, spy_new_low=False,
+        spy_retrace=0.0, vix_level=None, vix_chg_pct=None, vix_session_high=None,
+        vix_off_high_pct=None, n_names=40, insufficient=False)
+    prior = shock.ShockState(label="NORMAL", session_date=D0)
+    new = shock.ShockState(label="SHOCK", session_date=D0, since=T0)
+    payload = shock_notices.notice_payload(prior, new, reading, [], T0)
+    event = shock_notices.notice_event(payload, as_of=T0)
+
+    repo.record(reading.as_row(), new.as_row(), state_after="SHOCK", notice_event=event,
+                conn=db_conn)
+
+    queued = db_conn.execute(sa.select(schema.manual_close_notify)).all()
+    assert len(queued) == 1
+    saved = NotifyQueueRepository()._record(queued[0])
+    assert saved["kind"] == "market_shock"
+    assert saved["payload"]["reading"]["depth_frac"] == 0.3
+    assert saved["payload"]["reading"]["breadth_speed"] is None
+    state = repo.current_state(conn=db_conn)
+    assert state["label"] == "SHOCK" and state["last_notice_at"] == T0
