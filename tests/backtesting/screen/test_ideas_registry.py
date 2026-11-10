@@ -7,7 +7,9 @@ import pytest
 
 from swingbot.core.backtesting.screen import ideas
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea
-from swingbot.core.backtesting.screen.ideas import range_breakdown_close, range_breakdown_stop
+from swingbot.core.backtesting.screen.ideas import (range_breakdown_close, range_breakdown_stop,
+                                                    shock_failed_bounce_short,
+                                                    shock_support_break_short)
 
 
 def test_registry_holds_the_first_batch_in_spec_order_then_later_ideas():
@@ -15,7 +17,8 @@ def test_registry_holds_the_first_batch_in_spec_order_then_later_ideas():
                                   "turn_of_month", "turtle_soup", "quiet_pullback",
                                   "bond_spike_rebound", "dollar_drop",
                                   "sweep_reclaim_bos", "range_breakdown_close",
-                                  "range_breakdown_stop", "vix_curve_calm")
+                                  "range_breakdown_stop", "vix_curve_calm",
+                                  "shock_support_break_short", "shock_failed_bounce_short")
     assert list(IDEAS) == list(ideas.IDEA_MODULES)
     assert all(IDEAS[name].name == name for name in IDEAS)
 
@@ -25,7 +28,8 @@ def test_time_caps_are_the_spec_values():
         "high52w": 60, "uptrend_pullback": 10, "gap_volume": 20, "turn_of_month": 4,
         "turtle_soup": 10, "quiet_pullback": 10, "bond_spike_rebound": 10,
         "dollar_drop": 10, "sweep_reclaim_bos": 20, "range_breakdown_close": 20,
-        "range_breakdown_stop": 20, "vix_curve_calm": 10}
+        "range_breakdown_stop": 20, "vix_curve_calm": 10,
+        "shock_support_break_short": 10, "shock_failed_bounce_short": 10}
 
 
 def test_frozen_parameter_sets():
@@ -58,6 +62,17 @@ def test_frozen_parameter_sets():
     assert dict(IDEAS["vix_curve_calm"].params) == {
         "near": "^VIX", "far": "^VIX3M", "stress_on_above": 1.0,
         "stress_off_below": 0.95, "events": "calm (not stressed)", "side": "long"}
+    _assert_shock_params()
+
+
+def _assert_shock_params():
+    assert dict(IDEAS["shock_support_break_short"].params) == {
+        "breadth": "BREADTH_ATR1", "vix": "^VIX", "enter": 0.40, "release": 0.10,
+        "low_window": 20, "side": "short"}
+    assert dict(IDEAS["shock_failed_bounce_short"].params) == {
+        "breadth": "BREADTH_ATR1", "vix": "^VIX", "enter": 0.40, "release": 0.10,
+        "decline_atr": 1.0, "high_from": 10, "high_to": 2, "bounce_from": 5,
+        "bounce_to": 1, "side": "short"}
 
 
 def test_every_idea_cites_its_source():
@@ -77,16 +92,19 @@ def test_every_registered_idea_pins_its_direction_and_entry():
         "turn_of_month": "long", "turtle_soup": "long", "quiet_pullback": "long",
         "bond_spike_rebound": "long", "dollar_drop": "long", "sweep_reclaim_bos": "long",
         "range_breakdown_close": "short", "range_breakdown_stop": "short",
-        "vix_curve_calm": "long"}
+        "vix_curve_calm": "long", "shock_support_break_short": "short",
+        "shock_failed_bounce_short": "short"}
     assert {n: i.entry for n, i in IDEAS.items()} == {
         "high52w": "next_open", "uptrend_pullback": "next_open", "gap_volume": "next_open",
         "turn_of_month": "next_open", "turtle_soup": "next_open",
         "quiet_pullback": "next_open", "bond_spike_rebound": "next_open",
         "dollar_drop": "next_open", "sweep_reclaim_bos": "next_open",
         "range_breakdown_close": "next_open", "range_breakdown_stop": "level",
-        "vix_curve_calm": "next_open"}
+        "vix_curve_calm": "next_open", "shock_support_break_short": "next_open",
+        "shock_failed_bounce_short": "next_open"}
     breakdown = ("range_breakdown_close", "range_breakdown_stop")
-    older = {n: i for n, i in IDEAS.items() if n not in breakdown}
+    special = (*breakdown, "shock_support_break_short", "shock_failed_bounce_short")
+    older = {n: i for n, i in IDEAS.items() if n not in special}
     assert {n: (i.levels, i.control, i.family) for n, i in older.items()} == {
         n: (None, None, ()) for n in older}
     close = IDEAS["range_breakdown_close"]
@@ -131,14 +149,15 @@ def test_every_registered_idea_is_raced_under_one_pinned_shape():
         "turn_of_month": "fixed", "turtle_soup": "fixed", "quiet_pullback": "fixed",
         "bond_spike_rebound": "fixed", "dollar_drop": "fixed",
         "sweep_reclaim_bos": "fixed", "range_breakdown_close": "fixed",
-        "range_breakdown_stop": "fixed", "vix_curve_calm": "fixed"}
+        "range_breakdown_stop": "fixed", "vix_curve_calm": "fixed",
+        "shock_support_break_short": "fixed", "shock_failed_bounce_short": "fixed"}
 
 
 MURPHY = ("Murphy (2004), Intermarket Analysis — shock proxy, "
           "see v174 § What the two shots can and cannot say")
 
 
-def test_only_the_two_intermarket_ideas_read_context_series():
+def test_only_the_intermarket_and_shock_ideas_read_context_series():
     """v174 § 3: the six older ideas keep `events(df)`; the two new ones
     each name one context series and cite the scope section."""
     assert {n: i.context for n, i in IDEAS.items()} == {
@@ -146,7 +165,9 @@ def test_only_the_two_intermarket_ideas_read_context_series():
         "turtle_soup": (), "quiet_pullback": (),
         "bond_spike_rebound": ("TLT",), "dollar_drop": ("UUP",),
         "sweep_reclaim_bos": (), "range_breakdown_close": (), "range_breakdown_stop": (),
-        "vix_curve_calm": ("^VIX", "^VIX3M")}
+        "vix_curve_calm": ("^VIX", "^VIX3M"),
+        "shock_support_break_short": ("BREADTH_ATR1", "^VIX"),
+        "shock_failed_bounce_short": ("BREADTH_ATR1", "^VIX")}
     assert IDEAS["bond_spike_rebound"].source == MURPHY
     assert IDEAS["dollar_drop"].source == MURPHY
 
@@ -266,3 +287,21 @@ def test_load_refuses_a_module_with_an_unknown_direction(monkeypatch):
     bad = _fake_module(monkeypatch, "fake_bad_direction", CAP=10, DIRECTION="both")
     with pytest.raises(ValueError, match="direction"):
         ideas._load(bad)
+
+
+def test_the_shock_support_idea_pins_level_context_control_and_family():
+    idea = IDEAS["shock_support_break_short"]
+    assert idea.context_kind == "level"
+    assert idea.control is shock_support_break_short.control_events
+    assert idea.family == ("shock_support_break_short", "shock_failed_bounce_short")
+    assert idea.levels is None and idea.entry == "next_open"
+    assert {n for n, i in IDEAS.items() if i.context_kind != "z"} == {"shock_support_break_short",
+                                                                              "shock_failed_bounce_short"}
+
+
+def test_the_shock_failed_bounce_idea_pins_level_context_control_and_family():
+    idea = IDEAS["shock_failed_bounce_short"]
+    assert idea.context_kind == "level" and idea.context == ("BREADTH_ATR1", "^VIX")
+    assert idea.control is shock_failed_bounce_short.control_events
+    assert idea.family == IDEAS["shock_support_break_short"].family
+    assert idea.levels is None and idea.entry == "next_open"

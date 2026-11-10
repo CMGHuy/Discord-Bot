@@ -8,6 +8,9 @@ script's --data-source, else yfinance when BACKTEST_CACHE_DIR is set, else
 TRAINING_DATA_SOURCE (training_data.select). The switch changes where bars come
 from, never what may be re-run: a closed component re-measured on Alpaca bars
 is the same hypothesis (backtest-methodology.md § Closed pre-registrations).
+
+v211: BREADTH_ATR1 and ^VIX (screen.context.CONTEXT_ONLY_STEMS) live in the same
+directory for the screen's context loader and are never returned as tickers.
 """
 from __future__ import annotations
 
@@ -22,6 +25,7 @@ for _path in (ROOT, ROOT / "scripts" / "data"):
         sys.path.insert(0, str(_path))
 
 from fetch_backtest_data import add_data_source_arg, apply_data_source  # noqa: E402
+from swingbot.core.backtesting.screen.context import is_context_only  # noqa: E402
 from swingbot.core.marketdata import training_data  # noqa: E402
 from swingbot.core.marketdata.backtest_cache import cache_path  # noqa: E402
 
@@ -63,28 +67,38 @@ def load_frame(cache_dir, symbol: str) -> pd.DataFrame | None:
     return frame if len(frame) else None
 
 
+def _csv_paths(cache_dir) -> list[Path]:
+    """Sorted ticker CSVs of a directory: context-only stems are skipped."""
+    return [p for p in sorted(Path(cache_dir).glob("*.csv")) if not is_context_only(p.stem)]
+
+
+def _switch_tickers() -> list[str]:
+    return [t for t in training_data.available_tickers() if not is_context_only(t)]
+
+
 def listing(cache_dir) -> list[str]:
     if cache_dir is None:
-        return training_data.available_tickers()
-    return sorted(p.stem for p in Path(cache_dir).glob("*.csv"))
+        return _switch_tickers()
+    return [p.stem for p in _csv_paths(cache_dir)]
 
 
 def load_all(cache_dir, limit: int | None = None) -> dict:
     """{ticker: frame}. A directory is globbed and read exactly as the scripts
     did before v162 (first `limit` paths, empty files kept); the switch gives
-    the first `limit` training tickers that load."""
+    the first `limit` training tickers that load. Context-only stems are
+    filtered before the limit."""
     if cache_dir is not None:
-        paths = sorted(Path(cache_dir).glob("*.csv"))[:limit]
+        paths = _csv_paths(cache_dir)[:limit]
         return {p.stem: pd.read_csv(p, index_col="Date", parse_dates=True) for p in paths}
-    tickers = training_data.available_tickers()[:limit]
+    tickers = _switch_tickers()[:limit]
     return {t: f for t in tickers if (f := training_data.load_daily(t)) is not None}
 
 
 def cache_files(cache_dir) -> list[str]:
     """What a run.json records under cache_files: a resume on other data is refused."""
     if cache_dir is None:
-        return sorted(f"{ticker}.csv" for ticker in training_data.available_tickers())
-    return sorted(p.name for p in Path(cache_dir).glob("*.csv"))
+        return sorted(f"{ticker}.csv" for ticker in _switch_tickers())
+    return [p.name for p in _csv_paths(cache_dir)]
 
 
 def source_marker() -> dict:

@@ -36,7 +36,13 @@ BACKTEST_CACHE_DIR), the cache every backtest script reads, so a later
 longer serves (delisted names in `sp500_pit`) are listed in a coverage file
 next to the cache -- that list IS the residual survivorship bias.
     BACKTEST_CACHE_DIR=data/backtest_cache_ext python scripts/data/fetch_backtest_data.py \
-        --start 2010-01-01 --end 2026-09-25 --training-universe sp500_pit"""
+        --start 2010-01-01 --end 2026-09-25 --training-universe sp500_pit
+
+--vix-context (v211) is its own mode: it fetches daily ^VIX 2009-01-01 ->
+2019-12-31 into <cache-dir>/^VIX.csv (the screen's context loader reads
+<stem>.csv literally, so not cache_path's _VIX.csv) and refuses a calendar
+that differs from <cache-dir>/SPY.csv's sessions from 2009-06-01.
+    python scripts/data/fetch_backtest_data.py --vix-context --cache-dir data/backtest_cache_ext"""
 import argparse
 import datetime as dt
 import json
@@ -58,6 +64,7 @@ from swingbot.core.marketdata.backtest_cache import CACHE_DIR, cache_path, norma
 from swingbot.core.marketdata import training_data
 from swingbot import config
 from swingbot.core.backtesting.instrument import contract
+from swingbot.core.backtesting.screen import context as screen_context
 
 START, END = "2018-06-01", "2025-12-31"
 
@@ -151,6 +158,82 @@ def fetch(ticker: str, start: str, end: str) -> pd.DataFrame | None:
     if df is None or df.empty or len(df) < 260:
         return None
     return normalize_ohlcv(df)
+
+
+VIX_CONTEXT = "^VIX"
+VIX_START, VIX_END = "2009-01-01", "2019-12-31"
+_OHLC = ["Open", "High", "Low", "Close"]
+
+
+def vix_context_path(cache_dir: Path) -> Path:
+    """The loader reads <stem>.csv literally, so the caret stays."""
+    return Path(cache_dir) / f"{VIX_CONTEXT}.csv"
+
+
+def check_vix_sessions(vix_index: pd.DatetimeIndex, spy_index: pd.DatetimeIndex, *,
+                       start: str = screen_context.CONTEXT_START,
+                       end: str = VIX_END) -> None:
+    """Refuse a ^VIX calendar that differs from SPY's sessions in [start, end]."""
+    screen_context.check_raw_index(vix_index, VIX_CONTEXT)
+    lo, hi = pd.Timestamp(start), pd.Timestamp(end)
+    vix_slice = vix_index[(vix_index >= lo) & (vix_index <= hi)]
+    spy_slice = spy_index[(spy_index >= lo) & (spy_index <= hi)]
+    if len(spy_slice) == 0:
+        raise screen_context.ContextError(
+            f"{VIX_CONTEXT}: no SPY session between {start} and {end}")
+    screen_context.check_contiguous(vix_slice, spy_slice, VIX_CONTEXT)
+
+
+def _clean_vix_frame(frame: pd.DataFrame, end: str) -> pd.DataFrame:
+    frame = frame[_OHLC + ["Volume"]].dropna(subset=_OHLC).copy()
+    frame["Volume"] = frame["Volume"].fillna(0.0)
+    frame = frame[frame.index <= pd.Timestamp(end)]
+    frame.index.name = "Date"
+    return frame
+
+
+def fetch_vix_context(cache_dir: Path, *, start: str = VIX_START, end: str = VIX_END,
+                      fetcher=fetch) -> Path:
+    """Fetch ^VIX, check it against SPY's sessions, and only then write it."""
+    spy_path = Path(cache_dir) / "SPY.csv"
+    if not spy_path.exists():
+        raise screen_context.ContextError(
+            f"{VIX_CONTEXT}: {spy_path} is missing; the session check needs SPY")
+    spy = pd.read_csv(spy_path, parse_dates=["Date"], index_col="Date")
+    stop = (pd.Timestamp(end) + pd.Timedelta(days=1)).date().isoformat()  # yfinance end is exclusive
+    raw = fetcher(VIX_CONTEXT, start, stop)
+    if raw is None or raw.empty:
+        raise screen_context.ContextError(f"{VIX_CONTEXT}: the fetch returned no data")
+    frame = _clean_vix_frame(raw, end)
+    check_vix_sessions(frame.index, spy.index, end=end)
+    path = vix_context_path(cache_dir)
+    frame.to_csv(path)
+    return path
+
+
+def vix_context_main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="Fetch ^VIX context aligned to SPY sessions")
+    ap.add_argument("--vix-context", action="store_true", required=True)
+    ap.add_argument("--cache-dir", required=True)
+    ap.add_argument("--start", default=VIX_START)
+    ap.add_argument("--end", default=VIX_END)
+    ap.add_argument("--force", action="store_true")
+    args = ap.parse_args(argv)
+    target = vix_context_path(Path(args.cache_dir))
+    if target.exists() and not args.force:
+        print(f"refusing: {target} exists; pass --force to refetch "
+              "(a pinned context file is never refetched)")
+        return 2
+    try:
+        path = fetch_vix_context(Path(args.cache_dir), start=args.start, end=args.end,
+                                 fetcher=fetch)
+    except screen_context.ContextError as exc:
+        print(f"error: {exc}")
+        return 2
+    written = pd.read_csv(path, parse_dates=["Date"], index_col="Date")
+    print(f"+ {VIX_CONTEXT}: {len(written)} bars "
+          f"({written.index[0].date()} -> {written.index[-1].date()}) -> {path}")
+    return 0
 
 
 def training_tickers(watchlist: list[str], benchmark: str | None,
@@ -272,5 +355,11 @@ def main():
         write_coverage(args.training_universe, tickers, failed)
 
 
+def _entry(argv: list[str]) -> int | None:
+    if "--vix-context" in argv:
+        return vix_context_main(argv)
+    return main()
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(_entry(sys.argv[1:]))
