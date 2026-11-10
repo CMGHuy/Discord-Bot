@@ -25,6 +25,7 @@ from swingbot.core.marketdata.data import (
 from swingbot.core.marketdata import data_refresh, data_store, spot_metals, universe
 from swingbot.core.marketdata import daily_delta, yf_safe
 from swingbot.core.marketdata.history_splice import splice_cached_history
+from swingbot.core.marketdata.providers.base import PRICE_SOURCES
 from swingbot.core.marketdata.shared import counters
 from swingbot.core.marketdata.shared.kinds import Asker
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
@@ -41,7 +42,7 @@ log = logging.getLogger(__name__)
 #: the worker (the call itself, not process spawn). price_sources: which
 #: provider answered each ticker of the live-price batch ("none" = no price).
 _fetch_stats: dict = {"cold_fetch_s": [], "price_sources": {}}
-_PRICE_SOURCE_KEYS = ("alpaca", "yfinance", "yfinance-fallback", "none")
+_PRICE_SOURCE_KEYS = PRICE_SOURCES + ("none",)
 
 
 def reset_fetch_stats() -> None:

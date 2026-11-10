@@ -30,6 +30,7 @@ from swingbot.core.market.market_events import get_market_events
 from swingbot.core.market.reversal import evaluate_reversal, reversals_for_ticker
 from swingbot.core.market.session import market_today
 from swingbot.core.market.strategy import HORIZONS, LEGACY_HORIZONS, live_horizons
+from swingbot.core.marketdata.providers.base import SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_YF
 from swingbot.core.marketdata.data import get_currency_symbol
 from swingbot.core.marketdata import data_store, universe
 from swingbot.core.marketdata.watchlist import load_watchlist
@@ -60,7 +61,9 @@ from .requote import Requote
 
 log = logging.getLogger(__name__)
 
-_SOURCE_BUCKETS = ("alpaca", "yfinance", "yfinance-fallback")
+#: Daily frames only: the daily path has no freshness rule, so it never emits
+#: SOURCE_OLD_PRINT (v223) -- that tag is live-price only.
+_SOURCE_BUCKETS = (SOURCE_ALPACA, SOURCE_YF, SOURCE_FALLBACK)
 
 
 def _count_sources(frames) -> dict:

@@ -89,7 +89,8 @@ def test_live_prices_count_each_tickers_provider(monkeypatch):
     prices = fetch._fetch_live_prices(["AAPL", "SAP.DE", "MSFT"])
     assert prices == {"AAPL": 190.0, "SAP.DE": 50.0}
     assert fetch.fetch_stats()["price_sources"] == {
-        "alpaca": 1, "yfinance": 1, "yfinance-fallback": 0, "none": 1}
+        "alpaca": 1, "yfinance": 1, "yfinance-fallback": 0,
+        "yfinance-old-print": 0, "none": 1}
 
 
 def test_a_failed_chunk_counts_its_tickers_as_none(monkeypatch):
@@ -102,6 +103,8 @@ def test_a_failed_chunk_counts_its_tickers_as_none(monkeypatch):
     fetch.reset_fetch_stats()
     assert fetch._fetch_live_prices(["AAPL", "MSFT"]) == {}
     assert fetch.fetch_stats()["price_sources"]["none"] == 2
+    assert set(fetch.fetch_stats()["price_sources"]) == {
+        "alpaca", "yfinance", "yfinance-fallback", "yfinance-old-print", "none"}
 
 
 def test_live_price_worker_counts_travel_back_to_the_parent(monkeypatch):
@@ -117,3 +120,54 @@ def test_live_price_worker_counts_travel_back_to_the_parent(monkeypatch):
     assert fetch._fetch_live_prices(["AAPL"]) == {"AAPL": 190.0}
     assert merged == rows
     assert "__counts__" not in fetch.fetch_stats()["price_sources"]
+
+
+# --- v223: one live-price tag list -----------------------------------------------
+
+def test_price_source_keys_are_the_provider_tags_plus_none():
+    from swingbot.core.marketdata.providers.base import PRICE_SOURCES
+    from swingbot.core.scanning import fetch
+    assert PRICE_SOURCES == ("alpaca", "yfinance", "yfinance-fallback", "yfinance-old-print")
+    assert fetch._PRICE_SOURCE_KEYS == PRICE_SOURCES + ("none",)
+
+
+def test_an_old_print_answered_by_yfinance_gets_its_own_bucket(monkeypatch):
+    from swingbot.core.marketdata.providers import router
+    from swingbot.core.scanning import fetch
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
+    monkeypatch.setattr(fetch, "get_current_price_batch",
+                        lambda tickers: {"AAPL": 190.0, "MSFT": 410.0, "NVDA": 120.0})
+    monkeypatch.setattr(router, "last_source", lambda t: {
+        "AAPL": "alpaca", "MSFT": "yfinance-old-print", "NVDA": "yfinance-fallback"}.get(t))
+    fetch.reset_fetch_stats()
+    fetch._fetch_live_prices(["AAPL", "MSFT", "NVDA"])
+    assert fetch.fetch_stats()["price_sources"] == {
+        "alpaca": 1, "yfinance": 0, "yfinance-fallback": 1,
+        "yfinance-old-print": 1, "none": 0}
+
+
+def test_an_old_print_yfinance_also_failed_for_lands_in_none(monkeypatch):
+    """Spec item 7: no price at all -> "none" (empty_rate covers it), never
+    an old print."""
+    from swingbot.core.marketdata.providers import router
+    from swingbot.core.scanning import fetch
+    monkeypatch.setattr(fetch, "ProcessPoolExecutor", _InlinePool)
+    monkeypatch.setattr(fetch, "get_current_price_batch", lambda tickers: {"AAPL": 190.0})
+    monkeypatch.setattr(router, "last_source", lambda t: {
+        "AAPL": "alpaca", "MSFT": "yfinance-old-print"}.get(t))
+    fetch.reset_fetch_stats()
+    assert fetch._fetch_live_prices(["AAPL", "MSFT"]) == {"AAPL": 190.0}
+    counts = fetch.fetch_stats()["price_sources"]
+    assert counts["none"] == 1 and counts["yfinance-old-print"] == 0
+
+
+def test_daily_buckets_never_include_the_old_print_tag():
+    """The daily path (_merge, daily_delta) has no freshness rule and never
+    emits yfinance-old-print; its buckets are built from the same constants."""
+    from swingbot.core.marketdata.providers.base import (
+        SOURCE_ALPACA, SOURCE_FALLBACK, SOURCE_OLD_PRINT, SOURCE_YF)
+    from swingbot.core.scanning.scan_run import _SOURCE_BUCKETS, _count_sources
+    assert _SOURCE_BUCKETS == (SOURCE_ALPACA, SOURCE_YF, SOURCE_FALLBACK)
+    counts = _count_sources({"AAPL": _frame("alpaca"), "X": _frame("yfinance-old-print")})
+    assert SOURCE_OLD_PRINT not in counts
+    assert counts == {"alpaca": 1, "yfinance": 0, "yfinance-fallback": 0, "cache": 1}
