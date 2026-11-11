@@ -1,11 +1,12 @@
 import { DestroyRef, Injectable, Signal, computed, effect, inject, signal, untracked } from '@angular/core';
 
 import { ApiClient } from '../api/api-client';
-import { EventStream } from '../api/event-stream';
+import { EventStream, MARKET_DATA_MIN_INTERVAL_MS } from '../api/event-stream';
 import { MarketStatus, MarketUpdates, QuoteUpdate, RowQuoteFields, SnapshotUpdate } from '../api/models';
 
-/** How often status is re-read when no event arrives: the only thing that
- *  notices a dead refresher, which raises no events. */
+/** How often status is re-read when no read went out in that time: the only
+ *  thing that notices a dead refresher, which raises no events. A tab that
+ *  synced within the last STATUS_POLL_MS skips the tick (v218). */
 export const STATUS_POLL_MS = 60_000;
 
 /** A locally-set refresh mark never outlives the server's mark timeout. */
@@ -46,9 +47,11 @@ export function overlayQuote<T extends RowQuoteFields>(row: T, update: QuoteUpda
 }
 
 /**
- * v201: the one place live prices live. `/market/updates` is read on every
- * `market` event (and at start, on a stream going live, and on a 60 s poll),
- * so a price reaches every table that shows it without each page refetching.
+ * v201: the one place live prices live. `/market/updates` is read at start,
+ * on a stream going live, on `market` events through the shared 30 s
+ * throttle (v218: one leading and one trailing read per burst), and on a 60 s
+ * poll that fires only when no read went out in the last 60 s -- so a price
+ * reaches every table that shows it without each page refetching.
  */
 @Injectable({ providedIn: 'root' })
 export class LiveValuesStore {
@@ -58,6 +61,8 @@ export class LiveValuesStore {
   private cursor: string | null = null;
   private inFlight = false;
   private again = false;
+  /** When this tab last sent `/market/updates` (ms since epoch); the poll defers to it. */
+  private lastSyncAt = -Infinity;
   private readonly memo = new Map<string, Signal<QuoteUpdate | null>>();
   private readonly snapshotMemo = new Map<string, Signal<SnapshotUpdate | null>>();
 
@@ -133,6 +138,7 @@ export class LiveValuesStore {
       return;
     }
     this.inFlight = true;
+    this.lastSyncAt = Date.now();
     this.api.marketUpdates(this.cursor).subscribe({
       next: (reply) => this.merge(reply),
       error: () => this.finish(),
@@ -190,7 +196,12 @@ export class LiveValuesStore {
   }
 
   private watchMarketEvents(): void {
-    const changes = this.events.changes('market');
+    // v218: the refresher raises `market` after every cycle, and an
+    // unthrottled read per event was the idle tab's biggest single source
+    // (12 of 33 requests in 120 s, v206 "Plan 2 after"). The shared throttle
+    // keeps the first event's read immediate and folds the rest of a burst
+    // into one trailing read, so the burst's last price still lands.
+    const changes = this.events.changes('market', { minIntervalMs: MARKET_DATA_MIN_INTERVAL_MS });
     let seen = untracked(changes);
     effect(() => {
       const n = changes();
@@ -211,9 +222,14 @@ export class LiveValuesStore {
   }
 
   private startPoll(destroyRef: DestroyRef): void {
-    const timer = setInterval(() => {
-      if (typeof document === 'undefined' || !document.hidden) this.sync();
-    }, STATUS_POLL_MS);
+    const timer = setInterval(() => this.pollIfQuiet(), STATUS_POLL_MS);
     destroyRef.onDestroy(() => clearInterval(timer));
+  }
+
+  /** The poll covers silence only: a hidden tab, or a tab that read within
+   *  the last STATUS_POLL_MS, has nothing to catch up on. */
+  private pollIfQuiet(): void {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (Date.now() - this.lastSyncAt >= STATUS_POLL_MS) this.sync();
   }
 }

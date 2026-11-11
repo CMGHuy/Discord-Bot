@@ -4,13 +4,24 @@ import { Observable, Subject, of, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiClient } from '../api/api-client';
-import { EventStream } from '../api/event-stream';
+import { EventStream, MARKET_DATA_MIN_INTERVAL_MS } from '../api/event-stream';
 import { MarketStatus, MarketUpdates, QuoteUpdate, RowQuoteFields, SnapshotUpdate } from '../api/models';
 import { LOCAL_REFRESH_TIMEOUT_MS, LiveValuesStore, STATUS_POLL_MS, overlayQuote } from './live-values.store';
 
+interface FakeThrottle {
+  readonly name: string;
+  readonly interval: number;
+  readonly out: WritableSignal<number>;
+  last: number;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
 class FakeEventStream {
   readonly state = signal<'connecting' | 'live' | 'degraded'>('connecting');
+  /** Every `changes()` call the store made, with its interval or null. */
+  readonly requested: Array<{ name: string; minIntervalMs: number | null }> = [];
   private readonly counters = new Map<string, WritableSignal<number>>();
+  private readonly throttles: FakeThrottle[] = [];
 
   private counterFor(name: string): WritableSignal<number> {
     let counter = this.counters.get(name);
@@ -21,12 +32,34 @@ class FakeEventStream {
     return counter;
   }
 
-  changes(name: string): Signal<number> {
-    return this.counterFor(name).asReadonly();
+  changes(name: string, options?: { minIntervalMs: number }): Signal<number> {
+    this.requested.push({ name, minIntervalMs: options?.minIntervalMs ?? null });
+    if (!options) return this.counterFor(name).asReadonly();
+    const throttle: FakeThrottle = { name, interval: options.minIntervalMs, out: signal(0), last: -Infinity, timer: null };
+    this.throttles.push(throttle);
+    return throttle.out.asReadonly();
   }
 
+  /** Same rule as EventStream.pass(): the leading bump at once, the rest of
+   *  a burst as one trailing bump when the interval has run out. */
   raise(name: string): void {
     this.counterFor(name).update((n) => n + 1);
+    for (const throttle of this.throttles) {
+      if (throttle.name !== name) continue;
+      const wait = throttle.last + throttle.interval - Date.now();
+      if (wait <= 0) {
+        if (throttle.timer !== null) clearTimeout(throttle.timer);
+        this.release(throttle);
+      } else if (throttle.timer === null) {
+        throttle.timer = setTimeout(() => this.release(throttle), wait);
+      }
+    }
+  }
+
+  private release(throttle: FakeThrottle): void {
+    throttle.timer = null;
+    throttle.last = Date.now();
+    throttle.out.update((n) => n + 1);
   }
 }
 
@@ -54,9 +87,23 @@ describe('LiveValuesStore (v201)', () => {
     return store;
   }
 
-  /** Raise one market event and let the store's effect run. */
+  /** One market event, a full throttle window after the last: each call is
+   *  a separate, spaced event that the throttle lets through. */
   function raiseMarket(): void {
+    vi.advanceTimersByTime(MARKET_DATA_MIN_INTERVAL_MS);
+    TestBed.tick();
+    raiseMarketNow();
+  }
+
+  /** One market event at the current fake time, no spacing. */
+  function raiseMarketNow(): void {
     events.raise('market');
+    TestBed.tick();
+  }
+
+  /** Move fake time on and let any trailing throttle bump reach the effect. */
+  function advance(ms: number): void {
+    vi.advanceTimersByTime(ms);
     TestBed.tick();
   }
 
@@ -85,7 +132,7 @@ describe('LiveValuesStore (v201)', () => {
     expect(api.marketUpdates.mock.calls.map((c) => c[0])).toEqual([null, 'c1']);
   });
 
-  it('refetches on every market event', () => {
+  it('refetches on each market event spaced past the throttle window', () => {
     make([of(reply('c1'))]);
     raiseMarket();
     raiseMarket();
@@ -261,6 +308,73 @@ describe('LiveValuesStore (v201)', () => {
     const store = make([of(reply('c1', [q('MSFT', 410, B)]))]);
     const rows = store.patchRows([{ sym: 'msft', current_price: 400, price_as_of: A }], (r) => r.sym);
     expect(rows[0].current_price).toBe(410);
+  });
+
+  /* -- v218: the idle tab ---------------------------------------------- */
+
+  it('asks for market events only through the shared 30 s throttle', () => {
+    make([of(reply('c0'))]);
+    const market = events.requested.filter((r) => r.name === 'market');
+    expect(market).toEqual([{ name: 'market', minIntervalMs: MARKET_DATA_MIN_INTERVAL_MS }]);
+  });
+
+  it('a burst of five market events in 30 s sends one leading and one trailing request', () => {
+    make([of(reply('c0'))]);
+    expect(api.marketUpdates).toHaveBeenCalledTimes(1);
+    for (const gapMs of [1_000, 4_000, 5_000, 5_000, 5_000]) {
+      advance(gapMs);
+      raiseMarketNow();
+    }
+    // t = 20 s: the start-up sync and the leading request only.
+    expect(api.marketUpdates).toHaveBeenCalledTimes(2);
+    advance(11_000);
+    // t = 31 s: the trailing request, 30 s after the leading one.
+    expect(api.marketUpdates).toHaveBeenCalledTimes(3);
+    advance(29_000);
+    // t = 60 s: the poll finds a sync 29 s old and stays quiet.
+    expect(api.marketUpdates).toHaveBeenCalledTimes(3);
+  });
+
+  it('a market event at 50 s keeps the 60 s poll from firing', () => {
+    make([of(reply('c0'))]);
+    advance(50_000);
+    raiseMarketNow();
+    expect(api.marketUpdates).toHaveBeenCalledTimes(2);
+    advance(10_000);
+    expect(api.marketUpdates).toHaveBeenCalledTimes(2);
+    advance(STATUS_POLL_MS);
+    // t = 120 s: the last sync is 70 s old, so the poll reads.
+    expect(api.marketUpdates).toHaveBeenCalledTimes(3);
+  });
+
+  it('with no events the poll still fires every 60 s (a dead refresher raises none)', () => {
+    make([of(reply('c0'))]);
+    advance(STATUS_POLL_MS);
+    advance(STATUS_POLL_MS);
+    advance(STATUS_POLL_MS);
+    expect(api.marketUpdates).toHaveBeenCalledTimes(4);
+  });
+
+  it('a hidden tab skips the poll', () => {
+    make([of(reply('c0'))]);
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    try {
+      advance(STATUS_POLL_MS);
+      expect(api.marketUpdates).toHaveBeenCalledTimes(1);
+    } finally {
+      delete (document as unknown as { hidden?: boolean }).hidden;
+    }
+    advance(STATUS_POLL_MS);
+    expect(api.marketUpdates).toHaveBeenCalledTimes(2);
+  });
+
+  it('a stream going live still syncs at once, inside the throttle window', () => {
+    make([of(reply('c0'))]);
+    raiseMarketNow();
+    expect(api.marketUpdates).toHaveBeenCalledTimes(2);
+    events.state.set('live');
+    TestBed.tick();
+    expect(api.marketUpdates).toHaveBeenCalledTimes(3);
   });
 });
 
