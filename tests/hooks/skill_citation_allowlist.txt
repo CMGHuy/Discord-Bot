@@ -11,6 +11,7 @@
 
 # --- uncommitted by design: the WSL-key SSH wrapper never enters git (root CLAUDE.md)
 prod-inspector|scripts/ops/ssh-hetzner.sh|uncommitted by design; the only way to reach the VM
+prod-incident|scripts/ops/ssh-hetzner.sh|uncommitted by design; the only way to reach the VM
 backup-pull|scripts/ops/ssh-hetzner.sh|uncommitted by design; the only way to reach the VM
 replicate-prod-db|scripts/ops/ssh-hetzner.sh|uncommitted by design; the only way to reach the VM
 stable-snapshot|scripts/ops/ssh-hetzner.sh|uncommitted by design; the only way to reach the VM

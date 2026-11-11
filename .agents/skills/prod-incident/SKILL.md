@@ -15,14 +15,14 @@ description: "Use when the partner reports an issue, bug, error, outage or anyth
 
 ## Step 2 — Pin down the report
 
-What broke, on which surface (bot / admin / refresher / db / tunnel), since
-when, always or sometimes. Ask with `AskUserQuestion` only if the report
-leaves the surface ambiguous; otherwise start.
+What broke, on which surface (bot / admin / refresher / db / tunnel), since when.
+Ask with `AskUserQuestion` only if the surface is ambiguous; otherwise start.
 
 ## Step 3 — Look, read-only (standing permission, no asking)
 
 Every command goes through `bash scripts/ops/ssh-hetzner.sh "<cmd>"`, never a
-raw `ssh`/`scp`. Hand log volume to the `prod-inspector` agent, one question
+raw `ssh`/`scp`; remote `$(...)`/`$VAR` expand locally, so pipe a script
+on stdin. Hand log volume to the `prod-inspector` agent, one question
 per dispatch, so raw logs stay out of this context.
 
 - **Status:** `cd /opt/swing-bot && docker compose ps`, `df -h`, `uptime`.
@@ -36,12 +36,10 @@ per dispatch, so raw logs stay out of this context.
   `.env`'s `ADMIN_USERNAME`/`ADMIN_PASSWORD` loaded inside the script, never
   printed. Before any probe, check for orphaned probe/Chromium processes on
   this machine — they have overloaded prod before.
-- Remote `$(...)`/`$VAR` expand locally; pipe a script on stdin instead.
 
 ## Step 4 — Reproduce locally
 
-`/replicate-prod-db`, then a failing test that shows the bug. A fix with no
-red test first is a guess.
+`/replicate-prod-db`, then a failing test that shows the bug — no red test, no fix.
 
 ## Step 5 — Fix through the normal path
 
@@ -49,10 +47,11 @@ red test first is a guess.
 |---|---|
 | Code bug | Fix + test on a branch/worktree, merge, push; CI deploys. Watch the run to green (`working-conventions.md` § Pipeline watch). |
 | Config value | `python3 scripts/ops/env_set.py KEY value` on the VM (never `sed -i`), then mirror into `swingbot/config.py`/docs. |
-| Bleeding now, fix not ready | Roll back per DEPLOY_HETZNER.md § "Rolling back" (or `scripts/ops/rollback_to.sh`); ask the partner first. |
+| Bleeding now, fix not ready | Roll back as the deploy doc's "Rolling back" section says (or `scripts/ops/rollback_to.sh '<UTC time>'` — a timestamp, not an image tag; `--dry-run` first); ask the partner first. |
 | Hand edit on the VM | Only under the `mirror-prod` skill; mirrored commit before done. |
 
-Every write to the VM — restart, `.env`, rollback — goes through `mirror-prod`.
+Every write to the VM — a restart included — needs the partner's go-ahead,
+saves the evidence logs first, and goes through `mirror-prod`.
 
 ## Step 6 — Verify on production and report
 
@@ -67,6 +66,8 @@ evidence it is live, and anything historical that was not this bug.
 | "`docker logs` shows no errors" | A deploy recreated the container; the history is in `/opt/swing-bot/logs/`. |
 | "this error is all over the logs" | Check it fires in the current file, not only rotated ones. |
 | "quick patch on the box, mirror later" | Next deploy erases it; `mirror-prod` gate applies. |
+| "restart now, find the cause later" | A restart erases the evidence and hides the bug; ask first, save logs first. |
+| "no alerts, so the bot is broken" | Quiet days are usually the 2% cap: grep `plan rejected (` before calling it a bug. |
 | "the dev machine shows the same thing" | Production is only the Hetzner VM; the local journal is fixture data. |
 
 ## Trigger table
