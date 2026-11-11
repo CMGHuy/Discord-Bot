@@ -75,18 +75,25 @@ def test_kpis(report):
     assert (k["median_tp1_exit_sessions"], k["tp1_exit_n"]) == (2.0, 5)
 
 
-def test_outcome_buckets_cover_every_partial_once(report):
-    rows = {row["bucket"]: row for row in report["outcomes"]}
-    assert list(rows) == list(pa.OUTCOME_BUCKETS)               # no "other" row when empty
-    assert {b: rows[b]["n"] for b in rows} == {"tp2": 1, "trail": 1, "floor": 1, "stall": 0,
-                                               "time": 0, "manual": 1, "no_tp2": 1, "open": 1}
-    assert rows["floor"]["avg_runner_r"] == 1.34 and rows["open"]["avg_runner_r"] is None
-    assert rows["manual"]["avg_runner_r"] == 2.5 and rows["tp2"]["share"] == 16.7
+def test_runner_endings_on_the_book(report):
+    block = report["runner_endings"]
+    assert (block["n"], block["decidable"]) == (4, 3)              # A, B, C, D; D is manual
+    assert block["excluded"] == {"no_tp2": 1, "runner_r_unavailable": 0, "manual_close": 1,
+                                 "unpathed": 0, "no_tp2_distance": 0}
+    assert sum(v for k, v in block["excluded"].items() if k != "no_tp2") == \
+        block["n"] - block["decidable"]
+    assert [row["ending"] for row in block["rows"]] == ["tp2", "trail", "floor", "other", "giveback"]
+    assert [card["ending"] for card in block["cards"]] == ["tp2", "floor", "giveback", "trail"]
+    assert block["cards"][2] == {"ending": "giveback", "n": 0, "denominator": 3, "share": 0.0,
+                                 "lo": 0.0, "hi": 56.2, "thin": True}
+    assert block["cards"][0] == {"ending": "tp2", "n": 1, "denominator": 4, "share": 25.0,
+                                 "lo": 4.6, "hi": 69.9, "thin": True}
 
 
-def test_an_unknown_close_reason_is_reported_not_dropped():
-    rows = pa.outcomes([pa.partial_trade(_trade("X", reason="acceptance", runner_r=1.0))])
-    assert rows[-1] == {"bucket": "other", "n": 1, "share": 100.0, "avg_runner_r": 1.0}
+def test_an_unknown_close_reason_lands_in_other_not_dropped():
+    block = pa.runner_endings([pa.partial_trade(_trade("X", reason="acceptance", runner_r=1.0))])
+    other = {row["ending"]: row for row in block["rows"]}["other"]
+    assert (other["n"], other["share"], other["avg_r"]) == (1, 100.0, 1.0)
 
 
 def test_actual_exp_r_ties_out_to_r_multiple(report):
@@ -203,12 +210,13 @@ def test_a_bulk_cleared_runner_lands_in_the_manual_bucket():
     assert pa.outcome_bucket(plan) == "manual"
 
 
-def test_bulk_and_single_manual_closes_share_one_bucket_row():
+def test_bulk_and_single_manual_closes_share_the_other_row():
     book = [*_book(), _trade("Z", reason="manual_bulk")]
-    rows = {row["bucket"]: row for row in pa.build_report(book, manual_exits={**MANUAL, "Z": 107.5})["outcomes"]}
-    assert rows["manual"]["n"] == 2
-    assert "other" not in rows
-    assert rows["manual"]["avg_runner_r"] == pytest.approx((2.5 + 1.5) / 2)
+    block = pa.build_report(book, manual_exits={**MANUAL, "Z": 107.5})["runner_endings"]
+    other = {row["ending"]: row for row in block["rows"]}["other"]
+    assert other["n"] == 2 and other["path_n"] == 0
+    assert other["avg_r"] == pytest.approx((2.5 + 1.5) / 2)
+    assert block["excluded"]["manual_close"] == 2
 
 
 # -- v219: tp2_r, typed pathed, decidable, progress --------------------------
@@ -431,3 +439,82 @@ def test_path_exclusions_count_the_first_failing_reason():
     assert counts == {"runner_r_unavailable": 1, "manual_close": 1, "unpathed": 2,
                       "no_tp2_distance": 1}
     assert sum(counts.values()) == len(runners) - sum(t.decidable for t in runners)
+
+
+# -- v219: odds, cards, the runner_endings block -----------------------------
+
+def _split(bar):
+    return [(s["ending"], s["n"], s["share"], s["lo"], s["hi"]) for s in bar["split"]]
+
+
+def test_odds_on_the_book(report):
+    odds = report["runner_endings"]["odds"]
+    assert [(bar["level"], bar["n"], bar["thin"]) for bar in odds] == \
+        [(25, 3, True), (50, 2, True), (75, 2, True)]
+    assert _split(odds[0]) == [("tp2", 1, 33.3, 6.1, 79.2), ("trail", 1, 33.3, 6.1, 79.2),
+                               ("floor", 1, 33.3, 6.1, 79.2), ("other", 0, 0.0, 0.0, 56.2)]
+    half = [("tp2", 1, 50.0, 9.5, 90.5), ("trail", 1, 50.0, 9.5, 90.5),
+            ("floor", 0, 0.0, 0.0, 65.8), ("other", 0, 0.0, 0.0, 65.8)]
+    assert _split(odds[1]) == half and _split(odds[2]) == half    # C's progress is 0.8
+
+
+def test_an_odds_group_includes_a_runner_exactly_at_the_level():
+    plans = [_trade("H", reason="tp1_runner_be", runner_r=1.34, path=_path(3.0, 2.5))]  # progress 0.5
+    odds = pa.runner_odds(_runners(plans))
+    assert [bar["n"] for bar in odds] == [1, 1, 0]
+    assert odds[2]["split"][0] == {"ending": "tp2", "n": 0, "share": None, "lo": None, "hi": None}
+
+
+def test_an_odds_bar_of_ten_is_not_thin():
+    plans = [_trade(f"T{i}", reason="tp1_runner_tp2", runner_r=4.0, path=_path(4.2, 4.0))
+             for i in range(10)]
+    odds = pa.runner_odds(_runners(plans))
+    assert [(bar["n"], bar["thin"]) for bar in odds] == [(10, False)] * 3
+
+
+def test_cards_are_the_matching_rows_share_fields(report):
+    block = report["runner_endings"]
+    rows = {row["ending"]: row for row in block["rows"]}
+    keys = ("ending", "n", "denominator", "share", "lo", "hi", "thin")
+    for card in block["cards"]:
+        assert card == {key: rows[card["ending"]][key] for key in keys}
+
+
+def test_the_outcomes_key_and_function_are_gone(report):
+    assert "outcomes" not in report and "runner_endings" in report
+    assert not hasattr(pa, "outcomes") and not hasattr(pa, "OUTCOME_BUCKETS")
+
+
+def test_malformed_stamps_never_fail_the_report():
+    book = [
+        _trade("A", reason="tp1_runner_tp2", runner_r=4.0, path=_path(4.2, 4.0)),
+        _trade("N", reason="tp1_runner_trail", runner_r=3.0, path={"mfe_r": None, "ladder": {}}),
+        _trade("S", reason="tp1_runner_trail", runner_r=3.0, path={"mfe_r": "3.6", "ladder": {}}),
+        _trade("L", reason="tp1_runner_be", runner_r=1.34, path={"mfe_r": 2.6, "ladder": []}),
+        _trade("K", reason="tp1_runner_be", runner_r=1.34, path="garbage"),
+        _trade("B", reason="tp1_runner_trail", runner_r=3.0, path={"mfe_r": True, "ladder": {}}),
+    ]
+    report = pa.build_report(book)
+    block = report["runner_endings"]
+    assert (block["n"], block["decidable"]) == (6, 1)
+    assert block["excluded"]["unpathed"] == 5
+    assert report["counterfactuals"]["giveback"] == [0.2]
+    assert report["counterfactuals"]["giveback_excluded"] == 5
+    assert [row["n"] for row in report["counterfactuals"]["ladder"]] == [1] * 5
+
+
+def test_all_runners_open_is_a_block_of_measured_zeros():
+    report = pa.build_report([_trade("E", status=PlanStatus.PARTIAL)])
+    block = report["runner_endings"]
+    assert report["population"]["partial"] == 1
+    assert (block["n"], block["decidable"]) == (0, 0)
+    assert all(card["share"] is None and card["n"] == 0 for card in block["cards"])
+    assert all(bar["n"] == 0 and bar["thin"] for bar in block["odds"])
+
+
+def test_empty_scope_runner_endings():
+    block = pa.build_report([])["runner_endings"]
+    assert block["excluded"] == {"no_tp2": 0, "runner_r_unavailable": 0, "manual_close": 0,
+                                 "unpathed": 0, "no_tp2_distance": 0}
+    assert [row["denominator"] for row in block["rows"]] == [0] * 5
+    assert [bar["level"] for bar in block["odds"]] == [25, 50, 75]

@@ -30,9 +30,10 @@ GIVEBACK_PROGRESS = 0.5
 #: v219 Runner endings: the four scorecard endings, which sum to the section.
 ENDING_ROWS = ("tp2", "trail", "floor", "other")
 _ENDING_OF_BUCKET = {"tp2": "tp2", "trail": "trail", "floor": "floor"}
-#: Every partial trade lands in exactly one; "other" (an unknown close
-#: reason) is reported only when non-empty, never dropped.
-OUTCOME_BUCKETS = ("tp2", "trail", "floor", "stall", "time", "manual", "no_tp2", "open")
+#: Card order (the partner's layout C) and the odds chart's progress levels (%).
+ENDING_CARDS = ("tp2", "floor", "giveback", "trail")
+ODDS_LEVELS = (25, 50, 75)
+_SHARE_KEYS = ("ending", "n", "denominator", "share", "lo", "hi", "thin")
 BREAKDOWN_DIMENSIONS = ("strategy", "horizon", "side", "month")
 FUNNEL_STAGES = ("filled", "tp1", "runner_closed", "tp2")
 _REASON_BUCKET = {
@@ -247,17 +248,6 @@ def funnel(plans: list, trades: list[PartialTrade]) -> list[dict]:
     return [{"stage": stage, "n": n} for stage, n in zip(FUNNEL_STAGES, counts)]
 
 
-def outcomes(trades: list[PartialTrade]) -> list[dict]:
-    rows = []
-    for bucket in (*OUTCOME_BUCKETS, "other"):
-        group = [t for t in trades if t.bucket == bucket]
-        if bucket == "other" and not group:
-            continue
-        rows.append({"bucket": bucket, "n": len(group), "share": _rate(len(group), len(trades)),
-                     "avg_runner_r": _mean(t.r_runner for t in group)})
-    return rows
-
-
 def _ladder_row(pathed: list[PartialTrade], level: float) -> dict:
     key = f"{level:.1f}"
     hits = [bool(t.runner_path["ladder"].get(key)) for t in pathed]
@@ -403,6 +393,46 @@ def path_exclusions(runners: list[PartialTrade]) -> dict:
     return counts
 
 
+def ending_cards(rows: list[dict]) -> list[dict]:
+    """The four cards: each is its scorecard row's Share fields, so card and
+    row cannot disagree."""
+    by_ending = {row["ending"]: row for row in rows}
+    return [{key: by_ending[ending][key] for key in _SHARE_KEYS} for ending in ENDING_CARDS]
+
+
+def _odds_bar(decidable: list[PartialTrade], level: int) -> dict:
+    group = [t for t in decidable if t.progress >= level / 100]
+    split = []
+    for ending in ENDING_ROWS:
+        k = sum(1 for t in group if ending_of(t) == ending)
+        split.append({"ending": ending, "n": k, **_share(k, len(group))})
+    return {"level": level, "n": len(group), "thin": len(group) < THIN_N, "split": split}
+
+
+def runner_odds(runners: list[PartialTrade]) -> list[dict]:
+    """Of the decidable runners that got at least L% of the way from TP1 to
+    TP2, how they ended. Descriptive conditionals on the live book, not rules."""
+    decidable = [t for t in runners if t.decidable]
+    return [_odds_bar(decidable, level) for level in ODDS_LEVELS]
+
+
+def runner_endings(trades: list[PartialTrade]) -> dict:
+    """The Runner endings section: cards, scorecard rows, odds and every
+    exclusion, over closed runners of plans with a TP2. Never raises on a
+    malformed runner_path (`PartialTrade.pathed` is type-checked)."""
+    runners = _section(trades)
+    rows = ending_rows(runners)
+    return {
+        "n": len(runners),
+        "decidable": sum(1 for t in runners if t.decidable),
+        "cards": ending_cards(rows),
+        "rows": rows,
+        "odds": runner_odds(runners),
+        "excluded": {"no_tp2": sum(1 for t in trades if t.bucket == "no_tp2"),
+                     **path_exclusions(runners)},
+    }
+
+
 def _quantiles(points: list[int]) -> dict:
     if not points:
         return {"p25": None, "median": None, "p75": None, "points": []}
@@ -461,7 +491,7 @@ def build_report(plans: list, manual_exits: dict | None = None) -> dict:
     return {
         "kpis": kpis(trades, decided),
         "funnel": funnel(plans, trades),
-        "outcomes": outcomes(trades),
+        "runner_endings": runner_endings(trades),
         "counterfactuals": counterfactuals(trades),
         "holds": holds(trades),
         "breakdowns": {dim: breakdown(dim, trades, plans) for dim in BREAKDOWN_DIMENSIONS},
