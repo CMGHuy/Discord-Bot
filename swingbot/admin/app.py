@@ -43,6 +43,7 @@ from functools import wraps
 from flask import Flask, Response, g, redirect, request, session, url_for
 
 from swingbot import config
+from swingbot.core.infra import store_snapshot
 from swingbot.core.scanning import progress_store
 from swingbot.core.scanning.engine import is_scan_running
 # `docker_sdk` is re-exported: api_v1/system.py imports it from here rather
@@ -295,6 +296,9 @@ request_timing.install(app)
 # v218: the admin snapshot's own LISTEN connection (trades, journal), started on
 # the first non-testing request so its thread lives in the gunicorn worker.
 snapshot_listener.install(app)
+# v218: read_memo's per-request loads of trades, plans and journal notes read
+# through the cross-request snapshot, served only while it can vouch for it.
+store_snapshot.install()
 
 
 # ---------------------------------------------------------------------------

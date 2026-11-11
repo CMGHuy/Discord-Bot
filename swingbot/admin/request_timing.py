@@ -22,6 +22,7 @@ from sqlalchemy import event
 from swingbot import config
 from swingbot.core.db import engine as db_engine
 from swingbot.core.infra.swallowed import swallowed
+from swingbot.core.infra import store_snapshot
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +102,7 @@ def install(app: Flask) -> None:
 def _begin() -> None:
     if request.path.startswith(API_PREFIX):
         setattr(g, _G_KEY, (time.perf_counter(), start_request()))
+        store_snapshot.begin_request()       # v218: one version read per request
 
 
 def _finish(response):
@@ -126,6 +128,7 @@ def _teardown(_exc) -> None:
     state = g.pop(_G_KEY, None)
     if state is None:
         return
+    store_snapshot.end_request()
     try:
         end_request(state[1])
     except ValueError as exc:
