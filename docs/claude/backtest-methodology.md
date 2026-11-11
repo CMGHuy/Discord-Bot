@@ -137,6 +137,30 @@ interpreting any backtest, grid, or validation result.
   regime, sector) is not exempt. Its spec says
   `exempt (post-signal)` and must clear Stage −1 reachability on the bot's
   own replay before any shot; the funnel's clauses are otherwise unchanged.
+  **Avoid mode (v214, partner 2026-11-06).** An idea module may declare
+  `MODE = "avoid"` (default `"edge"`, part of the frozen definition like
+  `RACE`, pinned in `test_ideas_registry.py`). It asks whether the event's
+  bars do **worse** than chance: the evidence a veto filter needs. A sign
+  flip is not enough. Four closed screens (`high52w`, `gap_volume`,
+  `sweep_reclaim_bos`, short `range_breakdown_close`) sit at ΔExpR ≤ −0.10
+  with p near 1, partly because 2010–2019 lifts the long null and sinks
+  shorts. So an avoid idea also faces a **control arm**: up to K = 20 bars
+  per event from the same ticker, month and trend state where the idea's
+  `control_condition` holds (the state exists, but differs in the one
+  tested way), floor `null.MIN_CANDIDATES` = 5, seed
+  `null_seed(idea + ":control", ticker)`. Every bar where the idea's
+  condition holds leaves both the null and the control pool.
+  `SCREEN-AVOID-PASS` needs all six: mean d ≤ −0.10R (the tolerance
+  mirrored, so exactly −0.10 passes); upper 95% bound < 0; mean d < 0 in
+  ≥ 7 of 2011–2019 (an empty year counts against); N ≥ 300; against the
+  control arm, mean d_c ≤ −0.10R, and upper bound < 0 with N_c ≥ 300.
+  N or N_c < 300 is `SCREEN-UNDERPOWERED`; any other failing clause is
+  `SCREEN-FAIL`. The avoid p (the share of resamples ≥ 0) joins the
+  ledger's one BH family. One shot per idea, as above; a fail is closed,
+  and no closed idea is re-run under the other mode. **An avoid pass buys
+  a veto spec, not a veto**: that spec says
+  `<ledger-id> SCREEN-AVOID-PASS (veto)` under `Edge: expectancy` and runs
+  the unchanged funnel on the bot's own replay.
 - **The acceptance funnel.** Selection never touches scoring data, and two
   free gates stand in front of the one-shot budget. Run it with
   `python scripts/backtest/validate_component.py --stage <stage>`.

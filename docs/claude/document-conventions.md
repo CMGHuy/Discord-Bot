@@ -208,12 +208,15 @@ the measured evidence that licensed the spec:
 | `Edge:` | `Screen:` value |
 |---|---|
 | `expectancy` or `volume`, adding an entry strategy or a filter | `<ledger-id> SCREEN-PASS` — the id must sit in `docs/superpowers/results/preregistration-ledger.jsonl` with that verdict |
+| `expectancy`, a **veto filter** licensed by an avoid screen (v214) | `<ledger-id> SCREEN-AVOID-PASS (veto)` — the row must carry `SCREEN-AVOID-PASS`; the literal `(veto)` marks a spec that adds a veto. The avoid label without `(veto)`, or `(veto)` beside a `SCREEN-PASS`, is rejected (`backtest-methodology.md` § Stage −2, avoid mode) |
 | `expectancy` moving stops/targets, or `harvest` | `harvest-headroom <path>` — a results doc quoting the measured MFE headroom (`scripts/reports/runner_headroom.py`, `analytics/exit_quality.py`) the change claims to capture; the path must exist |
 | `none (integrity)` | `exempt (integrity)` |
 | `expectancy`, a **fill-timing veto** only: a rule decided by price action between the bot's alert and its fill (e.g. the next open), on the bot's own plans. A filter on signal-bar features, regime, sector or anything known at the alert is **not** exempt | `exempt (post-signal)` — the idea screen races events on any bar with no bot signal beneath them, so it cannot measure such a filter; the spec must instead clear Stage −1 reachability on the bot's own replay before any shot (partner, 2026-10-24, v192) |
 
 `tests/hooks/test_spec_screen_header.py` fails a spec whose line is missing,
-cites an absent or non-`SCREEN-PASS` ledger id, cites a headroom path that
+cites an absent ledger id or one whose verdict is not the cited label,
+cites `SCREEN-AVOID-PASS` without `(veto)` or under an `Edge:` other than
+`expectancy`, puts `(veto)` beside a `SCREEN-PASS`, cites a headroom path that
 does not exist, or says `exempt` with an `Edge:` other than `none`. A split
 spec carries the line in its `_0-index` part. Why the screen exists, its
 pass rule and its one-shot discipline: `backtest-methodology.md` § Stage −2.

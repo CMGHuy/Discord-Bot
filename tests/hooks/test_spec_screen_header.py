@@ -6,6 +6,7 @@
 | expectancy moving stops/targets, or harvest            | `harvest-headroom <path>` (path must exist) |
 | none (integrity)                                       | `exempt (integrity)`                        |
 | expectancy, a fill-timing veto (alert-to-fill price)   | `exempt (post-signal)` (v192, 2026-10-24)   |
+| expectancy, a veto filter licensed by an avoid screen  | `<ledger-id> SCREEN-AVOID-PASS (veto)` (v214) |
 
 v140 and earlier are grandfathered by number. A split spec carries the line
 in its _0-index part. See
@@ -16,12 +17,15 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from swingbot.core.backtesting.instrument import stats
 
 ROOT = Path(__file__).resolve().parents[2]
 SPECS_DIR = ROOT / "docs/superpowers/specs"
 LAST_GRANDFATHERED = 140
 SCREEN_PASS = "SCREEN-PASS"
+SCREEN_AVOID_PASS = "SCREEN-AVOID-PASS"
 
 _NUMBER = re.compile(r"^\d{4}-\d{2}-\d{2}-v(\d+)-")
 _PART = re.compile(r"_(\d+)[a-z]?(?:-[^.]*)?\.md$")
@@ -29,8 +33,23 @@ _EXEMPT = re.compile(r"^exempt\b")
 _POST_SIGNAL = re.compile(r"^exempt\s*\(post-signal\)")
 _HEADROOM = re.compile(r"^harvest-headroom\s+`?([^`\s]+)`?")
 _LEDGER = re.compile(r"^`?([^`\s]+)`?\s+SCREEN-PASS\b")
+_AVOID_VETO = re.compile(r"^`?([^`\s]+)`?\s+SCREEN-AVOID-PASS\s+\(veto\)")
+_AVOID_BARE = re.compile(r"^`?([^`\s]+)`?\s+SCREEN-AVOID-PASS\b")
+_PASS_VETO = re.compile(r"^`?([^`\s]+)`?\s+SCREEN-PASS\s+\(veto\)")
 _EDGES_FOR = {"exempt": {"none"}, "post_signal": {"expectancy"},
-              "headroom": {"expectancy", "harvest"}, "ledger": {"expectancy", "volume"}}
+              "headroom": {"expectancy", "harvest"}, "ledger": {"expectancy", "volume"},
+              "avoid_veto": {"expectancy"}}
+
+#: v214 G6: the cited Screen forms, first match wins. A kind of None refuses
+#: the value with the reason in the third slot.
+_FORMS = (
+    (_AVOID_VETO, "avoid_veto", SCREEN_AVOID_PASS),
+    (_AVOID_BARE, None, "SCREEN-AVOID-PASS licenses a veto only: write "
+                        "`<ledger-id> SCREEN-AVOID-PASS (veto)` under Edge: expectancy"),
+    (_PASS_VETO, None, "`(veto)` goes only beside SCREEN-AVOID-PASS; cite a "
+                       "SCREEN-PASS as `<ledger-id> SCREEN-PASS`"),
+    (_LEDGER, "ledger", SCREEN_PASS),
+)
 
 
 def spec_number(path: Path) -> int | None:
@@ -61,13 +80,24 @@ def edge_kind(value: str | None) -> str:
     return re.split(r"[\s(,;]", value, maxsplit=1)[0] if value else ""
 
 
-def _ledger_problem(row_id: str, ledger) -> str | None:
+def _ledger_problem(row_id: str, ledger, wanted: str = SCREEN_PASS) -> str | None:
     verdicts = {row["id"]: row["verdict"] for row in ledger}
     if row_id not in verdicts:
         return f"ledger id {row_id} is not in the ledger"
-    if verdicts[row_id] != SCREEN_PASS:
-        return f"ledger id {row_id} is {verdicts[row_id]}, not {SCREEN_PASS}"
+    if verdicts[row_id] != wanted:
+        return f"ledger id {row_id} is {verdicts[row_id]}, not {wanted}"
     return None
+
+
+def _cited(screen: str, ledger):
+    """(kind, problem) for a ledger-citing Screen value, per ``_FORMS``."""
+    for pattern, kind, wanted in _FORMS:
+        match = pattern.match(screen)
+        if match and kind:
+            return kind, _ledger_problem(match.group(1), ledger, wanted)
+        if match:
+            return None, wanted
+    return None, f"unrecognised Screen value `{screen}`"
 
 
 def _classify(screen: str, ledger, root: Path):
@@ -80,10 +110,7 @@ def _classify(screen: str, ledger, root: Path):
     if match:
         missing = not (root / match.group(1)).exists()
         return "headroom", f"headroom path {match.group(1)} does not exist" if missing else None
-    match = _LEDGER.match(screen)
-    if match:
-        return "ledger", _ledger_problem(match.group(1), ledger)
-    return None, f"unrecognised Screen value `{screen}`"
+    return _cited(screen, ledger)
 
 
 def screen_problems(text: str, *, ledger, root: Path = ROOT) -> list:
@@ -189,6 +216,57 @@ def test_grandfathered_and_split_specs_are_skipped(tmp_path):
     assert {p.name for p in checked_specs(tmp_path)} == {
         "2026-10-09-v141-a-design.md", "2026-10-10-v142-b-design.md",
         "2026-10-11-v143-c_0-index.md"}
+
+
+# -- v214 G6: an avoid pass licenses a veto only ------------------------------
+
+AVOID_LEDGER = LEDGER + [{"id": "screen-avoid", "verdict": "SCREEN-AVOID-PASS"}]
+
+
+def test_an_avoid_pass_cited_as_a_veto_fits_an_expectancy_spec():
+    for screen in ("screen-avoid SCREEN-AVOID-PASS (veto)",
+                   "`screen-avoid` SCREEN-AVOID-PASS (veto)"):
+        assert screen_problems(_spec("expectancy", screen), ledger=AVOID_LEDGER) == []
+
+
+@pytest.mark.parametrize("edge", ["volume", "harvest", "none (integrity)"])
+def test_an_avoid_veto_fits_only_an_expectancy_edge(edge):
+    problems = screen_problems(_spec(edge, "screen-avoid SCREEN-AVOID-PASS (veto)"),
+                               ledger=AVOID_LEDGER)
+    assert problems and "does not fit" in problems[0]
+
+
+def test_an_avoid_pass_without_the_veto_suffix_fails():
+    problems = screen_problems(_spec("expectancy", "screen-avoid SCREEN-AVOID-PASS"),
+                               ledger=AVOID_LEDGER)
+    assert problems and "SCREEN-AVOID-PASS (veto)" in problems[0]
+
+
+def test_a_veto_suffix_beside_a_screen_pass_fails():
+    problems = screen_problems(_spec("expectancy", "screen-good SCREEN-PASS (veto)"),
+                               ledger=AVOID_LEDGER)
+    assert problems and "only beside SCREEN-AVOID-PASS" in problems[0]
+
+
+def test_an_avoid_veto_must_cite_an_avoid_pass_row():
+    wrong = screen_problems(_spec("expectancy", "screen-good SCREEN-AVOID-PASS (veto)"),
+                            ledger=AVOID_LEDGER)
+    assert wrong == ["ledger id screen-good is SCREEN-PASS, not SCREEN-AVOID-PASS"]
+    absent = screen_problems(_spec("expectancy", "screen-nope SCREEN-AVOID-PASS (veto)"),
+                             ledger=AVOID_LEDGER)
+    assert absent and "not in the ledger" in absent[0]
+
+
+def test_a_screen_pass_cite_of_an_avoid_row_fails():
+    problems = screen_problems(_spec("expectancy", "screen-avoid SCREEN-PASS"),
+                               ledger=AVOID_LEDGER)
+    assert problems == ["ledger id screen-avoid is SCREEN-AVOID-PASS, not SCREEN-PASS"]
+
+
+def test_every_other_case_still_needs_a_screen_pass():
+    assert screen_problems(_spec(screen="screen-good SCREEN-PASS"), ledger=AVOID_LEDGER) == []
+    problems = screen_problems(_spec(screen="screen-bad SCREEN-PASS"), ledger=AVOID_LEDGER)
+    assert problems == ["ledger id screen-bad is SCREEN-FAIL, not SCREEN-PASS"]
 
 
 # -- the repository gate ----------------------------------------------------

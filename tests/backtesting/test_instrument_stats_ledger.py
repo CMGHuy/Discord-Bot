@@ -20,7 +20,7 @@ def test_fields_and_vocabularies_are_the_plan_set():
     assert stats.VERDICTS == ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE",
                               "WITHDRAWN", "OPEN", "SCREEN-PASS", "SCREEN-FAIL",
                               "SCREEN-UNDERPOWERED", "COST", "SAVED", "INCONCLUSIVE",
-                              "DESCRIPTION")
+                              "DESCRIPTION", "SCREEN-AVOID-PASS")
     assert stats.INSTRUMENTS == ("v1", "v2", "screen-v1", "v3")
 
 
@@ -149,10 +149,27 @@ def test_iso_week_date_is_refused():
         stats.validate_ledger_row(_row(date="2026-W41-1"))
 
 
-@pytest.mark.parametrize("verdict", ["SCREEN-PASS", "SCREEN-FAIL", "SCREEN-UNDERPOWERED"])
+@pytest.mark.parametrize("verdict", ["SCREEN-PASS", "SCREEN-FAIL", "SCREEN-UNDERPOWERED",
+                                     "SCREEN-AVOID-PASS"])
 def test_a_screen_row_validates(verdict):
     stats.validate_ledger_row(_row(id="screen-demo", instrument="screen-v1",
                                    verdict=verdict))
+
+
+def test_the_avoid_label_is_appended_last_and_the_old_order_is_kept():
+    """v214: an addition, never a reorder; the committed ledger is never edited."""
+    assert stats.VERDICTS[-1] == "SCREEN-AVOID-PASS"
+    assert stats.VERDICTS.count("SCREEN-AVOID-PASS") == 1
+    rows = stats.load_ledger()
+    assert all(row["verdict"] in stats.VERDICTS for row in rows)
+
+
+def test_an_avoid_row_enters_the_same_bh_family():
+    rows = [_row(id="a", p=0.01), _row(id="b", verdict="SCREEN-AVOID-PASS",
+                                       instrument="screen-v1", p=0.04)]
+    for row in rows:
+        stats.validate_ledger_row(row)
+    assert stats.ledger_qvalues(rows) == {"a": pytest.approx(0.02), "b": pytest.approx(0.04)}
 
 
 def test_the_committed_ledger_still_loads_unchanged():
