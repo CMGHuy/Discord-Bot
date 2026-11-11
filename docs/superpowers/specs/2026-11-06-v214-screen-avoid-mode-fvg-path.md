@@ -372,3 +372,7 @@ switch to a replay diagnostic.
   not among them.
 - technical-analyst: no timeframe named -- applied: daily bars, daily
   ATR14.
+
+## Result
+
+2026-11-11: `screen-fvg_overhead_aged` -> **SCREEN-FAIL**. N = 13908, ΔExpR +0.3709R (upper 95% +0.4521R), 0 of 9 years negative; control arm N_c = 4559, ΔExpR_c +0.0721R (upper 95% +0.2120R); avoid p 1.0000, BH q 1.0000 across the ledger (row 80; v211 shots before it: screen-shock_support_break_short, screen-shock_failed_bounce_short). The sign is the wrong way for an avoid screen: bars under an aged overhead bearish gap did better than the matched null, so there is no veto. Results: `docs/superpowers/results/2026-11-11-screen-fvg_overhead_aged.md`.
