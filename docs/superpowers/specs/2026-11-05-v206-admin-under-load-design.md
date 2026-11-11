@@ -460,7 +460,7 @@ the table in `## Results`. Rollback is redeploying the previous image.
 Every client change works against an older server: a thin `scan` event
 falls back to fetching, a missing `today` or `prev_day` falls back to the
 old calls (v205 P3), and no ETag means plain 200s. Plan 3's server changes
-switch off with `ADMIN_STORE_SNAPSHOT=off` via SIGHUP.
+switch off with `ADMIN_STORE_SNAPSHOT=off`, set in place; the admin has no SIGHUP and re-reads `.env` on the next request when its mtime moved (DEPLOY_HETZNER § Rolling back).
 
 ## Panel review
 
@@ -794,3 +794,10 @@ local backtest during both runs, which adds noise to the dev-side timings.
   but `/dashboard` rose from 9 to 14 and now dominates the idle traffic.
 - `/health` median TTFB rose from 57.7 to 88.5 ms (p90 153.3 to 156.8 ms); the
   route showed `snap: off` (no snapshot read), so no v218 code path is on it; read it as dev-machine noise.
+
+### Plan 3 panel review (v218, staff-engineer, senior-engineer, quant-engineer)
+
+- staff-engineer BLOCKING: rollback runbook claimed a full image rollback changes every ETag; the admin container has no `SWING_BOT_IMAGE` -- applied: DEPLOY_HETZNER, the `build_identity` docstring and the SIGHUP line above now say what is true, with the off/on toggle as the interim step. **Open partner call:** forward `SWING_BOT_IMAGE` into the admin service's `environment:` in docker-compose.yml, which makes the claim true.
+- senior-engineer: dead `_TAG` -- applied (removed). Others carried as advisories, not applied: nested-record mutation is pinned for the profiled endpoints only (senior, quant); repeated `status` key in `_closed_filter` untested (senior); `outcome=win|loss` admitted without `status=closed`, unproven that no open PARTIAL/ACTIVE row can carry it (quant -- tighten the admit predicate if a fixture shows one); the idle-tab comparison mixes a `scan` run with Plan 2's `mixed` run and the under-10 target stays open (senior).
+- staff-engineer advisories carried: snapshot lock held across loads (serialises rebuilds); process-local settings counter restarts at 0; LISTEN connection has no keepalive so a half-open socket would silently reopen V218-1; `store_snapshot` placed in `core/infra` though admin-only; no owner or removal condition for `ADMIN_STORE_SNAPSHOT`.
+- quant-engineer advisories carried: FX version token has no NOTIFY backstop; Berlin-midnight straddle reads the date at two instants (self-healing); DST-mismatch-week admission window unpinned by a test.
