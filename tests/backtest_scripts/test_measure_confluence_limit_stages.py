@@ -22,6 +22,8 @@ def _open_caps(monkeypatch):
                         ("SECTOR_HEAT_CAP_PCT", 1e9), ("MAX_OPEN_POSITIONS", None),
                         ("MAX_POSITION_SIZE_PCT", 1e9), ("MAX_POSITION_VALUE_ABSOLUTE", 0.0)):
         monkeypatch.setattr(config, attr, value, raising=False)
+    monkeypatch.setattr(mcl, "_spy", lambda: {"2021-03-01": -1.5})
+    monkeypatch.setattr(mcl, "_earnings", lambda tickers: {})
 
 
 def alerts(years, cells=clr.CELLS, n=100):
@@ -94,9 +96,11 @@ def _assert_folds(folds):
 
 def _assert_builds(calls):
     validation = [c for c in calls if c[1] == mcl.VALIDATION]
-    assert validation == [("rows", mcl.VALIDATION, False, (0.333,))]
+    assert validation == [("rows", mcl.VALIDATION, False, (0.333,)),       # the shot
+                          ("census", mcl.VALIDATION, False, (0.333,)),     # disclosures only
+                          ("rows", mcl.VALIDATION, True, (0.333,))]        # touch sensitivity
     train_rows = [c for c in calls if c[0] == "rows" and c[1] == mcl.TRAIN]
-    assert len(train_rows) == 1                          # TRAIN rows built once, then reused
+    assert sorted(c[2] for c in train_rows) == [False, True]   # each TRAIN file built once
 
 
 def test_stage3_is_one_shot(tmp_path):
@@ -234,3 +238,19 @@ def test_the_stage_command_exits_zero_only_on_an_advancing_verdict(tmp_path, mon
                      "--preregistration", "p.md"]) == code
     verdict = "REACHABLE" if filled else "refused:zero-diff"
     assert f"v212 stage -1: {verdict}" in capsys.readouterr().out
+
+
+def test_stages_1_and_3_carry_disclosures_that_never_change_the_verdict(tmp_path):
+    from swingbot.core.backtesting.confluence_limit_disclosures import render_disclosures
+    verdicts = [_run(stage, tmp_path, [])["verdict"] for stage in (-1, 0, 1, 2, 3)]
+    assert verdicts == ["REACHABLE", "POWERED", "SELECTED", "PASS", "THIN"]
+    blob = mcl._load(mcl.stage_path(tmp_path, 1))["disclosures"]
+    assert blob["window"] == "train"
+    assert [c["cell"] for c in blob["cells"]] == list(clr.CELLS)
+    assert [t["cell"] for t in blob["touch"]] == list(clr.CELLS)
+    assert blob["cells"][0]["paired"]["alerts"] == 300          # 100 alerts x 3 TRAIN years
+    stage3 = mcl._load(mcl.stage_path(tmp_path, 3))["disclosures"]
+    assert (stage3["window"], [c["cell"] for c in stage3["cells"]]) == ("validation", ["f0.333"])
+    text = render_disclosures(blob)
+    assert "D range" in text and "direction" in text
+    assert "disclosures" not in mcl._load(mcl.stage_path(tmp_path, 2))

@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path[:0] = [str(ROOT), str(ROOT / "scripts" / "data"), str(ROOT / "scripts" / "backtest")]
 
 from swingbot import config  # noqa: E402
+from swingbot.core.backtesting import confluence_limit_disclosures as cld  # noqa: E402
 from swingbot.core.backtesting import confluence_limit_replay as clr  # noqa: E402
 from swingbot.core.backtesting.acceptance import (CLOSED, ArmTrade, expectancy_r,  # noqa: E402
                                                   project_target_n, win_rate)
@@ -486,6 +487,59 @@ def ledger_rows(out_dir, run_date, record) -> list:
                      "p": None, "verdict": LEDGER_VERDICTS[raw], "stage_verdict": raw,
                      "record": record})
     return rows
+
+
+# --- disclosures (printed, never gating) ----------------------------------------
+
+def _spy() -> dict:
+    """SPY close-to-close % by ISO date from the training cache; {} when absent."""
+    from measure_arms import load_frame
+    frame = load_frame("SPY")
+    return {} if frame is None or frame.empty else cld.spy_changes(frame)
+
+
+def _earnings(tickers) -> dict:
+    """Report dates per ticker from market_data/earnings/; tickers without a CSV
+    are left out (the disclosure counts them)."""
+    from swingbot.core.market.earnings_calendar import CsvSource
+    source = CsvSource()
+    return {t: [report.date.isoformat() for report in source.reports(t)]
+            for t in sorted(tickers) if source.has_data(t)}
+
+
+def _disclose(ctx, rows, census, cells, window_name, f_cells) -> dict:
+    """Every cell's disclosures plus the touch-fill sensitivity, scored with
+    the same clauses through its own portfolio pass."""
+    inputs = {"spy": _spy(), "earnings": _earnings({r["ticker"] for r in rows})}
+    ref = [r for r in rows if r["arm"] == "ref"]
+    out = []
+    for cell in cells:
+        _, kept = score_cell(rows, cell, **_env(ctx))
+        out.append(cld.disclosures([r for r in rows if r["arm"] == cell], ref, census,
+                                   portfolio=kept, **inputs))
+    touch_rows = _rows(ctx, "rows", window_name, touch=True, cells=f_cells)
+    touch = [score_cell(touch_rows, cell, **_env(ctx))[0] for cell in cells]
+    return {"window": window_name, "cells": out, "touch": touch}
+
+
+def _run_1_disclosed(ctx):
+    out = _run_1(ctx)
+    out["disclosures"] = _disclose(ctx, _rows(ctx, "rows", "train"),
+                                   _rows(ctx, "census", "train"), clr.CELLS, "train", clr.F_GRID)
+    return out
+
+
+def _run_3_disclosed(ctx):
+    out = _run_3(ctx)
+    selected = _load(stage_path(ctx["out"], 1))["selected"]
+    f_cells = (selected["f"],)
+    rows = _rows(ctx, "rows", "validation", cells=f_cells)
+    census = _rows(ctx, "census", "validation", cells=f_cells)
+    out["disclosures"] = _disclose(ctx, rows, census, [selected["cell"]], "validation", f_cells)
+    return out
+
+
+STAGE_RUNNERS.update({1: _run_1_disclosed, 3: _run_3_disclosed})
 
 
 # --- CLI -------------------------------------------------------------------------
