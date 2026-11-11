@@ -8,6 +8,11 @@ are tests/admin_perf/test_conditional_routes.py (V218-13)."""
 import datetime as dt
 
 import pytest
+from werkzeug.datastructures import MultiDict
+
+from swingbot.admin.api_v1 import conditional as cond
+from swingbot.admin.api_v1.read_scope import READ_SCOPE_ATTR
+from tests.admin_perf import golden_book as gb
 
 CLOSED = "/api/v1/trades?status=CLOSED"
 UTC = dt.timezone.utc
@@ -83,3 +88,77 @@ def test_follow_score_moves_with_the_et_date():
     from swingbot.core.analytics.rank import follow_score
     plan = {"badge": "VALIDATED", "quality_score": 72, "created_at": "2026-11-03"}
     assert follow_score(plan, today=dt.date(2026, 11, 4)) != follow_score(plan, today=dt.date(2026, 11, 5))
+
+
+# --- the admitted shape (V218-10b) ------------------------------------------
+
+@pytest.mark.parametrize("pairs, admitted", [
+    ([("status", "CLOSED")], True),
+    ([("status", " closed ")], True),
+    ([("outcome", "win")], True),
+    ([("outcome", "LOSS")], True),
+    ([("status", "closed"), ("sort", "-closed_at")], True),
+    ([("status", "closed"), ("ticker", "aapl"), ("page", "2")], True),
+    ([], False),
+    ([("status", "open")], False),
+    ([("status", "cancelled")], False),
+    ([("outcome", "open")], False),
+    ([("status", "closed"), ("sort", "-pnl_pct")], False),
+    ([("status", "closed"), ("sort", "r_multiple")], False),
+    ([("status", "closed"), ("sort", "status")], False),
+])
+def test_closed_only_query_admits_exactly_the_closed_shapes(admin_app, frozen_clock, refresher_on,
+                                                            pairs, admitted):
+    from swingbot.admin.api_v1 import trades
+    assert trades.closed_only_query(MultiDict(pairs)) is admitted
+
+
+def test_closed_only_query_needs_the_refresher(admin_app, frozen_clock):
+    from swingbot.admin.api_v1 import trades
+    assert trades.closed_only_query(MultiDict([("status", "closed")])) is False
+
+
+@pytest.mark.parametrize("now, admitted", [
+    (dt.datetime(2026, 11, 4, 4, 30, tzinfo=UTC), False),   # 05:30 Berlin 4 Nov, 23:30 ET 3 Nov
+    (dt.datetime(2026, 11, 4, 5, 30, tzinfo=UTC), True),    # 06:30 Berlin 4 Nov, 00:30 ET 4 Nov
+    (dt.datetime(2026, 11, 4, 22, 30, tzinfo=UTC), True),   # 23:30 Berlin 4 Nov, 17:30 ET 4 Nov
+    (dt.datetime(2026, 11, 4, 23, 30, tzinfo=UTC), False),  # 00:30 Berlin 5 Nov, 18:30 ET 4 Nov
+])
+def test_closed_only_query_needs_the_et_and_berlin_dates_to_agree(admin_app, frozen_clock, refresher_on,
+                                                                  monkeypatch, now, admitted):
+    from swingbot.admin.api_v1 import trades
+    monkeypatch.setattr(gb, "FROZEN_NOW", now)
+    assert trades.closed_only_query(MultiDict([("status", "closed")])) is admitted
+
+
+# --- the decorator on the real view ------------------------------------------
+
+def test_list_trades_carries_the_trades_route_key_and_its_read_scope(admin_app):
+    view = admin_app.view_functions["api_v1.list_trades"]
+    assert getattr(view, cond.CONDITIONAL_ATTR) == "trades"
+    assert getattr(view, READ_SCOPE_ATTR) is True
+
+
+def test_a_304_skips_build_rows(closed_page, monkeypatch):
+    from swingbot.admin.api_v1 import trades
+    calls = []
+    real = trades.build_rows
+
+    def spying(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(trades, "build_rows", spying)
+    first = closed_page.get(CLOSED)
+    assert first.status_code == 200 and first.headers["ETag"].startswith('W/"')
+    assert first.headers["Cache-Control"] == cond.CACHE_CONTROL
+    second = closed_page.get(CLOSED, headers={"If-None-Match": first.headers["ETag"]})
+    assert second.status_code == 304 and second.get_data() == b""
+    assert calls == [1]                                     # the 304 built nothing
+
+
+def test_the_unfiltered_list_keeps_no_store(closed_page):
+    response = closed_page.get("/api/v1/trades")
+    assert response.status_code == 200
+    assert "ETag" not in response.headers
+    assert response.headers["Cache-Control"] == "no-store"
