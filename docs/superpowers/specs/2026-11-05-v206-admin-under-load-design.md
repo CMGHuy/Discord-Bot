@@ -657,3 +657,26 @@ The probe cannot show v217's own savings: it opens the Dashboard on 1D, which
 sent one `/dashboard` before v217 too, and a mid-month day page made no extra
 month call before either. The wider-scope Dashboard request and the
 day-edge month lookup are pinned by their specs (V217-3, V217-4, V217-5, V217-5b).
+
+### Plan 3 version() gap (V218-1)
+
+`(count, max(updated_at))` is built from stamps written before commit:
+`upsert()`/`patch()` use `clock_timestamp()` (`repositories/base.py:89,101`),
+`insert()` uses the column default `now()` (transaction start). A transaction that
+commits after a concurrent one can therefore land under an older stamp, and the
+token does not move although a row changed.
+`tests/db/test_v218_store_versions.py` reproduces it on two real connections for
+`trades` (`TradeRepository.version()`, new in V218-1) and `plans`.
+
+Existing callers of `plans_repo().version()`:
+
+| Caller | Use | Verdict |
+|---|---|---|
+| `swingbot/admin/api_v1/cancel_precision.py:38-41` `_memo_key()` | memo key `(version, UTC hour)` of the cancel-precision payload | affected: an upsert committed under an older stamp leaves `(count, max)` unchanged, so the memo serves the old payload until the hour turns |
+| `swingbot/admin/watchlist_rows.py:67-73` `_plans_signature()` | signature `("db", count, max)` of the watchlist plan projection | affected: same mechanism; stale until a later plan write moves the token |
+
+Fix: V218-6 appends `store_generation.generation("trades")` to both keys. The
+v218 snapshot listener bumps that generation on every `trades` NOTIFY, and the
+`plans` and `starred_plans` triggers fire that channel too. The snapshot (V218-4)
+and the ETag (V218-8) never trust versions alone either: their tokens carry the
+generations too.
