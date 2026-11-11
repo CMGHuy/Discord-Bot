@@ -40,7 +40,6 @@ T = TypeVar("T")
 SNAPSHOT_KEYS: frozenset[str] = frozenset(
     {read_memo.TRADE_ROWS, read_memo.TRADES, read_memo.PLANS, read_memo.NOTED_IDS})
 
-_TAG = "ops.admin.snapshot"
 _OUTSIDE = object()                      # no request armed: versions are read per call
 _RANK = {"hit": 0, "miss": 1, "off": 2}  # request_state precedence
 
