@@ -121,7 +121,8 @@ def test_split_what_if(report):
 
 def test_giveback_and_visible_exclusions(report):
     cf = report["counterfactuals"]
-    assert cf["giveback"] == pytest.approx([0.2, 1.26, 0.6, 0.4])
+    assert cf["giveback"] == pytest.approx([0.2, 1.26, 0.6])     # A, B, C; F has no TP2, D is manual
+    assert cf["giveback_excluded"] == 2
     assert cf["path_unavailable"] == 1 and cf["runner_r_unavailable"] == 0
 
 
@@ -191,6 +192,7 @@ def test_a_stamp_without_ladder_or_mfe_is_path_unavailable_not_a_crash():
     plan = _trade("S", reason="tp1_runner_tp2", runner_r=4.0, path={"source": "live"})
     cf = pa.counterfactuals([pa.partial_trade(plan)])
     assert cf["giveback"] == [] and cf["path_unavailable"] == 1
+    assert cf["giveback_excluded"] == 1
     assert [row["n"] for row in cf["ladder"]] == [0] * 5
 
 
@@ -207,3 +209,86 @@ def test_bulk_and_single_manual_closes_share_one_bucket_row():
     assert rows["manual"]["n"] == 2
     assert "other" not in rows
     assert rows["manual"]["avg_runner_r"] == pytest.approx((2.5 + 1.5) / 2)
+
+
+# -- v219: tp2_r, typed pathed, decidable, progress --------------------------
+
+def _one(plan, manual_exits=None):
+    return pa.partial_trade(plan, manual_exits)
+
+
+def test_tp2_r_is_the_plans_tp2_on_the_initial_risk_basis():
+    assert _one(_trade("A", reason="tp1_runner_tp2", runner_r=4.0)).tp2_r == 4.0
+    assert _one(_trade("S", reason="tp1_runner_tp2", runner_r=4.0, direction="bearish",
+                       tp2=80.0)).tp2_r == 4.0
+    assert _one(_trade("F", reason="tp1_runner_trail", runner_r=2.4, tp2=None)).tp2_r is None
+
+
+def test_a_well_formed_stamp_is_pathed():
+    assert _one(_trade("A", reason="tp1_runner_tp2", runner_r=4.0, path=_path(4.2, 4.0))).pathed
+    whole = {**_path(4.0, 4.0), "mfe_r": 4}                     # an int is a real number
+    assert _one(_trade("I", reason="tp1_runner_tp2", runner_r=4.0, path=whole)).pathed
+
+
+@pytest.mark.parametrize("stamp", [
+    None,
+    {},
+    "garbage",
+    ["mfe_r", "ladder"],
+    {"mfe_r": 3.1},
+    {"ladder": {}},
+    {"mfe_r": None, "ladder": {}},
+    {"mfe_r": "3.1", "ladder": {}},
+    {"mfe_r": True, "ladder": {}},
+    {"mfe_r": float("nan"), "ladder": {}},
+    {"mfe_r": float("inf"), "ladder": {}},
+    {"mfe_r": 3.1, "ladder": None},
+    {"mfe_r": 3.1, "ladder": ["2026-10-06"]},
+])
+def test_a_malformed_stamp_is_unpathed_and_never_raises(stamp):
+    trade = _one(_trade("X", reason="tp1_runner_trail", runner_r=3.0, path=stamp))
+    assert trade.pathed is False and trade.decidable is False and trade.progress is None
+    cf = pa.counterfactuals([trade])
+    assert cf["giveback"] == [] and cf["giveback_excluded"] == 1
+
+
+def test_decidable_needs_every_condition():
+    assert _one(_trade("A", reason="tp1_runner_tp2", runner_r=4.0, path=_path(4.2, 4.0))).decidable
+    unpriced = _trade("N", reason="tp1_runner_trail", path=_path(3.0, 3.0))
+    flat = _trade("Q", reason="tp1_runner_trail", runner_r=3.0, tp2=110.0, path=_path(3.0, 3.0))
+    below = _trade("R", reason="tp1_runner_trail", runner_r=3.0, tp2=105.0, path=_path(3.0, 3.0))
+    no_tp2 = _trade("F", reason="tp1_runner_trail", runner_r=2.4, tp2=None, path=_path(2.8, 2.5))
+    assert not _one(unpriced).decidable                           # runner R unknown
+    assert _one(flat).tp2_r == 2.0 and not _one(flat).decidable   # tp2_r == r_tp1: no distance
+    assert not _one(below).decidable                              # tp2_r < r_tp1
+    assert not _one(no_tp2).decidable
+
+
+def test_a_priced_manual_close_with_a_stamp_is_still_not_decidable():
+    plan = _trade("M", reason="manual", path=_path(3.0, 2.5))
+    trade = _one(plan, {"M": 107.5})                              # priced from its trade: 1.5R
+    assert trade.bucket == "manual" and trade.r_runner == 1.5 and trade.pathed
+    assert trade.decidable is False and trade.progress is None
+    cf = pa.counterfactuals([trade])
+    assert cf["giveback"] == [] and cf["giveback_excluded"] == 1
+
+
+@pytest.mark.parametrize("mfe, expected", [
+    (4.2, 1.0),      # past TP2: clamped at 1
+    (4.0, 1.0),
+    (3.0, 0.5),      # exactly halfway
+    (2.0, 0.0),      # at TP1
+    (1.5, 0.0),      # below TP1 (a hand-built stamp): clamped at 0
+])
+def test_progress_to_tp2_is_clamped(mfe, expected):
+    trade = _one(_trade("P", reason="tp1_runner_trail", runner_r=2.0, path=_path(mfe, 2.0)))
+    assert trade.progress == pytest.approx(expected)
+    assert 0.0 <= trade.progress <= 1.0
+
+
+def test_progress_is_none_unless_decidable():
+    assert _one(_trade("N", reason="tp1_runner_trail", path=_path(3.0, 3.0))).progress is None
+
+
+def test_the_giveback_threshold_is_half_way():
+    assert pa.GIVEBACK_PROGRESS == 0.5

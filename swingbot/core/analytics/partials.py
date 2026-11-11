@@ -10,6 +10,7 @@ open sits in the funnel and the `open` bucket only.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from statistics import mean
 
@@ -22,6 +23,9 @@ from swingbot.core.tracking.origin import in_cohort
 
 THIN_N = 10
 SPLIT_FRACTIONS = (0.33, 0.5, 0.67)
+#: v219: a runner that got this far from TP1 to TP2 and then closed below
+#: TP1 gave the move back (the Giveback ending).
+GIVEBACK_PROGRESS = 0.5
 #: Every partial trade lands in exactly one; "other" (an unknown close
 #: reason) is reported only when non-empty, never dropped.
 OUTCOME_BUCKETS = ("tp2", "trail", "floor", "stall", "time", "manual", "no_tp2", "open")
@@ -34,6 +38,11 @@ _REASON_BUCKET = {
     # override-fidelity report, never by the partials buckets.
     "manual_bulk": "manual",
 }
+
+
+def _is_real(value) -> bool:
+    """A finite int/float; a bool is not one (JSON `true` is an int in Python)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 @dataclass(frozen=True)
@@ -52,6 +61,7 @@ class PartialTrade:
     hold_entry_tp1: int | None
     hold_tp1_exit: int | None
     hold_entry_exit: int | None
+    tp2_r: float | None = None  # v219: plan TP2 in R, initial entry/stop basis; None without a TP2
 
     @property
     def closed(self) -> bool:
@@ -59,8 +69,11 @@ class PartialTrade:
 
     @property
     def pathed(self) -> bool:
-        """A runner_path stamp carrying the fields the ladder and giveback read."""
-        return bool(self.runner_path) and "ladder" in self.runner_path and "mfe_r" in self.runner_path
+        """A runner_path stamp carrying the fields the ladder and giveback read,
+        with the types they read: a malformed stamp is unpathed, never a crash."""
+        path = self.runner_path
+        return (isinstance(path, dict) and _is_real(path.get("mfe_r"))
+                and isinstance(path.get("ladder"), dict))
 
     @property
     def measured(self) -> bool:
@@ -73,6 +86,21 @@ class PartialTrade:
         if not self.measured:
             return None
         return (1.0 - self.fraction) * (self.r_runner - self.r_tp1)
+
+    @property
+    def decidable(self) -> bool:
+        """v219 path filter: a runner whose path figures can be trusted. A manual
+        close is out by bucket (its stamp never saw the exit), not by r_runner."""
+        return (self.pathed and self.r_runner is not None and self.bucket != "manual"
+                and self.tp2_r is not None and self.tp2_r > self.r_tp1)
+
+    @property
+    def progress(self) -> float | None:
+        """How far the runner got from TP1 towards TP2, clamped to [0, 1]."""
+        if not self.decidable:
+            return None
+        raw = (self.runner_path["mfe_r"] - self.r_tp1) / (self.tp2_r - self.r_tp1)
+        return min(1.0, max(0.0, raw))
 
 
 # -- population ----------------------------------------------------------------
@@ -151,6 +179,11 @@ def _span(start, end) -> int | None:
     return None if start is None or end is None else session_span(start, end)
 
 
+def _tp2_r(plan, view: dict) -> float | None:
+    """The plan's TP2 in R on the initial entry/stop basis; None without a TP2."""
+    return None if plan.tp2 is None else _one_leg_r(view, {"exit_price": plan.tp2})
+
+
 def partial_trade(plan, manual_exits: dict | None = None) -> PartialTrade | None:
     """One partial plan as a PartialTrade; None when it cannot be read (no
     fill price, zero risk, no TP1 leg)."""
@@ -166,7 +199,7 @@ def partial_trade(plan, manual_exits: dict | None = None) -> PartialTrade | None
         plan.plan_id, plan.strategy, plan.horizon_key, plan.direction,
         tp1.isoformat()[:7] if tp1 else "unknown", float(plan.tp1_fraction), r_tp1,
         r_runner, blended, outcome_bucket(plan), plan.runner_path,
-        _span(fill, tp1), _span(tp1, exit_), _span(fill, exit_))
+        _span(fill, tp1), _span(tp1, exit_), _span(fill, exit_), _tp2_r(plan, view))
 
 
 # -- aggregates ----------------------------------------------------------------
@@ -235,9 +268,17 @@ def _split_row(measured: list[PartialTrade], fraction: float) -> dict:
     return {"fraction": fraction, "exp_r": _mean(values), "n": len(measured)}
 
 
-def _giveback(pathed: list[PartialTrade]) -> list[float]:
-    """MFE R minus banked runner R, per trade with a stamped path."""
-    return [round(t.runner_path["mfe_r"] - t.r_runner, 4) for t in pathed]
+def _giveback(runners: list[PartialTrade]) -> list[float]:
+    """MFE R minus banked runner R, per runner (unclamped). The Runner endings
+    "Gave back" column uses the same formula."""
+    return [round(t.runner_path["mfe_r"] - t.r_runner, 4) for t in runners]
+
+
+def _giveback_strip(closed: list[PartialTrade]) -> dict:
+    """The Giveback strip over the v219 path filter (manual, no-TP2 and
+    no-distance runners out), with the count it dropped."""
+    decidable = [t for t in closed if t.decidable]
+    return {"giveback": _giveback(decidable), "giveback_excluded": len(closed) - len(decidable)}
 
 
 def _exclusions(closed: list[PartialTrade]) -> dict:
@@ -248,14 +289,15 @@ def _exclusions(closed: list[PartialTrade]) -> dict:
 
 def counterfactuals(trades: list[PartialTrade]) -> dict:
     """The four what-ifs, over closed runners with a known runner R; the
-    ladder and giveback further need a stamped runner_path."""
+    ladder further needs a stamped runner_path, the giveback strip the v219
+    path filter (`PartialTrade.decidable`)."""
     closed = [t for t in trades if t.closed]
     measured = [t for t in closed if t.measured]
     pathed = [t for t in measured if t.pathed]
     return {
         "actual_exp_r": _mean(t.blended_r for t in measured),
         "all_out_exp_r": _mean(t.r_tp1 for t in measured),
-        "giveback": _giveback(pathed),
+        **_giveback_strip(closed),
         "ladder": [_ladder_row(pathed, level) for level in LADDER_R],
         "split": [_split_row(measured, fraction) for fraction in SPLIT_FRACTIONS],
         **_exclusions(closed),
