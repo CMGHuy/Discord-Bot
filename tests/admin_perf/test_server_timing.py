@@ -2,10 +2,13 @@
 import logging
 import re
 
+import pytest
+
 from swingbot import config
 from swingbot.admin import request_timing
 
-HEADER_RE = re.compile(r'^total;dur=\d+\.\d, db;dur=\d+\.\d;desc="(\d+) statements"$')
+HEADER_RE = re.compile(r'^total;dur=\d+\.\d, db;dur=\d+\.\d;desc="(\d+) statements", '
+                       r'app;dur=\d+\.\d, snap;desc=(hit|miss|off)$')
 LOGGER = "swingbot.admin.request_timing"
 
 
@@ -15,7 +18,8 @@ def _slow_lines(caplog):
 
 def test_the_header_has_exactly_the_documented_format():
     tally = request_timing.SqlTally(statements=3, db_s=0.01234)
-    assert request_timing.server_timing(1.23456, tally) == 'total;dur=1234.6, db;dur=12.3;desc="3 statements"'
+    assert request_timing.server_timing(1.23456, tally) == (
+        'total;dur=1234.6, db;dur=12.3;desc="3 statements", app;dur=1222.3, snap;desc=off')
 
 
 def test_an_api_v1_response_carries_its_statement_count(client, auth, sql_counted):
@@ -54,3 +58,48 @@ def test_the_threshold_is_read_per_request_and_logs_one_line(client, auth, sql_c
     [line] = _slow_lines(caplog)
     # path only: never the query string, never a header or a credential
     assert re.fullmatch(r"slow request /api/v1/trades total=\d+ms db=\d+ms statements=\d+", line), line
+
+
+def test_app_is_total_minus_db_and_never_negative():
+    tally = request_timing.SqlTally(statements=1, db_s=0.5)
+    assert request_timing.server_timing(0.4, tally, "miss").endswith("app;dur=0.0, snap;desc=miss")
+    assert "app;dur=990.0" in request_timing.server_timing(1.0, request_timing.SqlTally(1, 0.01), "hit")
+
+
+@pytest.mark.parametrize("state", ["hit", "miss", "off"])
+def test_the_snap_entry_carries_the_request_state(client, auth, sql_counted, monkeypatch, state):
+    from swingbot.core.infra import store_snapshot
+    monkeypatch.setattr(store_snapshot, "request_state", lambda: state)
+    header = client.get("/api/v1/trades", headers=auth).headers["Server-Timing"]
+    match = HEADER_RE.match(header)
+    assert match and match.group(2) == state, header
+
+
+def test_a_failing_state_read_says_off_and_the_response_still_succeeds(client, auth, sql_counted,
+                                                                       monkeypatch):
+    from swingbot.core.infra import store_snapshot
+
+    def boom():
+        raise RuntimeError("v218 state read failed")
+
+    monkeypatch.setattr(store_snapshot, "request_state", boom)
+    response = client.get("/api/v1/trades", headers=auth)
+    assert response.status_code == 200
+    assert response.headers["Server-Timing"].endswith("snap;desc=off")
+
+
+def test_with_the_switch_off_every_request_says_off(client, auth, sql_counted, monkeypatch):
+    from swingbot import config
+    monkeypatch.setattr(config, "auto_reload_if_changed", lambda *a, **k: None)
+    monkeypatch.setattr(config, "ADMIN_STORE_SNAPSHOT", "off")
+    for _ in range(2):
+        header = client.get("/api/v1/trades", headers=auth).headers["Server-Timing"]
+        assert header.endswith("snap;desc=off"), header
+
+
+def test_a_second_scoped_request_on_a_connected_snapshot_is_a_hit(client, auth, sql_counted,
+                                                                  snapshot_on):
+    first = client.get("/api/v1/trades", headers=auth).headers["Server-Timing"]
+    second = client.get("/api/v1/trades", headers=auth).headers["Server-Timing"]
+    assert first.endswith("snap;desc=miss"), first
+    assert second.endswith("snap;desc=hit"), second
