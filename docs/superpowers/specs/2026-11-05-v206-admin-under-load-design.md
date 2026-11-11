@@ -741,3 +741,56 @@ or the route (or the query shape) stays off the list. A dropped route keeps
   request (`calendar.py:202`) and reads daily bar frames through
   `data_store.load_normalized` (`calendar.py:198-199`), which are not
   snapshot-backed and have no version among the tag inputs.
+
+### Plan 3 after (committed probe)
+
+After plan v218 deployed (ui 1.40.6, bot 2.18.3), with
+`scripts/ops/admin_browser_probe.py` at `e6595942`, against image
+`ghcr.io/cmghuy/discord-bot:sha-e6595942ac7b`, 16:44 Berlin, `--date 2026-11-03`,
+3 rounds × 12 pages, cap 90 s, quiet 2 s. Label **scan**. Reference: Plan 2's
+`v217-after-1` run (label `mixed`). Closed view: 20 cold GETs and 20
+revalidations of `/api/v1/trades?status=CLOSED&page=1&per_page=10` from the dev
+machine through Cloudflare, 16:56 Berlin. Credentials were absent from every output.
+
+| Measure | Plan 2 after (v217-after-1) | Plan 3 after (v218) |
+|---|---|---|
+| Label | mixed | scan |
+| `/trades` TTFB | p90 11095.9 / max 11358.8 ms (n 12, median 9340.3) | p90 10472.6 / max 10615.7 ms (n 11, median 2111.3) |
+| `/dashboard` TTFB | p90 11403.9 / max 16188.5 ms (n 19, median 8984.9) | p90 6024.2 / max 12318.1 ms (n 13, median 2813.3) |
+| `/live` TTFB | p90 8835.0 / max 10083.9 ms (n 49, median 5538.6) | p90 3089.7 / max 7227.5 ms (n 79, median 400.3) |
+| `/market/updates` TTFB | p90 1870.5 / max 4970.0 ms (n 229, median 274.3) | p90 374.7 / max 1081.1 ms (n 107, median 148.3) |
+| `/market/tape` TTFB | p90 6871.7 / max 9255.0 ms (n 78, median 4024.9) | p90 4813.9 / max 6141.4 ms (n 73, median 3220.3) |
+| `/system/scan` TTFB | p90 706.4 / max 2206.0 ms (n 78, median 166.7) | p90 361.9 / max 562.8 ms (n 75, median 187.8) |
+| `/health` TTFB | p90 153.3 / max 428.4 ms (n 78, median 57.7) | p90 156.8 / max 358.8 ms (n 75, median 88.5) |
+| `snap;desc` share, all /api calls | - | absent 3%, hit 13%, miss 4%, off 80% |
+| 304 responses seen by the probe | - | 0 |
+| Idle tab, requests per minute | 16.5 | 17.5 |
+| Idle tab, calls by endpoint (120 s) | `/market/updates` 12, `/dashboard` 9, `/equity/candles` 4, `/market/tape` 4, `/live` 4 | `/dashboard` 14, `/live` 7, `/market/updates` 4, `/equity/candles` 4, `/market/tape` 4, `/health` 1, `/system/scan` 1 |
+| Closed view `/trades?status=CLOSED`, cold 200 | 11.1 s p90 / 11.4 s max (unfiltered `/trades`, Plan 2) | p90 2226.3 / max 3549.0 ms (n 20, median 623.1) |
+| Closed view, revalidation 304 | - | p90 532.0 / max 900.9 ms (n 18, median 311.0) |
+| Closed view, ETag on cold / 200 on revalidate | - | 20 of 20 / 2 |
+| Closed view, `snap;desc` | - | hit 34, miss 6, off 0 |
+| Closed view, scan running at start / end | - | True / True |
+
+**What the figures can and cannot show.** The probe's `/trades` row is the
+Trades page's unfiltered request (`page=1&per_page=10`). It may include open
+rows, so it gets no ETag, and its change is the snapshot alone (`snap;desc`
+share). The ETag saving shows only in the closed-view rows, measured by a
+script because no SPA page requests that shape. The closed view is admitted
+06:00–24:00 Berlin with the refresher on (V218-10b), and both held here. The
+calendar routes stayed off the allow-list (`### Plan 3 route audits
+(V218-10..12)`). The idle tab's `/market/updates` count is V218-14's measure:
+it was 12 in 120 s before. The "Plan 2" cell of the closed-view cold row quotes
+Plan 2's unfiltered `/trades` figure, the only `/trades` figure Plan 2 has. The
+`snap;desc` share counts every /api call the probe saw: `off` is the calls whose request
+read no snapshot-backed store (`/health` and `/system/scan` showed `off` in the deploy check).
+Two of the 20 closed-view revalidations answered 200, each with a new ETag: a
+trade write moved the tag mid-scan between the cold GET and its revalidation
+(no 200 carried an unchanged tag). The dev machine was also running an unrelated
+local backtest during both runs, which adds noise to the dev-side timings.
+
+- The idle tab missed the Plan 1 target of under 10 requests per minute: 17.5
+  per minute (Plan 2: 16.5). `/market/updates` fell from 12 to 4 calls in 120 s,
+  but `/dashboard` rose from 9 to 14 and now dominates the idle traffic.
+- `/health` median TTFB rose from 57.7 to 88.5 ms (p90 153.3 to 156.8 ms); the
+  route showed `snap: off` (no snapshot read), so no v218 code path is on it; read it as dev-machine noise.
