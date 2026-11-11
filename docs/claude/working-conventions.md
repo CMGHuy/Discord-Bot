@@ -376,16 +376,15 @@ trusts it in `/hooks`.
 Added 2026-10-14 at the partner's request. The only cost allowed is the Claude
 subscription. Never propose, start, schedule or script anything billed on top
 of it unless the partner asks for it by name in that message: API-key LLM calls (`ANTHROPIC_API_KEY` etc.), `/code-review ultra` (billed), paid
-data or hosting services. The per-skill `evals/` suites stay in the repo (files
-cost nothing), but `claude plugin eval` is **never run** unless the partner asks
-for it by name, since each case is a billed child `claude` run; a skill
-`description:` edit is checked against its trigger table and
-`tests/hooks/test_role_skills.py` (free). Subagents
+data or hosting services, and `claude plugin eval` (a billed child `claude` run
+per case). The per-skill `evals/` suites were deleted on 2026-11-11 at the
+partner's request; never recreate them. A skill `description:` edit is checked
+against its trigger table and `tests/hooks/test_role_skills.py` (free). Subagents
 on the subscription (`Agent`, `/panel`) are not extra cost.
 
 **Never offer it either** (partner, 2026-11-11): no billed option in an
 `AskUserQuestion`, a closing summary or an "I can run X if you want" line, and
-no new `evals/` cases written for a new skill — its trigger table and
+no `evals/` cases written for any skill — its trigger table and
 `tests/hooks/` are the check.
 
 ## Permissions follow every worktree

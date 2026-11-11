@@ -175,41 +175,14 @@ green and its results are recorded, and `replicate-prod-db` before a task's
 first test run against the database. `/task-brief` (grandfathered, outside the tiers) was opened to Claude too (partner, 2026-11-05): Claude invokes it right after `task_handoff.py` writes a handoff. `MODEL_RUN_RITUALS` in
 `tests/hooks/test_skill_shape.py` pins the split.
 
-## Proving a skill fires: the eval suites
+## Proving a skill fires: free checks only
 
-**Never run these unless the partner asks by name** — each case is a billed
-child `claude` run (`working-conventions.md` § Paid usage). The suites are kept
-as the written record of each trigger table.
-
-Every Tier 1 and Tier 3 trigger table is wired into a runnable suite under
-`.claude/skills/<skill>/evals/` — one case per table row, `fire-*` for a
-should-fire row and `no-fire-*` for a near-miss. A case is a `prompt.md` (the
-request as a session would really phrase it, `allowed_tools: [Read, Glob,
-Grep, Skill]`) plus `graders/skill-fired.md`, a `tool_used` grader on the
-`Skill` tool: `min: 1` for a fire, `min: 0` **and** `max: 0` for a near-miss.
-A near-miss grader must set `min: 0` explicitly — `min` defaults to 1, so a
-bare `max: 0` asks for the impossible range `1..0` and fails every case that
-behaved correctly.
-
-```bash
-claude plugin eval .claude/skills/<skill> --runs 1 --no-publish --trust-plugin --ablation none
-```
-
-`--ablation none` keeps the run to a single arm. Omit it and the run defaults
-to `with-without`, which adds a no-plugin baseline arm at twice the runs and
-cost. That arm is worth paying for when the question is whether the *skill*
-rather than the base model produced the behaviour — a should-fire case then
-reports `with 1.00 / without 0.00 / Δ +1.00`. It adds nothing on a near-miss,
-where the baseline arm trivially scores 1.00.
-
-Each case is a real child `claude` run on your own credential. The full
-52-case sweep is about $3.50 and about 8 minutes; per-skill suites are 3–8
-cases each. Results land in `.claude/skills/<skill>/evals/results/`, which is
-gitignored. Baseline at 2026-09-21: 52/52 cases pass, all eight suites exit 0.
-v145 role suites, 2026-10-09: 54/54 cases pass across the nine role
-suites (one description revision each for quant-engineer and senior-engineer: a
-missed fire case, fixed by naming the reproducibility and behaviour-preserving
-refactor questions in the description).
+Skills carry no eval suites. `claude plugin eval` runs a billed child `claude`
+per case, so the partner had every `evals/` folder removed on 2026-11-11
+(`working-conventions.md` § Paid usage). A skill's `## Trigger table` is its
+record; `tests/hooks/test_skill_shape.py` (which also fails if an `evals/`
+folder reappears) and `tests/hooks/test_role_skills.py` are the free checks,
+plus a subscription subagent run of a realistic prompt when wording matters.
 
 ## Repo tooling (`.claude/`)
 

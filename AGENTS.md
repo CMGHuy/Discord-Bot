@@ -55,7 +55,7 @@ laptop. Cron runs read-only checks; suite runs, commits and close-outs wait. Det
 Commit in several scoped commits, never one big one.
 Never propose or start anything billed beyond the subscription (API keys,
 `/code-review ultra`, paid services) unless the partner asks by name. Never offer
-one either (no billed option in a question or summary, no new skill `evals/`). Detail:
+one either (no billed option in a question or summary, no skill `evals/` suites; `claude plugin eval` is billed). Detail:
 `docs/claude/working-conventions.md` § Paid usage.
 
 ## Project and production boundary
