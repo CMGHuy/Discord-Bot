@@ -41,8 +41,9 @@ already-numbered spec reuses that spec's number and links back with a
 `**Spec:**` line.
 
 A spec numbered above v140 also carries `**Screen:**` under `Edge:` -- a
-`SCREEN-PASS` ledger id, a `harvest-headroom` results path, or `exempt
-(integrity)`. From v146 a spec carries `**Panel:**` directly below
+`SCREEN-PASS` ledger id, a `harvest-headroom` results path, `exempt
+(integrity)`, or -- for `Edge: expectancy` only -- `<id> SCREEN-AVOID-PASS (veto)`
+(v214 avoid mode). From v146 a spec carries `**Panel:**` directly below
 `Screen:`: one to three role skills, defaulting by `Edge:` from the table in
 `document-conventions.md`, overridable by the author. From v146 a plan's
 first line under every `### Task` is `**Model:**`, per
