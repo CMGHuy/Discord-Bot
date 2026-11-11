@@ -376,3 +376,22 @@ switch to a replay diagnostic.
 ## Result
 
 2026-11-11: `screen-fvg_overhead_aged` -> **SCREEN-FAIL**. N = 13908, ΔExpR +0.3709R (upper 95% +0.4521R), 0 of 9 years negative; control arm N_c = 4559, ΔExpR_c +0.0721R (upper 95% +0.2120R); avoid p 1.0000, BH q 1.0000 across the ledger (row 80; v211 shots before it: screen-shock_support_break_short, screen-shock_failed_bounce_short). The sign is the wrong way for an avoid screen: bars under an aged overhead bearish gap did better than the matched null, so there is no veto. Results: `docs/superpowers/results/2026-11-11-screen-fvg_overhead_aged.md`.
+
+Reading correction (panel): the +0.3709R is mostly the null, not the event arm. The event arm's own mean is +0.0893R against a null of -0.2816R, the same negative pullback-state null that `uptrend_pullback` showed (-0.2892R, +0.3672R). The like-for-like read is the control arm: ΔExpR_c +0.0721R, lower 95% -0.0528R, which rules out a reach penalty of 0.10R or more within the 4559 events that met the control floor (32.8% of kept events; the two arms are not paired on the same events). SCREEN-FAIL therefore means no avoidable penalty was found, not that the condition carries an edge. Scope: never-touched bearish gaps only (a wick touch fills the gap, so touched-and-rejected gaps are outside the verdict), the live detector's 3 freshest gaps within 100 bars, any gap size, reach measured on Close[t] (overnight share 1.7%).
+
+The live cluster (N=68, -0.199R) is not explained by this screen and is not closed by it; the plan-level shape (TP1 at the gap midpoint) stays open for the replay diagnostic in *What follows*.
+
+## Panel review (results doc: quant-researcher, quant-engineer, technical-analyst)
+
+No BLOCKING findings from any seat. Advisories:
+
+- quant-researcher: same trigger re-screened in edge mode under a new name -- applied: the closed row now names it data-snooped.
+- quant-researcher: +0.37R is the null's composition -- applied: reading correction above.
+- quant-researcher: realised null draws per event (about 12.1, not K=20 as in earlier screens; the 26.0% condition-bar exclusion shrinks the pools) -- applied: noted here; the results doc is the runner's output and is not hand-edited.
+- quant-researcher: d on the same 4559 events as d_c -- rejected for this record: needs a re-run or follow-up read-out, never a retry of the shot.
+- quant-researcher: live-book gap -- applied: second paragraph above.
+- quant-engineer: cache dir `data/backtest_cache_ext`, fetch date and file hashes not pinned (no context idea, so no hashes) -- applied: noted here; a re-fetched cache would change N.
+- quant-engineer: arms not paired; null pool composition (tenure, trend share) not printed -- applied (pairing note above); pool-composition print rejected as a follow-up-spec item.
+- quant-engineer: no lookahead found, helper parity sound, seeding reproducible -- no change.
+- technical-analyst: trigger probably fires mostly at age 5 right after a gap-down, age-at-event and (bottom - Close)/ATR distributions not printed -- rejected for this record: follow-up spec item before any veto.
+- technical-analyst: sign opposite to the hypothesis, tested-and-rejected gaps outside scope, gap size unconstrained, reach vs TP1-at-midpoint -- applied: reading correction and scope sentence above.
