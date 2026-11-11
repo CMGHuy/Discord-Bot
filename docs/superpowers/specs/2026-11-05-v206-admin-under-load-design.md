@@ -731,3 +731,13 @@ or the route (or the query shape) stays off the list. A dropped route keeps
   `api_v1/analytics.py:132-165`), and the default month is the process-local
   `dt.date.today()` (`api_v1/calendar.py:62`). Admitting it would first need
   `as_of` changed, which is a payload change outside v206. It keeps `no-store`.
+- **`/calendar/pnl/day`: dropped.** The body's `as_of` is stamped per request
+  (`api_v1/calendar.py:157`), below day resolution: two requests five minutes
+  apart on an unchanged book differ in `as_of` alone
+  (`tests/admin_perf/test_calendar_day_conditional_audit.py`). Its FX
+  conversion also fetches pair frames while the refresher is off
+  (`api_v1/money.py:23-25`), which no tag input versions. It keeps `no-store`.
+- **`/calendar/pnl/day/sparklines`: off, no key audit.** It stamps `as_of` per
+  request (`calendar.py:202`) and reads daily bar frames through
+  `data_store.load_normalized` (`calendar.py:198-199`), which are not
+  snapshot-backed and have no version among the tag inputs.
