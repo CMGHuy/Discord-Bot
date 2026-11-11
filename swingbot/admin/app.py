@@ -52,6 +52,7 @@ from . import login_limiter
 from . import principals
 from . import freshness
 from . import request_timing
+from .events import snapshot_listener
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
@@ -291,6 +292,9 @@ freshness.install(app)
 # response, the ADMIN_SLOW_REQUEST_MS log line, and the SQL counter on the
 # admin's engines only -- the bot and the refresher never import this module.
 request_timing.install(app)
+# v218: the admin snapshot's own LISTEN connection (trades, journal), started on
+# the first non-testing request so its thread lives in the gunicorn worker.
+snapshot_listener.install(app)
 
 
 # ---------------------------------------------------------------------------
