@@ -128,6 +128,12 @@ def test_model_run_rituals_are_invocable_and_say_when():
         assert f"Run as /{name}, or by Claude itself" in meta["description"]
 
 
+def test_no_skill_ships_a_billed_eval_suite():
+    """Partner, 2026-11-11: `claude plugin eval` is billed beyond the
+    subscription, so no skill carries an evals/ suite to run."""
+    assert [p.parent.name for p in SKILLS_DIR.glob("*/evals")] == []
+
+
 def test_every_skill_is_registered_in_exactly_one_tier():
     on_disk = {p.name for p in _skill_dirs()}
     assert on_disk == GRANDFATHERED | VENDORED | TIER_1_AND_3 | TIER_2

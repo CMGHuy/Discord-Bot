@@ -38,12 +38,5 @@ etoro-public-api-operations|.cursor/mcp.json|vendored; a client config path outs
 etoro-public-api-operations|.vscode/mcp.json|vendored; a client config path outside the repo
 etoro-public-api-operations|~/.codeium/windsurf/mcp_config.json|vendored; a client config path outside the repo
 
-# --- eval hypotheticals: a prompt about a file or knob that does not exist
-edge-module|swingbot/core/edge/vwap_reclaim.py|eval prompt proposes a new module
-replicate-prod-db|tests/charts/test_render.py|eval prompt names a hypothetical unit test
-mirror-prod|SCAN_INTERVAL_SECONDS|eval prompt names a hypothetical .env knob
-no-lookahead|SCAN_INTERVAL_SECONDS|eval prompt names a hypothetical knob
-no-lookahead|SCAN_INTERVAL_SECS|eval prompt names a hypothetical knob
-
 # --- runtime output on the VM, never tracked
 stable-snapshot|backups/deploys.jsonl|runtime log written on the VM, never tracked
