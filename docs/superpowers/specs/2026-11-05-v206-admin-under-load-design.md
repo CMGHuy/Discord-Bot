@@ -680,3 +680,15 @@ v218 snapshot listener bumps that generation on every `trades` NOTIFY, and the
 `plans` and `starred_plans` triggers fire that channel too. The snapshot (V218-4)
 and the ETag (V218-8) never trust versions alone either: their tokens carry the
 generations too.
+
+### Plan 3 build tag on the VM (V218-7)
+
+Checked 2026-11-11 (Berlin), read-only through `scripts/ops/ssh-hetzner.sh`:
+the admin container's environment does **not** carry `SWING_BOT_IMAGE`.
+`swingbot/admin/build_identity.build_version()` therefore rests on the
+SHA-256 of `VERSION.json` alone. Every release bumps `VERSION.json`, so a
+deploy or a rollback across releases still changes every ETag. Two images
+with the same `VERSION.json` (a hotfix redeployed without a bump) would
+share tags. Passing `SWING_BOT_IMAGE` into the admin service's
+`environment:` in `docker-compose.yml` closes that gap. It is a deploy
+change outside this plan, raised with the partner.
