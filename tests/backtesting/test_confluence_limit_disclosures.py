@@ -115,3 +115,78 @@ def test_slim_rows_and_empty_inputs_do_not_crash():
     assert cld.paired_delta([], [])["mean_delta_r"] is None
     assert cld.scope_counts([], None)["d_range"] is None
     assert cld.filled_dollars([])["per_fill"] is None
+
+
+KEPT = {"arm": ARM[:3], "ref": REF,
+        "arm_result": {"trades_taken": 3, "trades_skipped": 1, "max_dd_pct": 1.2,
+                       "notional_capped": 1, "skip_reasons": {"heat": 1}},
+        "ref_result": {"trades_taken": 5, "trades_skipped": 0, "max_dd_pct": 2.0,
+                       "notional_capped": 0, "skip_reasons": {}}}
+
+
+@pytest.fixture
+def book():
+    return cld.disclosures(ARM, REF, CENSUS, spy=SPY, earnings=EARNINGS, portfolio=KEPT)
+
+
+def test_disclosures_assemble_every_section(book):
+    assert book["cell"] == "f0.5"
+    assert book["paired"] == cld.paired_delta(ARM, REF)
+    assert book["scope"] == cld.scope_counts(CENSUS, "f0.5")
+    assert book["adverse"] == cld.adverse(ARM) and book["atr"] == cld.by_atr(ARM)
+    assert book["spy"] == cld.spy_days(ARM, SPY)
+    assert book["earnings"] == cld.earnings_share(ARM, EARNINGS)
+    assert book["alert_volume_per_day"] == cld.alert_volume_per_day(CENSUS, ARM)
+
+
+def test_portfolio_skips_are_the_heat_at_fill_cancels(book):
+    arm = book["portfolio"]["arm"]
+    assert (arm["heat_at_fill"], arm["notional_capped_share"]) == (1, 0.25)
+    assert (arm["submitted"], arm["taken"]) == (4, 3)
+    assert book["portfolio"]["ref"]["heat_at_fill"] == 0
+    reasons = {"heat": 1, "sector": 2, "cluster": 3, "max_open": 4, "one_per_ticker": 9}
+    assert cld.cap_skips({"skip_reasons": reasons})["heat_at_fill"] == 10
+
+
+def test_per_direction_and_risk(book):
+    bull = book["per_direction"][0]
+    assert (bull["direction"], bull["arm"]["n"], bull["ref"]["n"]) == ("bullish", 3, 5)
+    assert bull["arm"]["wr"] == pytest.approx(100 / 3)
+    assert book["per_direction"][1]["arm"] == {"n": 0, "expr": None, "wr": None}
+    risk = book["risk"]["arm"]
+    assert risk["worst_day_r"] == pytest.approx(-1.0)
+    # 03-03: T0 (03-01..03-03), T1 (03-02..03-04) and T2 (03-03..03-05) all open
+    assert (risk["max_open_positions"], risk["max_open_risk_pct"]) == (3, 3.0)
+    assert risk["max_drawdown_r"] == pytest.approx(1.05)      # +2, then -1 and -0.05
+    assert 0.0 <= risk["p_ruin"] <= 1.0
+
+
+def test_empty_inputs_disclose_without_crashing():
+    empty = {"arm": [], "ref": [], "arm_result": {}, "ref_result": {}}
+    d = cld.disclosures([], [], [], spy={}, earnings={}, portfolio=empty)
+    assert d["cell"] is None and d["paired"]["alerts"] == 0
+    assert d["risk"]["arm"] == {"n": 0, "worst_day_r": None, "max_open_positions": 0,
+                                "max_open_risk_pct": 0.0, "max_drawdown_r": None,
+                                "p_ruin": None, "max_dd_p95": None}
+    assert d["portfolio"]["arm"]["notional_capped_share"] is None
+    assert "D range n/a" in cld.render_disclosures(d)
+
+
+def test_render_prints_every_section_and_the_touch_sensitivity(book):
+    text = cld.render_disclosures({"window": "train", "cells": [book],
+                                   "touch": [{"cell": "f0.5", "n": 4, "ref_n": 5, "expr": 0.1,
+                                              "ref_expr": 0.0, "wr": 50.0, "ref_wr": 60.0,
+                                              "passes": False}]})
+    for needle in ("## Disclosures (train", "### Cell f0.5", "D range 2.00%-5.00%",
+                   "direction", "Paired per-alert", "Gap-through-stop", "Stop-run",
+                   "ATR14%", "SPY down day", "Earnings", "Notional cap cut (arm)", "heat 1",
+                   "Worst day R", "P(ruin)", "upper bound", "Touch-fill sensitivity", "n/a"):
+        assert needle in text, needle
+    assert "never gating" in text
+
+
+def test_render_reads_a_json_round_trip(book):
+    import json
+    blob = json.loads(json.dumps({"window": "validation", "cells": [book], "touch": []}))
+    assert cld.render_disclosures(blob) == cld.render_disclosures(
+        {"window": "validation", "cells": [book]})
