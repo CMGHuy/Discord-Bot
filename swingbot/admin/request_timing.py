@@ -22,6 +22,7 @@ from sqlalchemy import event
 from swingbot import config
 from swingbot.core.db import engine as db_engine
 from swingbot.core.infra.swallowed import swallowed
+from swingbot.core.infra import store_snapshot
 
 log = logging.getLogger(__name__)
 
@@ -84,10 +85,16 @@ _G_KEY = "_v205_request_timing"
 _DEFAULT_SLOW_MS = 2000
 
 
-def server_timing(total_s: float, tally: SqlTally) -> str:
-    """The header value; V205-1's timing script parses exactly this."""
-    return (f"total;dur={total_s * 1000:.1f}, "
-            f'db;dur={tally.db_s * 1000:.1f};desc="{tally.statements} statements"')
+def server_timing(total_s: float, tally: SqlTally, snap: str = "off") -> str:
+    """The header value. ``total`` and ``db`` first and unchanged (V205-1's
+    script parses them); ``app`` is total minus db from the rounded values,
+    so the three always add up; ``snap`` is the snapshot's state (v218 P3-d)."""
+    total_ms = round(total_s * 1000, 1)
+    db_ms = round(tally.db_s * 1000, 1)
+    app_ms = max(round(total_ms - db_ms, 1), 0.0)
+    return (f"total;dur={total_ms:.1f}, "
+            f'db;dur={db_ms:.1f};desc="{tally.statements} statements", '
+            f"app;dur={app_ms:.1f}, snap;desc={snap}")
 
 
 def install(app: Flask) -> None:
@@ -101,6 +108,7 @@ def install(app: Flask) -> None:
 def _begin() -> None:
     if request.path.startswith(API_PREFIX):
         setattr(g, _G_KEY, (time.perf_counter(), start_request()))
+        store_snapshot.begin_request()       # v218: one version read per request
 
 
 def _finish(response):
@@ -109,9 +117,18 @@ def _finish(response):
         return response
     total_s = time.perf_counter() - state[0]
     tally = current() or SqlTally()
-    response.headers["Server-Timing"] = server_timing(total_s, tally)
+    response.headers["Server-Timing"] = server_timing(total_s, tally, _snap_state())
     _log_if_slow(request.path, total_s, tally)
     return response
+
+
+def _snap_state() -> str:
+    """hit | miss | off for this request; a failing read is ``off``, never a failed response."""
+    try:
+        return store_snapshot.request_state()
+    except Exception as exc:
+        swallowed(log, "ops.request_timing.snap_state", exc, level=logging.DEBUG)
+        return "off"
 
 
 def _log_if_slow(path: str, total_s: float, tally: SqlTally) -> None:
@@ -126,6 +143,7 @@ def _teardown(_exc) -> None:
     state = g.pop(_G_KEY, None)
     if state is None:
         return
+    store_snapshot.end_request()
     try:
         end_request(state[1])
     except ValueError as exc:

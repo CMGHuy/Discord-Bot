@@ -50,7 +50,10 @@ VOLATILE_KEYS: dict[str, str] = {}
 ADDED_POINTERS: dict[str, dict[str, str]] = {
     "dashboard": {"/equity_30d/market_meta": "v204 sparkline snapshot meta; tests/admin_snapshots"},
     "dashboard_today": {"/equity_30d/market_meta": "v204 sparkline snapshot meta; tests/admin_snapshots"},
-    "calendar_month": {"/market_meta": "v204 calendar snapshot meta; tests/admin_snapshots"},
+    "calendar_month": {
+        "/market_meta": "v204 calendar snapshot meta; tests/admin_snapshots",
+        "/month_day_of_week": "fa6290fd by-weekday table for the month on show; tests/admin/test_api_v1_calendar.py",
+    },
 }
 
 ACCOUNT_CODE = "EUR"

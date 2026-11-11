@@ -657,3 +657,87 @@ The probe cannot show v217's own savings: it opens the Dashboard on 1D, which
 sent one `/dashboard` before v217 too, and a mid-month day page made no extra
 month call before either. The wider-scope Dashboard request and the
 day-edge month lookup are pinned by their specs (V217-3, V217-4, V217-5, V217-5b).
+
+### Plan 3 version() gap (V218-1)
+
+`(count, max(updated_at))` is built from stamps written before commit:
+`upsert()`/`patch()` use `clock_timestamp()` (`repositories/base.py:89,101`),
+`insert()` uses the column default `now()` (transaction start). A transaction that
+commits after a concurrent one can therefore land under an older stamp, and the
+token does not move although a row changed.
+`tests/db/test_v218_store_versions.py` reproduces it on two real connections for
+`trades` (`TradeRepository.version()`, new in V218-1) and `plans`.
+
+Existing callers of `plans_repo().version()`:
+
+| Caller | Use | Verdict |
+|---|---|---|
+| `swingbot/admin/api_v1/cancel_precision.py:38-41` `_memo_key()` | memo key `(version, UTC hour)` of the cancel-precision payload | affected: an upsert committed under an older stamp leaves `(count, max)` unchanged, so the memo serves the old payload until the hour turns |
+| `swingbot/admin/watchlist_rows.py:67-73` `_plans_signature()` | signature `("db", count, max)` of the watchlist plan projection | affected: same mechanism; stale until a later plan write moves the token |
+
+Fix: V218-6 appends `store_generation.generation("trades")` to both keys. The
+v218 snapshot listener bumps that generation on every `trades` NOTIFY, and the
+`plans` and `starred_plans` triggers fire that channel too. The snapshot (V218-4)
+and the ETag (V218-8) never trust versions alone either: their tokens carry the
+generations too.
+
+### Plan 3 build tag on the VM (V218-7)
+
+Checked 2026-11-11 (Berlin), read-only through `scripts/ops/ssh-hetzner.sh`:
+the admin container's environment does **not** carry `SWING_BOT_IMAGE`.
+`swingbot/admin/build_identity.build_version()` therefore rests on the
+SHA-256 of `VERSION.json` alone. Every release bumps `VERSION.json`, so a
+deploy or a rollback across releases still changes every ETag. Two images
+with the same `VERSION.json` (a hotfix redeployed without a bump) would
+share tags. Passing `SWING_BOT_IMAGE` into the admin service's
+`environment:` in `docker-compose.yml` closes that gap. It is a deploy
+change outside this plan, raised with the partner.
+
+### Plan 3 route audits (V218-10..12)
+
+Each allow-list candidate was audited against the ETag inputs (v218 index
+§ Global Constraints): every field of its body is either covered by an input,
+or the route (or the query shape) stays off the list. A dropped route keeps
+`Cache-Control: no-store`. The exact allow-list is pinned by
+`tests/admin_perf/test_conditional_routes.py`.
+
+- **`/trades`: admitted per query shape** (`trades.closed_only_query`, route
+  key `trades`). The shape: `status=closed` or `outcome=win|loss`; no `sort` on
+  `pnl_pct`, `r_multiple` or `status` (an alias of `progress_pct`), which price
+  every row; the refresher on; and the ET date equal to the Berlin date.
+  `tests/admin_perf/test_trades_conditional_audit.py` classifies every key of
+  the closed page (stored records, Berlin day, journal, FX daily, ET day,
+  unpriced, paging), and a new key fails it. Findings:
+  - With the refresher off, a closed row's FX can come from the pair frame
+    (`fx.fx_rate` → `rate_before`), which `fx_daily_rate_repo().version()`
+    does not cover. So the shape needs the refresher on.
+  - `follow_score` (`_attach_follow_scores`, `trades.py:772`) counts days from
+    the ET date (`rank.follow_score`, `session.market_today()`), which turns
+    at 06:00 Berlin. The tag keys the Berlin date, so the shape is admitted
+    only while the two dates agree (06:00–24:00 Berlin). The tag inputs did
+    not change.
+  - `held_hours` reads the clock only for a row without `closed_at`; every
+    closed row has one (asserted).
+  - Unfiltered `/trades`, `status=open` and every other shape keep
+    `no-store`: open rows carry live prices, `held_hours` to now,
+    `prices_as_of` and `market_meta`.
+- **`/calendar/pnl`: dropped.** The body's `as_of` is the time the filtered
+  view was composed (`core/analytics/page_bodies.py:352-354`), a per-request
+  stamp below day resolution that no ETag input covers: two requests five
+  minutes apart on an unchanged book differ in `as_of` and nothing else in the
+  month (`tests/admin_perf/test_calendar_conditional_audit.py`). Also outside
+  the tag: `market_meta` follows the refresher (`computed_at`, `refreshing`,
+  `stale_inputs`, `error` from the stored `admin_snapshots` row,
+  `api_v1/analytics.py:132-165`), and the default month is the process-local
+  `dt.date.today()` (`api_v1/calendar.py:62`). Admitting it would first need
+  `as_of` changed, which is a payload change outside v206. It keeps `no-store`.
+- **`/calendar/pnl/day`: dropped.** The body's `as_of` is stamped per request
+  (`api_v1/calendar.py:157`), below day resolution: two requests five minutes
+  apart on an unchanged book differ in `as_of` alone
+  (`tests/admin_perf/test_calendar_day_conditional_audit.py`). Its FX
+  conversion also fetches pair frames while the refresher is off
+  (`api_v1/money.py:23-25`), which no tag input versions. It keeps `no-store`.
+- **`/calendar/pnl/day/sparklines`: off, no key audit.** It stamps `as_of` per
+  request (`calendar.py:202`) and reads daily bar frames through
+  `data_store.load_normalized` (`calendar.py:198-199`), which are not
+  snapshot-backed and have no version among the tag inputs.
