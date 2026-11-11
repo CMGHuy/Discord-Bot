@@ -29,6 +29,7 @@ FLAGS_OFF = [
     ("v191", "CONFLUENCE_ATR_STOP_FLOOR", 0.0),
     ("v191", "CONFLUENCE_ATR_TARGET_MODE", "rechoose"),
     ("v191", "LONG_GAP_SIZING", False),
+    ("v212", "CONFLUENCE_LIMIT_ENTRY_F", 0.0),
 ]
 
 MASKED_STRATEGIES = [

@@ -58,6 +58,11 @@ _V191 = ("v191: atr_band.band_stop inside builders.build_confluence_plan, and th
          "replay_scenarios (ConfluenceEngine) observes it. Confluence plans only; strategy plans "
          "never. Gated by the v92 harvest gate through "
          "scripts/backtest/measure_atr_band_stop.py, not measure_arms.py.")
+_V212 = ("v212: builders.apply_confluence_limit inside build_confluence_plan turns a clamped "
+         "confluence market plan into a resting limit. Measured by its own paired replay "
+         "(swingbot/core/backtesting/confluence_limit_replay.py through "
+         "scripts/backtest/measure_confluence_limit.py), which derives every arm from the "
+         "knob-0 reference stream -- not measure_arms.py.")
 _HEADROOM = ("v135 headroom veto (edge/gates.py), applied to the built plan in "
              "StrategyEngine._gated_plan and to each scenario in "
              "backtest_scenarios._headroom_kept. Inert unless HEADROOM_SCOPE != off and "
@@ -153,6 +158,7 @@ REGISTRY: dict[str, Reach] = {
     "CONFLUENCE_ATR_TARGET_MODE": Reach(REACHABLE, _V191 + " Read only when "
                                         "CONFLUENCE_ATR_STOP_FLOOR > 0; a lone perturbation at "
                                         "floor 0 is inert by design.", C),
+    "CONFLUENCE_LIMIT_ENTRY_F": Reach(REACHABLE, _V212, C),
 }
 
 

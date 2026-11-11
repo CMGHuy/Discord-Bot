@@ -313,6 +313,70 @@ def _days_between(a: str, b: str) -> float:
     return (db - da).days
 
 
+_V212_OPTIONS = ("max_position_pct", "max_position_value", "cluster_fn", "track_keys")
+
+
+def _note_skip(extra: dict, reason: str) -> None:
+    extra["skip_reasons"][reason] = extra["skip_reasons"].get(reason, 0) + 1
+
+
+def _notional_cap(balance, max_pct, max_value) -> float | None:
+    """The tighter of the two notional caps, or None when both are off
+    (max_pct None; max_value None or 0, as account._uncut_size_caps)."""
+    caps = [cap for cap in (None if max_pct is None else balance * max_pct / 100.0,
+                            max_value if max_value else None) if cap is not None]
+    return min(caps) if caps else None
+
+
+def _notional_capped_risk(sig, balance, eff_risk, max_pct, max_value, extra) -> float:
+    """v212 rule 7: shares = dollar risk / stop distance, so the notional is
+    balance * eff_risk / stop_pct. A notional cap cuts the shares and with
+    them the risk carried; the trade's R is untouched. 0 or None = no cap;
+    a signal without stop_pct is never capped."""
+    stop_pct = sig.get("stop_pct")
+    cap = _notional_cap(balance, max_pct, max_value)
+    if cap is None or not stop_pct or stop_pct <= 0 or balance <= 0:
+        return eff_risk
+    notional = balance * eff_risk / stop_pct
+    if notional <= cap + 1e-9:
+        return eff_risk
+    extra["notional_capped"] += 1
+    return eff_risk * cap / notional
+
+
+def _heat_reason(open_pos, sec, eff_risk, heat_cap_pct, sector_cap_pct) -> str | None:
+    """Total heat, then sector heat (only when the signal has a sector)."""
+    heat = sum(p["risk_pct"] for p in open_pos)
+    if heat + eff_risk > heat_cap_pct + 1e-9:
+        return "heat"
+    sec_heat = sum(p["risk_pct"] for p in open_pos if p["sector"] == sec)
+    if sec and sec_heat + eff_risk > sector_cap_pct + 1e-9:
+        return "sector"
+    return None
+
+
+def _capacity_reason(open_pos, sec, eff_risk, sig, heat_cap_pct, sector_cap_pct, max_open,
+                     cluster_fn) -> str | None:
+    """The first cap a new position breaches -- heat, sector, cluster,
+    max_open (fill_heat's order) -- or None. Today's checks, unchanged in
+    value; cluster only when a callback is given."""
+    reason = _heat_reason(open_pos, sec, eff_risk, heat_cap_pct, sector_cap_pct)
+    if reason is not None:
+        return reason
+    if cluster_fn is not None and cluster_fn(open_pos, sig, eff_risk):
+        return "cluster"
+    if max_open is not None and len(open_pos) >= max_open:
+        return "max_open"
+    return None
+
+
+def _with_v212(out: dict, extra: dict, options: dict) -> dict:
+    """Today's dict unless a v212 option was set (a 0.0 cap counts as set)."""
+    used = bool(options["track_keys"]) or any(options[name] is not None
+                                              for name in _V212_OPTIONS[:3])
+    return {**out, **extra} if used else out
+
+
 def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
                      risk_pct: float = 1.0, heat_cap_pct: float = 6.0,
                      sector_cap_pct: float = 3.0, max_open: int | None = None,
@@ -320,7 +384,11 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
                      one_per_ticker: bool = True, reversals: bool = False,
                      rev_min_hold_days: float = 1.0,
                      rev_cooldown_days: float = 2.0,
-                     rev_max_per_day: int = 1) -> dict:
+                     rev_max_per_day: int = 1,
+                     max_position_pct: float | None = None,
+                     max_position_value: float | None = None,
+                     cluster_fn=None,
+                     track_keys: bool = False) -> dict:
     """Chronological replay under real capital constraints. Per-signal
     expectancy answers 'is the edge real'; THIS answers 'what does the
     account actually do'. The difference is skipped signals.
@@ -343,6 +411,12 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
       * Guards are in DAYS, not hours -- signals are dated, not timestamped.
 
     Both flags default False so existing callers replay exactly as before.
+
+    v212: `max_position_pct` / `max_position_value` apply the notional caps to
+    signals carrying `stop_pct` (the cut scales carried risk, never
+    `r_multiple`); `cluster_fn(open_pos, sig, eff_risk)` returns True to skip a
+    signal on the cluster cap; `track_keys` records each taken signal's `key`.
+    With all four unset the result is exactly the pre-v212 dict.
     """
     from swingbot.core.edge.throttle import current_throttle
 
@@ -369,6 +443,9 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
     # for trades that have already closed are removed from that list as
     # they exit (see step 1 above), same reasoning as r_multiples_taken.
     taken_strategy_outcomes: list[tuple[str, str | None]] = []
+    options = {"max_position_pct": max_position_pct, "max_position_value": max_position_value,
+               "cluster_fn": cluster_fn, "track_keys": track_keys}
+    extra = {"notional_capped": 0, "skip_reasons": {}, "taken_keys": []}
 
     for sig in events:
         # 1) close everything that exited before this signal's date
@@ -385,6 +462,7 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
         eff_risk = risk_pct * mult
         if eff_risk <= 0:
             skipped += 1
+            _note_skip(extra, "throttle")
             continue
 
         # 2b) one position per ticker -- and, optionally, flip it
@@ -417,16 +495,18 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
                         flipped = True
                 if not flipped:
                     skipped += 1
+                    _note_skip(extra, "one_per_ticker")
                     continue
 
-        # 3) capacity checks
-        heat = sum(p["risk_pct"] for p in open_pos)
+        # 3) capacity checks (v212: notional cut first, then heat on the cut risk)
+        eff_risk = _notional_capped_risk(sig, balance, eff_risk, max_position_pct,
+                                         max_position_value, extra)
         sec = (sectors or {}).get(sig["ticker"], sig.get("sector"))
-        sec_heat = sum(p["risk_pct"] for p in open_pos if p["sector"] == sec)
-        if (heat + eff_risk > heat_cap_pct + 1e-9
-                or (sec and sec_heat + eff_risk > sector_cap_pct + 1e-9)
-                or (max_open is not None and len(open_pos) >= max_open)):
+        reason = _capacity_reason(open_pos, sec, eff_risk, sig, heat_cap_pct, sector_cap_pct,
+                                  max_open, cluster_fn)
+        if reason is not None:
             skipped += 1
+            _note_skip(extra, reason)
             continue
 
         open_pos.append({"exit_date": sig["exit_date"], "ticker": sig["ticker"],
@@ -436,6 +516,7 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
         taken += 1
         r_multiples_taken.append(sig["r_multiple"])
         taken_strategy_outcomes.append((sig.get("strategy", "UNKNOWN"), sig.get("outcome")))
+        extra["taken_keys"].append(sig.get("key"))
 
     for p in sorted(open_pos, key=lambda p: p["exit_date"]):
         balance *= 1 + (p["risk_pct"] / 100.0) * p["r"]
@@ -476,16 +557,17 @@ def portfolio_replay(signals: list, *, start_balance: float = 10_000.0,
         for strat, c in per_strategy_counts.items()
     }
 
-    return {"equity_curve": curve, "final_multiple": balance / start_balance,
-            "max_dd_pct": round(max_dd, 2), "trades_taken": taken,
-            "trades_skipped": skipped, "trades_per_month": round(taken / months, 1),
-            "r_multiples_taken": r_multiples_taken,
-            "per_strategy_wr": per_strategy_wr,
-            # reversals_r_delta is the R actually banked by cutting positions
-            # short MINUS the R those same positions would have earned running
-            # to their original exits. Negative means the flips cost money.
-            "reversals": reversed_n,
-            "reversals_r_delta": round(reversal_r_delta, 4)}
+    out = {"equity_curve": curve, "final_multiple": balance / start_balance,
+           "max_dd_pct": round(max_dd, 2), "trades_taken": taken,
+           "trades_skipped": skipped, "trades_per_month": round(taken / months, 1),
+           "r_multiples_taken": r_multiples_taken,
+           "per_strategy_wr": per_strategy_wr,
+           # reversals_r_delta is the R actually banked by cutting positions
+           # short MINUS the R those same positions would have earned running
+           # to their original exits. Negative means the flips cost money.
+           "reversals": reversed_n,
+           "reversals_r_delta": round(reversal_r_delta, 4)}
+    return _with_v212(out, extra, options)
 
 
 def _trades_similar(a, b, tol_pct: float) -> bool:

@@ -36,7 +36,8 @@ from swingbot.core.planning.params import shock_asof, stamp_entry_context
 from swingbot.core.planning.gap_sizing import size_for_plan, stamp_gap_sizing
 from swingbot.core.planning import gap_reclaim
 from swingbot.core.scanning.risk_notice import stamp_risk_notice
-from swingbot.core.planning.builders import band_no_plan_reason, confluence_stop_dropped
+from swingbot.core.planning.builders import (band_no_plan_reason, confluence_limit_dropped,
+                                             confluence_stop_dropped)
 from swingbot.core.planning.stop_scope import band_sizing_verdict, plan_stop_ceiling, risk_sizing_ok
 from swingbot.core.risk_limits import planned_loss_pct
 from swingbot.core.market.indicators import atr
@@ -413,9 +414,13 @@ def pd_normalize(when):
     return pd.Timestamp(when).normalize()
 
 
-def _no_plan_reason(scenario, level_map) -> str:
-    """Why no plan: band_no_target, band_rr_drop, v139's ceiling, or no
-    level paying MIN_RISK_REWARD_RATIO."""
+def _no_plan_reason(scenario, level_map, df=None) -> str:
+    """Why no plan: a v212 limit drop (limit_scope, limit_stop_beyond_cap,
+    limit_rr_fail; needs `df`), band_no_target, band_rr_drop, v139's
+    ceiling, or no level paying MIN_RISK_REWARD_RATIO."""
+    limit = confluence_limit_dropped(scenario, df, level_map) if df is not None else None
+    if limit is not None:
+        return limit
     band = band_no_plan_reason(scenario, level_map)
     if band is not None:
         return band
@@ -550,7 +555,7 @@ def attach_plan_v2(item, scenario, df, ticker, horizon_key, level_map=None,
             # the legacy scenario numbers (which is what plan_numbers_for_display
             # does for plan=None, and would silently re-post the very prices
             # this change exists to stop posting).
-            _reject_plan(item, _no_plan_reason(scenario, level_map), ticker, horizon_key)
+            _reject_plan(item, _no_plan_reason(scenario, level_map, df), ticker, horizon_key)
             return
         ceiling = plan_stop_ceiling(plan)
         loss_pct = planned_loss_pct(plan.trigger_price, plan.stop_loss)

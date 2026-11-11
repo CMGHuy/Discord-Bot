@@ -15,6 +15,7 @@ win) whatever the net r; r itself is always price-derived.
 """
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass
 
 import pandas as pd
@@ -29,6 +30,7 @@ from .exit_sim import (ExitResult, _carried_level, _chandelier_ratchet, _givebac
                        _no_trade, _not_triggered, _runner_timeout, _structure_update,
                        _tenth_session_reached, acceptance_exit, runner_floor,
                        runner_stop_source, runner_structure_frame, tighter_stop)
+from .limit_entry_rule import bar_outcome, is_arm_limit
 from .lifecycle import limit_cancelled, pending_expired, pending_invalidated
 from .plan_types import TradePlanV2
 from .stop_scope import plan_stop_ceiling
@@ -39,6 +41,10 @@ GAP_CANCEL = "gap_through_stop"
 #: A limit or stop entry filled at or beyond the stop: a 0R scratch at the fill
 #: (v1's leg reason for it is "gap_through_stop"; v2 keeps that string for the cancel).
 ENTRY_GAP_SCRATCH = "entry_gap_scratch"
+#: v212 arm limit (limit_entry_rule.is_arm_limit) ``ExitResult.exit_reason`` values.
+LIMIT_EXPIRED = "limit_expired"
+LIMIT_TP1_CANCEL = "limit_tp1_cancel"
+FILLED_STOPPED_GAP = "filled_stopped_gap"
 
 
 @dataclass(frozen=True)
@@ -337,6 +343,64 @@ def _limit_entry_v2(df, signal_index, plan, instrument, scale_out, max_holding_d
     return _limit_unfilled(plan, cancelled=False)
 
 
+def _arm_unfilled(reason: str) -> ExitResult:
+    """An arm limit that never filled: v131's cancel_reason strings, plus the
+    v212 exit_reason on the instance."""
+    result = _not_triggered("cancelled" if reason == LIMIT_TP1_CANCEL else "expired")
+    result.exit_reason = reason
+    return result
+
+
+def _gap_stop_r(cost_model: CostModel, plan: TradePlanV2, open_: float) -> float:
+    """The primary R of a gap-through-stop fill (V212-5 scoring decision,
+    2026-11-06): filled and stopped at the same open, so 0R less the entry and
+    stop slippage and both commissions, over the planned risk |L - stop|
+    (costs.book cannot score it: the entry sits at or beyond the stop)."""
+    bull = plan.direction == "bullish"
+    sign = 1 if bull else -1
+    entry_px = costs.slip(open_, buy=bull, bps=cost_model.slippage_bps)
+    exit_px = costs.slip(open_, buy=not bull, bps=costs.exit_bps(cost_model, "stop"))
+    risk = abs(plan.trigger_price - plan.stop_loss)
+    return round(((exit_px - entry_px) * sign - 2.0 * cost_model.commission_per_share) / risk, 3)
+
+
+def _gap_stopped_exit(df, j: int, plan: TradePlanV2, instrument: InstrumentSpec) -> ExitResult:
+    """An arm limit whose session opens at or through the stop fills at the
+    open and its bracket stop sells at that same open: a realised loss scored
+    by _gap_stop_r. ``gap_stop_r_from_limit`` is the pessimistic from-L reading
+    (costs.book with entry at L), disclosed only -- it never scores or gates."""
+    open_ = float(df["Open"].values[j])
+    r = _gap_stop_r(instrument.cost_model, plan, open_)
+    result = ExitResult(outcome="loss", runner_outcome=None, entry_index=j, exit_index=j,
+                        entry_price=open_, r_total=r,
+                        legs=[{"fraction": 1.0, "exit_price": open_, "r": r,
+                               "reason": FILLED_STOPPED_GAP}])
+    result.exit_reason = FILLED_STOPPED_GAP
+    result.gap_stop_r_from_limit = costs.book(
+        instrument.cost_model, direction=plan.direction, entry_price=plan.trigger_price,
+        stop_loss=plan.stop_loss, legs=[_leg(1.0, open_, FILLED_STOPPED_GAP, "stop")])[0]
+    return result
+
+
+def _arm_limit_entry_v2(df, signal_index, plan, instrument, scale_out, max_holding_days,
+                        *, touch: bool = False) -> ExitResult:
+    """v212 arm limit on the shared fill rule (limit_entry_rule.bar_outcome),
+    bars t+1 .. t+expiry_bars only: a cancel, a gap-stopped fill at the open,
+    or a fill that takes the usual fill-bar stop check and walk_v2."""
+    high, low, open_ = df["High"].values, df["Low"].values, df["Open"].values
+    last = min(signal_index + plan.expiry_bars, len(df) - 1)
+    for j in range(signal_index + 1, last + 1):
+        out = bar_outcome(plan, open_=float(open_[j]), high=float(high[j]),
+                          low=float(low[j]), touch=touch)
+        if out.kind == "cancel":
+            return _arm_unfilled(LIMIT_TP1_CANCEL)
+        if out.kind == "fill":
+            if out.gap_stopped:
+                return _gap_stopped_exit(df, j, plan, instrument)
+            return _filled(df, j, out.fill, plan, instrument, scale_out, max_holding_days)
+    return _arm_unfilled(LIMIT_EXPIRED)
+
+
 def _stop_entry_v2(df, signal_index, plan, instrument, scale_out, max_holding_days):
     """exit_sim's stop-entry scan on fills.py's touch and fill rules. The
     compression short keeps its risk-cap cancel on the actual fill and its
@@ -362,16 +426,26 @@ def _stop_entry_v2(df, signal_index, plan, instrument, scale_out, max_holding_da
 _ENTRIES = {"market": _market_entry_v2, "limit": _limit_entry_v2}
 
 
+def _entry_for(plan: TradePlanV2, touch_fill: bool):
+    """The entry simulator: the v212 arm limit when is_arm_limit, else the
+    _ENTRIES lookup (any other entry_type is a stop entry)."""
+    if is_arm_limit(plan):
+        return functools.partial(_arm_limit_entry_v2, touch=touch_fill)
+    return _ENTRIES.get(plan.entry_type, _stop_entry_v2)
+
+
 def simulate_exit_v2(df, signal_index: int, plan: TradePlanV2, instrument: InstrumentSpec,
                      *, scale_out: bool = False,
-                     max_holding_days: int | None = None) -> ExitResult:
+                     max_holding_days: int | None = None,
+                     touch_fill: bool = False) -> ExitResult:
     """exit_sim.simulate_exit under a v2 instrument: the entry (market at the
     next open, limit, stop entry -- any other entry_type is a stop entry, as
     in v1), the fill-bar stop check, then walk_v2. Same hold-cap resolution
-    as v1."""
+    as v1. v212: an arm limit (is_arm_limit) takes the shared fill rule, and
+    ``touch_fill`` (a bare touch of L fills) is read for it alone."""
     fills.require_supported(instrument.fill_model)
     if max_holding_days is None:
         max_holding_days = HORIZONS[plan.horizon_key]["max_holding_days"]
     max_holding_days = _hold_cap_bars(plan, max_holding_days)
-    entry = _ENTRIES.get(plan.entry_type, _stop_entry_v2)
+    entry = _entry_for(plan, touch_fill)
     return entry(df, signal_index, plan, instrument, scale_out, max_holding_days)
