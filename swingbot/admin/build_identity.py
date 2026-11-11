@@ -1,11 +1,13 @@
 """v218 P3-c: the build a response came from -- the first input of every ETag.
 
 ``build_version()`` is the SHA-256 of ``VERSION.json``'s bytes (16 hex chars)
-plus the image tag ``SWING_BOT_IMAGE`` when the environment carries it. The
-deploy writes that tag into ``.env`` (``deploy/deploy.sh``) and the admin
-service loads ``.env`` as its ``env_file``, so a rollback to another image
-changes the value even when ``VERSION.json`` did not. It is read from
-``os.environ`` because it is not a ``config.FIELDS`` entry.
+plus the image tag ``SWING_BOT_IMAGE`` when the environment carries it. On
+the VM the admin container does NOT carry it: ``deploy/deploy.sh`` only
+exports it to the shell running compose and ``docker-compose.yml`` does not
+forward it to the admin service (v206 spec, Plan 3 build tag on the VM). So
+today the build input is the ``VERSION.json`` hash alone, and two images with
+the same ``VERSION.json`` share tags. It is read from ``os.environ`` because
+it is not a ``config.FIELDS`` entry.
 
 Cached per process: the image cannot change under a running worker. A
 missing ``VERSION.json`` raises and caches nothing -- the ETag code swallows

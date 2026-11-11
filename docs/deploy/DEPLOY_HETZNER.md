@@ -282,9 +282,15 @@ The Settings page (section "Admin UI") writes the same key in place too.
 Check it took: any `/api/v1/health` response's `Server-Timing` now ends
 `snap;desc=off`, and `/api/v1/trades?status=CLOSED` carries no `ETag`.
 Switch back with the same command and `on`. Like any VM change, record it
-per the `mirror-prod` skill. A full image rollback needs none of this: the
-build identity in every tag changes with the image, so a browser never gets
-a 304 for a body another image produced.
+per the `mirror-prod` skill. A rollback to an image with a *different*
+`VERSION.json` needs none of this: the build identity in every tag is a hash
+of that file, so a browser never gets a 304 for a body that image did not
+produce. The admin container does **not** carry `SWING_BOT_IMAGE` (checked
+2026-11-11, v206 § Plan 3 build tag on the VM), so two images with the *same*
+`VERSION.json` (a hotfix redeployed without a bump, or a rollback to one)
+share every ETag. After such a deploy or rollback, set `ADMIN_STORE_SNAPSHOT`
+to `off` and back to `on` (the settings generation moves, so every tag
+changes), or bump `VERSION.json`.
 
 That leaves `main` ahead of production, which is deliberate — it's a
 stop-the-bleeding move. Follow it with the real fix:
