@@ -115,7 +115,7 @@ def read(key: str, loader: Callable[[], T]) -> T:
     try:
         token = (store_generation.token(), request_versions())
     except Exception as exc:
-        swallowed(log, _TAG, exc, "admin snapshot bypassed: version query failed")
+        swallowed(log, "ops.admin.snapshot", exc, "admin snapshot bypassed: version query failed")
         _note("off")
         return loader()
     return _read_valid(key, loader, token)

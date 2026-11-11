@@ -19,6 +19,7 @@ import time
 from typing import Callable
 
 from swingbot.core.db import notify
+from swingbot.core.infra.swallowed import swallowed
 
 log = logging.getLogger(__name__)   # v111: no literal logger names
 
@@ -136,8 +137,10 @@ class DbEventListener:
         self._connected = False
         try:
             self._on_disconnected()
-        except Exception:
-            log.exception("event listener disconnect hook failed")
+        except Exception as exc:
+            swallowed(log, "ops.db_listener.disconnect_hook", exc,
+                      "event listener disconnect hook failed",
+                      level=logging.ERROR, exc_info=True)
 
     def _on_disconnected(self) -> None:
         """Hook: the LISTEN connection is gone (lost, never made, or stopped).

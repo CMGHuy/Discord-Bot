@@ -82,7 +82,7 @@ def compute_etag(route_key: str, args: MultiDict) -> str | None:
             return None
         digest = hashlib.sha256(repr(etag_inputs(route_key, args)).encode("utf-8")).hexdigest()
     except Exception as exc:
-        swallowed(log, "ops.admin.etag", exc)
+        swallowed(log, "ops.admin.etag.compute", exc)
         return None
     return f'W/"{digest[:_TAG_HEX]}"'
 
@@ -104,7 +104,7 @@ def _admitted(admit: Callable[[MultiDict], bool]) -> bool:
     try:
         return bool(admit(request.args))
     except Exception as exc:
-        swallowed(log, "ops.admin.etag", exc)
+        swallowed(log, "ops.admin.etag.admit", exc)
         return False
 
 
