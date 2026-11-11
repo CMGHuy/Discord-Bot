@@ -191,3 +191,35 @@ def test_full_refetch_logs_anchor_drift(monkeypatch, caplog):
     with caplog.at_level(logging.INFO, logger=dd.log.name):
         out = dd.full_refetch(["AAPL"], asker=Asker.BACKGROUND)
     assert "AAPL" in out and "anchor_close" in caplog.text and "drift" in caplog.text
+
+
+def _full_write_with_older_cache(rescale):
+    """A cache whose oldest bars predate the fresh span, rescaled by `rescale`
+    in the cache so they differ from the vendor's own closes."""
+    m = Market()
+    old = m.frame(dd.BASIS_ALPACA, T1)
+    cached = old.copy()
+    cached[["Open", "High", "Low", "Close"]] *= rescale
+    cached.attrs = {}
+    data_store.atomic_write_csv(cached, dd.cache_file("AAPL", dd.BASIS_ALPACA))
+    fresh = m.frame(dd.BASIS_ALPACA, T1, start=date(2026, 1, 20))
+    dd.write_daily("AAPL", fresh, basis=dd.BASIS_ALPACA, full=True, today=T1)
+    return fresh, dd.read_meta("AAPL", dd.BASIS_ALPACA)
+
+
+def test_full_write_anchors_on_the_vendor_bar_not_a_rescaled_older_cached_bar():
+    fresh, meta = _full_write_with_older_cache(rescale=1.0003)
+    # the older cached bars survive the union (they are not in the fresh span) ...
+    assert dd.read_daily("AAPL", dd.BASIS_ALPACA).index.min() < fresh.index.min()
+    # ... but the fingerprint is the vendor's own first bar on/after the anchor date
+    first = fresh[fresh.index >= pd.Timestamp(config.ALPACA_ANCHOR_DATE)]
+    assert meta.anchor_date == first.index[0].date().isoformat()
+    assert meta.anchor_close == pytest.approx(float(first["Close"].iloc[0]))
+
+
+def test_anchor_probe_after_such_a_full_write_does_not_force_another_refetch():
+    fresh, meta = _full_write_with_older_cache(rescale=1.0003)
+    probe = float(fresh.loc[pd.Timestamp(meta.anchor_date), "Close"])
+    cached = dd.read_daily("AAPL", dd.BASIS_ALPACA)
+    window = fresh.iloc[-5:]
+    assert dd.needs_full_refetch(cached, window, meta, anchor_close=probe) is None
