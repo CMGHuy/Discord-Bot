@@ -139,6 +139,7 @@ wrapper; it reads flags only from the shell segment that runs
 | `no-lookahead` | 1 | model-invocable | `architecture.md`, `known-traps.md` |
 | `pooled-numbers` | 1 | model-invocable | `edge-priorities.md`, `backtest-methodology.md` |
 | `mirror-prod` | 1 | model-invocable | `working-conventions.md` |
+| `prod-incident` | 1 | model-invocable, whenever the partner reports a production issue | `known-traps.md` (plus `docs/deploy/DEPLOY_HETZNER.md`) |
 | `edge-module` | 3 | model-invocable | `architecture.md` |
 | `alert-surface` | 3 | model-invocable | `known-traps.md` |
 | `schema-change` | 3 | model-invocable | `schema-evolution.md` — Step 1 reads it to pick add/rename/drop/promote |

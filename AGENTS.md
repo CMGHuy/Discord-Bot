@@ -237,6 +237,7 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 | Editing the scan engine, `scan_embeds`, `embeds.py` or anything rendering an alert | `alert-surface` |
 | Adding or changing a strategy or edge module or its registry entry | `edge-module` |
 | Changing the Postgres schema, a store's read/write path or a migration | `schema-change` |
+| The partner reports an issue, bug or outage on production (bot, bomeo-capital.com, admin) | `prod-incident` |
 | About to change anything on the Hetzner VM | `mirror-prod` |
 | Creating, merging or removing a git worktree | `worktree-lifecycle` |
 | Live-book hypotheses: `trade-scout` runs the `scout` agent per role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
