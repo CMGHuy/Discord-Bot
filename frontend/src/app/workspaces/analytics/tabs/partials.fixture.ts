@@ -74,16 +74,6 @@ export const PARTIALS_FIXTURE: AnalyticsPartials = {
   funnel: [
     { stage: 'filled', n: 8 }, { stage: 'tp1', n: 6 }, { stage: 'runner_closed', n: 5 }, { stage: 'tp2', n: 1 },
   ],
-  outcomes: [
-    { bucket: 'tp2', n: 1, share: 16.7, avg_runner_r: 4 },
-    { bucket: 'trail', n: 1, share: 16.7, avg_runner_r: 3 },
-    { bucket: 'floor', n: 1, share: 16.7, avg_runner_r: 1.34 },
-    { bucket: 'stall', n: 0, share: 0, avg_runner_r: null },
-    { bucket: 'time', n: 0, share: 0, avg_runner_r: null },
-    { bucket: 'manual', n: 1, share: 16.7, avg_runner_r: 2.5 },
-    { bucket: 'no_tp2', n: 1, share: 16.7, avg_runner_r: 2.4 },
-    { bucket: 'open', n: 1, share: 16.7, avg_runner_r: null },
-  ],
   runner_endings: RUNNER_ENDINGS_FIXTURE,
   counterfactuals: {
     actual_exp_r: 2.324, all_out_exp_r: 2, giveback: [0.2, 1.26, 0.6],

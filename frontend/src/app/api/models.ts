@@ -900,14 +900,12 @@ export interface PartialsKpis {
   median_tp1_exit_sessions: number | null; tp1_exit_n: number;
 }
 export type PartialsStage = 'filled' | 'tp1' | 'runner_closed' | 'tp2';
-export type PartialsBucket = 'tp2' | 'trail' | 'floor' | 'stall' | 'time' | 'manual' | 'no_tp2' | 'open' | 'other';
 export type PartialsDimension = 'strategy' | 'horizon' | 'side' | 'month';
 export type PartialsHoldStage = 'entry_tp1' | 'tp1_exit' | 'entry_exit';
 export interface PartialsHold { p25: number | null; median: number | null; p75: number | null; points: number[]; }
 export interface PartialsBreakdownRow extends PartialsKpis { key: string; n: number; thin: boolean; }
 export interface PartialsLadderRow { level_r: number; touch_rate: number | null; cf_exp_r: number | null; n: number; }
 export interface PartialsSplitRow { fraction: number; exp_r: number | null; n: number; }
-export interface PartialsOutcome { bucket: PartialsBucket; n: number; share: number | null; avg_runner_r: number | null; }
 /** v219 — `runner_endings` (`partials.py::runner_endings`): how closed runners
  *  ended. Shares are percentages 0-100 (1 dp) with Wilson 95% bounds `lo`/`hi`;
  *  all three are null when `denominator` is 0. Giveback's denominator is the
@@ -935,7 +933,6 @@ export interface PartialsRunnerEndings {
 export interface AnalyticsPartials extends Scoped {
   kpis: PartialsKpis;
   funnel: { stage: PartialsStage; n: number }[];
-  outcomes: PartialsOutcome[];
   runner_endings: PartialsRunnerEndings;
   counterfactuals: {
     actual_exp_r: number | null; all_out_exp_r: number | null; giveback: number[];

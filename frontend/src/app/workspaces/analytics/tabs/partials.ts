@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 
 import {
-  AnalyticsPartials, PartialsBreakdownRow, PartialsBucket, PartialsDimension, PartialsHoldStage,
+  AnalyticsPartials, PartialsBreakdownRow, PartialsDimension, PartialsHoldStage,
 } from '../../../api/models';
 import { AnalyticsStore } from '../../../stores/analytics.store';
 import { BarList, BarRow } from '../../../ui/bar-list';
@@ -13,10 +13,10 @@ import { PanelError } from '../../../ui/panel-error';
 import { MINUS } from '../../../ui/format';
 import { PanelHeader } from '../../../ui/panel-header';
 import { SegmentOption, Segmented } from '../../../ui/segmented';
-import { ShareBar, ShareSegment } from '../../../ui/share-bar';
 import { PERFORMANCE_CAVEAT, StatTile, StatTone } from '../../../ui/stat-tile';
 import { StripGroup, StripPlot } from '../../../ui/strip-plot';
 import { Waterfall, WaterfallStep } from '../../../ui/waterfall';
+import { RUNNER_ENDINGS_HINT, RunnerEndings } from './runner-endings';
 
 /* v142 — Partials: does the runner earn its keep, and where would a different
  * TP2 or split have landed? Descriptive only: the live book is a small,
@@ -30,13 +30,6 @@ export interface PartialsTile {
 
 const STAGES: Record<string, string> = {
   filled: 'Filled', tp1: 'Hit TP1', runner_closed: 'Runner closed', tp2: 'Hit TP2',
-};
-const BUCKETS: Record<PartialsBucket, { label: string; tone: NonNullable<ShareSegment['tone']> }> = {
-  tp2: { label: 'TP2', tone: 'pos' }, trail: { label: 'Trail', tone: 'accent' },
-  floor: { label: 'Floor', tone: 'neg' }, stall: { label: 'Stall', tone: 'warn' },
-  time: { label: 'Time', tone: 'warn' }, manual: { label: 'Manual', tone: 'muted' },
-  no_tp2: { label: 'No TP2', tone: 'muted' }, open: { label: 'Open', tone: 'muted' },
-  other: { label: 'Unrecorded', tone: 'warn' },
 };
 const HOLDS: [PartialsHoldStage, string][] = [
   ['entry_tp1', 'Entry → TP1'], ['tp1_exit', 'TP1 → exit'], ['entry_exit', 'Entry → exit'],
@@ -74,13 +67,6 @@ export function funnelRows(p: AnalyticsPartials): BarRow[] {
   const filled = p.funnel[0]?.n ?? 0;
   return p.funnel.map((step) => ({
     label: STAGES[step.stage] ?? step.stage, value: filled ? (step.n / filled) * 100 : null, n: step.n,
-  }));
-}
-
-export function outcomeSegments(p: AnalyticsPartials): ShareSegment[] {
-  return p.outcomes.map((o) => ({
-    label: `${BUCKETS[o.bucket]?.label ?? o.bucket} ${rText(o.avg_runner_r)}`,
-    count: o.n, tone: BUCKETS[o.bucket]?.tone ?? 'warn',
   }));
 }
 
@@ -145,7 +131,7 @@ export function monthTrend(rows: readonly PartialsBreakdownRow[]): LineChartSeri
 @Component({
   selector: 'sb-partials-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, PanelHeader, PanelError, StatTile, BarList, ShareBar, Waterfall, LineChart,
+  imports: [Panel, PanelHeader, PanelError, StatTile, BarList, RunnerEndings, Waterfall, LineChart,
     Histogram, StripPlot, Segmented, EmptyStateComponent],
   template: `
     @if (store.partialsError(); as error) {
@@ -163,16 +149,16 @@ export function monthTrend(rows: readonly PartialsBreakdownRow[]): LineChartSeri
         <div class="panels">
           <sb-panel><sb-panel-header [titleTip]="true" title="Funnel" [n]="p.n" hint="Share of filled trades reaching each stage." />
             <sb-bar-list [rows]="funnel()" mode="rate" [format]="pctFmt" /></sb-panel>
-          <sb-panel><sb-panel-header [titleTip]="true" title="Runner outcome mix" [n]="p.population.partial" hint="How each runner ended, with its average runner R." />
-            <sb-share-bar label="Runner outcomes" [segments]="outcomes()" /></sb-panel>
           <sb-panel><sb-panel-header [titleTip]="true" title="Does the runner pay?" [n]="p.kpis.beat_all_out_n" [hint]="runnerPayHint" />
             <sb-waterfall [steps]="waterfall()" [format]="rFmt" totalLabel="Actual ExpR" /></sb-panel>
+          <sb-panel class="wide"><sb-panel-header [titleTip]="true" title="Runner endings" [n]="p.runner_endings.n" [hint]="runnerEndingsHint" />
+            <sb-runner-endings [block]="p.runner_endings" [thinN]="p.thin_n" /></sb-panel>
           <sb-panel><sb-panel-header [titleTip]="true" title="TP2 ladder" [n]="ladderN()" [hint]="ladderHint" />
             <sb-bar-list [rows]="ladder()" [format]="rFmt" />
             <sb-bar-list [rows]="touches()" mode="rate" [format]="pctFmt" /></sb-panel>
           <sb-panel><sb-panel-header [titleTip]="true" title="Split what-if" [n]="p.kpis.beat_all_out_n" [hint]="splitHint" />
             <sb-bar-list [rows]="split()" [format]="rFmt" /></sb-panel>
-          <sb-panel><sb-panel-header [titleTip]="true" title="Giveback" [n]="p.counterfactuals.giveback.length" hint="Best R the runner saw minus the R it banked." />
+          <sb-panel class="wide"><sb-panel-header [titleTip]="true" title="Giveback" [n]="p.counterfactuals.giveback.length" [hint]="givebackHint()" />
             <sb-histogram [bins]="giveback()" /></sb-panel>
           <sb-panel class="wide"><sb-panel-header [titleTip]="true" title="Hold times" [n]="p.population.partial" hint="Trading sessions per stage; open runners count only before TP1." />
             <sb-strip-plot [groups]="holds()" unit=" sessions" /></sb-panel>
@@ -206,7 +192,6 @@ export class PartialsTab {
 
   readonly tiles = computed(() => this.shape(kpiTiles, []));
   readonly funnel = computed(() => this.shape(funnelRows, []));
-  readonly outcomes = computed(() => this.shape(outcomeSegments, []));
   readonly waterfall = computed(() => this.shape(runnerWaterfall, []));
   readonly ladder = computed(() => this.shape(ladderRows, []));
   readonly ladderN = computed(() => this.data()?.counterfactuals.ladder[0]?.n ?? 0);
@@ -222,6 +207,12 @@ export class PartialsTab {
     + `Below: share of runners that touched each level. ${PERFORMANCE_CAVEAT}`;
   readonly splitHint = "ExpR had a different share been taken at TP1, from each trade's own two legs. "
     + PERFORMANCE_CAVEAT;
+  /* v219: the section's header carries the basis of its R; the Giveback strip
+   * reads the same decidable runners as the section's path figures. */
+  readonly runnerEndingsHint = RUNNER_ENDINGS_HINT;
+  readonly givebackHint = computed(() => 'Best R the runner saw minus the R it banked, over the decidable '
+    + `runners Runner endings reads; ${this.data()?.counterfactuals.giveback_excluded ?? 0} closed runners `
+    + 'left out (manual closes, no TP2, no price path, TP2 at or below TP1).');
   readonly thinHint = computed(() => `Rows under N=${this.data()?.thin_n ?? 10} are dimmed: shown, not trusted.`);
   readonly dimensionLabel = computed(() => DIMENSIONS.find((d) => d.value === this.dimension())?.label ?? '');
   readonly footer = computed(() => {
