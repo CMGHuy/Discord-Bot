@@ -17,6 +17,7 @@ from statistics import mean
 import numpy as np
 
 from swingbot.core.analytics import metrics as m
+from swingbot.core.analytics.intervals import wilson_interval
 from swingbot.core.analytics.runner_path import (LADDER_R, close_reason, runner_leg,
                                                  session_span, tp1_leg, transition_day)
 from swingbot.core.tracking.origin import in_cohort
@@ -26,6 +27,9 @@ SPLIT_FRACTIONS = (0.33, 0.5, 0.67)
 #: v219: a runner that got this far from TP1 to TP2 and then closed below
 #: TP1 gave the move back (the Giveback ending).
 GIVEBACK_PROGRESS = 0.5
+#: v219 Runner endings: the four scorecard endings, which sum to the section.
+ENDING_ROWS = ("tp2", "trail", "floor", "other")
+_ENDING_OF_BUCKET = {"tp2": "tp2", "trail": "trail", "floor": "floor"}
 #: Every partial trade lands in exactly one; "other" (an unknown close
 #: reason) is reported only when non-empty, never dropped.
 OUTCOME_BUCKETS = ("tp2", "trail", "floor", "stall", "time", "manual", "no_tp2", "open")
@@ -302,6 +306,101 @@ def counterfactuals(trades: list[PartialTrade]) -> dict:
         "split": [_split_row(measured, fraction) for fraction in SPLIT_FRACTIONS],
         **_exclusions(closed),
     }
+
+
+# -- runner endings (v219) -------------------------------------------------------
+
+#: The path filter's conditions, in counting order. Each is the negation of one
+#: clause of `PartialTrade.decidable`, so first-failing counts sum to n - decidable.
+_PATH_CHECKS = (
+    ("runner_r_unavailable", lambda t: t.r_runner is None),
+    ("manual_close", lambda t: t.bucket == "manual"),
+    ("unpathed", lambda t: not t.pathed),
+    ("no_tp2_distance", lambda t: t.tp2_r is None or t.tp2_r <= t.r_tp1),
+)
+
+
+def _section(trades: list[PartialTrade]) -> list[PartialTrade]:
+    """The Runner endings population: closed runners of plans that have a TP2."""
+    return [t for t in trades if t.closed and t.bucket != "no_tp2"]
+
+
+def ending_of(trade: PartialTrade) -> str:
+    """The scorecard ending of a closed runner; stall, time, manual and
+    unknown close reasons all read as "other"."""
+    return _ENDING_OF_BUCKET.get(trade.bucket, "other")
+
+
+def is_giveback(trade: PartialTrade) -> bool:
+    """Got at least halfway from TP1 to TP2, then closed below TP1, whatever
+    the ending. Exactly at TP1 is not a giveback."""
+    return (trade.decidable and trade.progress >= GIVEBACK_PROGRESS
+            and trade.r_runner < trade.r_tp1)
+
+
+def _share(k: int, n: int) -> dict:
+    """A share and its Wilson 95% interval, percentages to 1 dp; None when n is 0."""
+    bounds = wilson_interval(k, n)
+    if bounds is None:
+        return {"share": None, "lo": None, "hi": None}
+    lo, hi = bounds
+    return {"share": _rate(k, n), "lo": round(100.0 * lo, 1), "hi": round(100.0 * hi, 1)}
+
+
+def _share_fields(ending: str, k: int, n: int) -> dict:
+    return {"ending": ending, "n": k, "denominator": n, **_share(k, n), "thin": k < THIN_N}
+
+
+def _total(values: list[float]) -> float | None:
+    return round(sum(values), 4) if values else None
+
+
+def _r_fields(group: list[PartialTrade]) -> dict:
+    """R columns, over runners whose runner R is known."""
+    measured = [t for t in group if t.r_runner is not None]
+    sessions = [t.hold_tp1_exit for t in measured if t.hold_tp1_exit is not None]
+    return {"r_n": len(measured),
+            "avg_r": _mean(t.r_runner for t in measured),
+            "median_r": _median([t.r_runner for t in measured]),
+            "total_r": _total([(1.0 - t.fraction) * t.r_runner for t in measured]),
+            "vs_all_out": _mean(t.delta_r for t in measured),
+            "sessions": _median(sessions)}
+
+
+def _path_fields(group: list[PartialTrade]) -> dict:
+    """Path columns, over decidable runners only."""
+    decidable = [t for t in group if t.decidable]
+    progress = _mean(t.progress for t in decidable)
+    return {"path_n": len(decidable),
+            "best_r": _mean(t.runner_path["mfe_r"] for t in decidable),
+            "progress": None if progress is None else round(100.0 * progress, 1),
+            "gave_back": _mean(t.runner_path["mfe_r"] - t.r_runner for t in decidable)}
+
+
+def _row(ending: str, group: list[PartialTrade], denominator: int) -> dict:
+    return {**_share_fields(ending, len(group), denominator), **_r_fields(group),
+            **_path_fields(group)}
+
+
+def ending_rows(runners: list[PartialTrade]) -> list[dict]:
+    """The five scorecard rows over a `_section` list. The four endings share
+    the section as denominator; Giveback (any ending) is over decidable runners
+    and is not part of that 100%."""
+    rows = [_row(ending, [t for t in runners if ending_of(t) == ending], len(runners))
+            for ending in ENDING_ROWS]
+    decidable = [t for t in runners if t.decidable]
+    rows.append(_row("giveback", [t for t in decidable if is_giveback(t)], len(decidable)))
+    return rows
+
+
+def path_exclusions(runners: list[PartialTrade]) -> dict:
+    """Section runners left out of the path figures, by first failing reason."""
+    counts = {name: 0 for name, _ in _PATH_CHECKS}
+    for trade in runners:
+        reason = next((name for name, fails in _PATH_CHECKS if fails(trade)), None)
+        if reason is not None:
+            counts[reason] += 1
+    return counts
 
 
 def _quantiles(points: list[int]) -> dict:

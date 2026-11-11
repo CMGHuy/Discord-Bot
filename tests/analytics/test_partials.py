@@ -292,3 +292,142 @@ def test_progress_is_none_unless_decidable():
 
 def test_the_giveback_threshold_is_half_way():
     assert pa.GIVEBACK_PROGRESS == 0.5
+
+
+# -- v219: runner endings -- rows and path exclusions --------------------------
+
+def _runners(plans, manual_exits=MANUAL):
+    trades = [t for plan in plans if (t := pa.partial_trade(plan, manual_exits)) is not None]
+    return pa._section(trades)
+
+
+def _rows(plans, manual_exits=MANUAL):
+    return {row["ending"]: row for row in pa.ending_rows(_runners(plans, manual_exits))}
+
+
+def test_the_section_is_closed_runners_with_a_tp2():
+    assert [t.plan_id for t in _runners(_book())] == ["A", "B", "C", "D"]  # E open, F no TP2
+
+
+@pytest.mark.parametrize("reason, ending", [
+    ("tp1_runner_tp2", "tp2"), ("tp1_runner_trail", "trail"), ("tp1_runner_be", "floor"),
+    ("tp1_runner_progress_stall", "other"), ("time_exit", "other"), ("manual", "other"),
+    ("manual_bulk", "other"), ("acceptance", "other"),
+])
+def test_every_close_reason_has_one_ending(reason, ending):
+    trade = pa.partial_trade(_trade("X", reason=reason, runner_r=1.0))
+    assert pa.ending_of(trade) == ending
+
+
+def test_share_carries_a_wilson_interval_in_percent():
+    assert pa._share(1, 4) == {"share": 25.0, "lo": 4.6, "hi": 69.9}
+    assert pa._share(0, 3) == {"share": 0.0, "lo": 0.0, "hi": 56.2}
+    assert pa._share(0, 0) == {"share": None, "lo": None, "hi": None}
+
+
+def test_ending_rows_on_the_book():
+    rows = _rows(_book())
+    assert list(rows) == ["tp2", "trail", "floor", "other", "giveback"]
+    assert rows["tp2"] == {
+        "ending": "tp2", "n": 1, "denominator": 4, "share": 25.0, "lo": 4.6, "hi": 69.9,
+        "thin": True, "r_n": 1, "avg_r": 4.0, "median_r": 4.0, "total_r": 2.0,
+        "vs_all_out": 1.0, "path_n": 1, "best_r": 4.2, "progress": 100.0, "gave_back": 0.2,
+        "sessions": 4.0}
+    cols = ("n", "denominator", "share", "r_n", "avg_r", "median_r", "total_r", "vs_all_out",
+            "path_n", "best_r", "progress", "gave_back", "sessions")
+    pick = lambda row: tuple(row[c] for c in cols)
+    assert pick(rows["trail"]) == (1, 4, 25.0, 1, 3.0, 3.0, 1.5, 0.5, 1, 3.6, 80.0, 0.6, 2.0)
+    assert pick(rows["floor"]) == (1, 4, 25.0, 1, 1.34, 1.34, 0.67, -0.33, 1, 2.6, 30.0, 1.26, 2.0)
+    assert pick(rows["other"]) == (1, 4, 25.0, 1, 2.5, 2.5, 1.25, 0.25, 0, None, None, None, 2.0)
+    assert pick(rows["giveback"]) == (0, 3, 0.0, 0, None, None, None, None, 0, None, None, None, None)
+    assert (rows["giveback"]["lo"], rows["giveback"]["hi"]) == (0.0, 56.2)
+
+
+def test_the_four_ending_rows_make_the_whole_section():
+    book = [*_book(), _trade("S1", reason="tp1_runner_progress_stall", runner_r=1.5),
+            _trade("T1", reason="time_exit", runner_r=0.8)]
+    rows = pa.ending_rows(_runners(book))
+    endings = [row for row in rows if row["ending"] in pa.ENDING_ROWS]
+    assert sum(row["n"] for row in endings) == 6 == endings[0]["denominator"]
+    assert sum(row["share"] for row in endings) == pytest.approx(100.0, abs=0.2)
+    assert {row["ending"]: row["n"] for row in endings} == {"tp2": 1, "trail": 1, "floor": 1, "other": 3}
+
+
+def _giveback_case(plan_id, *, reason="tp1_runner_trail", runner_r, mfe):
+    return _trade(plan_id, reason=reason, runner_r=runner_r, path=_path(mfe, 2.5))
+
+
+@pytest.mark.parametrize("runner_r, mfe, expected", [
+    (1.98, 3.0, True),      # exactly halfway to TP2, closed just below TP1
+    (2.0, 3.0, False),      # closed exactly at TP1: not a giveback
+    (1.0, 2.98, False),     # 49% of the way: not far enough
+    (1.0, 4.2, True),       # past TP2 (progress clamped to 1), closed well below TP1
+])
+def test_giveback_definition(runner_r, mfe, expected):
+    trade = pa.partial_trade(_giveback_case("G", runner_r=runner_r, mfe=mfe))
+    assert pa.is_giveback(trade) is expected
+
+
+def test_giveback_spans_endings_and_has_its_own_denominator():
+    book = [*_book(),
+            _giveback_case("G1", runner_r=1.98, mfe=3.0),                        # trail
+            _giveback_case("G2", reason="tp1_runner_be", runner_r=1.34, mfe=3.2),  # floor
+            _trade("M1", reason="manual", path=_path(3.5, 3.0))]                 # priced below TP1
+    rows = _rows(book, {**MANUAL, "M1": 105.0})
+    give = rows["giveback"]
+    assert (give["n"], give["denominator"]) == (2, 5)     # A, B, C, G1, G2 decidable; D, M1 manual
+    assert (give["share"], give["lo"], give["hi"]) == (40.0, 11.8, 76.9)
+    assert give["r_n"] == give["path_n"] == 2
+    assert rows["trail"]["n"] == 2 and rows["floor"]["n"] == 2 and rows["other"]["n"] == 2
+    assert rows["tp2"]["denominator"] == 7
+
+
+def test_a_runner_without_runner_r_counts_in_n_and_share_only():
+    rows = _rows([_trade("A", reason="tp1_runner_tp2", runner_r=4.0, path=_path(4.2, 4.0)),
+                  _trade("U", reason="tp1_runner_trail", path=_path(3.0, 3.0))], manual_exits={})
+    trail = rows["trail"]
+    assert (trail["n"], trail["share"], trail["r_n"], trail["path_n"]) == (1, 50.0, 0, 0)
+    assert trail["avg_r"] is None and trail["total_r"] is None
+    assert trail["vs_all_out"] is None and trail["sessions"] is None
+
+
+def test_a_row_of_ten_is_not_thin_and_an_empty_one_is():
+    plans = [_trade(f"T{i}", reason="tp1_runner_tp2", runner_r=4.0, path=_path(4.2, 4.0))
+             for i in range(10)]
+    rows = _rows(plans)
+    assert (rows["tp2"]["n"], rows["tp2"]["thin"]) == (10, False)
+    assert (rows["trail"]["n"], rows["trail"]["thin"]) == (0, True)
+
+
+def test_an_empty_section_is_measured_zeros_and_nones():
+    rows = pa.ending_rows([])
+    assert [row["ending"] for row in rows] == ["tp2", "trail", "floor", "other", "giveback"]
+    for row in rows:
+        assert (row["n"], row["denominator"], row["r_n"], row["path_n"], row["thin"]) == (0, 0, 0, 0, True)
+        assert all(row[key] is None for key in ("share", "lo", "hi", "avg_r", "median_r",
+                                                "total_r", "vs_all_out", "best_r", "progress",
+                                                "gave_back", "sessions"))
+    assert pa.path_exclusions([]) == {"runner_r_unavailable": 0, "manual_close": 0,
+                                      "unpathed": 0, "no_tp2_distance": 0}
+
+
+def test_path_exclusions_on_the_book():
+    assert pa.path_exclusions(_runners(_book())) == {
+        "runner_r_unavailable": 0, "manual_close": 1, "unpathed": 0, "no_tp2_distance": 0}
+
+
+def test_path_exclusions_count_the_first_failing_reason():
+    plans = [
+        _trade("A", reason="tp1_runner_tp2", runner_r=4.0, path=_path(4.2, 4.0)),   # decidable
+        _trade("M0", reason="manual", path=_path(3.0, 3.0)),                        # no price
+        _trade("M1", reason="manual", path=_path(3.0, 3.0)),                        # priced
+        _trade("U", reason="tp1_runner_trail", runner_r=3.0),                       # no stamp
+        _trade("Q", reason="tp1_runner_trail", runner_r=3.0, tp2=110.0, path=_path(3.0, 3.0)),
+        _trade("W", reason="tp1_runner_trail", runner_r=3.0, tp2=105.0,
+               path={"mfe_r": "x", "ladder": {}}),                                  # both: unpathed first
+    ]
+    runners = _runners(plans, {"M1": 107.5})
+    counts = pa.path_exclusions(runners)
+    assert counts == {"runner_r_unavailable": 1, "manual_close": 1, "unpathed": 2,
+                      "no_tp2_distance": 1}
+    assert sum(counts.values()) == len(runners) - sum(t.decidable for t in runners)
