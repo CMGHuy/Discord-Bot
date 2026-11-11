@@ -3,8 +3,8 @@
 
   census    Stage -1 rows (plans and fills, no outcome)
   rows      outcome rows for a window (--touch: the disclosed touch-fill sensitivity)
-  stage     one funnel stage (V212-13c)
-  ledger    one preregistration-ledger row per look (V212-13c)
+  stage     one funnel stage
+  ledger    one preregistration-ledger row per look
 
 Every command refuses without the committed v212 pre-registration. Rows are
 built one ticker at a time and each finished ticker is written to
@@ -18,6 +18,7 @@ Run: python scripts/backtest/measure_confluence_limit.py rows --window train \
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import subprocess
@@ -32,10 +33,14 @@ sys.path[:0] = [str(ROOT), str(ROOT / "scripts" / "data"), str(ROOT / "scripts" 
 from swingbot import config  # noqa: E402
 from swingbot.core.backtesting import confluence_limit_replay as clr  # noqa: E402
 from swingbot.core.backtesting.acceptance import (CLOSED, ArmTrade, expectancy_r,  # noqa: E402
-                                                  win_rate)
-from swingbot.core.backtesting.acceptance_exit_funnel import TRAIN, VALIDATION  # noqa: E402
+                                                  project_target_n, win_rate)
+from swingbot.core.backtesting.acceptance_exit_funnel import (MDE_CEILING_R, MDE_POWER,  # noqa: E402
+                                                              TRAIN, TRAIN_DAYS, VALIDATION,
+                                                              VALIDATION_DAYS)
+from swingbot.core.backtesting.acceptance_harvest import mde_expectancy_r_paired  # noqa: E402
 from swingbot.core.backtesting.backtest_scenarios import _resolve_replay_workers  # noqa: E402
-from swingbot.core.backtesting.backtest_wf import portfolio_replay  # noqa: E402
+from swingbot.core.backtesting.backtest_wf import (gate_expectancy_harvest,  # noqa: E402
+                                                   portfolio_replay)
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS  # noqa: E402
 
 RESULTS = ROOT / "docs" / "superpowers" / "results" / "v212"
@@ -311,6 +316,175 @@ def load_sectors() -> dict:
     return {**sector_map("etfs"), **sector_map("sp500")}
 
 
+# --- stages ----------------------------------------------------------------------
+
+def _rows(ctx, kind, window_name, *, touch=False, cells=clr.F_GRID) -> list:
+    """Rows from their file, built (per-ticker checkpointed) and saved when absent."""
+    path = rows_file(ctx["out"], kind, window_name, touch)
+    if not path.exists():
+        _write(path, ctx["build"](kind, WINDOWS[window_name], touch=touch, cells=cells), indent=None)
+    return _load(path)
+
+
+def _mde_cell(rows, cell) -> dict:
+    arm = [to_trade(r) for r in closed(rows, cell)]
+    ref = [to_trade(r) for r in reference_rows(rows, cell)]
+    observed_n = len({t.key for t in arm} & {t.key for t in ref})
+    target_n = project_target_n(observed_n=observed_n, observed_days=TRAIN_DAYS,
+                                target_days=VALIDATION_DAYS)
+    mde = mde_expectancy_r_paired(ref, arm, target_n=target_n, power=MDE_POWER)
+    return {"cell": cell, "observed_n": observed_n, "target_n": target_n, "mde_r": mde,
+            "powered": mde is not None and mde <= MDE_CEILING_R}
+
+
+def stage0(rows) -> dict:
+    cells = [_mde_cell(rows, cell) for cell in clr.CELLS]
+    verdict = "POWERED" if all(cell["powered"] for cell in cells) else "UNDERPOWERED"
+    return {"stage": 0, "verdict": verdict, "mde_ceiling_r": MDE_CEILING_R,
+            "power": MDE_POWER, "cells": cells}
+
+
+def score_cell(rows, cell, *, sectors, cluster_fn) -> tuple:
+    """Both sides through their own portfolio pass, then the clauses."""
+    arm, arm_result = run_portfolio(closed(rows, cell), sectors=sectors, cluster_fn=cluster_fn)
+    ref, ref_result = run_portfolio(reference_rows(rows, cell), sectors=sectors,
+                                    cluster_fn=cluster_fn)
+    scored = {"cell": cell, **clauses(arm, ref)}
+    return scored, {"arm": arm, "ref": ref, "arm_result": arm_result, "ref_result": ref_result}
+
+
+def stage1(rows, *, sectors, cluster_fn) -> dict:
+    results = {cell: score_cell(rows, cell, sectors=sectors, cluster_fn=cluster_fn)[0]
+               for cell in clr.CELLS}
+    pick = plateau(results)
+    selected = None if pick is None else {"cell": pick, "f": clr.F_GRID[clr.CELLS.index(pick)]}
+    return {"stage": 1, "verdict": "SELECTED" if selected else "NO_ELIGIBLE_CELL",
+            "selected": selected, "cells": list(results.values())}
+
+
+def _fold(kept, year) -> dict:
+    arm = [to_trade(r) for r in kept["arm"] if r["entry_date"][:4] == str(year)]
+    ref = [to_trade(r) for r in kept["ref"] if r["entry_date"][:4] == str(year)]
+    exp, ref_exp = expectancy_r(arm), expectancy_r(ref)
+    delta = None if exp is None or ref_exp is None else exp - ref_exp
+    wins = min(sum(t.outcome == "win" for t in arm), sum(t.outcome == "win" for t in ref))
+    return {"year": year, "n": len(arm), "ref_n": len(ref), "delta_expectancy_r": delta,
+            "n_tp1": wins}
+
+
+def stage2(rows, cell, *, sectors, cluster_fn) -> dict:
+    _, kept = score_cell(rows, cell, sectors=sectors, cluster_fn=cluster_fn)
+    folds = [_fold(kept, year) for year in FOLD_YEARS]
+    return {"stage": 2, "cell": cell, "verdict": gate_expectancy_harvest({"folds": folds}),
+            "folds": folds}
+
+
+def stage3(rows, cell, *, sectors, cluster_fn) -> dict:
+    scored, kept = score_cell(rows, cell, sectors=sectors, cluster_fn=cluster_fn)
+    verdict = "THIN" if thin(kept["arm"]) else ("PASS" if scored["passes"] else "FAIL")
+    return {"stage": 3, "cell": cell, "verdict": verdict, "score": scored}
+
+
+def _env(ctx) -> dict:
+    return {"sectors": ctx["sectors"], "cluster_fn": ctx["cluster_fn"]}
+
+
+def _run_m1(ctx):
+    return stage_minus1(_rows(ctx, "census", "train"))
+
+
+def _run_0(ctx):
+    _previous(ctx["out"], 0)
+    return stage0(_rows(ctx, "rows", "train"))
+
+
+def _run_1(ctx):
+    _previous(ctx["out"], 1)
+    return stage1(_rows(ctx, "rows", "train"), **_env(ctx))
+
+
+def _run_2(ctx):
+    selected = _previous(ctx["out"], 2)["selected"]
+    return stage2(_rows(ctx, "rows", "train"), selected["cell"], **_env(ctx))
+
+
+def _run_3(ctx):
+    _previous(ctx["out"], 3)
+    selected = _load(stage_path(ctx["out"], 1))["selected"]
+    rows = _rows(ctx, "rows", "validation", cells=(selected["f"],))
+    return stage3(rows, selected["cell"], **_env(ctx))
+
+
+STAGE_RUNNERS = {-1: _run_m1, 0: _run_0, 1: _run_1, 2: _run_2, 3: _run_3}
+
+
+def run_stage(stage, out_dir, *, build, preregistration, sectors=None, cluster_fn=None) -> dict:
+    """One stage, its verdict JSON written. Stages -1..2 are TRAIN-only and
+    may be re-run; stage 3 may not."""
+    require_preregistration(preregistration)
+    target = stage_path(out_dir, stage)
+    if stage == 3 and target.exists():
+        _refuse(f"{target.name} exists -- v212's one VALIDATION shot is spent")
+    ctx = {"out": Path(out_dir), "build": build, "sectors": sectors or {},
+           "cluster_fn": cluster_fn}
+    out = STAGE_RUNNERS[stage](ctx)
+    _write(target, out)
+    return out
+
+
+# --- ledger ----------------------------------------------------------------------
+
+LEDGER_VERDICTS = {"PASS": "PASS", "FAIL": "NO-LIFT", "NOT_SELECTED": "NO-LIFT",
+                   "NO_ELIGIBLE_CELL": "NO-LIFT", "THIN": "UNMEASURABLE",
+                   "UNDERPOWERED": "UNMEASURABLE", "refused:zero-diff": "UNMEASURABLE",
+                   "OPEN": "OPEN"}
+
+
+def _gate_verdict(stages) -> str | None:
+    """The verdict of the first stage that closed the run, else None."""
+    for stage, advancing in ((-1, "REACHABLE"), (0, "POWERED"), (1, "SELECTED")):
+        verdict = stages.get(stage, {}).get("verdict")
+        if verdict is None:
+            return "OPEN"
+        if verdict != advancing:
+            return verdict
+    return None
+
+
+def _look_verdict(cell, stages) -> str:
+    closed_by = _gate_verdict(stages)
+    if closed_by is not None:
+        return closed_by
+    if stages[1]["selected"]["cell"] != cell:
+        return "NOT_SELECTED"
+    if 3 in stages:
+        return stages[3]["verdict"]
+    return stages[2]["verdict"] if stages.get(2, {}).get("verdict") == "FAIL" else "OPEN"
+
+
+def _look_stats(cell, stages) -> dict:
+    if 3 in stages and stages[3].get("cell") == cell:
+        return stages[3]["score"]
+    return next((c for c in stages.get(1, {}).get("cells", []) if c["cell"] == cell), {})
+
+
+def ledger_rows(out_dir, run_date, record) -> list:
+    """One preregistration-ledger row per look (spec: 3 looks, BH family)."""
+    stages = {s: _load(stage_path(out_dir, s)) for s in STAGE_RUNNERS
+              if stage_path(out_dir, s).exists()}
+    rows = []
+    for cell in clr.CELLS:
+        raw, stats = _look_verdict(cell, stages), _look_stats(cell, stages)
+        rows.append({"id": f"v212-{cell}", "date": run_date,
+                     "hypothesis": f"Confluence limit entry partway to the support, f={cell[1:]} "
+                                   "of M-S, stop 0.25% beyond S, clamped confluence plans; ExpR "
+                                   "above the reference, fills >= 50%, WR within 2pp (v212)",
+                     "instrument": "v2", "n": stats.get("n"), "exp_r": stats.get("expr"),
+                     "p": None, "verdict": LEDGER_VERDICTS[raw], "stage_verdict": raw,
+                     "record": record})
+    return rows
+
+
 # --- CLI -------------------------------------------------------------------------
 
 def _cells(names) -> tuple:
@@ -340,6 +514,46 @@ def _cmd_build(args):
 COMMANDS = {"census": _cmd_build, "rows": _cmd_build}
 
 
+def _cli_refusal(args) -> str | None:
+    if args.tickers and args.stage == 3:
+        return "partial-validation -- stage 3 is the one shot and runs the full universe"
+    if args.tickers and Path(args.out).resolve() == RESULTS.resolve():
+        return "smoke-run -- --tickers needs a scratch --out, never the results directory"
+    return None
+
+
+def _portfolio_env(stage) -> dict:
+    """Sectors and the cluster callback for stages 1-3 (frames from the cache)."""
+    if stage < 1:
+        return {}
+    from measure_arms import load_frame
+    frames = {t: f for t in universe() if (f := load_frame(t)) is not None}
+    sectors = load_sectors()
+    return {"sectors": sectors, "cluster_fn": make_cluster_fn(frames, sectors)}
+
+
+def _cmd_stage(args):
+    refusal = _cli_refusal(args)
+    if refusal:
+        _refuse(refusal)
+    build_fn = functools.partial(build, tickers=args.tickers, workers=args.workers,
+                                 checkpoint_dir=args.checkpoint_dir)
+    out = run_stage(args.stage, args.out, build=build_fn, preregistration=args.preregistration,
+                    **_portfolio_env(args.stage))
+    print(f"v212 stage {args.stage}: {out['verdict']} -> {stage_path(args.out, args.stage)}",
+          flush=True)
+    return 0 if out["verdict"] in ADVANCING else 1
+
+
+def _cmd_ledger(args):
+    for line in ledger_rows(args.out, args.run_date, args.record):
+        print(json.dumps(line, ensure_ascii=False))
+    return 0
+
+
+COMMANDS.update({"stage": _cmd_stage, "ledger": _cmd_ledger})
+
+
 def _common(sub) -> None:
     sub.add_argument("--preregistration", type=Path, required=True)
     sub.add_argument("--out", type=Path, default=RESULTS)
@@ -359,6 +573,13 @@ def _parser():
         sub.add_argument("--cells", nargs="+", choices=clr.CELLS, default=None)
         if name == "rows":
             sub.add_argument("--touch", action="store_true")
+    stage = subs.add_parser("stage")
+    _common(stage)
+    stage.add_argument("--stage", required=True, type=int, choices=sorted(STAGE_RUNNERS))
+    ledger = subs.add_parser("ledger")
+    _common(ledger)
+    ledger.add_argument("--run-date", required=True)
+    ledger.add_argument("--record", required=True)
     return parser, subs
 
 
