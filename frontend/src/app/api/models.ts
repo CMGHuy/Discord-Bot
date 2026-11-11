@@ -908,14 +908,39 @@ export interface PartialsBreakdownRow extends PartialsKpis { key: string; n: num
 export interface PartialsLadderRow { level_r: number; touch_rate: number | null; cf_exp_r: number | null; n: number; }
 export interface PartialsSplitRow { fraction: number; exp_r: number | null; n: number; }
 export interface PartialsOutcome { bucket: PartialsBucket; n: number; share: number | null; avg_runner_r: number | null; }
+/** v219 — `runner_endings` (`partials.py::runner_endings`): how closed runners
+ *  ended. Shares are percentages 0-100 (1 dp) with Wilson 95% bounds `lo`/`hi`;
+ *  all three are null when `denominator` is 0. Giveback's denominator is the
+ *  decidable runners, the four endings' is `n`. R figures are runner R on the
+ *  plan's initial risk; `progress` is % of the TP1→TP2 distance (0-100). */
+export type PartialsEnding = 'tp2' | 'trail' | 'floor' | 'other' | 'giveback';
+export interface PartialsShare {
+  n: number; denominator: number; share: number | null; lo: number | null; hi: number | null; thin: boolean;
+}
+export interface PartialsEndingCard extends PartialsShare { ending: 'tp2' | 'floor' | 'giveback' | 'trail'; }
+export interface PartialsEndingRow extends PartialsShare {
+  ending: PartialsEnding;
+  r_n: number; avg_r: number | null; median_r: number | null; total_r: number | null; vs_all_out: number | null;
+  path_n: number; best_r: number | null; progress: number | null; gave_back: number | null; sessions: number | null;
+}
+export interface PartialsOddsSegment {
+  ending: Exclude<PartialsEnding, 'giveback'>; n: number; share: number | null; lo: number | null; hi: number | null;
+}
+export interface PartialsOddsBar { level: number; n: number; thin: boolean; split: PartialsOddsSegment[]; }
+export interface PartialsRunnerEndings {
+  n: number; decidable: number;
+  cards: PartialsEndingCard[]; rows: PartialsEndingRow[]; odds: PartialsOddsBar[];
+  excluded: { no_tp2: number; runner_r_unavailable: number; manual_close: number; unpathed: number; no_tp2_distance: number };
+}
 export interface AnalyticsPartials extends Scoped {
   kpis: PartialsKpis;
   funnel: { stage: PartialsStage; n: number }[];
   outcomes: PartialsOutcome[];
+  runner_endings: PartialsRunnerEndings;
   counterfactuals: {
     actual_exp_r: number | null; all_out_exp_r: number | null; giveback: number[];
     ladder: PartialsLadderRow[]; split: PartialsSplitRow[];
-    path_unavailable: number; runner_r_unavailable: number;
+    path_unavailable: number; runner_r_unavailable: number; giveback_excluded: number;
   };
   holds: Record<PartialsHoldStage, PartialsHold>;
   breakdowns: Record<PartialsDimension, PartialsBreakdownRow[]>;
