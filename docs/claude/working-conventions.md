@@ -383,6 +383,11 @@ for it by name, since each case is a billed child `claude` run; a skill
 `tests/hooks/test_role_skills.py` (free). Subagents
 on the subscription (`Agent`, `/panel`) are not extra cost.
 
+**Never offer it either** (partner, 2026-11-11): no billed option in an
+`AskUserQuestion`, a closing summary or an "I can run X if you want" line, and
+no new `evals/` cases written for a new skill — its trigger table and
+`tests/hooks/` are the check.
+
 ## Permissions follow every worktree
 
 `.claude/settings.local.json` is git-ignored, so a new worktree used to start
