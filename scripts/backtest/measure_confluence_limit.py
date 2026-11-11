@@ -420,11 +420,14 @@ STAGE_RUNNERS = {-1: _run_m1, 0: _run_0, 1: _run_1, 2: _run_2, 3: _run_3}
 
 def run_stage(stage, out_dir, *, build, preregistration, sectors=None, cluster_fn=None) -> dict:
     """One stage, its verdict JSON written. Stages -1..2 are TRAIN-only and
-    may be re-run; stage 3 may not."""
+    may be re-run until stage 3 has run; once VALIDATION is read, no stage
+    runs again (the selection it read must not change)."""
     require_preregistration(preregistration)
-    target = stage_path(out_dir, stage)
+    target, shot = stage_path(out_dir, stage), stage_path(out_dir, 3)
     if stage == 3 and target.exists():
         _refuse(f"{target.name} exists -- v212's one VALIDATION shot is spent")
+    if shot.exists():
+        _refuse(f"{shot.name} exists -- VALIDATION is read; stage {stage} does not re-run")
     ctx = {"out": Path(out_dir), "build": build, "sectors": sectors or {},
            "cluster_fn": cluster_fn}
     out = STAGE_RUNNERS[stage](ctx)

@@ -1,6 +1,7 @@
 """V212-13c: the v212 stage chain -- census verdicts, the paired MDE, the
 portfolio-passed clauses and plateau, the fold gate, the one VALIDATION shot
 on the selected cell only, and one ledger row per look. `build` is faked."""
+import json
 import sys
 from pathlib import Path
 
@@ -128,3 +129,108 @@ def test_the_cli_refuses_a_partial_validation_shot():
         mcl.main(["stage", "--stage", "3", "--tickers", "5", "--preregistration", "p.md"])
     with pytest.raises(SystemExit, match="smoke-run"):
         mcl.main(["stage", "--stage", "0", "--tickers", "5", "--preregistration", "p.md"])
+
+
+# --- review follow-ups: re-run refusal, non-thin VALIDATION, ledger and CLI paths ----
+
+def _both_directions(arm_win):
+    """VALIDATION rows with both directions filled (not THIN); arm wins pay `arm_win`R."""
+    def build(kind, window, *, touch=False, cells=clr.F_GRID, **_):
+        out = []
+        for direction, prefix in (("bullish", "L"), ("bearish", "S")):
+            for i in range(100):
+                ticker = f"{prefix}{i:03d}"
+                out.append(row("ref", i, 1.0 if i % 2 == 0 else -1.0, year=2024,
+                               direction=direction, ticker=ticker))
+                for cell in (clr.cell_key(c) for c in cells):
+                    filled = i % 5 != 4
+                    r = (arm_win if i % 2 == 0 else -1.0) if filled else None
+                    out.append(row(cell, i, r, year=2024, direction=direction,
+                                   ticker=ticker, filled=filled))
+        return out
+    return build
+
+
+def _through_stage2(out):
+    for stage in (-1, 0, 1, 2):
+        _run(stage, out, [])
+
+
+def _stage3(out, arm_win):
+    return mcl.run_stage(3, out, build=_both_directions(arm_win), preregistration="p.md")
+
+
+def test_stage3_passes_a_non_thin_selected_cell_that_beats_the_reference(tmp_path):
+    _through_stage2(tmp_path)
+    out = _stage3(tmp_path, 1.2)
+    assert (out["verdict"], out["cell"], out["score"]["passes"]) == ("PASS", "f0.333", True)
+    rows = mcl.ledger_rows(tmp_path, "d", "r")
+    assert [(r["verdict"], r["stage_verdict"]) for r in rows][0] == ("PASS", "PASS")
+
+
+def test_stage3_fails_a_non_thin_selected_cell_below_the_reference(tmp_path):
+    _through_stage2(tmp_path)
+    out = _stage3(tmp_path, 0.8)
+    assert (out["verdict"], out["score"]["expr_beats_reference"]) == ("FAIL", False)
+    assert mcl.ledger_rows(tmp_path, "d", "r")[0]["verdict"] == "NO-LIFT"
+
+
+def test_no_train_stage_reruns_once_validation_is_read(tmp_path):
+    _through_stage2(tmp_path)
+    _stage3(tmp_path, 1.2)
+    for stage in (-1, 0, 1, 2):
+        with pytest.raises(SystemExit, match="VALIDATION is read"):
+            _run(stage, tmp_path, [])
+
+
+def _write_stages(out, **verdicts):
+    selected = {"cell": "f0.333", "f": 1 / 3}
+    stages = {-1: {"verdict": "REACHABLE"}, 0: {"verdict": "POWERED"},
+              1: {"verdict": "SELECTED", "selected": selected,
+                  "cells": [{"cell": c, "n": 10, "expr": 0.1} for c in clr.CELLS]}}
+    stages.update({int(k[1:]): v for k, v in verdicts.items()})
+    for stage, body in stages.items():
+        mcl._write(mcl.stage_path(out, stage), body)
+
+
+def test_a_stage2_fail_is_no_lift_for_the_selected_look(tmp_path):
+    _write_stages(tmp_path, s2={"verdict": "FAIL", "cell": "f0.333", "folds": []})
+    rows = mcl.ledger_rows(tmp_path, "d", "r")
+    assert [(r["verdict"], r["stage_verdict"]) for r in rows] == [
+        ("NO-LIFT", "FAIL"), ("NO-LIFT", "NOT_SELECTED"), ("NO-LIFT", "NOT_SELECTED")]
+    assert rows[0]["n"] == 10
+
+
+def test_no_eligible_cell_is_no_lift_for_every_look(tmp_path):
+    _write_stages(tmp_path, s1={"verdict": "NO_ELIGIBLE_CELL", "selected": None, "cells": []})
+    rows = mcl.ledger_rows(tmp_path, "d", "r")
+    assert {(r["verdict"], r["stage_verdict"]) for r in rows} == {("NO-LIFT", "NO_ELIGIBLE_CELL")}
+
+
+def test_a_stage2_pass_without_stage3_leaves_the_selected_look_open(tmp_path):
+    _write_stages(tmp_path, s2={"verdict": "PASS", "cell": "f0.333", "folds": []})
+    assert mcl.ledger_rows(tmp_path, "d", "r")[0]["verdict"] == "OPEN"
+
+
+def test_the_ledger_command_prints_one_json_line_per_look(tmp_path, capsys):
+    _write_stages(tmp_path, s2={"verdict": "FAIL", "cell": "f0.333", "folds": []})
+    code = mcl.main(["ledger", "--run-date", "2026-11-20", "--record", "r.md",
+                     "--out", str(tmp_path), "--preregistration", "p.md"])
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert code == 0
+    assert [(r["id"], r["verdict"], r["date"], r["record"]) for r in lines] == [
+        ("v212-f0.333", "NO-LIFT", "2026-11-20", "r.md"),
+        ("v212-f0.5", "NO-LIFT", "2026-11-20", "r.md"),
+        ("v212-f0.667", "NO-LIFT", "2026-11-20", "r.md")]
+
+
+@pytest.mark.parametrize("filled, code", [(True, 0), (False, 1)])
+def test_the_stage_command_exits_zero_only_on_an_advancing_verdict(tmp_path, monkeypatch,
+                                                                   capsys, filled, code):
+    def build(kind, window, *, touch=False, cells=clr.F_GRID, **_):
+        return census_rows(filled=filled)
+    monkeypatch.setattr(mcl, "build", build)
+    assert mcl.main(["stage", "--stage", "-1", "--out", str(tmp_path),
+                     "--preregistration", "p.md"]) == code
+    verdict = "REACHABLE" if filled else "refused:zero-diff"
+    assert f"v212 stage -1: {verdict}" in capsys.readouterr().out
