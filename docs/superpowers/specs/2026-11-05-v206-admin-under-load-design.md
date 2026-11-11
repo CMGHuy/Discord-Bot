@@ -721,3 +721,13 @@ or the route (or the query shape) stays off the list. A dropped route keeps
   - Unfiltered `/trades`, `status=open` and every other shape keep
     `no-store`: open rows carry live prices, `held_hours` to now,
     `prices_as_of` and `market_meta`.
+- **`/calendar/pnl`: dropped.** The body's `as_of` is the time the filtered
+  view was composed (`core/analytics/page_bodies.py:352-354`), a per-request
+  stamp below day resolution that no ETag input covers: two requests five
+  minutes apart on an unchanged book differ in `as_of` and nothing else in the
+  month (`tests/admin_perf/test_calendar_conditional_audit.py`). Also outside
+  the tag: `market_meta` follows the refresher (`computed_at`, `refreshing`,
+  `stale_inputs`, `error` from the stored `admin_snapshots` row,
+  `api_v1/analytics.py:132-165`), and the default month is the process-local
+  `dt.date.today()` (`api_v1/calendar.py:62`). Admitting it would first need
+  `as_of` changed, which is a payload change outside v206. It keeps `no-store`.
