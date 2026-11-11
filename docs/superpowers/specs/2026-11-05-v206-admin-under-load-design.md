@@ -692,3 +692,32 @@ with the same `VERSION.json` (a hotfix redeployed without a bump) would
 share tags. Passing `SWING_BOT_IMAGE` into the admin service's
 `environment:` in `docker-compose.yml` closes that gap. It is a deploy
 change outside this plan, raised with the partner.
+
+### Plan 3 route audits (V218-10..12)
+
+Each allow-list candidate was audited against the ETag inputs (v218 index
+§ Global Constraints): every field of its body is either covered by an input,
+or the route (or the query shape) stays off the list. A dropped route keeps
+`Cache-Control: no-store`. The exact allow-list is pinned by
+`tests/admin_perf/test_conditional_routes.py`.
+
+- **`/trades`: admitted per query shape** (`trades.closed_only_query`, route
+  key `trades`). The shape: `status=closed` or `outcome=win|loss`; no `sort` on
+  `pnl_pct`, `r_multiple` or `status` (an alias of `progress_pct`), which price
+  every row; the refresher on; and the ET date equal to the Berlin date.
+  `tests/admin_perf/test_trades_conditional_audit.py` classifies every key of
+  the closed page (stored records, Berlin day, journal, FX daily, ET day,
+  unpriced, paging), and a new key fails it. Findings:
+  - With the refresher off, a closed row's FX can come from the pair frame
+    (`fx.fx_rate` → `rate_before`), which `fx_daily_rate_repo().version()`
+    does not cover. So the shape needs the refresher on.
+  - `follow_score` (`_attach_follow_scores`, `trades.py:772`) counts days from
+    the ET date (`rank.follow_score`, `session.market_today()`), which turns
+    at 06:00 Berlin. The tag keys the Berlin date, so the shape is admitted
+    only while the two dates agree (06:00–24:00 Berlin). The tag inputs did
+    not change.
+  - `held_hours` reads the clock only for a row without `closed_at`; every
+    closed row has one (asserted).
+  - Unfiltered `/trades`, `status=open` and every other shape keep
+    `no-store`: open rows carry live prices, `held_hours` to now,
+    `prices_as_of` and `market_meta`.
