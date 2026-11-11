@@ -209,3 +209,19 @@ def _raise(*_a, **_k):
 
 def _raise_os(*_a, **_k):
     raise OSError("VERSION.json missing")
+
+
+def test_the_real_principal_maps_a_session_and_a_basic_auth_caller(monkeypatch):
+    """_principal() is patched everywhere else: pin its own two branches."""
+    from swingbot.admin import app as admin_app
+    flask_app = Flask(__name__)
+    monkeypatch.setattr(admin_app, "resolve_principal",
+                        lambda: {"role": "viewer", "username": "v", "user_id": 7})
+    with flask_app.test_request_context("/"):
+        assert cond._principal() == ("viewer", "v", 7)
+    monkeypatch.setattr(admin_app, "resolve_principal", lambda: None)
+    with flask_app.test_request_context(
+            "/", headers={"Authorization": "Basic " + __import__("base64").b64encode(b"bot:pw").decode()}):
+        assert cond._principal() == ("admin", "bot", None)
+    with flask_app.test_request_context("/"):
+        assert cond._principal() == ("admin", None, None)
