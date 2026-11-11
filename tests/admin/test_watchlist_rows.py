@@ -269,6 +269,38 @@ def test_signal_projection_cache_reuses_a_plans_table_version_and_returns_copies
     assert calls == ["read", "read"]
 
 
+def test_the_plans_signature_moves_with_the_trades_generation(monkeypatch):
+    """v218 V218-6: same plans version, new trades generation -> a new signature."""
+    from swingbot.admin import watchlist_rows
+    from swingbot.core.infra import store_generation
+    from tests.planning.test_plan_store_records import FakePlansRepo
+
+    fake = FakePlansRepo()
+    monkeypatch.setattr("swingbot.core.db.repositories.plans.plans_repo", lambda: fake)
+    store_generation.reset()
+    try:
+        first = watchlist_rows._plans_signature()
+        assert first == ("db", *fake.version(), 0)
+        assert watchlist_rows._plans_signature() == first
+        store_generation.bump("trades")
+        second = watchlist_rows._plans_signature()
+        assert second != first and second[:-1] == first[:-1]
+        store_generation.bump("journal")
+        assert watchlist_rows._plans_signature() == second
+    finally:
+        store_generation.reset()
+
+
+def test_the_plans_signature_is_none_when_the_database_is_unreachable(monkeypatch):
+    from swingbot.admin import watchlist_rows
+
+    def boom():
+        raise OSError("no database")
+
+    monkeypatch.setattr("swingbot.core.db.repositories.plans.plans_repo", boom)
+    assert watchlist_rows._plans_signature() is None
+
+
 def test_a_live_price_carries_the_provider_it_came_from(bars, monkeypatch):
     """v106: the row names which provider served its live quote."""
     bars["AAPL"] = _frame([100.0] * 26)
