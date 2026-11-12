@@ -1,0 +1,25 @@
+# v220 V220-18: scratch project for the code-only rollback drill. Used ONLY as
+#   COMPOSE_PROJECT_NAME=rbdrill COMPOSE_FILE=docker-compose.yml:/opt/swing-bot-rbdrill.override.yml
+# from the scratch checkout /opt/swing-bot-rbdrill, with this file copied
+# outside the checkout (the drill checks out older trees, which lack it).
+# It renames every fixed container_name so nothing collides with the live
+# stack, publishes no host port, and points the admin's container controls
+# at a bot container that does not exist. The bot service is never started
+# in the drill: a second bot on the live token would post to the live guild.
+services:
+  db:
+    container_name: rbdrill-db
+  db-test:
+    container_name: rbdrill-db-test
+    ports: !reset []
+  bot:
+    container_name: rbdrill-bot
+  admin:
+    container_name: rbdrill-admin
+    ports: !reset []
+    environment:
+      BOT_CONTAINER_NAME: rbdrill-bot
+  refresher:
+    container_name: rbdrill-refresher
+  cloudflared:
+    container_name: rbdrill-cloudflared
