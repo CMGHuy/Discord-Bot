@@ -26,6 +26,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import NamedTuple
 
+import rollback_checks as rc  # sibling module (scripts/ops/, or $WORK on the VM)
+import rollback_migrations as rm  # sibling module
+
 UTC = dt.timezone.utc
 STABLE_RE = re.compile(r"^stable-\d{4}-\d{2}-\d{2}(-\d+)?$")
 FORMS_HELP = "stable-YYYY-MM-DD[-N], <sha>, vNNN[-before|-after], bot-A.B.C, YYYY-MM-DD[THH:MM]"
@@ -335,6 +338,114 @@ def candidates(repo: Path, *, deploys_path: Path, stable_dir: Path | None,
         row["plans"] = _plans_near(repo, row["sha"])
         row["above_floor"] = not floor_violations(row["sha"], repo, bounds)
     return rows
+
+
+# --- V220-6: the check report ------------------------------------------------
+
+_CHECK_ERRORS = (subprocess.CalledProcessError, LookupError, ValueError, OSError, Refused)
+
+
+@dataclass
+class _Run:
+    sha: str
+    image: str
+    repo: Path
+    head: str
+    env_path: Path
+    allow_writer_drift: bool
+    run: object
+    report: dict
+
+
+def _new_report() -> dict:
+    return {"ok": False, "noop": False, "refusals": [], "warnings": [], "notes": [],
+            "refresher": "start", "migrations": [], "hold": None}
+
+
+def _check_floor(c: _Run) -> None:
+    for b in floor_violations(c.sha, c.repo, INCOMPATIBLE_BOUNDARIES):
+        c.report["refusals"].append(f"below the compatibility floor: {b.sha} {b.plan} {b.reason}")
+
+
+def _check_migrations(c: _Run) -> None:
+    for v in rm.check_migrations(c.repo, c.sha, c.head):
+        c.report["migrations"].append({"revision": v.revision, "safe": v.safe,
+                                       "reasons": list(v.reasons), "override": v.override})
+        if not v.safe:
+            c.report["refusals"].append(f"migration {v.revision} ({v.path}) is not provably additive: "
+                                        + "; ".join(v.reasons))
+        if v.override:
+            c.report["notes"].append(f"migration {v.revision} is marked ROLLBACK_SAFE: {v.override}")
+
+
+def _check_config(c: _Run) -> None:
+    names = rc.env_key_names(c.env_path.read_text(encoding="utf-8"))
+    refusals, warnings = rc.check_config(rc.show(c.repo, c.sha, rc.CONFIG_PATH),
+                                         rc.show(c.repo, c.head, rc.CONFIG_PATH) or "", names)
+    c.report["refusals"].extend(refusals)
+    c.report["warnings"].extend(warnings)
+
+
+def _check_compose(c: _Run) -> None:
+    c.report["refusals"].extend(rc.check_compose(rc.show(c.repo, c.sha, rc.COMPOSE_PATH),
+                                                 rc.show(c.repo, c.head, rc.COMPOSE_PATH) or ""))
+
+
+# (label, check, needs the VM host), in spec order. V220-6b inserts vocabulary (4),
+# market-data writer (6) and image tag / image / clean tree (7).
+_CHECKS = (
+    ("floor", _check_floor, False),
+    ("migrations", _check_migrations, False),
+    ("config keys", _check_config, False),
+    ("compose db", _check_compose, False),
+)
+
+
+def _read_hold(path: Path, report: dict) -> None:
+    if not path.exists():
+        return
+    try:
+        hold = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(hold, dict):
+            raise ValueError("not a JSON object")
+    except (OSError, ValueError) as exc:
+        report["warnings"].append(f"hold file {path} is unreadable ({exc}); a new rollback rewrites it")
+        return
+    report["hold"] = hold
+    report["notes"].append(f"existing hold: rollback to {str(hold.get('sha', ''))[:12]} since "
+                           f"{hold.get('at')}; a new rollback replaces it")
+
+
+def _run_all(ctx: _Run, host: bool) -> None:
+    for label, check, needs_host in _CHECKS:
+        if needs_host and not host:
+            ctx.report["notes"].append(f"{label}: skipped (--skip-host)")
+            continue
+        try:
+            check(ctx)
+        except _CHECK_ERRORS as exc:
+            ctx.report["refusals"].append(f"{label}: cannot run: {exc}")
+
+
+def run_checks(sha: str, image: str, *, repo: Path, ref: str, env_path: Path, running_sha: str,
+               hold_path: Path, host: bool = True, allow_writer_drift: bool = False,
+               run=subprocess.run) -> dict:
+    """Every safety check for rolling back to `sha`; nothing is changed. See the CLI contract."""
+    repo, report = Path(repo), _new_report()
+    _read_hold(Path(hold_path), report)
+    try:
+        full = _on_main(_Ctx(repo, ref, Path()), sha, "target")
+        head = git_out(repo, "rev-parse", f"{ref}^{{commit}}")
+    except _CHECK_ERRORS as exc:
+        report["refusals"].append(str(exc))
+        return report
+    if running_sha and _full(repo, running_sha) == full:
+        report["noop"] = True
+        report["notes"].append(f"target {full[:12]} is already running")
+        return report
+    _run_all(_Run(full, image, repo, head, Path(env_path), allow_writer_drift, run, report), host)
+    report["ok"] = not report["refusals"]
+    return report
 
 
 def _print_refusal(exc: Refused) -> None:
