@@ -286,7 +286,10 @@ run_release() {
   log "release of the hold on $hold_sha started (main $main_sha)"
   cp "$HOLD" "$WORK/released_hold.json"
   rm -f "$HOLD"
-  git_d checkout -q main
+  git_d checkout -q main || {
+    log "release FAILED after the hold was removed: checkout of main failed; main $main_sha is not running"
+    exit 1
+  }
   if ! deploy_main; then
     log "release FAILED after the hold was removed: main $main_sha is not running; read the deploy output above"
     exit 1

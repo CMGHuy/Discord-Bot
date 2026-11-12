@@ -232,6 +232,11 @@ def test_a_failed_deploy_line_is_reported_not_called_a_restore(src):
     assert "record_line rollback" in fn and "NOT written" in fn
 
 
+def test_a_failed_main_checkout_on_release_is_reported(src):
+    fn = body(src, "run_release")
+    assert "checkout of main failed" in fn
+
+
 def test_the_script_parses(bash):
     assert subprocess.run([bash, "-n", SCRIPT.as_posix()], capture_output=True).returncode == 0
 
