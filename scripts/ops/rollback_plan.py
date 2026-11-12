@@ -11,7 +11,12 @@ target tree is read with `git show`, never imported or run.
     python3 rollback_plan.py floor <sha> [--repo DIR]
     python3 rollback_plan.py candidates [--repo] [--ref] [--deploys FILE] [--stable-dir DIR] [--limit 10]
 
-Exit codes: 0 pass, 2 refused (nothing changed).
+    python3 rollback_plan.py check <sha> --image IMG [--repo] [--ref] [--env FILE] [--running-sha SHA]
+                                     [--hold FILE] [--skip-host] [--allow-writer-drift]
+    python3 rollback_plan.py deploy-line --kind rollback|release --sha S --image I --db-image D
+                                     --from-sha F [--ts TS]
+
+Exit codes: 0 pass, 2 refused (nothing changed), 3 no-op (target already running).
 """
 from __future__ import annotations
 
@@ -391,13 +396,59 @@ def _check_compose(c: _Run) -> None:
                                                  rc.show(c.repo, c.head, rc.COMPOSE_PATH) or ""))
 
 
-# (label, check, needs the VM host), in spec order. V220-6b inserts vocabulary (4),
-# market-data writer (6) and image tag / image / clean tree (7).
+_DRIFT = "the admin's freshness refresh (swingbot/admin/freshness.py) calls the same writers"
+
+
+def _check_vocabulary(c: _Run) -> None:
+    values = rc.vocab_from_db(app_dir=c.repo, run=c.run)
+    for item in rc.missing_vocabulary(c.repo, c.sha, values):
+        c.report["refusals"].append(f"open-trade value unknown to the target: {item}")
+
+
+def _check_writer(c: _Run) -> None:
+    changed = rc.changed_writer_paths(c.repo, c.sha, c.head)
+    if not changed:
+        return
+    c.report["refresher"] = "keep-stopped"
+    listed = ", ".join(changed[:5]) + (" ..." if len(changed) > 5 else "")
+    if c.allow_writer_drift:
+        c.report["warnings"].append(f"market-data writer differs ({listed}); the refresher stays stopped, "
+                                    f"but {_DRIFT}, so the admin may still write market_data/ "
+                                    "in the target's format")
+    else:
+        c.report["refusals"].append(f"market-data writer differs ({listed}) and {_DRIFT}; "
+                                    "pass --allow-writer-drift to roll back anyway")
+
+
+def _check_image_tag(c: _Run) -> None:
+    if not c.image.endswith(f":sha-{c.sha[:12]}"):
+        c.report["refusals"].append(f"image {c.image} is not the target's sha-{c.sha[:12]} tag")
+
+
+def _check_image_exists(c: _Run) -> None:
+    done = c.run(["docker", "manifest", "inspect", c.image], capture_output=True, text=True)
+    if done.returncode != 0:
+        c.report["refusals"].append(f"image {c.image} is not on the registry (pruned?)")
+
+
+def _check_clean_tree(c: _Run) -> None:
+    dirty = git_out(c.repo, "status", "--porcelain", "--untracked-files=no")
+    if dirty:
+        c.report["refusals"].append("tracked files have local changes (an unmirrored live edit?): "
+                                    + "; ".join(dirty.splitlines()[:3]))
+
+
+# (label, check, needs the VM host) -- spec checks 1-7 in order; 8 is the no-op/hold.
 _CHECKS = (
     ("floor", _check_floor, False),
     ("migrations", _check_migrations, False),
     ("config keys", _check_config, False),
+    ("vocabulary", _check_vocabulary, True),
     ("compose db", _check_compose, False),
+    ("market-data writer", _check_writer, False),
+    ("image tag", _check_image_tag, False),
+    ("image", _check_image_exists, True),
+    ("clean tree", _check_clean_tree, True),
 )
 
 
@@ -448,6 +499,22 @@ def run_checks(sha: str, image: str, *, repo: Path, ref: str, env_path: Path, ru
     return report
 
 
+DEPLOY_KINDS = ("rollback", "release")
+
+
+def deploy_line(kind: str, *, ts: str, git_sha: str, bot_image: str, db_image: str,
+                from_sha: str) -> str:
+    """One deploys.jsonl line for a rollback or release: pitr_resolve's fields plus kind/from_sha."""
+    if kind not in DEPLOY_KINDS:
+        raise ValueError(f"kind must be one of {', '.join(DEPLOY_KINDS)}, got {kind!r}")
+    row = {"ts": ts, "git_sha": git_sha, "bot_image": bot_image, "db_image": db_image,
+           "kind": kind, "from_sha": from_sha}
+    empty = [key for key, value in row.items() if not value]
+    if empty:
+        raise ValueError(f"empty field(s): {', '.join(empty)}")
+    return json.dumps(row, sort_keys=True)
+
+
 def _print_refusal(exc: Refused) -> None:
     print(f"REFUSE: {exc}", file=sys.stderr)
     for candidate in exc.candidates:
@@ -486,7 +553,34 @@ def _cmd_candidates(args: argparse.Namespace) -> int:
     return 0
 
 
-HANDLERS = {"resolve": _cmd_resolve, "candidates": _cmd_candidates, "floor": _cmd_floor}
+def _cmd_check(args: argparse.Namespace) -> int:
+    repo = Path(args.repo)
+    report = run_checks(
+        args.sha, args.image, repo=repo, ref=args.ref,
+        env_path=Path(args.env) if args.env else repo / ".env",
+        running_sha=args.running_sha or git_out(repo, "rev-parse", "HEAD"),
+        hold_path=Path(args.hold) if args.hold else repo / "backups" / "deploy_hold.json",
+        host=not args.skip_host, allow_writer_drift=args.allow_writer_drift)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    if report["noop"]:
+        return 3
+    return 0 if report["ok"] else 2
+
+
+def _cmd_deploy_line(args: argparse.Namespace) -> int:
+    ts = args.ts or dt.datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        line = deploy_line(args.kind, ts=ts, git_sha=args.sha, bot_image=args.image,
+                           db_image=args.db_image, from_sha=args.from_sha)
+    except ValueError as exc:
+        print(f"REFUSE: {exc}", file=sys.stderr)
+        return 2
+    print(line)
+    return 0
+
+
+HANDLERS = {"resolve": _cmd_resolve, "candidates": _cmd_candidates, "floor": _cmd_floor,
+            "check": _cmd_check, "deploy-line": _cmd_deploy_line}
 
 
 def _add_repo_args(parser: argparse.ArgumentParser) -> None:
@@ -510,6 +604,21 @@ def _parser() -> argparse.ArgumentParser:
     flo = sub.add_parser("floor", help="is <sha> at or above every incompatible boundary?")
     flo.add_argument("sha")
     flo.add_argument("--repo", default=".")
+    chk = sub.add_parser("check", help="every safety check for a rollback target; changes nothing")
+    chk.add_argument("sha")
+    chk.add_argument("--image", required=True)
+    _add_repo_args(chk)
+    chk.add_argument("--env", default=None, help="default: <repo>/.env (key names only)")
+    chk.add_argument("--running-sha", default=None, help="default: <repo> HEAD")
+    chk.add_argument("--hold", default=None, help="default: <repo>/backups/deploy_hold.json")
+    chk.add_argument("--skip-host", action="store_true",
+                     help="skip the vocabulary, registry and clean-tree checks")
+    chk.add_argument("--allow-writer-drift", action="store_true",
+                     help="roll back although the market-data writer differs (refresher stays stopped)")
+    dline = sub.add_parser("deploy-line", help="one deploys.jsonl line for a rollback or release")
+    for flag in ("--kind", "--sha", "--image", "--db-image", "--from-sha"):
+        dline.add_argument(flag, required=True)
+    dline.add_argument("--ts", default=None, help="default: now, UTC, %%Y-%%m-%%dT%%H:%%M:%%SZ")
     return parser
 
 

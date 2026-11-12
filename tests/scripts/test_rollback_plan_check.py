@@ -11,6 +11,7 @@ import pytest
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "scripts" / "ops"))
+import pitr_resolve as pr  # noqa: E402
 import rollback_plan as rp  # noqa: E402
 from tests.scripts.rollback_repo import commit_off_main, make_repo, sha_of  # noqa: E402
 
@@ -136,3 +137,110 @@ def test_existing_hold_is_shown_and_will_be_replaced(stack):
     hold.write_text("{broken", encoding="utf-8")
     r = _check(w)
     assert r["hold"] is None and any("unreadable" in x for x in r["warnings"]) and r["ok"] is True
+
+
+# --- V220-6b: host checks, writer refusal, deploy-line, CLIs -----------------
+
+
+class HostRun:
+    """subprocess.run stand-in for the host checks: docker manifest inspect and psql."""
+
+    def __init__(self, vocab: str | None = "status\tACTIVE\nstrategy\tRSI\n", manifest: int = 0):
+        self.vocab, self.manifest = vocab, manifest
+
+    def __call__(self, cmd, **kw):
+        if list(cmd[:3]) == ["docker", "manifest", "inspect"]:
+            return subprocess.CompletedProcess(cmd, self.manifest, "", "")
+        if self.vocab is None:
+            raise subprocess.CalledProcessError(2, cmd, "", "db is down")
+        return subprocess.CompletedProcess(cmd, 0, self.vocab, "")
+
+
+def test_skip_host_skips_exactly_the_three_host_checks(stack):
+    notes = _check(stack())["notes"]
+    assert sorted(n for n in notes if "skipped (--skip-host)" in n) == [
+        "clean tree: skipped (--skip-host)", "image: skipped (--skip-host)",
+        "vocabulary: skipped (--skip-host)"]
+
+
+def test_writer_drift_refuses_unless_allowed(stack):
+    w = stack({"subject": "feat(v302): refresher", "files": {"swingbot/refresher/main.py": "x = 2\n"}})
+    refused = _check(w)
+    assert refused["ok"] is False and refused["refresher"] == "keep-stopped"
+    assert any("--allow-writer-drift" in x and "freshness.py" in x for x in refused["refusals"])
+    allowed = _check(w, allow_writer_drift=True)
+    assert allowed["ok"] is True and allowed["refresher"] == "keep-stopped"
+    assert any("admin may still write" in x for x in allowed["warnings"])
+
+
+def test_image_tag_must_match_the_target(stack):
+    r = _check(stack(), image=IMAGE + "0" * 12)
+    assert any(x.startswith("image ") and "sha-" in x for x in r["refusals"])
+
+
+def test_host_checks_pass_with_known_vocabulary_and_a_present_image(stack):
+    r = _check(stack(), host=True, run=HostRun())
+    assert r["ok"] is True, r["refusals"]
+    assert not any("skipped" in n for n in r["notes"])
+
+
+@pytest.mark.parametrize("run,expected", [
+    (HostRun(vocab="strategy\tGap Reclaim\n"), "open-trade value unknown to the target: strategy=Gap Reclaim"),
+    (HostRun(manifest=1), "is not on the registry"),
+    (HostRun(vocab=None), "vocabulary: cannot run"),
+])
+def test_host_check_refusals(stack, run, expected):
+    r = _check(stack(), host=True, run=run)
+    assert any(expected in x for x in r["refusals"]), r["refusals"]
+
+
+def test_dirty_tracked_file_refuses(stack):
+    w = stack()
+    (w["repo"] / "swingbot" / "vocab.py").write_bytes(b"V = ('edited live',)\n")
+    r = _check(w, host=True, run=HostRun())
+    assert any("local changes" in x for x in r["refusals"])
+
+
+def _cli_check(w, running: str, *extra: str) -> int:
+    return rp.main(["check", w["target"], "--image", IMAGE + w["target"][:12], "--repo", str(w["repo"]),
+                    "--env", str(w["env"]), "--running-sha", running, "--skip-host", *extra])
+
+
+def test_cli_check_exit_codes(stack, capsys):
+    w = stack({"subject": "feat(v302): refresher", "files": {"swingbot/refresher/main.py": "x = 2\n"}})
+    assert _cli_check(w, w["head"]) == 2
+    assert json.loads(capsys.readouterr().out)["ok"] is False
+    assert _cli_check(w, w["head"], "--allow-writer-drift") == 0
+    assert json.loads(capsys.readouterr().out)["refresher"] == "keep-stopped"
+    assert _cli_check(w, w["target"]) == 3
+    assert json.loads(capsys.readouterr().out)["noop"] is True
+
+
+def test_deploy_line_parses_through_both_readers(tmp_path):
+    line = rp.deploy_line("rollback", ts="2026-11-08T10:00:00Z", git_sha="a" * 40,
+                          bot_image="ghcr.io/o/swing-bot:sha-aaaaaaaaaaaa", db_image="ghcr.io/o/swing-bot-db:x",
+                          from_sha="b" * 40)
+    row = json.loads(line)
+    assert "\n" not in line and list(row) == sorted(row)
+    path = tmp_path / "deploys.jsonl"
+    path.write_bytes(('{"ts": "2026-11-01T10:00:00Z", "git_sha": "c", "bot_image": "b", "db_image": "d"}\n'
+                      + line + "\n").encode("utf-8"))
+    last = pr.load_deploys(str(path))[-1]
+    assert (last["git_sha"], last["kind"], last["from_sha"]) == ("a" * 40, "rollback", "b" * 40)
+    assert rp.load_deploys(path)[-1]["db_image"] == "ghcr.io/o/swing-bot-db:x"
+
+
+@pytest.mark.parametrize("kind,sha", [("deploy", "a"), ("release", "")])
+def test_deploy_line_refuses_unknown_kind_and_empty_fields(kind, sha):
+    with pytest.raises(ValueError):
+        rp.deploy_line(kind, ts="t", git_sha=sha, bot_image="b", db_image="d", from_sha="f")
+
+
+def test_cli_deploy_line_defaults_ts_to_now(capsys):
+    assert rp.main(["deploy-line", "--kind", "release", "--sha", "a" * 40, "--image", "b",
+                    "--db-image", "d", "--from-sha", "f" * 40]) == 0
+    row = json.loads(capsys.readouterr().out)
+    assert row["kind"] == "release" and row["ts"].endswith("Z") and len(row["ts"]) == 20
+    assert rp.main(["deploy-line", "--kind", "oops", "--sha", "a", "--image", "b",
+                    "--db-image", "d", "--from-sha", "f"]) == 2
+    assert "REFUSE:" in capsys.readouterr().err
