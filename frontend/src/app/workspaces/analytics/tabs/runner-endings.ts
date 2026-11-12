@@ -120,7 +120,7 @@ export function exclusionNote(block: PartialsRunnerEndings): string {
           @if (card.hint) { <sb-hint [text]="card.hint" [label]="card.label + ' definition'" /> }</p>
         <p class="card-share">{{ card.share }}</p>
         <p class="card-interval">{{ card.interval }}</p>
-        <p class="card-count">{{ card.count }}@if (card.thin) { <span class="thin-mark" [title]="thinTitle()">thin</span> }</p>
+        <p class="card-count">{{ card.count }}@if (card.thin) { <span class="thin-mark">thin <sb-hint [text]="thinTitle()" label="Thin sample definition" /></span> }</p>
       </article>
     }</div>
     <div class="table-scroll"><table class="scorecard">
@@ -135,7 +135,7 @@ export function exclusionNote(block: PartialsRunnerEndings): string {
         <tr [class.thin]="row.thin" [class.cross]="row.cross">
           <th class="pin" scope="row"><span class="key" [attr.data-tone]="row.tone"></span><span class="row-label">{{ row.label }}</span>
             @if (row.hint) { <sb-hint [text]="row.hint" [label]="row.label + ' definition'" /> }
-            @if (row.thin) { <span class="thin-mark" [title]="thinTitle()">thin</span> }</th>
+            @if (row.thin) { <span class="thin-mark">thin <sb-hint [text]="thinTitle()" label="Thin sample definition" /></span> }</th>
           <td class="num">{{ row.n }}</td>
           <td class="num share">{{ row.share }}@if (row.of) { <span class="of">{{ row.of }}</span> }<small>{{ row.interval }}</small></td>
           @for (cell of row.cells; track $index) { <td class="num">{{ cell }}</td> }
@@ -147,7 +147,7 @@ export function exclusionNote(block: PartialsRunnerEndings): string {
       @for (bar of odds(); track bar.level) {
         <div class="odds-row" [class.thin]="bar.thin">
           <p class="odds-label">{{ bar.label }} <span class="odds-n">N {{ bar.n }}</span>
-            @if (bar.thin) { <span class="thin-mark" [title]="thinTitle()">thin</span> }</p>
+            @if (bar.thin) { <span class="thin-mark">thin <sb-hint [text]="thinTitle()" label="Thin sample definition" /></span> }</p>
           <div class="track" role="img" [attr.aria-label]="bar.aria">@for (s of bar.segments; track s.ending) {
             @if (s.grow > 0) { <span class="seg" [attr.data-tone]="s.tone" [style.flex-grow]="s.grow"></span> }
           }</div>

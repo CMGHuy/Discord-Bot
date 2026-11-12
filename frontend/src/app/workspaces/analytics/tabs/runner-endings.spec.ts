@@ -162,8 +162,8 @@ describe('RunnerEndings', () => {
     const solid = { ...BLOCK, cards: BLOCK.cards.map((c) => ({ ...c, thin: false })) };
     expect(mount(solid).el.querySelectorAll('.card .thin-mark')).toHaveLength(0);
     TestBed.resetTestingModule();
-    const { el } = mount(BLOCK, 12);
-    expect(el.querySelector('.thin-mark')?.getAttribute('title')).toBe('Under N=12: shown, not trusted.');
+    const { fixture } = mount(BLOCK, 12);
+    expect(hintText(fixture, 'Thin sample definition')).toBe('Under N=12: shown, not trusted.');
   });
 
   it('renders an all-open scope as measured zeros, not an error', () => {
