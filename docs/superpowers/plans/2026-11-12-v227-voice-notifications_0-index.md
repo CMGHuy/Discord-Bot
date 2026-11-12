@@ -139,7 +139,8 @@ At most 2 implementers at once (`CLAUDE.md`). Suggested waves: (V227-1 ∥ V227-
 
 | Part | File | Tasks | Scope |
 |---|---|---|---|
-| 1 | [`2026-11-12-v227-voice-notifications_1-backend.md`](2026-11-12-v227-voice-notifications_1-backend.md) | V227-1..V227-6 | Table, revision and `feed` channel; repository; headline builder; recorder glue and kill switch; the two call sites; admin endpoints |
+| 1 | [`2026-11-12-v227-voice-notifications_1-backend.md`](2026-11-12-v227-voice-notifications_1-backend.md) | V227-1..V227-3 | Table, revision and `feed` channel; repository; headline builder |
+| 1b | [`2026-11-12-v227-voice-notifications_1b-recorder-admin.md`](2026-11-12-v227-voice-notifications_1b-recorder-admin.md) | V227-4..V227-6 | Recorder glue and kill switch; the two call sites; admin endpoints |
 | 2 | [`2026-11-12-v227-voice-notifications_2-voice-services.md`](2026-11-12-v227-voice-notifications_2-voice-services.md) | V227-7..V227-11 | API client and prefs; speaker; notifier; top-bar chip; switch primitive |
 | 3 | [`2026-11-12-v227-voice-notifications_3-settings-release.md`](2026-11-12-v227-voice-notifications_3-settings-release.md) | V227-12..V227-15 | Settings block (switches, previews, voice and rate); layout audit; release and close-out |
 
