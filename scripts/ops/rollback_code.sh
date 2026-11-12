@@ -159,8 +159,8 @@ switch_image() {   # <image> <start|keep-stopped>
   local services
   services="$(services_for "$2")"
   python3 scripts/ops/env_set.py SWING_BOT_IMAGE "$1"
-  SWITCHED_AT="$(date +%s)"
   SWING_BOT_IMAGE="$1" docker compose up -d --no-deps --no-build --wait $services
+  SWITCHED_AT="$(date +%s)"   # after up: the old bot's last heartbeat must not pass the smoke
   SERVICES="$services"
 }
 
@@ -258,7 +258,10 @@ run_rollback() {
   switch_image "$IMAGE" "$START_REFRESHER"
   if ! smoke; then restore_previous; exit 1; fi
   SWITCHING=0
-  record_line rollback "$SHA" "$IMAGE" "$FROM_SHA"
+  record_line rollback "$SHA" "$IMAGE" "$FROM_SHA" || {
+    log "rollback is LIVE and held, but the deploys.jsonl line was NOT written: append it by hand (rollback_plan.py deploy-line)"
+    exit 1
+  }
   log "rollback to $SHA finished; deploys are held until /rollback --release"
 }
 

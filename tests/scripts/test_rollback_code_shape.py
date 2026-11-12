@@ -180,6 +180,16 @@ def bash(tmp_path):
     return found
 
 
+def test_the_heartbeat_clock_starts_after_the_new_bot_is_up(src):
+    fn = body(src, "switch_image")
+    assert fn.index("docker compose up") < fn.index("SWITCHED_AT=")
+
+
+def test_a_failed_deploy_line_is_reported_not_called_a_restore(src):
+    fn = body(src, "run_rollback")
+    assert "record_line rollback" in fn and "NOT written" in fn
+
+
 def test_the_script_parses(bash):
     assert subprocess.run([bash, "-n", SCRIPT.as_posix()], capture_output=True).returncode == 0
 
