@@ -152,3 +152,17 @@ Sequential edges named: `builders.py` (V212-2, V212-3) and
 | 3b | `2026-11-06-v212-confluence-limit-entry_3b-measurement-stages.md` | V212-13b, V212-13c, V212-14, V212-14b | census, clauses, plateau, thin seal, portfolio pass; stage chain and ledger rows; disclosures module |
 | 3c | `2026-11-06-v212-confluence-limit-entry_3c-disclosures-wiring.md` | V212-14c | disclosures in the Stage 1 and Stage 3 files |
 | 4 | `2026-11-06-v212-confluence-limit-entry_4-runs-closeout.md` | V212-15 .. V212-17 (incl. V212-15b) | pre-registration, Stage −1..3 via `backtest-runner`, results and ledger, verdict record, `/panel`, `/close-out` |
+
+## Handoff
+
+_Updated 2026-11-12 (session resumed at V212-15b). Main tree, not the worktree._
+
+**Done:** V212-1..14c merged (`4497ddd8`); V212-15 pre-registration (`3aedb886`); V212-15b Stage −1 census → `REACHABLE`, `observed_n` filled, committed `0b0915e2`. The v212 worktree was fast-forwarded to main and holds no work of its own.
+
+**In flight (V212-16 Step 1/2):** TRAIN entry rows, primary then `--touch`, started in the background with `--workers 8` via the scratch script `logs/v212/run_rows.sh` (git-ignored; it exports `MEASURE_ARMS_UNIVERSE=cache` and `BACKTEST_CACHE_DIR=E:/Documents/Private/Projects/Discord-Bot/data/backtest_cache_ext`, then runs `measure_confluence_limit.py rows --window train [--touch] --workers 8 --preregistration docs/superpowers/results/2026-11-11-v212-preregistration.md --checkpoint-dir logs/v212/ckpt-rows-train[-touch] --out docs/superpowers/results/v212`). Progress: `tail logs/v212/rows-train.log` (X/650); finish marker `logs/v212/rows.res` (`step1 exit=0`, `step2 exit=0`). A single worker would take ~24 h per leg.
+
+**To resume after a crash or a new session:** re-run the same command(s); per-ticker checkpoints skip finished tickers. Never delete `logs/v212/ckpt-*`. If the process is dead, `bash logs/v212/run_rows.sh` (step 2 appends to its log).
+
+**Next, in order:** (1) `python logs/v212/check_rows.py` on both rows files (scratch; text is in V212-16 Step 1; a failed assert is a wiring bug: stop and report). (2) Stage 0, then Stage 1, then Stage 2 (V212-16 Steps 2–4; `backtest-gate` before each, one runner at a time, `render_stage.py` for the numbers). (3) Commit the TRAIN files (V212-16 Step 8 commit (a)) **before** Stage 3. (4) Stage 3 is the one-shot VALIDATION run; never twice. (5) V212-17: verdict record, `/panel`, `/close-out`.
+
+**Traps:** the driver names the Stage −1 file `v212-stageM1.json` (the plan says `stage-1.json`; `logs/v212/observed_n.py` was patched to match). No edit under `swingbot/` or `scripts/` until the last stage file. `CONFLUENCE_LIMIT_ENTRY_F` stays `"0"`. CI on the v212 merge push was not confirmed green (`gh run list --workflow=CI` finds no such workflow; the workflow is "Deploy Discord Swing Trade Bot to Hetzner"): check before Stage 3.
