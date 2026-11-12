@@ -6,6 +6,7 @@
 #   rollback_code.sh --candidates            # picker rows (JSON)
 #   rollback_code.sh <sha> <image> --dry-run # every check; nothing changes
 #   rollback_code.sh <sha> <image> --i-mean-it [--reason TEXT] [--keep-refresher] [--allow-writer-drift]
+#   rollback_code.sh --release --dry-run|--i-mean-it   # clear the hold, redeploy main
 #
 # Never touched: Postgres contents, the db container, .env beyond the
 # SWING_BOT_IMAGE pin, the market data cache. No schema migration runs;
@@ -31,6 +32,7 @@ HEARTBEAT_SQL="SELECT coalesce(floor(extract(epoch FROM (doc->>'timestamp')::tim
 usage() {
   echo "usage: rollback_code.sh --resolve <target> | --candidates" >&2
   echo "       rollback_code.sh <sha40> <image> --dry-run|--i-mean-it [--reason TEXT] [--keep-refresher] [--allow-writer-drift]" >&2
+  echo "       rollback_code.sh --release --dry-run|--i-mean-it" >&2
 }
 stamp() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 log() { echo "$(stamp) rollback_code $*" | tee -a "$LOG"; }
@@ -51,6 +53,8 @@ parse_args() {
   case "${1:-}" in
     --resolve) [ $# -eq 2 ] || return 1; ACTION=resolve; TARGET="$2"; return 0 ;;
     --candidates) [ $# -eq 1 ] || return 1; ACTION=candidates; return 0 ;;
+    --release) [ $# -eq 2 ] || return 1; ACTION=release; MODE="$2"
+               case "$MODE" in --dry-run|--i-mean-it) return 0 ;; *) return 1 ;; esac ;;
     ''|-*) return 1 ;;
     *) [ $# -ge 3 ] || return 1; ACTION=rollback; SHA="$1"; IMAGE="$2"; MODE="$3"; shift 3 ;;
   esac
@@ -241,6 +245,67 @@ record_line() {   # <rollback|release> <sha> <image> <from_sha>
     >> backups/deploys.jsonl
 }
 
+check_cron() {   # an older checkout may lack a script a cron line runs
+  local path
+  for path in $({ crontab -l -u deploy 2>/dev/null; crontab -l 2>/dev/null; } | grep -v '^[[:space:]]*#' \
+      | grep -o 'scripts/[A-Za-z0-9_./-]*' | sort -u || true); do
+    if [ ! -e "$APP_DIR/$path" ]; then
+      echo "WARNING: a cron line runs $path, which this checkout lacks (no research job while held)" >&2
+    fi
+  done
+}
+
+release_drill() {   # scratch project only: deploy.sh would deploy the live stack's way
+  git_d merge -q --ff-only "$TOOLS_REF" || return 1
+  python3 scripts/ops/env_set.py SWING_BOT_IMAGE "$IMAGE" || return 1
+  docker pull "$IMAGE" || return 1
+  SWING_BOT_IMAGE="$IMAGE" docker compose up -d --no-deps --no-build --wait $(services_for start) || return 1
+  docker compose exec -T admin alembic upgrade head </dev/null
+}
+
+deploy_main() {
+  if [ "$DRILL" = 1 ]; then release_drill; return; fi
+  runuser -u deploy -- env SWING_BOT_IMAGE="$IMAGE" SWING_BOT_DB_IMAGE="$DB_IMAGE" bash "$APP_DIR/deploy/deploy.sh"
+}
+
+run_release() {
+  local current hold_sha main_sha keys
+  if [ ! -f "$HOLD" ]; then log "no-op: no deploy hold to release"; exit 3; fi
+  hold_sha="$(json_field "$HOLD" sha)"
+  AT="$(json_field "$HOLD" at)"
+  DB_IMAGE="$(env_get SWING_BOT_DB_IMAGE)"
+  current="$(env_get SWING_BOT_IMAGE)"
+  main_sha="$(git_d rev-parse "$TOOLS_REF")"
+  IMAGE="${current%:*}:sha-${main_sha:0:12}"
+  host_checks
+  echo "Release plan:"
+  echo "  hold     rollback to $hold_sha since $AT ($(json_field "$HOLD" reason))"
+  echo "  deploy   main $main_sha  image $IMAGE  db image $DB_IMAGE"
+  if [ "$MODE" = --dry-run ]; then echo "Dry run: nothing changed."; exit 0; fi
+  trap 'on_error $LINENO' ERR
+  log "release of the hold on $hold_sha started (main $main_sha)"
+  cp "$HOLD" "$WORK/released_hold.json"
+  rm -f "$HOLD"
+  git_d checkout -q main
+  if ! deploy_main; then
+    log "release FAILED after the hold was removed: main $main_sha is not running; read the deploy output above"
+    exit 1
+  fi
+  record_line release "$main_sha" "$IMAGE" "$hold_sha" || {
+    log "release is LIVE and the hold is gone, but the deploys.jsonl line was NOT written: append it by hand (rollback_plan.py deploy-line)"
+    exit 1
+  }
+  keys="backups/rollback_keys_$AT.json"
+  if [ -f "$keys" ]; then
+    python3 "$WORK/rollback_window.py" report --snapshot "$keys" --since "$AT" --until "$(stamp)" \
+      --app-dir "$APP_DIR" || log "window report failed (the release itself succeeded)"
+  else
+    log "no key snapshot for the window since $AT; report skipped"
+  fi
+  check_cron
+  log "released: main $main_sha, image $IMAGE; deploys resume"
+}
+
 run_rollback() {
   run_check
   host_checks
@@ -262,6 +327,7 @@ run_rollback() {
     log "rollback is LIVE and held, but the deploys.jsonl line was NOT written: append it by hand (rollback_plan.py deploy-line)"
     exit 1
   }
+  check_cron
   log "rollback to $SHA finished; deploys are held until /rollback --release"
 }
 
@@ -285,6 +351,7 @@ main() {
     candidates) planner candidates --repo "$APP_DIR" --ref "$TOOLS_REF" \
                --deploys "$APP_DIR/backups/deploys.jsonl" --stable-dir "$APP_DIR/backups/stable" || exit $? ;;
     rollback) run_rollback ;;
+    release) run_release ;;
   esac
 }
 

@@ -132,8 +132,10 @@ def test_the_drill_skips_backup_bot_and_heartbeat(src):
     assert 'if [ "$DRILL" != 1 ]; then heartbeat_fresh' in body(src, "smoke")
 
 
-def test_it_never_touches_schema_db_image_env_contents_or_market_data(code):
-    assert "alembic" not in code
+def test_it_never_touches_schema_db_image_env_contents_or_market_data(src, code):
+    drill = body(src, "release_drill")
+    assert "alembic upgrade head" in drill
+    assert "alembic" not in code.replace(drill, "")
     assert "env_set.py SWING_BOT_DB_IMAGE" not in code
     assert "> .env" not in code and "sed -i" not in code
     assert "market_data" not in code
@@ -152,6 +154,46 @@ def test_the_refresher_is_probed_and_stopped_before_the_checkout(src):
 def test_the_deploy_line_is_written_by_the_planner(src):
     rec = body(src, "record_line")
     assert 'planner deploy-line --kind "$1"' in rec and ">> backups/deploys.jsonl" in rec
+
+
+def test_the_release_steps_run_in_the_spec_order(src):
+    b = body(src, "run_release")
+    order = ['if [ ! -f "$HOLD" ]', "exit 3", "host_checks", "Dry run: nothing changed.",
+             "trap 'on_error $LINENO' ERR", 'rm -f "$HOLD"', "git_d checkout -q main",
+             "deploy_main", 'record_line release "$main_sha" "$IMAGE" "$hold_sha"',
+             'rollback_window.py" report', "check_cron"]
+    pos = [b.index(x) for x in order]
+    assert pos == sorted(pos)
+
+
+def test_the_release_deploys_mains_image_through_deploy_sh_as_deploy(src):
+    b = body(src, "run_release")
+    assert 'IMAGE="${current%:*}:sha-${main_sha:0:12}"' in b
+    assert 'main_sha="$(git_d rev-parse "$TOOLS_REF")"' in b
+    d = body(src, "deploy_main")
+    assert ('runuser -u deploy -- env SWING_BOT_IMAGE="$IMAGE" SWING_BOT_DB_IMAGE="$DB_IMAGE" '
+            'bash "$APP_DIR/deploy/deploy.sh"') in d
+    assert 'if [ "$DRILL" = 1 ]; then release_drill' in d
+
+
+def test_a_failed_release_says_the_hold_is_gone(src):
+    b = body(src, "run_release")
+    assert "if ! deploy_main; then" in b
+    tail = b[b.index("if ! deploy_main; then"):]
+    assert "hold" in tail.split("fi")[0] and "exit 1" in tail.split("fi")[0]
+
+
+def test_a_failed_release_line_is_reported_as_not_written(src):
+    b = body(src, "run_release")
+    after = b[b.index("record_line release"):]
+    assert "NOT written" in after.split("keys=")[0]
+
+
+def test_cron_is_checked_after_a_rollback_and_after_a_release(src):
+    roll = body(src, "run_rollback")
+    assert roll.index("record_line rollback") < roll.index("check_cron")
+    cron = body(src, "check_cron")
+    assert "crontab -l -u deploy" in cron and "grep -o 'scripts/" in cron
 
 
 # --- argument parsing under bash (nothing is touched before it passes) ------
@@ -196,6 +238,7 @@ def test_the_script_parses(bash):
 
 BAD_ARGS = [
     [], ["--resolve"], ["--resolve", "a", "b"], ["--candidates", "x"], ["--bogus"],
+    ["--release"], ["--release", "--now"], ["--release", "--dry-run", "x"],
     ["abc123", "img", "--dry-run"], ["a" * 40, "img"], ["a" * 40, "img", "--now"],
     ["a" * 40, "img", "--dry-run", "--bogus"], ["a" * 40, "img", "--dry-run", "--reason"],
 ]
