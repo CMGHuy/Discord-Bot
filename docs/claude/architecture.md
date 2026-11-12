@@ -36,7 +36,8 @@ Referenced from the root `CLAUDE.md`. Read this before touching
   (JSON, locks and delivery channels — `jsonio.py`, `state.py`,
   `notifier.py`, `silent_channel.py`; v205 `read_memo.py`, the opt-in
   `contextvars` memo that loads each store once per admin GET request,
-  switched on only by `@read_scope`), plus the four that predate the
+  switched on only by `@read_scope`; v218 `store_generation.py` and `store_snapshot.py`,
+  the admin-only per-process snapshot behind that memo, see `ADMIN_STORE_SNAPSHOT`), plus the four that predate the
   restructure: `core/edge/`, `core/scanning/`, `core/analytics/`,
   `core/charts/`, and `core/presentation/`. `presentation/` owns every
   Discord colour, glyph, number format and embed part: pure `tokens.py`,

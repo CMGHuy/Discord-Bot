@@ -101,3 +101,39 @@ def golden_seed(admin_app, tmp_path, monkeypatch):
     yield types.SimpleNamespace(set_fx=set_fx)
     risk._invalidate_cache()
     fx_daily.reset_memo()
+
+
+def _frozen_value(value, freeze):
+    """Deep-freeze a stored loader value below each record's top level."""
+    if isinstance(value, list):
+        return [freeze(record) if isinstance(record, dict) else record for record in value]
+    if isinstance(value, dict):
+        return {key: freeze(record) if isinstance(record, dict) else record for key, record in value.items()}
+    return value
+
+
+@pytest.fixture
+def snapshot_on(admin_app, monkeypatch):
+    """v218: the admin snapshot on and vouched for (switch on, listener 'connected')."""
+    from swingbot import config
+    from swingbot.core.infra import store_generation, store_snapshot
+    monkeypatch.setattr(config, "ADMIN_STORE_SNAPSHOT", "on", raising=False)
+    store_snapshot.reset()
+    store_generation.reset()
+    store_generation.set_connected(True)
+    store_snapshot.install()
+    yield store_snapshot
+    store_snapshot.reset()
+    store_generation.reset()
+
+
+@pytest.fixture
+def frozen_snapshot(snapshot_on, monkeypatch):
+    """snapshot_on, and every value the snapshot stores is deep-frozen below its top level:
+    a read path writing into a record shared across requests raises TypeError (v205 L2-c)."""
+    from swingbot.core.infra import read_memo
+    from tests.admin_perf.test_memo_isolation import _freeze_record
+    real = snapshot_on.read
+    monkeypatch.setattr(read_memo, "_BACKING", lambda key, loader: real(
+        key, lambda: _frozen_value(loader(), _freeze_record)))
+    return snapshot_on

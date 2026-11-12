@@ -1061,6 +1061,12 @@ FIELDS: list[Field] = [
           help="v205. An /api/v1 request slower than this logs one 'slow request' line in the admin log "
                "(path, total, db time, statement count). Read on every request: a saved .env applies "
                "on the next request, no restart."),
+    Field("ADMIN_STORE_SNAPSHOT", "ADMIN_STORE_SNAPSHOT", "Admin UI", "Admin store snapshot",
+          type="select", default="on", options=["on", "off"],
+          help="v218. 'on' = the admin keeps trades, plans and journal notes in memory between "
+               "requests, invalidated by database notifications, and sends ETags on the closed "
+               "Trades view. 'off' = every request reads the database, exactly as before v218. "
+               "Read on every request: a saved .env applies on the next request, no restart."),
 
     # --- Discord Alerts (Cockpit v3 / Plan B) ---
     Field("ALERT_EMBED_LAYOUT", "ALERT_EMBED_LAYOUT", "Discord Alerts", "Alert embed layout",
@@ -1775,12 +1781,14 @@ _MODE_VALUES = {
     "FVG_LEVELS_MODE": ("all", "displacement", "off"),
     "TRAINING_DATA_SOURCE": ("alpaca", "yfinance"),
     "ADMIN_REFRESHER": ("on", "off"),
+    "ADMIN_STORE_SNAPSHOT": ("on", "off"),
     "MARKET_SHOCK_MODE": ("off", "shadow", "live"),
 }
 
 # v128: "off" is a signal change for FVG_LEVELS_MODE (it removes a level
 # source), so a typo must land on the pre-v128 behaviour instead.
-_MODE_FALLBACK = {"CONFLUENCE_ATR_TARGET_MODE": "rechoose", "FVG_LEVELS_MODE": "all", "TRAINING_DATA_SOURCE": "alpaca"}
+_MODE_FALLBACK = {"CONFLUENCE_ATR_TARGET_MODE": "rechoose", "FVG_LEVELS_MODE": "all", "TRAINING_DATA_SOURCE": "alpaca",
+                  "ADMIN_STORE_SNAPSHOT": "on"}
 
 # Floats that must be finite and > 0. Anything else is a parse failure, so
 # _apply_env falls back to the field default and knobs.parse_knob refuses the arm.
@@ -1951,6 +1959,10 @@ def reload() -> dict:
     _ENV_MTIME = _env_signature()
     changed = _apply_env()
     if changed:
+        # v218: the admin's snapshot and ETags key on this; the admin reloads by
+        # .env mtime per request (admin/app.py), never by SIGHUP.
+        from swingbot.core.infra import store_generation
+        store_generation.bump("settings")
         log.info("Config reloaded from %s -- %d value(s) changed:", ENV_PATH, len(changed))
         for attr, (old, new) in changed.items():
             f = next((f for f in FIELDS if f.attr == attr), None)

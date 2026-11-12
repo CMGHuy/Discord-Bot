@@ -65,10 +65,15 @@ _signal_cache_lock = threading.Lock()
 
 def _plans_signature() -> tuple | None:
     """Cross-process version token for the plans table (None when the
-    database is unreachable, so the cache is skipped rather than stale)."""
+    database is unreachable, so the cache is skipped rather than stale).
+
+    v218: the trades generation (bumped on every plans NOTIFY by the admin's
+    snapshot listener) joins the table version, because a write can commit
+    under an older updated_at stamp and leave version() unchanged."""
     try:
         from swingbot.core.db.repositories.plans import plans_repo
-        return ("db", *plans_repo().version())
+        from swingbot.core.infra import store_generation
+        return ("db", *plans_repo().version(), store_generation.generation("trades"))
     except Exception:
         return None
 

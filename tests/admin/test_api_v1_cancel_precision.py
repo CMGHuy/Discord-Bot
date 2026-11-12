@@ -92,10 +92,34 @@ def test_the_memo_recomputes_only_on_a_plan_write(logged_in, module, repo, monke
     assert len(calls) == 2
 
 
-def test_the_memo_key_carries_the_utc_hour(module, repo):
-    version, hour = module._memo_key()
+def test_the_memo_key_carries_the_utc_hour_and_the_trades_generation(module, repo):
+    from swingbot.core.infra import store_generation
+    version, hour, generation = module._memo_key()
     assert version == repo.version()
     assert len(hour) == 13 and hour[10] == "T"      # "YYYY-MM-DDTHH"
+    assert generation == store_generation.generation("trades")
+
+
+def test_a_trades_generation_bump_recomputes_with_an_unchanged_version(logged_in, module, repo, monkeypatch):
+    """v218 V218-6: a plan write committed under an older stamp leaves version()
+    unchanged (V218-1); the NOTIFY-driven generation still invalidates the memo."""
+    from swingbot.core.infra import store_generation
+    store_generation.reset()
+    calls = []
+    monkeypatch.setattr(module, "_load_plans", lambda: calls.append(1) or [])
+    monkeypatch.setattr(module, "_bar_loader", lambda _t: None)
+    try:
+        logged_in.get(URL)
+        logged_in.get(URL)
+        assert len(calls) == 1                      # unchanged version and generation: memo kept
+        store_generation.bump("trades")
+        logged_in.get(URL)
+        assert len(calls) == 2
+        store_generation.bump("journal")            # not a plans concern
+        logged_in.get(URL)
+        assert len(calls) == 2
+    finally:
+        store_generation.reset()
 
 
 def test_spot_metals_have_no_bars(module, monkeypatch):
