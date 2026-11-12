@@ -187,28 +187,30 @@ count (520) were identical before and after.
 checkout and bot image back to an earlier `main` commit and keeps every row of trading data (the
 two restores above put Postgres back). While rolled back, `backups/deploy_hold.json` holds every
 deploy (CI `hold` job, `deploy/deploy.sh`, `HOLD` line, `/deploy`) until `/rollback --release`.
-It is meant to be proven on a scratch project, never by a production rollback.
+It was proven on a scratch project, never by a production rollback.
 
-### Drill 2026-11-12 (v220 V220-18): stopped at the dry run
+### Drill 2026-11-12 (v220 V220-18)
 
 Scratch project `rbdrill` on the VM: checkout `/opt/swing-bot-rbdrill` at `main` d388bf5c9abe
 (bot 2.18.5), override `deploy/drill/rollback-drill.override.yml` copied outside the checkout,
-database seeded by `pg_dump` from production (952 plans, 1076 journal rows, equal to live),
-`ROLLBACK_DRILL=1` (no pgBackRest backup, no bot service, no heartbeat check). Setup took 42 s;
-`db`, `admin` and `refresher` came up healthy. Target: `deploy 2026-11-11T16:14:03Z` e135cb7d3b79
-(bot 2.18.3), image `...:sha-e135cb7d3b79`, found with `--candidates` and `--resolve` (exit 0).
+database seeded by `pg_dump` from production (962 plans, 1082 journal rows), `ROLLBACK_DRILL=1`
+(no pgBackRest backup, no bot service, no heartbeat check). Target `deploy 2026-11-11T16:14:03Z`
+e135cb7d3b79 (bot 2.18.3), image `...:sha-e135cb7d3b79`, found with `--candidates` and `--resolve`.
+
+A first attempt stopped at the dry run: the replicated book held open trades with strategies the
+2.18.3 target does not know (`EMA30`, `Fib 78.6%`, then `EMA9`); the planner refused, as designed.
+The scratch copy (never production) had those open plans and journal rows deleted, then the drill ran.
 
 | Step | Exit | Result |
 |---|---|---|
-| Dry run | refused | `ok: false`; refusals: `open-trade value unknown to the target: strategy=EMA30` and `strategy=Fib 78.6%`; refresher `start`; no migrations, no warnings |
-| Forced smoke failure | not run | drill stopped at the refusal |
-| Rollback | not run | drill stopped at the refusal |
-| Release | not run | drill stopped at the refusal |
+| Dry run | 0 | ok; no warnings; refresher start; no migrations |
+| Forced smoke failure | 1 (not captured: stdin was eaten, see below) | restored main d388bf5c9abe and its image; no hold; `deploys.jsonl` unchanged (138) |
+| Rollback | 0 | checkout e135cb7d3b79 detached, admin on the target image, hold written, `rollback` line, no `rollback_smoke` in the pre-v220 image |
+| Release | 0 | main d388bf5c9abe back, hold gone, `release` line, Alembic at v209_001 (head); window report: no new or updated rows, no fewer keys |
 
-The refusal is the planner working as designed: the replicated production book holds open trades
-whose strategy names the 2.18.3 target does not know. Scratch state was unchanged by the dry run
-(`main` d388bf5c9abe, no hold, `deploys.jsonl` 138 lines). The scratch project, its volume, the
-checkout and the override copy were removed afterwards. Production was untouched: container ids
-and creation times, checkout `HEAD`, `.env` mtime, no hold file and `deploys.jsonl` (138 lines)
-were identical before and after. The drill needs a target whose strategy registry knows these
-values (or a book without open trades of those strategies) before it can continue.
+Note: the drill harness piped its run script over stdin, and the first call's `docker compose` ate
+the rest of it, so that call's `EXIT` line was lost; later calls redirect stdin from `/dev/null`.
+
+Production was untouched: container ids and creation times, checkout `HEAD`, `.env` mtime, no hold
+file, `deploys.jsonl` 138 lines before and after. The scratch project, its volume, the checkout and
+the override copy were removed afterwards.
