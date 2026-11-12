@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v220 safety checks 3, 5 and 6 (config keys, compose db block, market-data writer).
+"""v220 safety checks 3, 4, 5 and 6 (config keys, open-trade vocabulary, compose db block, market-data writer).
 
 Reads the target tree with `git show <sha>:<path>` and `ast`; never imports or runs
 a target file. `.env` is read for key NAMES only -- no value ever reaches output.
@@ -157,3 +157,62 @@ def changed_writer_paths(repo: Path, target_sha: str, head_sha: str,
     out = subprocess.run(["git", "-C", str(repo), "diff", "--name-only", target_sha, head_sha, "--", *paths],
                          capture_output=True, text=True, encoding="utf-8", check=True).stdout
     return sorted(line for line in out.splitlines() if line)
+
+
+# --- Check 4: open-trade vocabulary (V220-5) ---------------------------------
+
+VOCAB_FIELDS = ("status", "strategy", "source", "entry_type", "ledger", "lifecycle_kind")
+_OPEN_PLANS = "status IN ('PENDING', 'ACTIVE', 'PARTIAL')"
+# One row per (field, value) stored on an open trade. `plans` promotes status and
+# strategy to columns; source, entry_type and ledger live in its doc. The v197
+# lifecycle queue is manual_close_notify; an undelivered event's kind is doc->>'kind'.
+# UNION removes duplicates; NULLs print as empty values and are dropped by the reader.
+VOCAB_SQL = f"""
+SELECT 'status', status FROM plans WHERE {_OPEN_PLANS}
+UNION SELECT 'strategy', strategy FROM plans WHERE {_OPEN_PLANS}
+UNION SELECT 'source', doc->>'source' FROM plans WHERE {_OPEN_PLANS}
+UNION SELECT 'entry_type', doc->>'entry_type' FROM plans WHERE {_OPEN_PLANS}
+UNION SELECT 'ledger', doc->>'ledger' FROM plans WHERE {_OPEN_PLANS}
+UNION SELECT 'strategy', strategy FROM journal_entries WHERE closed_at IS NULL
+UNION SELECT 'lifecycle_kind', doc->>'kind' FROM manual_close_notify WHERE delivered_at IS NULL
+ORDER BY 1, 2
+"""
+# psql inside the db container, every transaction read-only, bare tab-separated rows.
+PSQL: tuple[str, ...] = (
+    "docker", "compose", "exec", "-T", "-e", "PGOPTIONS=-c default_transaction_read_only=on", "db",
+    "psql", "-X", "-U", "swingbot", "-d", "swingbot", "-v", "ON_ERROR_STOP=1", "-A", "-t", "-F", "\t", "-c",
+)
+
+
+def psql_lines(sql: str, *, app_dir: Path, run=subprocess.run) -> list[str]:
+    """Non-blank output rows of one read-only query; CalledProcessError when it fails."""
+    done = run([*PSQL, sql], cwd=str(app_dir), capture_output=True, text=True,
+               encoding="utf-8", check=True)
+    return [line for line in done.stdout.splitlines() if line.strip()]
+
+
+def vocab_from_db(*, app_dir: Path, run=subprocess.run) -> dict[str, set[str]]:
+    """field -> distinct stored values of the open trades (every VOCAB_FIELDS key present)."""
+    values: dict[str, set[str]] = {field: set() for field in VOCAB_FIELDS}
+    for line in psql_lines(VOCAB_SQL, app_dir=app_dir, run=run):
+        field, _, value = line.partition("\t")
+        if field in values and value.strip():
+            values[field].add(value)
+    return values
+
+
+def _literal_in_tree(repo: Path, sha: str, value: str) -> bool:
+    """True when "value" or 'value' occurs in a file under swingbot/ at `sha`."""
+    proc = subprocess.run(["git", "-C", str(repo), "grep", "-q", "-F", "-e", f'"{value}"',
+                           "-e", f"'{value}'", sha, "--", "swingbot"],
+                          capture_output=True, text=True, encoding="utf-8")
+    if proc.returncode in (0, 1):
+        return proc.returncode == 0
+    raise subprocess.CalledProcessError(proc.returncode, proc.args, proc.stdout, proc.stderr)
+
+
+def missing_vocabulary(repo: Path, sha: str, values: dict[str, set[str]]) -> list[str]:
+    """Check 4: every stored value the target tree does not know, as "<field>=<value>"."""
+    return [f"{field}={value}"
+            for field in sorted(values) for value in sorted(values[field])
+            if not _literal_in_tree(Path(repo), sha, value)]
