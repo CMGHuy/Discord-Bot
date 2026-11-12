@@ -9,6 +9,7 @@ target tree is read with `git show`, never imported or run.
     python3 rollback_plan.py resolve <target> [--repo DIR] [--ref origin/main]
                                      [--deploys FILE] [--current-image IMG]
     python3 rollback_plan.py floor <sha> [--repo DIR]
+    python3 rollback_plan.py candidates [--repo] [--ref] [--deploys FILE] [--stable-dir DIR] [--limit 10]
 
 Exit codes: 0 pass, 2 refused (nothing changed).
 """
@@ -29,6 +30,7 @@ UTC = dt.timezone.utc
 STABLE_RE = re.compile(r"^stable-\d{4}-\d{2}-\d{2}(-\d+)?$")
 FORMS_HELP = "stable-YYYY-MM-DD[-N], <sha>, vNNN[-before|-after], bot-A.B.C, YYYY-MM-DD[THH:MM]"
 PLAN_RE = re.compile(r"^v(\d+)(-before|-after)?$")
+PLAN_TAG_RE = re.compile(r"\((v\d+)\)")
 
 
 class Boundary(NamedTuple):
@@ -119,7 +121,10 @@ def _stable_candidates(repo: Path, limit: int = 5) -> list[str]:
 
 
 def _manifest_sha(repo: Path, name: str) -> str | None:
-    path = repo / "backups" / "stable" / name / "manifest.json"
+    return _read_manifest_sha(repo / "backups" / "stable" / name / "manifest.json")
+
+
+def _read_manifest_sha(path: Path) -> str | None:
     try:
         sha = json.loads(path.read_text(encoding="utf-8")).get("git_sha")
     except (OSError, ValueError, AttributeError):
@@ -281,6 +286,57 @@ def resolve(target: str, repo: Path, *, deploys_path: Path, current_image: str,
                   _stable_candidates(ctx.repo))
 
 
+def _plans_near(repo: Path, sha: str, depth: int = 15, limit: int = 5) -> list[str]:
+    plans: list[str] = []
+    for subject in git_out(repo, "log", f"-n{depth}", "--format=%s", sha).splitlines():
+        plans.extend(p for p in PLAN_TAG_RE.findall(subject) if p not in plans)
+    return plans[:limit]
+
+
+def _deploy_rows(repo: Path, deploys_path: Path, ref: str, limit: int) -> list[dict]:
+    rows: list[dict] = []
+    for row in reversed(load_deploys(deploys_path)):
+        sha = _full(repo, row["git_sha"])
+        fresh = sha is not None and sha not in {r["sha"] for r in rows}
+        if fresh and git_ok(repo, "merge-base", "--is-ancestor", sha, ref):
+            rows.append({"label": f"deploy {row['ts']}", "sha": sha, "kind": "deploy"})
+    return rows[:limit]
+
+
+def _stable_points(repo: Path, stable_dir: Path | None) -> dict[str, str]:
+    points = {tag: git_out(repo, "rev-parse", f"{tag}^{{commit}}")
+              for tag in git_out(repo, "tag", "-l", "stable-*").splitlines()}
+    folders = sorted(Path(stable_dir).iterdir()) if stable_dir and Path(stable_dir).is_dir() else []
+    for folder in folders:
+        sha = _read_manifest_sha(folder / "manifest.json") if STABLE_RE.match(folder.name) else None
+        if sha:
+            points[folder.name] = sha
+    return points
+
+
+def _stable_rows(repo: Path, stable_dir: Path | None, ref: str, limit: int) -> list[dict]:
+    rows = []
+    for name, sha in sorted(_stable_points(repo, stable_dir).items(), reverse=True):
+        full = _full(repo, sha)
+        if full and git_ok(repo, "merge-base", "--is-ancestor", full, ref):
+            rows.append({"label": name, "sha": full, "kind": "stable"})
+    return rows[:limit]
+
+
+def candidates(repo: Path, *, deploys_path: Path, stable_dir: Path | None,
+               ref: str = "origin/main", limit: int = 10,
+               boundaries: tuple[Boundary, ...] | None = None) -> list[dict]:
+    """Picker rows: newest deploys, then newest stable points, each with its floor verdict."""
+    repo = Path(repo)
+    bounds = INCOMPATIBLE_BOUNDARIES if boundaries is None else boundaries
+    rows = _deploy_rows(repo, Path(deploys_path), ref, limit) + _stable_rows(repo, stable_dir, ref, limit)
+    for row in rows:
+        row["bot_version"] = _bot_version(repo, row["sha"])
+        row["plans"] = _plans_near(repo, row["sha"])
+        row["above_floor"] = not floor_violations(row["sha"], repo, bounds)
+    return rows
+
+
 def _print_refusal(exc: Refused) -> None:
     print(f"REFUSE: {exc}", file=sys.stderr)
     for candidate in exc.candidates:
@@ -311,7 +367,15 @@ def _cmd_floor(args: argparse.Namespace) -> int:
     return 2 if violations else 0
 
 
-HANDLERS = {"resolve": _cmd_resolve, "floor": _cmd_floor}
+def _cmd_candidates(args: argparse.Namespace) -> int:
+    stable_dir = Path(args.stable_dir) if args.stable_dir else Path(args.repo) / "backups" / "stable"
+    rows = candidates(Path(args.repo), deploys_path=_deploys_arg(args), stable_dir=stable_dir,
+                      ref=args.ref, limit=args.limit)
+    print(json.dumps(rows, indent=2, sort_keys=True))
+    return 0
+
+
+HANDLERS = {"resolve": _cmd_resolve, "candidates": _cmd_candidates, "floor": _cmd_floor}
 
 
 def _add_repo_args(parser: argparse.ArgumentParser) -> None:
@@ -327,6 +391,11 @@ def _parser() -> argparse.ArgumentParser:
     _add_repo_args(res)
     res.add_argument("--deploys", default=None, help="default: <repo>/backups/deploys.jsonl")
     res.add_argument("--current-image", default=os.environ.get("SWING_BOT_IMAGE", ""))
+    cand = sub.add_parser("candidates", help="picker rows: recent deploys and stable points")
+    _add_repo_args(cand)
+    cand.add_argument("--deploys", default=None, help="default: <repo>/backups/deploys.jsonl")
+    cand.add_argument("--stable-dir", default=None, help="default: <repo>/backups/stable")
+    cand.add_argument("--limit", type=int, default=10)
     flo = sub.add_parser("floor", help="is <sha> at or above every incompatible boundary?")
     flo.add_argument("sha")
     flo.add_argument("--repo", default=".")

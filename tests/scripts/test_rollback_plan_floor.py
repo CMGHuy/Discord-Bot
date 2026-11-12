@@ -82,3 +82,58 @@ def test_cli_floor_in_a_foreign_repo_names_all_three_boundaries(chain, capsys):
 def test_cli_floor_on_head_is_above_floor(capsys):
     assert rp.main(["floor", "HEAD", "--repo", str(REPO)]) == 0
     assert capsys.readouterr().out.strip() == "above floor"
+
+
+# --- V220-2b: picker candidates ----------------------------------------------
+
+
+def _deploys(tmp_path, shas):
+    path = tmp_path / "deploys.jsonl"
+    lines = [{"ts": "2026-02-01T00:00:00Z", "git_sha": shas[2]},
+             {"ts": "2026-02-02T00:00:00Z", "git_sha": shas[4]},
+             {"ts": "2026-02-03T00:00:00Z", "git_sha": shas[4], "kind": "release"}]
+    path.write_bytes("".join(json.dumps(line) + "\n" for line in lines).encode("utf-8"))
+    return path
+
+
+def test_candidates_list_deploys_then_stable_points(chain, tmp_path):
+    repo, shas = chain
+    stable_dir = tmp_path / "stable"
+    (stable_dir / "stable-2026-01-05").mkdir(parents=True)
+    (stable_dir / "stable-2026-01-05" / "manifest.json").write_bytes(
+        json.dumps({"git_sha": shas[3]}).encode())
+    (stable_dir / "not-a-point").mkdir()
+    rows = rp.candidates(repo, deploys_path=_deploys(tmp_path, shas), stable_dir=stable_dir,
+                         boundaries=(rp.Boundary(shas[3], "v301", "b"),))
+    assert [(r["kind"], r["label"], r["sha"]) for r in rows] == [
+        ("deploy", "deploy 2026-02-03T00:00:00Z", shas[4]),
+        ("deploy", "deploy 2026-02-01T00:00:00Z", shas[2]),
+        ("stable", "stable-2026-01-05", shas[3]),
+        ("stable", "stable-2026-01-01", shas[2]),
+    ]
+    assert [r["above_floor"] for r in rows] == [True, False, True, False]
+    assert [r["bot_version"] for r in rows] == ["1.0.2", "1.0.1", "1.0.1", "1.0.1"]
+    assert rows[0]["plans"] == ["v302", "v301", "v300"]
+
+
+def test_candidates_limit_and_missing_stable_dir(chain, tmp_path):
+    repo, shas = chain
+    rows = rp.candidates(repo, deploys_path=_deploys(tmp_path, shas), stable_dir=None,
+                         limit=1, boundaries=())
+    assert [(r["kind"], r["sha"]) for r in rows] == [("deploy", shas[4]), ("stable", shas[2])]
+
+
+def test_candidates_skip_deploys_off_main(chain, tmp_path):
+    repo, shas = chain
+    path = tmp_path / "d.jsonl"
+    path.write_bytes((json.dumps({"ts": "2026-02-01T00:00:00Z", "git_sha": "f" * 40}) + "\n").encode())
+    assert rp.candidates(repo, deploys_path=path, stable_dir=None, boundaries=())[0]["kind"] == "stable"
+
+
+def test_cli_candidates_prints_json_rows(chain, tmp_path, capsys):
+    repo, shas = chain
+    rc = rp.main(["candidates", "--repo", str(repo), "--deploys", str(_deploys(tmp_path, shas)),
+                  "--limit", "5"])
+    rows = json.loads(capsys.readouterr().out)
+    assert rc == 0 and len(rows) == 3
+    assert set(rows[0]) == {"label", "sha", "kind", "bot_version", "plans", "above_floor"}
