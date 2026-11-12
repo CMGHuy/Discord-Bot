@@ -79,6 +79,81 @@ def test_the_report_decides_the_refresher_and_keep_refresher_overrides(src):
     assert 'if [ "$KEEP_REFRESHER" = 1 ]; then START_REFRESHER=keep-stopped; fi' in run
 
 
+def test_the_rollback_steps_run_in_the_spec_order(src):
+    b = body(src, "run_rollback")
+    order = ["run_check", "host_checks", "print_plan", "Dry run: nothing changed.",
+             "trap 'on_error $LINENO' ERR", "pull_and_probe", "safety_backup", "prepare_hold",
+             "SWITCHING=1", "write_hold", 'git_d checkout -q --detach "$SHA"', "switch_image",
+             "if ! smoke; then restore_previous; exit 1; fi", "SWITCHING=0", "record_line rollback"]
+    pos = [b.index(x) for x in order]
+    assert pos == sorted(pos)
+    assert "not wired yet" not in src
+
+
+def test_the_hold_carries_the_seven_contract_fields_and_lands_atomically(src):
+    w = body(src, "write_hold")
+    assert '("sha", "image", "from_sha", "from_image", "db_image", "reason", "at")' in w
+    assert 'mv -f "$HOLD.tmp" "$HOLD"' in w and 'chmod 644 "$HOLD.tmp"' in w
+    p = body(src, "prepare_hold")
+    assert 'AT="$(json_field "$HOLD" at)"' in p
+    assert 'KEYS="backups/rollback_keys_$AT.json"' in p
+    assert 'rollback_window.py" snapshot --out "$KEYS"' in p
+
+
+def test_a_failed_smoke_restores_and_writes_no_deploy_line(src):
+    r = body(src, "restore_previous")
+    assert "record_line" not in r
+    assert r.index("trap - ERR") < r.index("set +e") < r.index("git_d checkout")
+    assert 'git_d checkout -q --detach "$FROM_SHA"' in r and 'git_d checkout -q "$FROM_REF"' in r
+    assert 'switch_image "$FROM_IMAGE" "$FROM_REFRESHER"' in r
+    assert 'cp "$WORK/prior_hold.json" "$HOLD"' in r and 'rm -f "$HOLD"' in r
+    assert 'if [ "${SWITCHING:-0}" = 1 ]; then restore_previous; fi' in body(src, "on_error")
+
+
+def test_smoke_covers_health_heartbeat_and_the_write_free_evaluation(src):
+    s = body(src, "smoke")
+    assert "SMOKE_SECONDS=180" in src
+    assert "bot_heartbeat" in src and '"$beat" -ge "$SWITCHED_AT"' in body(src, "heartbeat_fresh")
+    assert "/api/v1/health" in body(src, "admin_answers")
+    assert "200|401) return 0" in body(src, "admin_answers")
+    life = body(src, "lifecycle_smoke")
+    assert "import swingbot.core.infra.rollback_smoke" in life
+    assert "docker compose exec -T admin python -m swingbot.core.infra.rollback_smoke" in life
+    order = ["services_healthy", "heartbeat_fresh", "admin_answers", "lifecycle_smoke"]
+    pos = [s.index(x) for x in order]
+    assert pos == sorted(pos)
+    forced = [l for l in src.splitlines() if "ROLLBACK_FORCE_SMOKE_FAIL" in l]
+    assert forced and all('"$DRILL" = 1' in l for l in forced)
+
+
+def test_the_drill_skips_backup_bot_and_heartbeat(src):
+    assert 'if [ "$DRILL" = 1 ]; then log "drill: pgBackRest' in body(src, "safety_backup")
+    assert 'if [ "$DRILL" = 1 ]; then s="admin"; fi' in body(src, "services_for")
+    assert 'if [ "$DRILL" != 1 ]; then heartbeat_fresh' in body(src, "smoke")
+
+
+def test_it_never_touches_schema_db_image_env_contents_or_market_data(code):
+    assert "alembic" not in code
+    assert "env_set.py SWING_BOT_DB_IMAGE" not in code
+    assert "> .env" not in code and "sed -i" not in code
+    assert "market_data" not in code
+    ups = [l for l in code.splitlines() if "docker compose up" in l]
+    assert ups and all("--no-deps" in l and "--no-build" in l for l in ups)
+    assert not re.search(r"docker compose (down|rm|stop db)", code)
+    assert all("--type=diff backup" in l for l in code.splitlines() if "pgbackrest" in l)
+
+
+def test_the_refresher_is_probed_and_stopped_before_the_checkout(src):
+    b = body(src, "run_rollback")
+    assert "import swingbot.refresher" in body(src, "pull_and_probe")
+    assert b.index("docker compose stop refresher") < b.index('git_d checkout -q --detach "$SHA"')
+
+
+def test_the_deploy_line_is_written_by_the_planner(src):
+    rec = body(src, "record_line")
+    assert 'planner deploy-line --kind "$1"' in rec and ">> backups/deploys.jsonl" in rec
+
+
 # --- argument parsing under bash (nothing is touched before it passes) ------
 
 def _working_bash(*paths):

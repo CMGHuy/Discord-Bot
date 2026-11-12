@@ -25,6 +25,8 @@ DRILL="${ROLLBACK_DRILL:-0}"
 TOOLS="rollback_plan.py rollback_migrations.py rollback_checks.py rollback_window.py"
 HOLD=backups/deploy_hold.json
 LOG=logs/rollback.log
+SMOKE_SECONDS=180
+HEARTBEAT_SQL="SELECT coalesce(floor(extract(epoch FROM (doc->>'timestamp')::timestamptz))::bigint, 0) FROM bot_heartbeat WHERE key = 'bot'"
 
 usage() {
   echo "usage: rollback_code.sh --resolve <target> | --candidates" >&2
@@ -109,12 +111,155 @@ print_plan() {
   if [ -f "$HOLD" ]; then echo "  replaces the hold: $(cat "$HOLD")"; fi
 }
 
+pull_and_probe() {
+  docker pull "$IMAGE"
+  if [ "$START_REFRESHER" = start ] && ! docker run --rm --entrypoint python "$IMAGE" \
+      -c "import swingbot.refresher" </dev/null >/dev/null 2>&1; then
+    echo "NOTICE: $IMAGE has no swingbot.refresher (pre-v201); the refresher stays stopped." >&2
+    START_REFRESHER=keep-stopped
+  fi
+}
+
+safety_backup() {
+  if [ "$DRILL" = 1 ]; then log "drill: pgBackRest safety backup skipped"; return 0; fi
+  docker compose exec -T -u postgres db pgbackrest --stanza=swingbot --type=diff backup </dev/null
+}
+
+prepare_hold() {
+  AT="$(stamp)"
+  if [ -f "$HOLD" ]; then
+    cp "$HOLD" "$WORK/prior_hold.json"
+    AT="$(json_field "$HOLD" at)"          # the window started at the first rollback
+  fi
+  KEYS="backups/rollback_keys_$AT.json"
+  if [ ! -f "$KEYS" ]; then
+    python3 "$WORK/rollback_window.py" snapshot --out "$KEYS" --app-dir "$APP_DIR"
+  fi
+}
+
+write_hold() {
+  python3 - "$HOLD.tmp" "$SHA" "$IMAGE" "$FROM_SHA" "$FROM_IMAGE" "$DB_IMAGE" "$REASON" "$AT" <<'PY'
+import json, sys
+keys = ("sha", "image", "from_sha", "from_image", "db_image", "reason", "at")
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    json.dump(dict(zip(keys, sys.argv[2:])), fh, indent=2, sort_keys=True)
+PY
+  chmod 644 "$HOLD.tmp"
+  mv -f "$HOLD.tmp" "$HOLD"
+}
+
+services_for() {   # <start|keep-stopped> -> the services to bring up
+  local s="bot admin"
+  if [ "$DRILL" = 1 ]; then s="admin"; fi
+  if [ "$1" = start ]; then s="$s refresher"; fi
+  echo "$s"
+}
+
+switch_image() {   # <image> <start|keep-stopped>
+  local services
+  services="$(services_for "$2")"
+  python3 scripts/ops/env_set.py SWING_BOT_IMAGE "$1"
+  SWITCHED_AT="$(date +%s)"
+  SWING_BOT_IMAGE="$1" docker compose up -d --no-deps --no-build --wait $services
+  SERVICES="$services"
+}
+
+services_healthy() {
+  local svc state
+  for svc in $SERVICES; do
+    state="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \
+      "$(docker compose ps -q "$svc")" 2>/dev/null || echo missing)"
+    case "$state" in healthy|running) ;; *) echo "smoke: $svc is $state" >&2; return 1 ;; esac
+  done
+}
+
+heartbeat_fresh() {   # <deadline epoch>
+  local beat
+  while [ "$(date +%s)" -lt "$1" ]; do
+    beat="$(docker compose exec -T db psql -U swingbot -d swingbot -tAc "$HEARTBEAT_SQL" </dev/null 2>/dev/null | tr -d '[:space:]' || true)"
+    if [ -n "$beat" ] && [ "$beat" -ge "$SWITCHED_AT" ]; then return 0; fi
+    sleep 10
+  done
+  echo "smoke: no bot heartbeat since the switch" >&2
+  return 1
+}
+
+admin_answers() {   # <deadline epoch>; /api/v1/health is auth-guarded: 401 = up and routing
+  local code=""
+  while [ "$(date +%s)" -lt "$1" ]; do
+    code="$(docker compose exec -T admin sh -c \
+      'curl -s -o /dev/null -w "%{http_code}" "http://localhost:${ADMIN_PORT:-1234}/api/v1/health"' </dev/null 2>/dev/null || true)"
+    case "$code" in 200|401) return 0 ;; esac
+    sleep 5
+  done
+  echo "smoke: admin /api/v1/health answered '${code:-nothing}'" >&2
+  return 1
+}
+
+lifecycle_smoke() {
+  if ! docker run --rm --entrypoint python "$IMAGE" -c "import swingbot.core.infra.rollback_smoke" \
+      </dev/null >/dev/null 2>&1; then
+    log "image has no rollback_smoke (pre-v220): relying on check 4, heartbeat and health"
+    return 0
+  fi
+  docker compose exec -T admin python -m swingbot.core.infra.rollback_smoke </dev/null
+}
+
+smoke() {
+  local deadline=$(( $(date +%s) + SMOKE_SECONDS ))
+  if [ "$DRILL" = 1 ] && [ "${ROLLBACK_FORCE_SMOKE_FAIL:-0}" = 1 ]; then
+    log "drill: forced smoke failure"
+    return 1
+  fi
+  services_healthy || return 1
+  if [ "$DRILL" != 1 ]; then heartbeat_fresh "$deadline" || return 1; fi
+  admin_answers "$deadline" || return 1
+  lifecycle_smoke
+}
+
+restore_previous() {
+  trap - ERR
+  set +e
+  log "restoring git $FROM_SHA and image $FROM_IMAGE"
+  docker compose stop refresher >/dev/null 2>&1
+  if [ -n "$FROM_REF" ]; then git_d checkout -q "$FROM_REF"; else git_d checkout -q --detach "$FROM_SHA"; fi
+  switch_image "$FROM_IMAGE" "$FROM_REFRESHER" \
+    || log "RESTORE INCOMPLETE: start the services by hand (docker compose up -d --no-deps --no-build --wait <services>)"
+  if [ -f "$WORK/prior_hold.json" ]; then cp "$WORK/prior_hold.json" "$HOLD"; else rm -f "$HOLD"; fi
+  log "restored git $FROM_SHA, image $FROM_IMAGE; nothing written to deploys.jsonl"
+}
+
+on_error() {
+  local rc=$?
+  echo "$(stamp) rollback_code failed at line $1 (exit $rc)" >> "$LOG"
+  if [ "${SWITCHING:-0}" = 1 ]; then restore_previous; fi
+  exit 1
+}
+
+record_line() {   # <rollback|release> <sha> <image> <from_sha>
+  planner deploy-line --kind "$1" --sha "$2" --image "$3" --db-image "$DB_IMAGE" --from-sha "$4" \
+    >> backups/deploys.jsonl
+}
+
 run_rollback() {
   run_check
   host_checks
   print_plan
   if [ "$MODE" = --dry-run ]; then echo "Dry run: nothing changed."; exit 0; fi
-  refuse "--i-mean-it is not wired yet (V220-9b)"
+  trap 'on_error $LINENO' ERR
+  log "rollback to $SHA started (from $FROM_SHA; reason: $REASON)"
+  pull_and_probe
+  safety_backup
+  prepare_hold
+  SWITCHING=1
+  write_hold
+  if [ "$START_REFRESHER" != start ]; then docker compose stop refresher || true; fi
+  git_d checkout -q --detach "$SHA"
+  switch_image "$IMAGE" "$START_REFRESHER"
+  if ! smoke; then restore_previous; exit 1; fi
+  SWITCHING=0
+  record_line rollback "$SHA" "$IMAGE" "$FROM_SHA"
+  log "rollback to $SHA finished; deploys are held until /rollback --release"
 }
 
 main() {
