@@ -772,6 +772,13 @@ jobs:
           # the tag in the command line of a process on the server.
           envs: SWING_BOT_IMAGE,SWING_BOT_DB_IMAGE,APP_DIR
           script: |
+            # v220: re-check the hold here, in this commit's own script. The `hold`
+            # job read it when the run started; a rollback may have landed since,
+            # and a rolled-back checkout's deploy.sh may not know the hold at all.
+            if [ -f "$APP_DIR/backups/deploy_hold.json" ]; then
+              echo "deploy held by rollback (backups/deploy_hold.json); nothing deployed"
+              exit 0
+            fi
             bash "$APP_DIR/deploy/deploy.sh"
         env:
           # The immutable SHA tag, never :latest. This is what makes the
