@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import ast
+import json
+import os
 import pathlib
+import shutil
+import subprocess
 import sys
 import textwrap
 
@@ -124,3 +128,171 @@ def test_module_value_reads_plain_annotated_and_unpacked_assignments():
     assert rm._module_value(tree, "missing") is rm._MISSING
     with pytest.raises(ValueError):
         rm._module_value(tree, "e")
+
+
+VERSIONS = REPO / "swingbot" / "core" / "db" / "migrations" / "versions"
+FLOOR_TREE = "10c75111"   # first main commit at the v197 floor (release bot 2.16.5)
+V197_BRANCH_TIP = "8562c35a"
+has_git = pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
+
+GRAPH = {  # deliberately non-numeric, with a merge revision
+    "v/a.py": _mig("pass", revision="a", down=None),
+    "v/b.py": _mig("pass", revision="b", down="a"),
+    "v/c.py": _mig("pass", revision="c", down="a"),
+    "v/m.py": _mig("pass", revision="m", down=("b", "c")),
+    "v/z.py": _mig("pass", revision="z", down="m"),
+    "v/y.py": _mig("pass", revision="y", down="z"),
+    "v/util.py": "X = 1\n",
+}
+
+
+def _ids(revs):
+    return [rev.revision for rev in revs]
+
+
+def test_revision_graph_reads_tuples_and_skips_non_revisions():
+    graph = rm.revision_graph(GRAPH)
+    assert sorted(graph) == ["a", "b", "c", "m", "y", "z"]
+    assert graph["m"].down == ("b", "c") and graph["a"].down == () and graph["b"].path == "v/b.py"
+    assert graph["b"].source == GRAPH["v/b.py"]
+    assert rm.head_of(graph) == "y"
+
+
+def test_revision_graph_reads_the_one_line_unpacked_declaration():
+    src = ('revision, down_revision, branch_labels, depends_on = "b", "a", None, None\n'
+           "def upgrade():\n    pass\n")
+    graph = rm.revision_graph({"v/a.py": GRAPH["v/a.py"], "v/b.py": src})
+    assert graph["b"].down == ("a",) and rm.head_of(graph) == "b"
+
+
+def test_between_walks_newer_revisions_oldest_first():
+    graph = rm.revision_graph(GRAPH)
+    assert _ids(rm.between(graph, "m")) == ["z", "y"]
+    assert _ids(rm.between(graph, "b")) == ["c", "m", "z", "y"]
+    assert _ids(rm.between(graph, "y")) == []
+
+
+def test_known_catches_revisions_rebased_underneath_the_target():
+    linear = rm.revision_graph({f"v/{r}.py": _mig("pass", revision=r, down=d)
+                                for r, d in (("a", None), ("b", "a"), ("c", "b"), ("d", "c"))})
+    assert _ids(rm.between(linear, "d")) == []
+    assert _ids(rm.between(linear, "d", known={"a", "d"})) == ["b", "c"]
+
+
+def test_graph_errors():
+    with pytest.raises(LookupError):
+        rm.between(rm.revision_graph(GRAPH), "nope")
+    with pytest.raises(ValueError, match="one head"):
+        rm.head_of(rm.revision_graph({k: GRAPH[k] for k in ("v/a.py", "v/b.py", "v/c.py")}))
+    with pytest.raises(ValueError, match="duplicate"):
+        rm.revision_graph({"v/a.py": GRAPH["v/a.py"], "v/a2.py": GRAPH["v/a.py"]})
+    with pytest.raises(ValueError, match="cannot read"):
+        rm.revision_graph({"v/bad.py": "revision = (\n"})
+
+
+def _repo_with(tmp_path, trees):
+    repo = tmp_path / "r"
+    repo.mkdir()
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@e", "GIT_COMMITTER_NAME": "t",
+           "GIT_COMMITTER_EMAIL": "t@e"}
+
+    def git(*args):
+        return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True,
+                              env=env, check=True).stdout.strip()
+
+    git("init", "-q")
+    git("config", "commit.gpgsign", "false")
+    shas = []
+    for files in trees:
+        for rel, text in files.items():
+            (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            (repo / rel).write_bytes(text.encode("utf-8"))
+        git("add", "-A")
+        git("commit", "-q", "-m", "c")
+        shas.append(git("rev-parse", "HEAD"))
+    return repo, shas
+
+
+@pytest.fixture
+def three_commits(tmp_path):
+    d = rm.MIGRATIONS_DIR
+    return _repo_with(tmp_path, [
+        {"README": "x\n"},
+        {f"{d}/__init__.py": "", f"{d}/a.py": _mig("pass", revision="a", down=None),
+         f"{d}/b.py": _mig("pass", revision="b", down="a")},
+        {f"{d}/c.py": _mig('op.create_table("t")', revision="c", down="b"),
+         f"{d}/d.py": _mig('op.drop_column("t", "x")', revision="d", down="c")},
+    ])
+
+
+@has_git
+def test_check_migrations_reads_both_trees_from_git(three_commits):
+    repo, shas = three_commits
+    d = rm.MIGRATIONS_DIR
+    assert sorted(rm.tree_migrations(repo, shas[1])) == [f"{d}/a.py", f"{d}/b.py"]
+    verdicts = rm.check_migrations(repo, shas[1], shas[2])
+    assert [(v.revision, v.safe, v.path) for v in verdicts] == [("c", True, f"{d}/c.py"),
+                                                               ("d", False, f"{d}/d.py")]
+    assert rm.check_migrations(repo, shas[2], shas[2]) == []
+    with pytest.raises(LookupError, match="no Alembic revisions"):
+        rm.check_migrations(repo, shas[0], shas[2])
+    with pytest.raises(LookupError, match="missing from"):
+        rm.check_migrations(repo, shas[2], shas[1])
+
+
+@has_git
+def test_cli_prints_verdicts_and_exits_by_safety(three_commits, capsys):
+    repo, shas = three_commits
+    assert rm.main([shas[1], "--head", shas[2], "--repo", str(repo)]) == 2
+    out = json.loads(capsys.readouterr().out)
+    assert [(v["revision"], v["safe"]) for v in out] == [("c", True), ("d", False)]
+    assert rm.main([shas[2], "--head", shas[2], "--repo", str(repo)]) == 0
+    assert json.loads(capsys.readouterr().out) == []
+    assert rm.main([shas[0], "--head", shas[2], "--repo", str(repo)]) == 2
+    assert capsys.readouterr().err.startswith("REFUSE: ")
+
+
+def _real_files():
+    return {p.relative_to(REPO).as_posix(): p.read_text(encoding="utf-8")
+            for p in sorted(VERSIONS.glob("*.py")) if p.name != "__init__.py"}
+
+
+def test_every_real_revision_classifies_without_error():
+    graph = rm.revision_graph(_real_files())
+    assert len(graph) == len(_real_files())
+    for rev in graph.values():
+        verdict = rm.scan_upgrade(rev.source, revision=rev.revision, path=rev.path)
+        assert verdict.revision == rev.revision and isinstance(verdict.safe, bool)
+
+
+def test_head_matches_alembic():
+    script = pytest.importorskip("alembic.script")
+    config = pytest.importorskip("alembic.config")
+    cfg = config.Config(str(REPO / "alembic.ini"))
+    cfg.set_main_option("script_location", str(REPO / "swingbot" / "core" / "db" / "migrations"))
+    directory = script.ScriptDirectory.from_config(cfg)
+    assert [rm.head_of(rm.revision_graph(_real_files()))] == list(directory.get_heads())
+
+
+def test_known_data_rewrites_classify_unsafe():
+    for name in ("v197_001_lifecycle_notifications.py", "v200_001_discord_issued_at.py"):
+        assert not rm.scan_upgrade((VERSIONS / name).read_text(encoding="utf-8")).safe
+
+
+def _has_commit(sha: str) -> bool:
+    return shutil.which("git") is not None and subprocess.run(
+        ["git", "-C", str(REPO), "cat-file", "-e", f"{sha}^{{commit}}"], capture_output=True).returncode == 0
+
+
+@pytest.mark.skipif(not _has_commit(FLOOR_TREE), reason="shallow checkout")
+def test_every_revision_newer_than_the_floor_is_rollback_safe():
+    verdicts = rm.check_migrations(REPO, FLOOR_TREE, "HEAD")
+    assert [(v.revision, v.reasons) for v in verdicts if not v.safe] == []
+    assert {"v207_001", "v204_001"} <= {v.revision for v in verdicts}
+
+
+@pytest.mark.skipif(not _has_commit(V197_BRANCH_TIP), reason="shallow checkout")
+def test_the_v197_branch_tip_sees_the_revisions_rebased_underneath_it():
+    verdicts = {v.revision: v.safe for v in rm.check_migrations(REPO, V197_BRANCH_TIP, "HEAD")}
+    assert {"v201_001", "v200_001", "v205_001"} <= set(verdicts)
+    assert verdicts["v200_001"] is False

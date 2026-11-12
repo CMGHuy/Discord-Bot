@@ -10,8 +10,13 @@ Standard library only: the VM host's python3 runs this from a copy.
 """
 from __future__ import annotations
 
+import argparse
 import ast
-from dataclasses import dataclass, field
+import json
+import subprocess
+import sys
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 MIGRATIONS_DIR = "swingbot/core/db/migrations/versions"
 SAFE_SQL_HEADS = ("CREATE TABLE ", "CREATE INDEX ", "CREATE UNIQUE INDEX ", "INSERT ", "COMMENT ")
@@ -27,6 +32,14 @@ class Verdict:
     safe: bool
     reasons: list[str] = field(default_factory=list)
     override: str | None = None
+
+
+@dataclass(frozen=True)
+class Rev:
+    revision: str
+    down: tuple[str, ...]
+    path: str
+    source: str
 
 
 def split_sql(sql: str) -> list[str]:
@@ -182,3 +195,120 @@ def scan_upgrade(source: str, *, revision: str = "?", path: str = "?") -> Verdic
         reasons = list(dict.fromkeys(reasons + _connection_reasons(upgrade)))
     override = _rollback_safe(tree)
     return Verdict(revision, path, not reasons or override is not None, reasons, override)
+
+
+def _downs(value) -> tuple[str, ...]:
+    if value is None or value is _MISSING:
+        return ()
+    return (value,) if isinstance(value, str) else tuple(value)
+
+
+def revision_graph(files: dict[str, str]) -> dict[str, Rev]:
+    """revision id -> Rev for every file declaring a string `revision`."""
+    graph: dict[str, Rev] = {}
+    for path, source in sorted(files.items()):
+        try:
+            tree = ast.parse(source)
+            revision, down = _module_value(tree, "revision"), _module_value(tree, "down_revision")
+        except (SyntaxError, ValueError) as exc:
+            raise ValueError(f"{path}: cannot read revision ids ({exc})") from None
+        if not isinstance(revision, str):
+            continue
+        if revision in graph:
+            raise ValueError(f"duplicate revision {revision} in {graph[revision].path} and {path}")
+        graph[revision] = Rev(revision, _downs(down), path, source)
+    return graph
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True,
+                          encoding="utf-8", check=True).stdout
+
+
+def tree_migrations(repo: Path, sha: str) -> dict[str, str]:
+    """path -> source of every revision file in `sha`'s tree (never the working tree)."""
+    names = _git(repo, "ls-tree", "--name-only", sha, f"{MIGRATIONS_DIR}/").splitlines()
+    wanted = [n for n in names if n.endswith(".py") and not n.endswith("__init__.py")]
+    return {name: _git(repo, "show", f"{sha}:{name}") for name in wanted}
+
+
+def head_of(graph: dict[str, Rev]) -> str:
+    referenced = {down for rev in graph.values() for down in rev.down}
+    heads = sorted(set(graph) - referenced)
+    if len(heads) != 1:
+        raise ValueError(f"expected exactly one head, found {heads or 'none'}")
+    return heads[0]
+
+
+def _ancestors(graph: dict[str, Rev], start: str) -> set[str]:
+    seen: set[str] = set()
+    stack = [start]
+    while stack:
+        rev = stack.pop()
+        if rev in seen:
+            continue
+        if rev not in graph:
+            raise LookupError(f"revision {rev} is not in the graph")
+        seen.add(rev)
+        stack.extend(graph[rev].down)
+    return seen
+
+
+def _topological(graph: dict[str, Rev], revs: set[str]) -> list[Rev]:
+    order: list[Rev] = []
+    done: set[str] = set()
+    pending = sorted(revs)
+    while pending:
+        ready = [r for r in pending if all(d in done or d not in revs for d in graph[r].down)]
+        if not ready:
+            raise ValueError(f"cycle among revisions {pending}")
+        order.extend(graph[r] for r in ready)
+        done.update(ready)
+        pending = [r for r in pending if r not in done]
+    return order
+
+
+def between(graph: dict[str, Rev], target_head: str, *, known: set[str] | None = None) -> list[Rev]:
+    """Revisions newer than the target, oldest first.
+
+    With `known` (the target tree's revision ids) the answer is every revision the
+    target lacks; without it, ancestry from the target head to the current head."""
+    if target_head not in graph:
+        raise LookupError(f"revision {target_head} is not in the current history")
+    if known is not None:
+        newer = set(graph) - set(known)
+    else:
+        newer = _ancestors(graph, head_of(graph)) - _ancestors(graph, target_head)
+    return _topological(graph, newer)
+
+
+def check_migrations(repo: Path, target_sha: str, head_sha: str) -> list[Verdict]:
+    """Safety check 2: a verdict for every revision `head_sha` has and `target_sha` lacks."""
+    target = revision_graph(tree_migrations(repo, target_sha))
+    if not target:
+        raise LookupError(f"{target_sha[:12]} has no Alembic revisions")
+    current = revision_graph(tree_migrations(repo, head_sha))
+    unknown = sorted(set(target) - set(current))
+    if unknown:
+        raise LookupError(f"target revisions missing from {head_sha[:12]}: {', '.join(unknown)}")
+    return [scan_upgrade(rev.source, revision=rev.revision, path=rev.path)
+            for rev in between(current, head_of(target), known=set(target))]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="v220 migration rollback-safety scan")
+    parser.add_argument("target_sha")
+    parser.add_argument("--head", default="HEAD")
+    parser.add_argument("--repo", default=".")
+    args = parser.parse_args(argv)
+    try:
+        verdicts = check_migrations(Path(args.repo), args.target_sha, args.head)
+    except (LookupError, ValueError, subprocess.CalledProcessError) as exc:
+        print(f"REFUSE: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps([asdict(v) for v in verdicts], indent=2))
+    return 0 if all(v.safe for v in verdicts) else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
