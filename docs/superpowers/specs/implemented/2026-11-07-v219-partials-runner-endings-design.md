@@ -265,3 +265,20 @@ Run 2026-11-07, after the spec commit, before the partner's review.
 - financial-advisor: peak figures read as achievable exits -- **applied** (hint copy).
 - financial-advisor: small odds groups read as findings -- **applied** (Wilson interval and N on every bar, thin marker).
 - financial-advisor: threshold validity is quant-researcher's -- **rejected**: pointer only, not a finding.
+
+## Close-out panel (diff review, 2026-11-12)
+
+Range `e135cb7d..320981a6`. No BLOCKING finding from any seat; every advisory is carried, none applied in this plan.
+
+- quant-researcher: Wilson interval treats same-week runners as independent (`intervals.py:11`) -- carried: spec chose Wilson; a cluster interval is a possible follow-up.
+- quant-researcher: `thin` keys on the numerator on cards/rows but on group size on odds bars (`partials.py:341`, `:403`) -- carried: follows the spec wording; needs a partner call.
+- quant-researcher: odds "Other" excludes manual closes while the scorecard "Other" row includes them (`partials.py:403` vs `:318`) -- carried.
+- quant-researcher: Giveback strip hint omits the `runner_r_unavailable` exclusion reason (`partials.ts:213`) -- carried.
+- staff-engineer: `outcomes` swapped in place, so a cached pre-v219 PWA bundle can break the Partials tab for ~5 min after deploy; rollback mismatches the other way (`partials.py:494`, `pwa-update.service.ts:22`) -- carried: admin-only, self-heals on reload, stores nothing.
+- financial-advisor: cost/tax caveat only in the title tooltip, not `PERFORMANCE_CAVEAT` (`runner-endings.ts:17`) -- carried.
+- financial-advisor: R columns hide `r_n`/`path_n` denominators (`runner-endings.ts:62-76`) -- carried.
+- financial-advisor: odds percentages read as a forecast (`runner-endings.ts:146`) -- carried.
+- financial-advisor: Best R seen hindsight note is hover-only (`runner-endings.ts:56`) -- carried.
+- financial-advisor: "thin" mark is hover-only on touch (`runner-endings.ts:123`) -- carried.
+
+Prediction check: Bump ui minor / bot patch and Edge none (integrity) held (ui 1.41.0, bot 2.18.4). skills: none affected.
