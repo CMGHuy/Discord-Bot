@@ -36,7 +36,8 @@ TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers", "mirror-prod"
                 "staff-engineer", "quant-engineer", "senior-engineer", "ux-designer",
                 "exit-harvester", "setup-scout", "regime-desk", "trade-scout"}   # each skill task appends its own name
 TIER_2 = {"close-out", "new-doc", "deploy", "stable-snapshot", "backup-pull", "panel",
-          "result-digest", "handoff", "screen", "prereg", "data-check", "replicate-prod-db"}        # each ritual task appends its own name
+          "result-digest", "handoff", "screen", "prereg", "data-check", "replicate-prod-db",
+          "rollback"}        # each ritual task appends its own name
 # Rituals the partner lets Claude run on its own (2026-10-08; replicate-prod-db
 # 2026-10-18). Still checklists with no Trigger table; their description names
 # the moment they run.
@@ -213,3 +214,28 @@ def test_handoff_writes_the_plan_handoff_block_in_the_main_context():
     assert "AskUserQuestion" in body
     assert "never rewrite, renumber or delete" in body
     assert "write nothing" in body
+
+
+def test_rollback_skill_runs_main_s_script_and_asks_before_every_override():
+    """v220: the checkout may be an older target without the script, so it
+    always comes from origin/main; the partner answers before the writer
+    override and before anything changes."""
+    meta, body = _read_skill("rollback")
+    assert meta.get("disable-model-invocation") == "true"
+    assert "bash scripts/ops/ssh-hetzner.sh" in body
+    assert "git show origin/main:scripts/ops/rollback_code.sh" in body
+    for flag in ("--resolve", "--candidates", "--dry-run", "--release"):
+        assert flag in body, flag
+    assert "Ask with `AskUserQuestion` before adding `--allow-writer-drift`" in body
+    assert body.count("Ask with `AskUserQuestion` before `--i-mean-it`") == 2   # rollback and release
+    assert "market-data writer differs" in body
+    assert "manifest `git_sha` or its git tag" in body
+    assert "scripts/ops/restore_stable.sh" in body and "scripts/ops/rollback_to.sh" in body
+    assert "alembic upgrade" not in body.lower()
+
+
+def test_deploy_skill_refuses_while_a_rollback_holds_deploys():
+    _, body = _read_skill("deploy")
+    step3 = body[body.index("## Step 3"):body.index("## Step 4")]
+    assert "deploy_hold.json" in step3 and "/rollback --release" in step3
+    assert step3.index("deploy_hold.json") < step3.index("git push origin")

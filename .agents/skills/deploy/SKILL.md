@@ -9,8 +9,7 @@ description: "The Hetzner deploy sequence -- decide config vs. code, push or tri
 ## Step 1 — Read the authority
 
 `docs/deploy/DEPLOY_HETZNER.md`, then `docs/deploy/DOCKER.md` for the
-two-containers-off-one-image shape. This skill is the checklist; the
-reasoning behind every step below lives there, not here.
+two-containers-off-one-image shape. This skill is the checklist; the reasoning lives there.
 
 ## Step 2 — Decide: config or code
 
@@ -19,17 +18,23 @@ no redeploy (DOCKER.md, "How hot reload actually works"). Two values don't:
 the bot token needs `docker compose restart bot`, and the admin UI's own
 username/password/port need `docker compose restart admin` — Flask can't
 rebind its own port live. Everything else is a code change and needs Step
-3's full build-and-deploy. Restarting for a config change, or redeploying
-for one, is how this goes wrong in both directions.
+3's full build-and-deploy. Restarting or redeploying for a config change goes wrong both ways.
 
 ## Step 3 — Build and deploy
+
+**First, the deploy hold (v220).** This skill refuses while a rollback holds deploys:
+```bash
+bash scripts/ops/ssh-hetzner.sh "cat /opt/swing-bot/backups/deploy_hold.json 2>/dev/null || echo 'no deploy hold'"
+```
+A hold printed here (or a `HOLD` session-start line) means stop: point the partner
+at `/rollback --release`. A push while held deploys nothing (the CI `hold` job
+and the `deploy/deploy.sh` guard skip it).
 
 Normal path — CI builds the image, Node stage included: `git push origin
 main`, or **Actions → Deploy to Hetzner → Run workflow**. CI's `frontend`
 job runs `ng test` plus a production build of the Angular SPA before the
 image is ever built; `docker-build` builds the image once,
-`container-healthcheck` smoke-tests it and `publish-image` pushes it to GHCR; `deploy` SSHes in and runs
-`deploy/deploy.sh`.
+`container-healthcheck` smoke-tests it, `publish-image` pushes it to GHCR; `deploy` runs `deploy/deploy.sh` over SSH.
 
 Manual, on-demand redeploy of whatever is already published (same as CI):
 
@@ -38,9 +43,8 @@ ssh deploy@167.233.26.185
 /opt/swing-bot/deploy/deploy.sh
 ```
 
-Building locally on the server, with no registry involved (first bring-up,
-or debugging) — this runs the Dockerfile's Node stage locally too, since
-`--build` runs every stage:
+Building locally on the server, no registry (first bring-up, or debugging) —
+this runs the Dockerfile's Node stage too, since `--build` runs every stage:
 
 ```bash
 sudo -u deploy docker compose up -d --build
@@ -55,9 +59,8 @@ docker compose ps
 docker compose logs -f bot
 ```
 
-Confirm both services are up, and the bot log shows it logged in and
-scanning, not just started. Then confirm the admin API itself, not just its
-container — a 302 on `/` is not proof (DOCKER.md, "Verifying a deploy
+Confirm both services are up and the bot log shows it logged in and
+scanning. Then confirm the admin API itself, not just its container — a 302 on `/` is not proof (DOCKER.md, "Verifying a deploy
 actually works"). `deploy.sh` already runs this after every deploy; re-run
 it by hand the same way, with `--from-config` rather than shell-sourced
 creds:
