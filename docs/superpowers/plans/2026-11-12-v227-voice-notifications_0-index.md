@@ -110,10 +110,10 @@ and 1440 px.
 | C | V227-6 | Consumes `feed_posts_repo()` (V227-2) and `kind_phrase`/`sample_headline`/`FEED_FAMILIES` (V227-3); may run beside V227-4/V227-5 (disjoint files). |
 | D | V227-7 → V227-8 → V227-8b → V227-9 → V227-10 | V227-8 reads `VoicePrefs`; V227-9 consumes `VoiceSpeaker.say` and `ApiClient.feedPosts`, plus `'feed'` in `EventName` (V227-1); V227-10 mounts the chip and starts the notifier. V227-7 codes against the ledger's response shape, so it may start before V227-6 lands. |
 | E | V227-11 | New `ui/switch.ts`, disjoint; may run beside anything in D. |
-| F | V227-12 → V227-13 | Same file (`voice-settings.ts`); V227-12 needs V227-7, V227-8 and V227-11. |
+| F | V227-12 → V227-12b → V227-13 | Same file (`voice-settings.ts`); V227-12 needs V227-7, V227-8 and V227-11. |
 | G | V227-14 → V227-15 | The layout audit needs V227-10 and V227-13; the release needs everything. |
 
-At most 2 implementers at once (`CLAUDE.md`). Suggested waves: (V227-1 ∥ V227-3), (V227-2 ∥ V227-11), (V227-4 ∥ V227-7), (V227-5 ∥ V227-6), V227-8, V227-8b, V227-9, (V227-10 ∥ V227-12), V227-13, V227-14, V227-15.
+At most 2 implementers at once (`CLAUDE.md`). Suggested waves: (V227-1 ∥ V227-3), (V227-2 ∥ V227-11), (V227-4 ∥ V227-7), (V227-5 ∥ V227-6), V227-8, V227-8b, V227-9, (V227-10 ∥ V227-12), V227-12b, V227-13, V227-14, V227-15.
 
 ## Task ledger
 
@@ -131,7 +131,8 @@ At most 2 implementers at once (`CLAUDE.md`). Suggested waves: (V227-1 ∥ V227-
 | V227-9 | `VoiceNotifier`: `feed` event → fetch → filter → speak | 2 | sonnet | C `frontend/src/app/voice/voice-notifier.ts`, `frontend/src/app/voice/voice-notifier.spec.ts` | `RECONNECT_CAP = 5`; `FEED_PAGE_LIMIT = 50`; `VoiceNotifier` (root): `start(): void` (idempotent), `lastId: Signal<number \| null>`; `moreLine(n: number): string` (`and ${n} more`) |
 | V227-10 | Voice chip in the top bar; shell starts the notifier | 2 | sonnet | C `frontend/src/app/shell/voice-chip.ts`, `frontend/src/app/shell/voice-chip.spec.ts`; M `frontend/src/app/shell/shell.html`, `frontend/src/app/shell/shell.ts`, `frontend/src/app/shell/shell.css`, `frontend/src/app/shell/shell.spec.ts` | `sb-voice-chip` (no inputs); `UNAVAILABLE_SEEN_KEY = 'swingbot.voice.unavailable-seen'` (sessionStorage) |
 | V227-11 | `sb-switch` primitive (`role="switch"`, mixed state, 44 px) | 2 | sonnet | C `frontend/src/app/ui/switch.ts`, `frontend/src/app/ui/switch.spec.ts`; M any ui registry the primitives/register specs require | `sb-switch`: inputs `label: string` (required), `checked: boolean`, `mixed = false`, `disabled = false`, `hint: string \| null = null`; output `checkedChange: boolean` (mixed → `true`) |
-| V227-12 | Settings block: master switch, family and kind switches, previews | 3 | sonnet | C `frontend/src/app/workspaces/system/voice-settings.ts`, `frontend/src/app/workspaces/system/voice-settings.spec.ts`; M `frontend/src/app/workspaces/system/settings-tab.ts`, `frontend/src/app/workspaces/system/settings-tab.spec.ts` | `sb-voice-settings` (no inputs) |
+| V227-12 | Settings block: master switch, family and kind switches | 3 | sonnet | C `frontend/src/app/workspaces/system/voice-settings.ts`, `frontend/src/app/workspaces/system/voice-settings.spec.ts` | `sb-voice-settings` (no inputs) |
+| V227-12b | Per-kind previews, unavailable note, mount in the Settings tab (split from V227-12 at the 20 KB task cap) | 3 | sonnet | M `frontend/src/app/workspaces/system/voice-settings.ts`, `frontend/src/app/workspaces/system/voice-settings.spec.ts`, `frontend/src/app/workspaces/system/settings-tab.ts`, `frontend/src/app/workspaces/system/settings-tab.spec.ts` | `unavailable`/`canSpeak` signals on `sb-voice-settings` |
 | V227-13 | Settings block: voice picker, rate slider, Test voice | 3 | sonnet | M `frontend/src/app/workspaces/system/voice-settings.ts`, `frontend/src/app/workspaces/system/voice-settings.spec.ts` | — |
 | V227-14 | Layout audit at 390, 768 and 1440 px | 3 | sonnet | M (fixes only) `voice-chip.ts`, `shell.css`, `voice-settings.ts`, `switch.ts`; C `docs/superpowers/results/2026-11-12-v227-layout-audit.md` | — |
 | V227-15 | Release: merge, CI watch, panel, close-out, skill alignment | 3 | sonnet | M `VERSION.json`, `version_history.json` (via `/close-out`), `.claude/skills/alert-surface/SKILL.md` (+ `python scripts/dev/sync_codex.py` mirror), `docs/claude/known-traps.md` + `AGENTS.md` if a trap line is added | — |
