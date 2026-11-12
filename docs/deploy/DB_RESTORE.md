@@ -180,3 +180,35 @@ count (520) were identical before and after.
 - A stable point's `market_data/` is pinned only on the VM (restic); off the VM it is the rolling mirror.
 - Each pull's `env` is plaintext on the dev machine, like `.env`.
 - A real `restore_stable.sh --i-mean-it` has not been run, only `--dry-run`.
+
+## Code-only rollback (v220)
+
+`/rollback` (`.claude/skills/rollback/SKILL.md`, `scripts/ops/rollback_code.sh`) puts the VM's
+checkout and bot image back to an earlier `main` commit and keeps every row of trading data (the
+two restores above put Postgres back). While rolled back, `backups/deploy_hold.json` holds every
+deploy (CI `hold` job, `deploy/deploy.sh`, `HOLD` line, `/deploy`) until `/rollback --release`.
+It is meant to be proven on a scratch project, never by a production rollback.
+
+### Drill 2026-11-12 (v220 V220-18): stopped at the dry run
+
+Scratch project `rbdrill` on the VM: checkout `/opt/swing-bot-rbdrill` at `main` d388bf5c9abe
+(bot 2.18.5), override `deploy/drill/rollback-drill.override.yml` copied outside the checkout,
+database seeded by `pg_dump` from production (952 plans, 1076 journal rows, equal to live),
+`ROLLBACK_DRILL=1` (no pgBackRest backup, no bot service, no heartbeat check). Setup took 42 s;
+`db`, `admin` and `refresher` came up healthy. Target: `deploy 2026-11-11T16:14:03Z` e135cb7d3b79
+(bot 2.18.3), image `...:sha-e135cb7d3b79`, found with `--candidates` and `--resolve` (exit 0).
+
+| Step | Exit | Result |
+|---|---|---|
+| Dry run | refused | `ok: false`; refusals: `open-trade value unknown to the target: strategy=EMA30` and `strategy=Fib 78.6%`; refresher `start`; no migrations, no warnings |
+| Forced smoke failure | not run | drill stopped at the refusal |
+| Rollback | not run | drill stopped at the refusal |
+| Release | not run | drill stopped at the refusal |
+
+The refusal is the planner working as designed: the replicated production book holds open trades
+whose strategy names the 2.18.3 target does not know. Scratch state was unchanged by the dry run
+(`main` d388bf5c9abe, no hold, `deploys.jsonl` 138 lines). The scratch project, its volume, the
+checkout and the override copy were removed afterwards. Production was untouched: container ids
+and creation times, checkout `HEAD`, `.env` mtime, no hold file and `deploys.jsonl` (138 lines)
+were identical before and after. The drill needs a target whose strategy registry knows these
+values (or a book without open trades of those strategies) before it can continue.
