@@ -163,6 +163,20 @@ try {
     catch {
         Emit "BACKUP   : WARNING no good pull yet (unreadable LAST_GOOD_PULL) -- run /backup-pull"
     }
+
+    # --- deploy hold (v220): cached, never waits on the network ---
+    # Own try/catch: --line reads logs/deploy_hold_cache.json only; the refresh
+    # (ssh-hetzner.sh, read-only) runs detached, at most every 30 minutes.
+    try {
+        $hs = 'scripts/dev/hold_status.py'
+        if (Test-Path $hs) {
+            $hline = @(& python $hs --line 2>$null) | Select-Object -First 1
+            if ($hline) { Emit $hline }
+            Start-Process -FilePath python -ArgumentList @($hs, '--refresh', '--if-stale') `
+                -WindowStyle Hidden -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+    catch { }
 }
 catch {
     Emit "(session-cursor hook error: $($_.Exception.Message))"

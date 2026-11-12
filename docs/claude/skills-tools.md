@@ -149,6 +149,7 @@ wrapper; it reads flags only from the shell segment that runs
 | `deploy` | 2 | slash-only (`/deploy`) | none — Step 1 reads `docs/deploy/DEPLOY_HETZNER.md` and `docs/deploy/DOCKER.md`, not `docs/claude/` |
 | `stable-snapshot` | 2 | slash-only (`/stable-snapshot`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
 | `backup-pull` | 2 | slash-only (`/backup-pull`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
+| `rollback` | 2 | slash-only (`/rollback [target] [--release]`) | none — Step 1 reads `docs/deploy/DB_RESTORE.md` and the header of `scripts/ops/rollback_code.sh`, not `docs/claude/` |
 | `replicate-prod-db` | 2 | `/replicate-prod-db`, or Claude before a task's first test run against the database | none — Step 1 reads `docs/deploy/DB_RESTORE.md` and `DEPLOY_HETZNER.md` § PostgreSQL, not `docs/claude/` |
 | `result-digest` | 2 | slash-only (`/result-digest`) | none — runs `scripts/backtest/compare_backtest_json.py` on the two files it is given, reads no `docs/claude/` file |
 | `handoff` | 2 | slash-only (`/handoff`) | `skills-tools.md` — only the "Handing a plan to another session or account" paragraph of § Plan writing, by `grep` |
@@ -166,7 +167,7 @@ pooled numbers, unmirrored prod changes), Tier 3 briefs an architectural seam
 before it's crossed (edge module boundaries, the alert surface, a schema
 change, worktree lifecycle). Tier 2 skills carry no Trigger table — they are
 checklists for an explicit slash command. `/deploy`, `/stable-snapshot`,
-`/backup-pull`, `/result-digest`, `/handoff`, `/screen`,
+`/backup-pull`, `/rollback`, `/result-digest`, `/handoff`, `/screen`,
 `/prereg` and `/data-check` also carry
 `disable-model-invocation: true`: the model never decides to run them. `/new-doc`, `/close-out` and `/replicate-prod-db` do not (the partner let
 Claude run the first two 2026-10-08, the third 2026-10-18): Claude invokes `new-doc` right before creating a

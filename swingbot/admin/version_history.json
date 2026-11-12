@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-12 09:15:26 UTC",
+  "generated_at": "2026-11-12 11:31:02 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.41.0",
-    "bot": "2.18.4"
+    "bot": "2.18.5"
   },
   "releases": [
     {
@@ -2586,6 +2586,19 @@
       },
       "changed": [
         "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-12",
+      "last_seen": "2026-11-12",
+      "commit": "dbf67f2d",
+      "subject": "release(bot): 2.18.5 -- code-only rollback: /rollback, deploy hold, rollback_smoke (v220)",
+      "versions": {
+        "ui": "1.41.0",
+        "bot": "2.18.5"
+      },
+      "changed": [
         "bot"
       ]
     }
