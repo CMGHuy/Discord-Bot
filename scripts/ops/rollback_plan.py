@@ -14,6 +14,7 @@ Exit codes: 0 pass, 2 refused (nothing changed).
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
@@ -22,6 +23,7 @@ import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+UTC = dt.timezone.utc
 STABLE_RE = re.compile(r"^stable-\d{4}-\d{2}-\d{2}(-\d+)?$")
 FORMS_HELP = "stable-YYYY-MM-DD[-N], <sha>, vNNN[-before|-after], bot-A.B.C, YYYY-MM-DD[THH:MM]"
 
@@ -127,10 +129,80 @@ def _resolve_sha(text: str, ctx: _Ctx) -> tuple[str, str]:
     raise Refused(f"unknown commit {text}", _stable_candidates(ctx.repo))
 
 
-# (pattern, form, handler) -- first match wins. V220-1b inserts the bot and date
-# rows before the hex rule (dates carry dashes, so they never reach it anyway).
+def parse_ts(text: str) -> dt.datetime:
+    raw = text.strip().replace(" ", "T")
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    parsed = dt.datetime.fromisoformat(raw)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _json_row(line: str) -> dict | None:
+    try:
+        row = json.loads(line)
+        usable = isinstance(row, dict) and row.get("ts") and row.get("git_sha")
+        at = parse_ts(row["ts"]) if usable else None
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return None
+    return {**row, "_at": at} if at else None
+
+
+def load_deploys(path: Path) -> list[dict]:
+    """deploys.jsonl rows with a truthy ts and git_sha, oldest first.
+
+    rollback/release lines are included: they record what was live."""
+    if not path.is_file():
+        return []
+    rows = [_json_row(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    return sorted((row for row in rows if row), key=lambda row: row["_at"])
+
+
+def _bot_version(repo: Path, sha: str) -> str | None:
+    try:
+        data = json.loads(git_out(repo, "show", f"{sha}:VERSION.json"))
+    except (subprocess.CalledProcessError, ValueError):
+        return None
+    return data.get("bot") if isinstance(data, dict) else None
+
+
+def _resolve_bot(text: str, ctx: _Ctx) -> tuple[str, str]:
+    version = text[len("bot-"):]
+    log = git_out(ctx.repo, "log", ctx.ref, "--reverse", f'-S"bot": "{version}"',
+                  "--format=%H", "--", "VERSION.json")
+    for sha in log.splitlines():
+        if _bot_version(ctx.repo, sha) == version:
+            return sha, text
+    raise Refused(f"no commit on {ctx.ref} sets bot {version}", _stable_candidates(ctx.repo))
+
+
+def _moment(text: str) -> dt.datetime:
+    """`YYYY-MM-DDTHH:MM` is that minute (UTC); a bare date is the end of that UTC day."""
+    if "T" in text:
+        return dt.datetime.strptime(text, "%Y-%m-%dT%H:%M").replace(tzinfo=UTC)
+    day = dt.datetime.strptime(text, "%Y-%m-%d").replace(tzinfo=UTC)
+    return day + dt.timedelta(days=1, seconds=-1)
+
+
+def _resolve_date(text: str, ctx: _Ctx) -> tuple[str, str]:
+    try:
+        moment = _moment(text)
+    except ValueError as exc:
+        raise Refused(f"bad date {text}: {exc}") from None
+    rows = load_deploys(ctx.deploys_path)
+    live = [row for row in rows if row["_at"] <= moment]
+    if not live:
+        raise Refused(f"no deploy recorded at or before {text} in {ctx.deploys_path}",
+                      [f"deploy {row['ts']} {row['git_sha'][:12]}" for row in rows[:5]])
+    label = f"deploy {live[-1]['ts']}"
+    return _on_main(ctx, live[-1]["git_sha"], label), label
+
+
+# (pattern, form, handler) -- first match wins; dates carry dashes, so they never
+# reach the hex rule. V220-2 adds the vNNN row.
 _FORMS = (
     (STABLE_RE, "stable", _resolve_stable),
+    (re.compile(r"^bot-\d+\.\d+\.\d+$"), "bot", _resolve_bot),
+    (re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$"), "date", _resolve_date),
     (re.compile(r"^[0-9a-fA-F]{7,40}$"), "sha", _resolve_sha),
 )
 

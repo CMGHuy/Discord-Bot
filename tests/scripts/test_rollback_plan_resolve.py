@@ -155,3 +155,68 @@ def test_cli_bad_ref_is_a_refusal_not_a_crash(world, capsys):
     rc = rp.main(["resolve", world["shas"][1], "--repo", str(world["repo"]),
                   "--ref", "no/such", "--current-image", IMAGE])
     assert rc == 2 and capsys.readouterr().err.startswith("REFUSE: git failed")
+
+
+# --- V220-1b: bot version and date forms -------------------------------------
+
+
+def test_bot_version_resolves_to_the_commit_that_set_it(world):
+    target = _resolve(world, "bot-2.0.1")
+    assert (target.sha, target.form, target.label) == (world["shas"][2], "bot", "bot-2.0.1")
+    assert _resolve(world, "bot-2.0.0").sha == world["shas"][0]
+
+
+def test_unknown_bot_version_is_refused_with_candidates(world):
+    with pytest.raises(rp.Refused, match="sets bot 9.9.9") as exc:
+        _resolve(world, "bot-9.9.9")
+    assert exc.value.candidates[0].startswith("stable-2026-01-01 ")
+
+
+@pytest.mark.parametrize("text,index", [
+    ("2026-02-01", 2), ("2026-02-02", 2), ("2026-02-03T09:59", 2), ("2026-02-03T10:00", 5),
+])
+def test_date_resolves_to_the_deploy_live_then(world, text, index):
+    target = _resolve(world, text)
+    assert (target.sha, target.form) == (world["shas"][index], "date")
+    assert target.label.startswith("deploy 2026-02-0")
+
+
+def test_date_before_any_deploy_is_refused_with_the_deploys(world):
+    with pytest.raises(rp.Refused, match="no deploy recorded") as exc:
+        _resolve(world, "2026-01-15")
+    assert exc.value.candidates == [f"deploy 2026-02-01T10:00:00Z {world['shas'][2][:12]}",
+                                    f"deploy 2026-02-03T10:00:00Z {world['shas'][5][:12]}"]
+
+
+def test_rollback_lines_count_as_deploys(world):
+    with world["deploys"].open("ab") as fh:
+        fh.write(_line("2026-02-04T00:00:00Z", world["shas"][1], kind="rollback",
+                       from_sha=world["shas"][5]).encode("utf-8"))
+    assert _resolve(world, "2026-02-04").sha == world["shas"][1]
+
+
+def test_bad_date_is_refused(world):
+    with pytest.raises(rp.Refused, match="bad date"):
+        _resolve(world, "2026-13-01")
+
+
+def test_missing_deploys_file_refuses_a_date(world, tmp_path):
+    with pytest.raises(rp.Refused, match="no deploy recorded"):
+        _resolve(world, "2026-02-02", deploys_path=tmp_path / "absent.jsonl")
+
+
+def test_load_deploys_skips_junk_and_sorts(tmp_path):
+    path = tmp_path / "d.jsonl"
+    path.write_bytes(("not json\n" + '{"ts": "", "git_sha": "x"}\n' + '{"ts": "bad", "git_sha": "x"}\n'
+                      + _line("2026-02-03T10:00:00Z", "b") + _line("2026-02-01 10:00:00", "a")
+                      + '["list"]\n').encode("utf-8"))
+    rows = rp.load_deploys(path)
+    assert [row["git_sha"] for row in rows] == ["a", "b"]
+    assert rows[0]["_at"].tzinfo is not None
+
+
+def test_cli_reads_deploys_under_the_repo_by_default(world, capsys):
+    (world["repo"] / "backups").mkdir()
+    shutil.copy(world["deploys"], world["repo"] / "backups" / "deploys.jsonl")
+    assert _cli(world, "2026-02-02") == 0
+    assert json.loads(capsys.readouterr().out)["sha"] == world["shas"][2]
