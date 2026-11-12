@@ -85,7 +85,7 @@ checks) through `ssh-hetzner.sh` is always allowed (standing permission,
 2026-11-06). **Always connect through
 `scripts/ops/ssh-hetzner.sh`** (a command, or bare for a shell; pipe stdin to
 run a script) -- never a raw `ssh`/`scp` or another key path; it is
-deliberately uncommitted (it shells through WSL to a key in WSL's home). **Any live fix or config change made on production must be mirrored back
+uncommitted (it shells through WSL to a key). **Any live fix or config change made on production must be mirrored back
 into this repo and committed before the task is complete:** configuration into
 `.env.example` or docs, local mirrored data where appropriate, and a committed
 code fix if the incident exposed a real defect. When a production configuration
@@ -138,8 +138,7 @@ evidence, write it into its durable home (`CLAUDE.md` for standing rules,
 Ask only when proceeding would be unsafe or irreversible.
 
 For strategy, trading or plan prioritization, rank work by pooled expectancy
-(`ExpR`) first and win rate second, and state the tradeoff when picking work over
-a higher-impact alternative. Every new spec or plan needs an `Edge:` header:
+(`ExpR`) first and win rate second, and state the tradeoff when picking lower-impact work. Every new spec or plan needs an `Edge:` header:
 `expectancy`, `harvest`, `volume` or `none (integrity)`. It governs what to work
 on, never what threshold to accept. Methodology and pre-registration rules always
 override profit motives: never re-run a closed pre-registration, shrink sample
@@ -246,10 +245,9 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
 whenever Claude would run `/<name>`: `gate` (pre-push: complexity gate, changed tests, CI watch), `deploy` (Hetzner deploy
-sequence; refuses while a rollback holds deploys), `stable-snapshot` (pin a known-good point),
-`rollback` (code-only rollback that keeps every trade; holds deploys until `--release`; asks before
-`--allow-writer-drift` and before `--i-mean-it`), `backup-pull` (off-VM pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
-output verbatim, never judged),
+sequence; refuses while held), `stable-snapshot` (pin a known-good point),
+`rollback` (code-only, keeps trades; holds deploys until `--release`), `backup-pull` (off-VM pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
+output verbatim),
 `handoff` (write the plan's `## Handoff` block before a session stops),
 `screen` (one real idea-screen run per idea, after the definition, ledger and
 results-doc checks), `prereg` (commit a pre-registration stub before the
@@ -298,8 +296,8 @@ credentials); never make a per-task container.
 
 `.ignore` excludes `.claude/worktrees/`, `market_data/`, `data/` and `logs/`.
 Use `rg` or `git grep` (for symbols, `git grep -n "def foo"`, tracked files
-only); never run unrestricted recursive search from the repository root, and
-scope file discovery narrowly (`swingbot/**/*.py`). Never edit
+only); never search recursively from the repository root; scope
+file discovery narrowly (`swingbot/**/*.py`). Never edit
 `.claude/worktrees/` from the main checkout. The README is only an index; read
 the one topic file it links. `tail` `.superpowers/sdd/progress.md`, never print
 it whole.
@@ -404,7 +402,7 @@ same work to them so bulk output stays out of your context:
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
 symbols exist), `task-implementer` then `task-reviewer` (one plan task each: `task_handoff.py <plan> <id>` writes the handoff; `agent_cost.py` checks cost),
 `plan-briefer` (gathers a spec's code context into
-`.superpowers/briefs/<plan base>.md` first), `plan-writer` (specs and plans are written at the `opus` tier only, partner 2026-11-10; a plan from a
+`.superpowers/briefs/<plan base>.md` first), `plan-writer` (specs and plans are written at the `opus` tier only; a plan from a
 spec and that brief: `mode=index` (index and task ledger) first,
 then one `mode=part <N>` per part, one at a time here, each appending task by
 task to disk; at most 2 plans in progress per session; a plan cut off
