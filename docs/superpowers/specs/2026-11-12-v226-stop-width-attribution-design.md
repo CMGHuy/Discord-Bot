@@ -59,8 +59,10 @@ per-ticker checkpointing. No stop, clamp, filter, alert or sizing rule changes.
 `abs(signal close − stop) / ATR14`, both taken from the signal bar. It is
 measured from the **signal close, not the planned entry or trigger**. It is
 point-in-time because the replay passes the frame cut at the signal bar
-(`scenario_rows.signal_fields`, `df.iloc[:hit.i+1]`); the plan cites the
-existing context truncation test or adds one.
+(`scenario_rows.signal_fields`, `df.iloc[:hit.i+1]`). No existing test
+truncates the frame for `entry_context["stop_atr"]`
+(`test_signal_fields_ignore_every_bar_after_the_signal` covers
+`signal_fields` only), so the plan adds one.
 
 A row whose `entry_context` is absent, or whose `stop_atr` is missing,
 non-numeric, or ≤ 0, is `unknown`.
@@ -141,8 +143,10 @@ gates** (live N is small and correlated). VALIDATION is never read.
 Per bucket, TRAIN and live separately:
 
 - N, win rate, ExpR net and gross, median planned RR;
-- the mix: direction, horizon, and strategy family shares, plus Δ within each
-  direction (long, short) where that stratum's bucket N ≥ 100;
+- the mix: direction and horizon shares, plus Δ within each direction (long,
+  short) where that stratum's bucket N ≥ 100. Strategy-family shares are
+  **live only**: the TRAIN scenario row carries no strategy field
+  (`scenario_rows.ROW_KEYS`), and the row contract is not widened for it;
 - the share of rows flagged `stop_clamped`. This is a **lower-bound
   provenance flag**: it is identity-based (a natural stop that lands at 1.75%
   is flagged too) and reads `CLAMP_STOP_TO_HARD_CAP` at run time. `None` rows
@@ -171,15 +175,22 @@ overlap.
   `swingbot.config` differ from production `.env`. Production is read through
   `scripts/ops/ssh-hetzner.sh`, read-only, and values are compared without
   being printed.
-- **Provenance:** `run_backtest_range.py:_write_provenance` records the three
-  values, git HEAD, window, universe (watchlist and membership as-of), the
-  command line and the store snapshot. The results doc quotes that file.
+- **Provenance:** `run_backtest_range.py:_write_provenance` today records the
+  store snapshot only (`training_data.write_provenance`: data source, feed,
+  adjustment, manifest hash, integrity sha). The plan adds a run sidecar beside
+  the `--trades-jsonl` output (`<path>.run.json`) holding git HEAD, window,
+  universe (watchlist and membership as-of), the command line and the three
+  stop settings. The results doc quotes both files.
 - **Checkpointing (named plan task, not conditional):** today
   `run_backtest_range.py` keeps rows in memory and writes them once at the end
-  (lines 281-285); its `.progress` file holds a percent only. The plan makes it
-  append each finished ticker's rows to the `--trades-jsonl` output plus a
-  done-list, and skip finished tickers on restart (CLAUDE.md, long runs must
-  checkpoint). The run goes to `backtest-runner`.
+  (lines 281-285); its `.progress` file holds a percent only, and the
+  `on_ticker_done(done, total)` callback carries no ticker or rows. The plan
+  adds a per-ticker completion hook carrying the ticker and its rows, appends
+  each finished ticker's rows to the `--trades-jsonl` output plus a done-list,
+  and skips finished tickers on restart (CLAUDE.md, long runs must
+  checkpoint). After a restart, the printed pooled table is computed from the
+  persisted rows, so it matches an uninterrupted run. The run goes to
+  `backtest-runner`.
 - **Live:** closed production trades from the local replica, after
   `/replicate-prod-db`.
 
@@ -189,7 +200,11 @@ overlap.
   skip-on-restart for `--trades-jsonl`; output unchanged for a run that is
   never interrupted.
 - `swingbot/core/analytics/expectancy_attribution.py`:
-  - `live_row` and `_train_row` gain `stop_atr`, `atr_pct` and `stop_clamped`;
+  - `live_row`, `_train_row` and `ROW_KEYS` are **unchanged** (tests pin
+    `tuple(row) == ROW_KEYS`, and the default report must stay byte-identical).
+    New `stop_width_row(base_row, source)` returns a separate dict: the base
+    row's fields plus `stop_atr`, `atr_pct`, `stop_clamped`, and, for live
+    rows only, `opened_at`, `closed_at` and `strategy`;
   - new `frozen_edges(rows, key) -> list[float]`;
   - new `edge_label(value, edges) -> str`;
   - new `stop_width_groups(train_rows, live_rows)` returning both populations
@@ -227,7 +242,11 @@ In the suites that already hold the attribution and backtest-script tests
 - the default report (no `--study`) is byte-identical to before (regression
   pin on a fixture), and `--study stop-width` writes only its own file;
 - replay checkpointing: an interrupted run restarted with the same arguments
-  skips finished tickers and yields the same rows as an uninterrupted run.
+  skips finished tickers and yields the same rows and the same printed table
+  as an uninterrupted run; the run sidecar carries its six fields;
+- `entry_context["stop_atr"]` is unchanged when every bar after the signal is
+  altered (truncation test);
+- `ROW_KEYS` and the `tuple(row) == ROW_KEYS` pins are unchanged.
 
 ## Out of scope
 
@@ -270,3 +289,4 @@ None for this spec.
 - quant-engineer: ADVISORY — data source not named -- applied (v162 training-data store; stale store fails; no refetch).
 - quant-engineer: ADVISORY — absent `entry_context` test; TRAIN unknown count -- applied (test and count).
 - quant-engineer: ADVISORY — quantile method and coinciding edges undefined -- applied (`numpy.quantile` linear; merged edges; tests).
+- plan-briefer (post-panel code check): `_write_provenance` lacks HEAD/window/universe/command/config; no TRAIN strategy field; no stop_atr truncation test; `on_ticker_done` carries no rows; live row lacks timestamps and `ROW_KEYS` is pinned -- applied (run sidecar; family share live only; truncation test; per-ticker hook; separate `stop_width_row`, `ROW_KEYS` unchanged).
