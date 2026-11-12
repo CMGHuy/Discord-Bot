@@ -614,6 +614,64 @@ jobs:
           docker buildx imagetools create -t "$IMAGE:$TAG" -t "$IMAGE:latest" "$CANDIDATE"
           echo "Promoted $CANDIDATE to $IMAGE:$TAG and $IMAGE:latest"
 
+  # ── 4a. Deploy hold (v220) ───────────────────────────────────────────────
+  # A code-only rollback (scripts/ops/rollback_code.sh) writes
+  # backups/deploy_hold.json on the VM. While it exists no push may deploy:
+  # the VM checkout is then the rollback target, whose own deploy.sh may have
+  # no hold check and would reset to main first, so the check lives here,
+  # in the pushed commit's workflow. Held: this job succeeds with held=true,
+  # warns, posts one ops notice (hold_notice.sh), and cleanup + deploy are
+  # skipped (the prune would delete the rollback's from_image). The run stays
+  # green. A failed check fails closed: nothing is pruned or deployed.
+  hold:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      held: ${{ steps.decide.outputs.held }}
+    steps:
+      - name: Read the deploy hold over SSH
+        id: read
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          port: ${{ secrets.HETZNER_SSH_PORT || 22 }}
+          capture_stdout: true
+          envs: APP_DIR
+          script: |
+            HOLD_FILE="$APP_DIR/backups/deploy_hold.json"
+            if [ ! -f "$HOLD_FILE" ]; then
+              echo "NOT_HELD"
+              exit 0
+            fi
+            msg="deploy held (backups/deploy_hold.json is present)"
+            notice="$(mktemp)"
+            if git -C "$APP_DIR" fetch -q origin main \
+                && git -C "$APP_DIR" show origin/main:scripts/ops/hold_notice.sh > "$notice"; then
+              msg="$(bash "$notice" "$APP_DIR" | tail -n 1)"
+            fi
+            rm -f "$notice"
+            echo "HELD $msg"
+        env:
+          APP_DIR: ${{ secrets.HETZNER_APP_DIR || '/opt/swing-bot' }}
+      - name: Decide
+        id: decide
+        env:
+          SSH_OUT: ${{ steps.read.outputs.stdout }}
+        run: |
+          line="$(printf '%s\n' "$SSH_OUT" | tr -d '\r' | grep '^HELD ' | head -n 1 || true)"
+          if [ -n "$line" ]; then
+            echo "held=true" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Deploy held::${line#HELD }"
+          elif printf '%s\n' "$SSH_OUT" | tr -d '\r' | grep -qx 'NOT_HELD'; then
+            echo "held=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::the deploy hold check gave no verdict; not deploying"
+            exit 1
+          fi
+
   # ── 4. Clean up old images on the server ────────────────────────────────────
   # Runs BEFORE deploy, not after, and does not wait on container-healthcheck
   # -- it needs nothing this run built, so it starts immediately alongside
@@ -643,7 +701,8 @@ jobs:
   # that used it, the host always has at most one running image per service,
   # so "unused" and "safe to delete" are the same test.
   cleanup:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [hold]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.hold.outputs.held == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -685,10 +744,18 @@ jobs:
   # race, and nothing stops the pull from landing before the prune does on
   # the exact disk-is-nearly-full run this ordering exists to protect.
   deploy:
-    needs: [docker-build, db-image, publish-image, cleanup, compose-lint]
+    needs: [hold, docker-build, db-image, publish-image, cleanup, compose-lint]
     # Skip on a manual run against a branch, where nothing was published --
     # deploying would silently re-run whatever :latest currently points at.
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # v220: always() so a cleanup skipped by the hold is evaluated here, not
+    # inherited; every other need must have succeeded, and a failed hold
+    # check means no deploy.
+    if: >-
+      always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+      && needs.hold.result == 'success' && needs.hold.outputs.held != 'true'
+      && needs.docker-build.result == 'success' && needs.db-image.result == 'success'
+      && needs.publish-image.result == 'success' && needs.compose-lint.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.cleanup.result)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
