@@ -220,3 +220,49 @@ def test_cli_reads_deploys_under_the_repo_by_default(world, capsys):
     shutil.copy(world["deploys"], world["repo"] / "backups" / "deploys.jsonl")
     assert _cli(world, "2026-02-02") == 0
     assert json.loads(capsys.readouterr().out)["sha"] == world["shas"][2]
+
+
+# --- V220-2: vNNN forms and the floor inside resolve --------------------------
+
+
+@pytest.fixture(autouse=True)
+def _no_floor(monkeypatch):
+    """The real INCOMPATIBLE_BOUNDARIES shas do not exist in the temp repos."""
+    monkeypatch.setattr(rp, "INCOMPATIBLE_BOUNDARIES", ())
+
+
+@pytest.mark.parametrize("text,index,label", [
+    ("v210", 2, "v210-before"), ("v210-before", 2, "v210-before"), ("v210-after", 4, "v210-after"),
+    ("v200-before", 0, "v200-before"), ("v200-after", 1, "v200-after"),
+])
+def test_plan_forms_resolve_around_the_plans_commits(world, text, index, label):
+    target = _resolve(world, text)
+    assert (target.sha, target.form, target.label) == (world["shas"][index], "plan", label)
+
+
+def test_plan_id_matches_exactly_not_by_prefix(world):
+    with pytest.raises(rp.Refused, match=r"carries \(v21\)"):
+        _resolve(world, "v21")
+
+
+def test_unknown_plan_is_refused_with_candidates(world):
+    with pytest.raises(rp.Refused, match=r"\(v999\)") as exc:
+        _resolve(world, "v999-after")
+    assert exc.value.candidates[0].startswith("stable-2026-01-01 ")
+
+
+def test_plan_whose_first_commit_is_the_root_has_no_before(tmp_path):
+    (tmp_path / "x").mkdir()
+    repo = make_repo(tmp_path / "x", [{"subject": "docs(v1): spec"}, {"subject": "feat(v1): it"}])
+    with pytest.raises(rp.Refused, match="has no parent"):
+        rp.resolve("v1-before", repo, deploys_path=tmp_path / "none", current_image=IMAGE)
+    assert rp.resolve("v1-after", repo, deploys_path=tmp_path / "none",
+                      current_image=IMAGE).sha == sha_of(repo)
+
+
+def test_resolve_refuses_a_target_below_the_floor(world):
+    floor = (rp.Boundary(world["shas"][3], "v210", "test boundary"),)
+    with pytest.raises(rp.Refused, match="below the compatibility floor") as exc:
+        _resolve(world, world["shas"][1], boundaries=floor)
+    assert f"{world['shas'][3]} v210 test boundary" in str(exc.value)
+    assert _resolve(world, world["shas"][4], boundaries=floor).sha == world["shas"][4]

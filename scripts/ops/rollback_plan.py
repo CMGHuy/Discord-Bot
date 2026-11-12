@@ -8,6 +8,7 @@ target tree is read with `git show`, never imported or run.
 
     python3 rollback_plan.py resolve <target> [--repo DIR] [--ref origin/main]
                                      [--deploys FILE] [--current-image IMG]
+    python3 rollback_plan.py floor <sha> [--repo DIR]
 
 Exit codes: 0 pass, 2 refused (nothing changed).
 """
@@ -22,10 +23,29 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 UTC = dt.timezone.utc
 STABLE_RE = re.compile(r"^stable-\d{4}-\d{2}-\d{2}(-\d+)?$")
 FORMS_HELP = "stable-YYYY-MM-DD[-N], <sha>, vNNN[-before|-after], bot-A.B.C, YYYY-MM-DD[THH:MM]"
+PLAN_RE = re.compile(r"^v(\d+)(-before|-after)?$")
+
+
+class Boundary(NamedTuple):
+    sha: str
+    plan: str
+    reason: str
+
+
+# Commits after which older code is unsafe against newer data. The floor is the
+# newest entry; a target passes only when every sha here is its ancestor. A plan
+# that makes old code unsafe against new data adds an entry
+# (docs/claude/schema-evolution.md, the schema-change skill).
+INCOMPATIBLE_BOUNDARIES: tuple[Boundary, ...] = (
+    Boundary("66e67c00", "v116", "unknown-field round-trip; older code can strip JSONB fields on re-save (merged in 14551c3c)"),
+    Boundary("2d672bab", "v184", "monitor heartbeat key (merged in b37c6e44)"),
+    Boundary("8562c35a", "v197", "durable lifecycle queue replaces the DELETE-drain consumer (migration a47f9ebc)"),
+)
 
 
 class Refused(Exception):
@@ -197,25 +217,65 @@ def _resolve_date(text: str, ctx: _Ctx) -> tuple[str, str]:
     return _on_main(ctx, live[-1]["git_sha"], label), label
 
 
+def floor_violations(sha: str, repo: Path,
+                     boundaries: tuple[Boundary, ...] = INCOMPATIBLE_BOUNDARIES) -> list[Boundary]:
+    """Boundaries that are not ancestors of `sha`. A boundary missing from the repo counts."""
+    return [b for b in boundaries
+            if not git_ok(Path(repo), "merge-base", "--is-ancestor", b.sha, sha)]
+
+
+def _plan_commits(ctx: _Ctx, plan: str) -> list[str]:
+    tag = f"(v{plan})"
+    log = git_out(ctx.repo, "log", ctx.ref, "--reverse", "--format=%H%x09%s")
+    pairs = (line.partition("\t") for line in log.splitlines())
+    return [sha for sha, _, subject in pairs if tag in subject]
+
+
+def _resolve_plan(text: str, ctx: _Ctx) -> tuple[str, str]:
+    match = PLAN_RE.match(text)
+    plan, mode = match.group(1), match.group(2) or "-before"
+    commits = _plan_commits(ctx, plan)
+    if not commits:
+        raise Refused(f"no commit on {ctx.ref} carries (v{plan})", _stable_candidates(ctx.repo))
+    if mode == "-after":
+        return commits[-1], f"v{plan}-after"
+    parent = _full(ctx.repo, f"{commits[0]}~1")
+    if parent is None:
+        raise Refused(f"the first (v{plan}) commit {commits[0][:12]} has no parent")
+    return parent, f"v{plan}-before"
+
+
 # (pattern, form, handler) -- first match wins; dates carry dashes, so they never
-# reach the hex rule. V220-2 adds the vNNN row.
+# reach the hex rule. V220-2 added the vNNN row.
 _FORMS = (
     (STABLE_RE, "stable", _resolve_stable),
+    (PLAN_RE, "plan", _resolve_plan),
     (re.compile(r"^bot-\d+\.\d+\.\d+$"), "bot", _resolve_bot),
     (re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$"), "date", _resolve_date),
     (re.compile(r"^[0-9a-fA-F]{7,40}$"), "sha", _resolve_sha),
 )
 
 
+def _refuse_below_floor(repo: Path, sha: str, label: str,
+                        boundaries: tuple[Boundary, ...] | None) -> None:
+    bounds = INCOMPATIBLE_BOUNDARIES if boundaries is None else boundaries
+    violations = floor_violations(sha, repo, bounds)
+    if violations:
+        named = "; ".join(f"{b.sha} {b.plan} {b.reason}" for b in violations)
+        raise Refused(f"{label} ({sha[:12]}) is below the compatibility floor: {named} -- "
+                      "use a whole-bot restore instead (docs/deploy/DB_RESTORE.md)")
+
+
 def resolve(target: str, repo: Path, *, deploys_path: Path, current_image: str,
-            ref: str = "origin/main") -> Target:
-    """Resolve any accepted form to one commit on `ref` plus its image; Refused otherwise."""
+            ref: str = "origin/main", boundaries: tuple[Boundary, ...] | None = None) -> Target:
+    """Resolve any accepted form to one commit on `ref` at or above the floor; Refused otherwise."""
     text = target.strip()
     image_for("0" * 12, current_image)  # refuse early when the registry path is unknown
     ctx = _Ctx(Path(repo), ref, Path(deploys_path))
     for pattern, form, handler in _FORMS:
         if pattern.match(text):
             sha, label = handler(text, ctx)
+            _refuse_below_floor(ctx.repo, sha, label, boundaries)
             return Target(sha=sha, image=image_for(sha, current_image), form=form, label=label)
     raise Refused(f"unknown target form {text!r} (accepted: {FORMS_HELP})",
                   _stable_candidates(ctx.repo))
@@ -242,7 +302,16 @@ def _cmd_resolve(args: argparse.Namespace) -> int:
     return 0
 
 
-HANDLERS = {"resolve": _cmd_resolve}
+def _cmd_floor(args: argparse.Namespace) -> int:
+    violations = floor_violations(args.sha, Path(args.repo))
+    for b in violations:
+        print(f"below floor: {b.sha} {b.plan} {b.reason}")
+    if not violations:
+        print("above floor")
+    return 2 if violations else 0
+
+
+HANDLERS = {"resolve": _cmd_resolve, "floor": _cmd_floor}
 
 
 def _add_repo_args(parser: argparse.ArgumentParser) -> None:
@@ -258,6 +327,9 @@ def _parser() -> argparse.ArgumentParser:
     _add_repo_args(res)
     res.add_argument("--deploys", default=None, help="default: <repo>/backups/deploys.jsonl")
     res.add_argument("--current-image", default=os.environ.get("SWING_BOT_IMAGE", ""))
+    flo = sub.add_parser("floor", help="is <sha> at or above every incompatible boundary?")
+    flo.add_argument("sha")
+    flo.add_argument("--repo", default=".")
     return parser
 
 
