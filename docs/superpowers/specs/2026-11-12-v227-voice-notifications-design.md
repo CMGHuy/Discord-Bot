@@ -48,7 +48,10 @@ made while no tab was open is never spoken later (no backlog).
 - **Table `feed_posts`** (Alembic revision `v227_001_feed_posts`):
   `id bigserial PK`, `posted_at timestamptz NOT NULL default now()`,
   `kind text NOT NULL` (a `presentation.kinds.Kind` member name),
-  `ticker text NULL`, `headline text NOT NULL`. Index on `posted_at`. Its NOTIFY
+  `ticker text NULL`, `headline text NOT NULL`, plus the hybrid-schema
+  `*standard_columns()` (`doc`, `updated_at`; `tests/db/test_schema_contract.py`)
+  with a `PROMOTION_REASONS` line for each of the four promoted columns
+  (`schema-evolution.md`). `down_revision = "v209_001"`. Index on `posted_at`. Its NOTIFY
   trigger comes from the shared `notify.trigger_ddl` (statement-level, on
   insert/update/delete), like `p3_007_notify_triggers.py`. **Three registries
   change together:** `swingbot/core/db/notify.CHANNELS` gains `feed`,
@@ -78,9 +81,12 @@ made while no tab was open is never spoken later (no backlog).
   long**: the insert goes through the fail-fast `swingbot/core/db/side_engine.py`
   (autocommit, statement timeout, pool timeout equal to it, down-backoff),
   never the main pool. A slow database costs one bounded, dropped notification
-  and nothing else.
+  and nothing else. The call stays **synchronous** inside the async senders, on
+  purpose: a fire-and-forget thread would break the single-writer ordering
+  invariant below. The side engine's statement timeout is what bounds the
+  stall.
 - **Call sites: only the simple-channel sends, after Discord accepted them**:
-  `commands/scanning/alerts.py:_mirror` (new setups, tickets, strategy mirrors)
+  `swingbot/commands/scanning/alerts.py:_mirror` (new setups, tickets, strategy mirrors)
   and the feed branch of `core/scanning/lifecycle_embeds._send_instruction`
   (fills, cancels, stop moves, TP1, results, near-stop/TP). In both, the call
   sits **inside the `try`, right after `log_posted`**, so a failed send records
@@ -116,7 +122,11 @@ made while no tab was open is never spoken later (no backlog).
   and just `latest_id`, which is how a fresh page starts without a backlog.
 - `GET /api/v1/feed-posts/kinds` returns the toggleable kinds grouped by
   family with their labels, so the Settings section never hard-codes the
-  registry.
+  registry. It lists the Kinds of the five families the simple channel carries
+  (NEW_SETUP, ENTRY, MANAGE, WATCH, RESULT). SYSTEM and BOOK never post there
+  and are not listed. New routes get rows in `tests/admin/access_expectations.py`.
+  `tests/admin/test_sse_contract.py` `EXPECTED_EVENTS` and the
+  `event-stream.spec.ts` last-event assertion are updated for `feed`.
 
 ### 3. Speaking it (SPA)
 
