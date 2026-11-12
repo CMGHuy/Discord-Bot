@@ -19,7 +19,6 @@ import sys
 from pathlib import Path
 
 TABLES = ("plans", "journal_entries")
-_ID = {"plans": "plan_id", "journal_entries": "trade_id"}
 _KEYS = "COALESCE((SELECT string_agg(k, ',' ORDER BY k) FROM jsonb_object_keys(doc) AS k), '')"
 KEYS_SQL = (f"SELECT 'plans', plan_id, {_KEYS} FROM plans\n"
             f"UNION ALL SELECT 'journal_entries', trade_id, {_KEYS} FROM journal_entries\n")
