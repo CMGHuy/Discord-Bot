@@ -17,8 +17,11 @@ from contextlib import contextmanager
 from sqlalchemy import event
 
 from swingbot.core.db import engine as engine_module
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.planning.plan_engine import PlanStatus, plan_from_dict
 from swingbot.core.planning.plan_store import PlanStore
+
+log = logging.getLogger(__name__)
 
 OPEN_STATUSES = (PlanStatus.PENDING, PlanStatus.ACTIVE, PlanStatus.PARTIAL)
 KNOWN_STATUSES = frozenset(value for name, value in vars(PlanStatus).items() if name.isupper())
@@ -120,6 +123,7 @@ def _step_one(manager, record: dict, result: dict) -> None:
             raise ValueError("no entry or trigger price")
         manager._step(plan, price, None)
     except Exception as exc:  # noqa: BLE001 - every failure is the finding
+        swallowed(log, "ops.rollback_smoke.step", exc)
         result["errors"].append(f"{plan_id}: {type(exc).__name__}: {exc}")
         return
     result["steps"] += 1
@@ -161,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         with read_only_session():
             result = evaluate(_open_records(), _open_journal_rows())
     except Exception as exc:  # noqa: BLE001 - one parseable failure line, always
+        swallowed(log, "ops.rollback_smoke.load", exc)
         result = _result(0, 0)
         result["errors"].append(f"load: {type(exc).__name__}: {exc}")
     print(json.dumps(result, sort_keys=True))
