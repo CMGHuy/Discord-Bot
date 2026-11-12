@@ -26,9 +26,9 @@ rebind its own port live. Everything else is a code change and needs Step
 ```bash
 bash scripts/ops/ssh-hetzner.sh "cat /opt/swing-bot/backups/deploy_hold.json 2>/dev/null || echo 'no deploy hold'"
 ```
-A hold printed here (or a `HOLD` session-start line) means stop: point the partner
-at `/rollback --release`. A push while held deploys nothing (the CI `hold` job
-and the `deploy/deploy.sh` guard skip it).
+A hold printed here (or a `HOLD` session-start line) means stop: deploying would move the VM
+off the rollback target; point the partner at `/rollback --release`. A push while held is harmless:
+the CI `hold` job skips `cleanup` and `deploy`, and `deploy.sh` exits before its `git reset`.
 
 Normal path — CI builds the image, Node stage included: `git push origin
 main`, or **Actions → Deploy to Hetzner → Run workflow**. CI's `frontend`
