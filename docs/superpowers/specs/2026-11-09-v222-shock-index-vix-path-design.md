@@ -538,3 +538,37 @@ Stage data is read; no frozen rule was loosened.
 - staff-engineer S3: new fixtures/CSV need DATA_READERS rows -- applied (Stage 1 ^VIX CSV, Stage 2 fixtures, Stage 3 11-05 fixture).
 - staff-engineer S4: name the config pins -- applied (§ Acceptance: 20 -> 22, contiguity before DATABASE_URL, "v209" in help, search_class "excluded", .env.example line, min <= default <= max with a min of 0 for SHOCK_INDEX_VIX_CHG).
 - staff-engineer S5: branch for the ^VIX fetch edit and Stage 2 adapter -- applied (Order of work: fresh worktree off main created before Stage 1).
+
+## Results
+
+### Stage 1 — window (written before any cell is read)
+
+- Source: yfinance daily (auto_adjust=True), fetched 2026-11-13T11:18:41+00:00
+  into the main tree's gitignored `data/v222/` by
+  `fetch_backtest_data.py --shock-index` (v222 worktree commit 74f5f1b4, with
+  ed58f052 dropping the two Yahoo holiday ^VIX bars 2026-05-25 and 2026-09-07).
+- SPY daily: first bar 1993-01-29, 8500 rows. `^VIX` daily: first bar
+  1990-01-02, 9279 rows. Both end 2026-11-04.
+- **Window: 1993-01-29 to 2026-11-04, 34 calendar years, 8500 common
+  sessions.** A session is scored once 15 completed SPY bars precede it
+  (ATR14, index § plan-time readings).
+
+### Stage 1 — screen
+
+Pending V222-5.
+
+### Stage 2 day list
+
+Pending V222-5.
+
+### Stage 2
+
+Pending V222-8.
+
+### Production check
+
+Pending V222-12.
+
+### Stage 3
+
+Pending V222-13.
