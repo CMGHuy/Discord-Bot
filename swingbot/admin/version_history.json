@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-13 14:48:58 UTC",
+  "generated_at": "2026-11-13 21:52:19 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.42.0",
-    "bot": "2.18.6"
+    "ui": "1.43.0",
+    "bot": "2.18.7"
   },
   "releases": [
     {
@@ -2639,6 +2639,20 @@
         "bot": "2.18.6"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-13",
+      "last_seen": "2026-11-13",
+      "commit": "7bde905c",
+      "subject": "release(ui,bot): ui 1.43.0, bot 2.18.7 -- voice notifications for simple-channel posts (v227)",
+      "versions": {
+        "ui": "1.43.0",
+        "bot": "2.18.7"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }
