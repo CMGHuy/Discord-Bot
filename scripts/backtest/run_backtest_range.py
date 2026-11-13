@@ -18,6 +18,7 @@ import argparse
 import dataclasses
 import json
 import math
+import subprocess
 import sys
 import warnings
 from collections import defaultdict
@@ -99,6 +100,64 @@ def _scenario_progress(trades_jsonl):
         print(f"  replay {done}/{total} tickers ({pct:.1f}%)", flush=True)
 
     return on_ticker_done
+
+
+#: v226: the three settings that decide every replayed stop; the run sidecar
+#: records them so the results doc can show the replay ran today's live stops.
+STOP_SETTING_NAMES = ("CLAMP_STOP_TO_HARD_CAP", "MIN_STOP_DISTANCE_PCT", "MAX_STOP_LOSS_PCT")
+
+#: v226: the run sidecar's fields, in order.
+RUN_SIDECAR_KEYS = ("git_head", "window", "watchlist", "membership_asof", "command", "stop_settings")
+
+
+def stop_settings() -> dict:
+    """The three stop settings as the replay reads them (config is
+    hot-reloaded, so read at call time). Nothing else from .env."""
+    return {name: getattr(config, name) for name in STOP_SETTING_NAMES}
+
+
+def _run_sidecar_path(trades_jsonl) -> Path:
+    return Path(str(trades_jsonl) + ".run.json")
+
+
+def _git_head() -> str | None:
+    """The repository HEAD the replay ran at; None when git is unavailable."""
+    try:
+        done = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(ROOT), capture_output=True,
+                              text=True, check=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.strip() or None
+
+
+def _membership_asof(membership: dict | None, today: str) -> str:
+    """The as-of date of the ticker universe: for a point-in-time map the
+    latest span boundary it knows, else `today` (the day the watchlist was read)."""
+    bounds = [str(bound) for spans in (membership or {}).values()
+              for span in spans for bound in span if bound is not None]
+    return max(bounds) if bounds else today
+
+
+def run_sidecar(*, date_from: str, date_to: str, tickers: list[str], universe: str | None,
+                membership: dict | None, argv: list[str], today: str) -> dict:
+    """v226: what ran -- HEAD, signal window, universe, membership as-of,
+    command line and the stop settings (keys: RUN_SIDECAR_KEYS, in order)."""
+    return {
+        "git_head": _git_head(),
+        "window": {"from": date_from, "to": date_to},
+        "watchlist": {"universe": universe or "watchlist", "tickers": sorted(tickers)},
+        "membership_asof": _membership_asof(membership, today),
+        "command": list(argv),
+        "stop_settings": stop_settings(),
+    }
+
+
+def write_run_sidecar(trades_jsonl, sidecar: dict) -> Path:
+    """<trades_jsonl>.run.json, beside the store's <trades_jsonl>.provenance.json."""
+    path = _run_sidecar_path(trades_jsonl)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(sidecar, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    return path
 
 
 def _context_symbols(symbols) -> list:
