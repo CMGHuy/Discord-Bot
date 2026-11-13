@@ -248,4 +248,6 @@ v131 (Fibonacci Limit, strategy source), v139 arms S and D, v191 arms K and R an
 
 ## observed_n (appended after the Stage −1 census, before Stage 0)
 
-Not yet computed.
+- `f0.333`: observed_n = 15180 filled keys of 38630 in-scope TRAIN alerts
+- `f0.5`: observed_n = 20162 filled keys of 38630 in-scope TRAIN alerts
+- `f0.667`: observed_n = 20939 filled keys of 38630 in-scope TRAIN alerts

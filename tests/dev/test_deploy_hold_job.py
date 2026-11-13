@@ -39,6 +39,14 @@ def test_the_hold_job_runs_first_and_publishes_held():
     assert decide["id"] == "decide" and decide["env"]["SSH_OUT"] == "${{ steps.read.outputs.stdout }}"
 
 
+def test_the_deploy_script_rechecks_the_hold_before_deploy_sh():
+    """A rollback landing between the hold job and the deploy step must still win."""
+    script = _jobs()["deploy"]["steps"][0]["with"]["script"]
+    check = script.index("deploy_hold.json")
+    assert check < script.index("deploy/deploy.sh")
+    assert "exit 0" in script[check:script.index("deploy/deploy.sh")]
+
+
 def test_cleanup_runs_only_when_not_held():
     cleanup = _jobs()["cleanup"]
     assert cleanup["needs"] == ["hold"]
