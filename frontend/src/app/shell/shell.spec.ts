@@ -887,6 +887,97 @@ describe('shell top-bar cluster (v195 Phase 3)', () => {
   });
 });
 
+describe('v225: one theme across the bar button and the profile menu', () => {
+  const NOW = Date.parse('2026-10-27T12:00:00Z');
+  const html = document.documentElement;
+  let stored: Map<string, string>;
+  const fakeStorage = () => ({
+    get: (key: string) => stored.get(key) ?? null,
+    set: (key: string, value: string) => stored.set(key, value),
+  });
+
+  beforeEach(() => {
+    stored = new Map();
+    TestBed.configureTestingModule({
+      providers: [
+        ...shellProviders(),
+        { provide: DENSITY_STORAGE, useValue: fakeStorage() },
+        { provide: THEME_STORAGE, useValue: memoryThemeStorage(stored) },
+      ],
+    });
+    TestBed.overrideProvider(CLOCK, { useValue: signal(NOW) });
+  });
+
+  afterEach(() => {
+    delete html.dataset['density'];   // data-theme is cleared by the file-level afterEach (V225-6)
+  });
+
+  async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  async function mount() {
+    const fixture = createShell();
+    await settle(fixture);
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  const openMenu = async (fixture: ComponentFixture<unknown>, el: HTMLElement) => {
+    el.querySelector<HTMLButtonElement>('sb-profile-menu .avatar')!.click();
+    await settle(fixture);
+  };
+  const themeSegments = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll<HTMLButtonElement>('sb-profile-menu .theme-control .segment'));
+  const segment = (el: HTMLElement, label: 'Black' | 'Dark blue') =>
+    themeSegments(el).find((button) => button.textContent!.trim() === label)!;
+  const pressedSegment = (el: HTMLElement) =>
+    themeSegments(el).find((button) => button.getAttribute('aria-pressed') === 'true')!.textContent!.trim();
+  const barButton = (el: HTMLElement) => el.querySelector<HTMLButtonElement>('header.topbar button.theme-toggle');
+
+  it('writes ui.theme and data-theme from the menu row, and the bar button follows', async () => {
+    const { fixture, el } = await mount();
+    expect(html.dataset['theme']).toBe('graphite');
+    await openMenu(fixture, el);
+    segment(el, 'Dark blue').click();
+    await settle(fixture);
+    expect(html.dataset['theme']).toBe('navy');
+    expect(stored.get('ui.theme')).toBe('navy');
+    expect(pressedSegment(el)).toBe('Dark blue');
+    expect(barButton(el)!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('moves the pressed segment when the bar button is clicked, and the bar when the menu is', async () => {
+    const { fixture, el } = await mount();
+    await openMenu(fixture, el);
+    expect(pressedSegment(el)).toBe('Black');
+    barButton(el)!.click();
+    await settle(fixture);
+    expect(html.dataset['theme']).toBe('navy');
+    // A click outside the menu closes it (ProfileMenu's document click); reopen to read it.
+    if (!el.querySelector('sb-profile-menu [role=menu]')) await openMenu(fixture, el);
+    expect(pressedSegment(el)).toBe('Dark blue');
+    segment(el, 'Black').click();
+    await settle(fixture);
+    expect(barButton(el)!.getAttribute('aria-pressed')).toBe('false');
+    expect(stored.get('ui.theme')).toBe('graphite');
+  });
+
+  it('keeps the Theme row on a phone, where it is the only switch', async () => {
+    TestBed.overrideProvider(ViewportService, {
+      useValue: { isPhone: signal(true), isNarrow: signal(true), viewport: signal('xs') },
+    });
+    const { fixture, el } = await mount();
+    expect(barButton(el)).toBeNull();
+    await openMenu(fixture, el);
+    segment(el, 'Dark blue').click();
+    await settle(fixture);
+    expect(html.dataset['theme']).toBe('navy');
+    expect(stored.get('ui.theme')).toBe('navy');
+  });
+});
+
 describe('shell on a phone (v195 Phase 3)', () => {
   let phone: WritableSignal<boolean>;
 

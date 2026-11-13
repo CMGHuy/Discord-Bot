@@ -117,6 +117,7 @@
                        [botAlive]="connection.botAlive()" [marketActive]="connection.marketActive()" (zoomCycled)="cycleZoom()"
                        [motion]="motionMode()" (motionChanged)="setMotion($event)"
                        [density]="density.density()" (densityChanged)="density.set($event)"
+                       [theme]="theme.theme()" (themeChanged)="theme.set($event)"
                        (signedOut)="logout()" />
       <!-- Hung from the bar's bottom edge (shell.css), never in the flow: an
            automatic scan runs every SCAN_INTERVAL_MINUTES all session, and a
