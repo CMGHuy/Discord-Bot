@@ -43,7 +43,7 @@ function blockEnd(css: string, open: number): number {
 }
 
 /** [selector, body] for each top-level `selector { body }`, in file order. */
-function topLevelBlocks(css: string): [string, string][] {
+export function topLevelBlocks(css: string): [string, string][] {
   const blocks: [string, string][] = [];
   let start = 0;
   let open = css.indexOf('{', start);
@@ -57,7 +57,7 @@ function topLevelBlocks(css: string): [string, string][] {
   return blocks;
 }
 
-function declarations(body: string): Record<string, string> {
+export function declarations(body: string): Record<string, string> {
   const found: Record<string, string> = {};
   for (const chunk of body.split(';')) {
     const colon = chunk.indexOf(':');

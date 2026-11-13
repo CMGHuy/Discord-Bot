@@ -5,7 +5,7 @@
  * THE ONLY FILE under frontend/src that holds hued colour literals (the
  * exceptions are named in the spec: --chart-1..6 and --quality-4 stay
  * literal in tokens.css, and index.html / manifest.webmanifest carry copies
- * of --bg for the cold load).
+ * of --bg for the cold load, and index.html one of the Navy --bg (spec v225)).
  *
  * A palette name says what a colour IS (hue and step), never what it is
  * FOR. Meaning lives in tokens.css tier 2 (--bg, --accent, --pos ...), which
@@ -37,11 +37,27 @@
   /* rules, dividers and disabled glyphs only -- never text */
   --graphite-500: #6b7280;
 
+  /* v225 Dark blue (Navy) ground, darkest first: tokens.css's
+     :root[data-theme="navy"] block re-points the ground to these. */
+  --midnight-950: #070c18;
+  --midnight-900: #0c1424;
+  --midnight-850: #121c32;
+  --midnight-800: #172440;
+  --midnight-750: #182540;
+  --midnight-700: #233453;
+  /* rules, dividers and disabled glyphs only -- never text */
+  --midnight-500: #5f6f8a;
+
   /* ink */
   --grey-400: #9aa4b2;
   --grey-300: #c9d1d9;
   --grey-100: #e6e8eb;
   --white: #ffffff;
+
+  /* v225 Navy ink, blue-tinted to sit on the midnight ground */
+  --frost-400: #9fb0c8;
+  --frost-300: #c9d4e3;
+  --frost-100: #e6ecf5;
 
   /* steel blue: interactive only. 400 is the text-safe accent; 500 and
      600 are the fills that carry white ink (5.00:1 and 5.74:1). */
@@ -57,6 +73,7 @@
 
   /* alpha entries: tints and the overlay dim */
   --graphite-950-a72: rgba(13, 15, 18, 0.72);
+  --midnight-950-a72: rgba(7, 12, 24, 0.72);
   --green-500-a12: rgba(63, 182, 139, 0.12);
   --red-500-a12: rgba(240, 110, 102, 0.12);
   --amber-500-a12: rgba(210, 153, 34, 0.12);
