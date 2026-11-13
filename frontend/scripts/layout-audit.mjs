@@ -26,18 +26,24 @@
  *              content box, or a live strip beside it; below 1024px a docked column, no live strip,
  *              or a sheet that a tap on the strip does not open inside the viewport (spec v202 §8).
  *              Never allowed.
+ *   profile-menu  at widths below 640 the profile menu, opened from sb-profile-menu .avatar, must sit
+ *              inside the viewport and its Theme row show two segments at least 44px wide (spec v225).
+ *              Never allowed.
  * A finding the allow-list names (with a reason and a date) passes; anything
  * else makes the exit code 1. Entries nothing matches any more print as STALE;
  * --prune removes them (only on a run at 390, 768 and 1440).
  *
  *   node frontend/scripts/layout-audit.mjs [--base http://localhost:1234] [--widths 390,768,1440]
- *        [--out DIR] [--allow FILE] [--settle MS] [--prune]
+ *        [--out DIR] [--allow FILE] [--settle MS] [--prune] [--theme graphite|navy]
  *
  * Sign in once with `node frontend/scripts/browse.mjs login --base <base>`
  * (headed; close that window first, the profile allows one browser). When
  * the profile has no session this script tries the .env ADMIN_USERNAME /
  * ADMIN_PASSWORD once -- loaded into this process only, never printed -- and
  * otherwise stops and says so.
+ *
+ * `--theme navy` seeds `ui.theme` before every page load (default graphite) and stops with exit 2 when
+ * the page does not come up in that theme; Navy shots and the default out dir carry a `-navy` suffix.
  *
  * Writes <out>/audit.json and a full-page <slug>@<width>.png per visit
  * (default out: <tmp>/swingbot-layout-audit). Exit 0 clean, 1 unallowed
@@ -50,9 +56,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import {
-  CHECKS, DOCK_MIN_WIDTH, DOCK_SELECTORS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, RAIL_MIN_WIDTH, ROUTES, TOUCH_MAX_WIDTH,
-  classify, countByCheck, dedupe, dockVerdict, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs, pickIds, probeHintTwice, railLabelVerdict,
-  resolveRoute, slug, validateAllow, vcenterGeometry,
+  CHECKS, DOCK_MIN_WIDTH, DOCK_SELECTORS, FULL_WIDTHS, MAX_BASELINE_OFFSET_PX, MAX_CENTER_OFFSET_PX, MIN_TAP_PX, MIN_TEXT_PX, PROFILE_MENU_MAX_WIDTH, PROFILE_MENU_SELECTORS, RAIL_MIN_WIDTH, ROUTES, THEME_KEY, TOUCH_MAX_WIDTH,
+  classify, countByCheck, dedupe, dockVerdict, formatFinding, hintVerdict, inScope, isVisuallyHidden, parseArgs, pickIds, probeHintTwice, profileMenuVerdict, railLabelVerdict,
+  resolveRoute, slug, themeSuffix, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -451,6 +457,35 @@ async function auditDock(page, width) {
   return [{ check: 'dock', selector: DOCK_SELECTORS[verdict.reason], text: '', detail: `live dock ${verdict.reason} at ${width}px` }];
 }
 
+/** Runs inside the page: the open profile menu's rect and its Theme segments' widths. Self-contained. */
+function measureProfileMenu() {
+  const r = document.querySelector('sb-profile-menu [role=menu]')?.getBoundingClientRect();
+  const root = document.documentElement;
+  return {
+    menu: r && r.width > 0 && r.height > 0 ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null,
+    segments: [...document.querySelectorAll('sb-profile-menu .theme-control .segment')].map((s) => s.getBoundingClientRect().width),
+    viewport: { width: root.clientWidth, height: root.clientHeight },
+  };
+}
+
+/** Tap the avatar, measure the open menu, keep a shot of it, close it with Escape (spec v225). */
+async function auditProfileMenu(page, width, opts) {
+  try {
+    await page.locator('sb-profile-menu .avatar').tap({ timeout: 2000 });
+  } catch (error) {
+    console.error(`  profile menu @${width}: cannot tap (${String(error).split('\n')[0]})`);
+  }
+  await page.locator('sb-profile-menu [role=menu]').waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
+  await page.waitForTimeout(SHEET_SETTLE_MS);
+  const facts = await page.evaluate(measureProfileMenu);
+  await page.screenshot({ path: join(opts.out, `profile-menu@${width}${themeSuffix(opts.theme)}.png`) });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(SHEET_SETTLE_MS);
+  const verdict = profileMenuVerdict(facts);
+  if (verdict.ok) return [];
+  return [{ check: 'profile-menu', selector: PROFILE_MENU_SELECTORS[verdict.reason], text: '', detail: `profile menu ${verdict.reason} at ${width}px` }];
+}
+
 /** Same page-ready rule as browse.mjs: never 'networkidle' (the SPA holds an event stream open). */
 function ready() {
   const main = document.querySelector('main') ?? document.body;
@@ -511,12 +546,16 @@ async function resolveIds(page, base) {
   });
 }
 
-async function withContext(width, fn) {
+async function withContext(width, theme, fn) {
   const context = await chromium.launchPersistentContext(PROFILE, {
     headless: true, viewport: { width, height: 900 }, deviceScaleFactor: 1,
     serviceWorkers: 'block', // the app's ngsw would serve the profile's cached build, not the one under test
     hasTouch: width <= TOUCH_MAX_WIDTH, isMobile: width < 640,
   });
+  // Seed the theme on every document before any page script (the persistent profile may hold the other value).
+  await context.addInitScript(([key, value]) => {
+    try { localStorage.setItem(key, value); } catch { /* blocked storage: the check below reports it */ }
+  }, [THEME_KEY, theme]);
   try {
     return await fn(context.pages()[0] ?? (await context.newPage()));
   } finally {
@@ -538,23 +577,32 @@ async function screenshot(page, file, width) {
 }
 
 async function auditWidth(width, opts) {
-  return withContext(width, async (page) => {
+  return withContext(width, opts.theme, async (page) => {
     await requireSession(page, opts.base);
+    let checked = false;
     const limits = { touch: width <= TOUCH_MAX_WIDTH, minTap: MIN_TAP_PX, minText: MIN_TEXT_PX, maxBaseline: MAX_BASELINE_OFFSET_PX, maxCenter: MAX_CENTER_OFFSET_PX };
     const findings = [];
     for (const route of ROUTES) {
       await page.goto(`${opts.base}${resolveRoute(route, opts.ids)}`, { waitUntil: 'load' });
       await page.waitForFunction(ready, null, { timeout: 30_000 })
         .catch(() => console.error(`still loading after 30s: ${route} @${width}`));
+      if (!checked) {
+        checked = true;
+        const applied = await page.evaluate(() => document.documentElement.dataset.theme ?? null);
+        if ((opts.theme === 'navy') !== (applied === 'navy')) {
+          throw new CannotRun(`--theme ${opts.theme} did not apply at ${width}px (data-theme=${applied})`);
+        }
+      }
       await page.waitForTimeout(opts.settle);
       const raw = await page.evaluate(auditPage, { ...limits, hiddenSrc: isVisuallyHidden.toString(), geometrySrc: vcenterGeometry.toString() });
       findings.push(...raw.map((f) => ({ route, width, ...f })));
-      await screenshot(page, join(opts.out, `${slug(route)}@${width}.png`), width);
+      await screenshot(page, join(opts.out, `${slug(route)}@${width}${themeSuffix(opts.theme)}.png`), width);
       const hints = await auditHints(page, width);
       const rails = await auditRailLabels(page, width);
       const docks = await auditDock(page, width);
-      findings.push(...[...hints, ...rails, ...docks].map((f) => ({ route, width, ...f })));
-      console.error(`${route} @${width}: ${raw.length + hints.length + rails.length + docks.length} raw finding(s)`);
+      const menus = width <= PROFILE_MENU_MAX_WIDTH && route === ROUTES[0] ? await auditProfileMenu(page, width, opts) : [];
+      findings.push(...[...hints, ...rails, ...docks, ...menus].map((f) => ({ route, width, ...f })));
+      console.error(`${route} @${width}: ${raw.length + hints.length + rails.length + docks.length + menus.length} raw finding(s)`);
     }
     return findings;
   });
@@ -562,7 +610,7 @@ async function auditWidth(width, opts) {
 
 function report(verdict, opts) {
   const counts = countByCheck(verdict.unallowed);
-  console.log(`layout audit ${opts.base} @ ${opts.widths.join(',')}: ${verdict.unallowed.length} unallowed, ${verdict.allowed.length} allowed`);
+  console.log(`layout audit ${opts.base} @ ${opts.widths.join(',')} (${opts.theme}): ${verdict.unallowed.length} unallowed, ${verdict.allowed.length} allowed`);
   console.log(CHECKS.map((check) => `${check}=${counts[check]}`).join(' '));
   for (const f of verdict.unallowed) console.log(`  FAIL ${formatFinding(f)}`);
   for (const e of verdict.stale) console.log(`  STALE ${e.route} @${e.width} ${e.check} ${e.selector} (added ${e.date})`);
@@ -583,7 +631,7 @@ function setUp(argv) {
     throw new CannotRun(error.message);
   }
   opts.allow ??= DEFAULT_ALLOW;
-  opts.out ??= join(tmpdir(), 'swingbot-layout-audit');
+  opts.out ??= join(tmpdir(), `swingbot-layout-audit${themeSuffix(opts.theme)}`);
   if (opts.prune && !FULL_WIDTHS.every((w) => opts.widths.includes(w))) {
     throw new CannotRun(`--prune needs a run at ${FULL_WIDTHS.join(',')}`);
   }
@@ -605,7 +653,7 @@ async function main() {
   const today = new Date().toISOString().slice(0, 10);
   const doc = loadAllow(opts.allow, today);
   mkdirSync(opts.out, { recursive: true });
-  opts.ids = await withContext(1440, async (page) => {
+  opts.ids = await withContext(1440, opts.theme, async (page) => {
     await requireSession(page, opts.base);
     return resolveIds(page, opts.base);
   });
@@ -618,7 +666,7 @@ async function main() {
   for (const width of opts.widths) findings.push(...(await auditWidth(width, opts)));
   const verdict = classify(dedupe(findings), doc.entries.filter((entry) => inScope(entry, opts.widths)), today);
   writeFileSync(join(opts.out, 'audit.json'),
-    `${JSON.stringify({ base: opts.base, widths: opts.widths, ids: opts.ids, date: today, ...verdict }, null, 1)}\n`);
+    `${JSON.stringify({ base: opts.base, widths: opts.widths, theme: opts.theme, ids: opts.ids, date: today, ...verdict }, null, 1)}\n`);
   report(verdict, opts);
   if (opts.prune && verdict.stale.length) prune(doc, verdict.stale, opts.allow);
   return verdict.unallowed.length ? 1 : 0;
