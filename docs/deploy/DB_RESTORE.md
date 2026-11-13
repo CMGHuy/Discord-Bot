@@ -4,6 +4,8 @@
 days, see `DEPLOY_HETZNER.md` "Point-in-time rollback"). The `pg_dump` described
 here (kept 90 days) is the second, day-level method for anything older.
 
+**To put back only the code and keep every trade:** `/rollback <target>`
+(`scripts/ops/rollback_code.sh`, v220), compared below in "Code-only rollback (v220)".
 
 An unexercised restore is a hope, not a backup. This is the record of the drill
 (v67 P6-04), run against **production** on 2026-09-30.
@@ -188,6 +190,21 @@ checkout and bot image back to an earlier `main` commit and keeps every row of t
 two restores above put Postgres back). While rolled back, `backups/deploy_hold.json` holds every
 deploy (CI `hold` job, `deploy/deploy.sh`, `HOLD` line, `/deploy`) until `/rollback --release`.
 It was proven on a scratch project, never by a production rollback.
+
+Three ways back, for different damage:
+
+| | `rollback_to.sh "<UTC>"` (v116) | `restore_stable.sh <name>` (v120) | `/rollback <target>` (`rollback_code.sh`, v220) |
+|---|---|---|---|
+| Postgres | restored to the second (pgBackRest PITR) | restored from the point's dump | untouched: every trade, plan and journal row stays |
+| Code and bot image | of the target | of the point | of the target |
+| db image | of the target | of the point | unchanged |
+| `.env` | of the target | of the point | current; only the `SWING_BOT_IMAGE` pin moves |
+| `market_data/` | restic, at the target | restic, of the point | untouched |
+| Targets | any second in the last 30 days | one stable point | stable point, sha, `vNNN[-before\|-after]`, `bot-A.B.C`, UTC date, at or above the compatibility floor |
+| Refuses when | the second is outside the PITR history | the manifest fails verify, an image is gone | any of the eight safety checks fails |
+| Afterwards | scanning paused | scanning paused | scanning keeps running; every deploy is held until `/rollback --release` |
+
+Use `/rollback` when a release misbehaves and the data is sound; use the other two when the data itself is damaged.
 
 ### Drill 2026-11-12 (v220 V220-18)
 

@@ -210,7 +210,8 @@ Read the `docs/claude/` file:
 - `code-complexity.md`: writing or changing any function.
 - `model-routing.md`: writing a plan or dispatching a plan task (the
   `**Model:**` tier rubric and the escalation ladder).
-- `schema-evolution.md`: changing a table's shape or a stored record's fields.
+- `schema-evolution.md`: changing a table's shape or a stored record's fields;
+  every revision states rollback safety (`ROLLBACK_SAFE`, `INCOMPATIBLE_BOUNDARIES`).
 - `skills-tools.md`: choosing repo-specific skills or automation.
 - `ui-design.md`: any screen, table or pager: designed for mobile, tablet and
   desktop together and checked at all three widths; tables page
