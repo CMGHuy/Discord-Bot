@@ -72,6 +72,10 @@ const RAW_CONTROL_ALLOWLIST = new Map<string, string>([
   // plain field and exposes none of that; growing it a combobox mode for one
   // call site would be the worse trade.
   ['shell/palette/command-palette.ts', 'role="combobox"'],
+  // v227: the voice rate slider. A range input has no primitive (this is the
+  // app's only one), and a ui/ wrapper used exactly once is the worse trade;
+  // its thumb takes the --hit-min square from voice-settings.ts.
+  ['workspaces/system/voice-settings.ts', 'type="range"'],
 ]);
 
 describe('no call site hand-rolls a form control', () => {

@@ -4,15 +4,39 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiClient } from '../../api/api-client';
 import { FeedKind, FeedKindFamily } from '../../api/models';
 import { Button } from '../../ui/button';
+import { Select, SelectOption } from '../../ui/form-controls';
 import { Panel } from '../../ui/layout';
 import { PanelError } from '../../ui/panel-error';
 import { Spinner } from '../../ui/spinner';
 import { Switch } from '../../ui/switch';
-import { VoicePrefs } from '../../voice/voice-prefs';
+import { RATE_MAX, RATE_MIN, RATE_STEP, VoicePrefs } from '../../voice/voice-prefs';
 import { VoiceSpeaker } from '../../voice/voice-speaker';
 
 export const VOICE_OFF_REASON = 'Turn on voice to choose kinds';
 export const NO_VOICE_NOTE = 'No voice on this browser';
+export const SYSTEM_DEFAULT_VOICE = 'System default';
+export const LOADING_VOICES = 'Loading voices…';
+export const MISSING_VOICE_NOTE = "Your saved voice isn't on this device; using the system default.";
+export const TEST_VOICE_FALLBACK = 'New long alert, AAPL, buy at 187.50';
+
+/** The picker's options: one loading row until the browser lists its voices. */
+export function voiceOptions(voices: string[] | null): SelectOption[] {
+  if (voices === null) return [{ value: '', label: LOADING_VOICES }];
+  return [{ value: '', label: SYSTEM_DEFAULT_VOICE }, ...voices.map((name) => ({ value: name, label: name }))];
+}
+
+export function rateText(rate: number): string {
+  return `${rate.toFixed(2)}×`;
+}
+
+/** Test voice says the server's own new-alert sample, else a fixed one. */
+export function testVoiceSample(families: FeedKindFamily[] | null): string {
+  for (const family of families ?? []) {
+    const setup = family.kinds.find((kind) => kind.kind === 'SETUP_SIMPLE');
+    if (setup?.sample) return setup.sample;
+  }
+  return TEST_VOICE_FALLBACK;
+}
 
 /** The plain-words line under a kind: what the site will say for it. */
 export function spokenHint(phrase: string): string {
@@ -62,7 +86,7 @@ export function familyRow(family: FeedKindFamily, isOn: (kind: string) => boolea
 @Component({
   selector: 'sb-voice-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Switch, Button, Spinner, PanelError],
+  imports: [Panel, Switch, Button, Spinner, PanelError, Select],
   template: `
     <sb-panel heading="Voice notifications">
       <div class="master">
@@ -116,6 +140,36 @@ export function familyRow(family: FeedKindFamily, isOn: (kind: string) => boolea
             }
           </div>
         }
+        <div class="voice-controls">
+          <sb-select
+            label="Voice"
+            [options]="voiceList()"
+            [value]="selectedVoice()"
+            [disabled]="!canSpeak() || speaker.voices() === null"
+            (valueChange)="prefs.setVoice($event || null)"
+          />
+          <label class="rate">
+            <span class="sb-label">Rate</span>
+            <span class="rate-row">
+              <input
+                type="range"
+                [min]="rateMin"
+                [max]="rateMax"
+                [step]="rateStep"
+                [value]="rate()"
+                [disabled]="!enabled()"
+                (input)="onRate($event)"
+              />
+              <output>{{ rateLabel() }}</output>
+            </span>
+          </label>
+          <button sb-button variant="secondary" type="button" [disabled]="!canSpeak()" (click)="testVoice()">
+            Test voice
+          </button>
+          @if (missingVoice()) {
+            <p class="reason missing">{{ missingVoiceNote }}</p>
+          }
+        </div>
       </details>
     </sb-panel>
   `,
@@ -135,6 +189,25 @@ export function familyRow(family: FeedKindFamily, isOn: (kind: string) => boolea
     .kind { display: flex; align-items: flex-start; gap: var(--space-8); min-width: 0; }
     .kind sb-switch { flex: 1 1 auto; min-width: 0; }
     .preview { flex: none; min-width: var(--hit-min); }
+    .voice-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-10) var(--space-14); margin-top: var(--space-14); }
+    .missing { flex-basis: 100%; }
+    .rate { display: inline-flex; flex: 1 1 220px; flex-direction: column; gap: var(--space-4); min-width: 0; }
+    .rate-row { display: flex; align-items: center; gap: var(--space-8); }
+    .rate input {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: var(--hit-min);
+      margin: 0;
+      background: transparent;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .rate input:disabled { opacity: 0.45; }
+    .rate input::-webkit-slider-runnable-track { height: 4px; border-radius: var(--chip-radius); background: var(--border-strong); }
+    .rate input::-webkit-slider-thumb { -webkit-appearance: none; width: var(--hit-min); height: var(--hit-min); margin-top: calc(2px - var(--hit-min) / 2); border-radius: 50%; background: var(--accent); }
+    .rate input::-moz-range-track { height: 4px; border-radius: var(--chip-radius); background: var(--border-strong); }
+    .rate input::-moz-range-thumb { width: var(--hit-min); height: var(--hit-min); border: 0; border-radius: 50%; background: var(--accent); }
+    .rate output { min-width: 5ch; color: var(--text); font-variant-numeric: tabular-nums; }
   `,
 })
 export class VoiceSettings {
@@ -154,6 +227,30 @@ export class VoiceSettings {
   readonly unavailable = computed(() => this.speaker.state() === 'unavailable');
   /** Previews and Test voice: the master is on and the browser can speak. */
   readonly canSpeak = computed(() => this.enabled() && !this.unavailable());
+
+  protected readonly rateMin = RATE_MIN;
+  protected readonly rateMax = RATE_MAX;
+  protected readonly rateStep = RATE_STEP;
+  protected readonly missingVoiceNote = MISSING_VOICE_NOTE;
+
+  protected readonly voiceList = computed(() => voiceOptions(this.speaker.voices()));
+  /** A stored voice this device's loaded list does not have. */
+  protected readonly missingVoice = computed(() => {
+    const stored = this.prefs.value().voice;
+    const voices = this.speaker.voices();
+    return stored !== null && voices !== null && !voices.includes(stored);
+  });
+  protected readonly selectedVoice = computed(() => (this.missingVoice() ? '' : (this.prefs.value().voice ?? '')));
+  protected readonly rate = computed(() => this.prefs.value().rate);
+  protected readonly rateLabel = computed(() => rateText(this.rate()));
+
+  protected onRate(event: Event): void {
+    this.prefs.setRate(Number((event.target as HTMLInputElement).value));
+  }
+
+  protected testVoice(): void {
+    this.speaker.preview(testVoiceSample(this.families()));
+  }
 
   /** isKindOn reads the prefs signal, so a toggle recomputes the rows. */
   protected readonly rows = computed(() =>
