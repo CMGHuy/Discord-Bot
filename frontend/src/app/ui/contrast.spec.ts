@@ -2,12 +2,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { resolveToken } from './testing/resolve-token';
+import { TOKEN_THEMES, resolveTokenIn } from './testing/theme-tokens';
 import { stripComments } from './testing/all-sources';
 
 /**
  * The tokens.css source, read only for the `--text-faint` documentation check
- * below. Colour values come from `resolveToken()` (spec v167 § 1): tier 2 is
+ * below. Colour values come from `resolveTokenIn()` (spec v167 § 1): tier 2 is
  * `var(--palette-name)`, which a private hex regexp would not find.
  */
 const CSS = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
@@ -38,47 +38,6 @@ const SURFACES = ['--bg', '--surface', '--surface-raised', '--surface-overlay'];
  */
 const NON_TEXT = new Set(['--text-faint']);
 
-describe('WCAG AA on every text/surface pair', () => {
-  for (const fg of ['--text', '--text-secondary', '--text-muted']) {
-    for (const bg of SURFACES) {
-      it(`${fg} on ${bg} clears 4.5:1`, () => {
-        expect(ratio(resolveToken(fg), resolveToken(bg))).toBeGreaterThanOrEqual(4.5);
-      });
-    }
-  }
-
-  for (const name of NON_TEXT) {
-    it(`${name} is documented as non-text`, () => {
-      expect(CSS).toMatch(new RegExp(`${name}[\\s\\S]{0,400}?rule and divider`, 'i'));
-    });
-  }
-});
-
-/**
- * v80 D1. The accent is two tokens: --accent is interactive TEXT and state
- * (links, active tab, sort arrow) and must read on every surface;
- * --accent-fill is what a filled button paints, carrying --on-accent.
- */
-describe('accent legibility (v80 D1)', () => {
-  for (const bg of SURFACES) {
-    it(`--accent as text on ${bg} clears 4.5:1`, () => {
-      expect(ratio(resolveToken('--accent'), resolveToken(bg))).toBeGreaterThanOrEqual(4.5);
-    });
-  }
-
-  it('--on-accent on --accent-fill clears 4.5:1', () => {
-    expect(ratio(resolveToken('--on-accent'), resolveToken('--accent-fill'))).toBeGreaterThanOrEqual(4.5);
-  });
-
-  /* v167 §2 / v195 §1.1: --accent-fill-hi is the hover fill of the primary
-   * button, so white ink sits on it too. Under Graphite it measures 5.00:1
-   * against --accent-fill's 5.74:1; the thinner margin is why it is checked
-   * by name rather than assumed from --accent-fill. */
-  it('--on-accent on --accent-fill-hi clears 4.5:1', () => {
-    expect(ratio(resolveToken('--on-accent'), resolveToken('--accent-fill-hi'))).toBeGreaterThanOrEqual(4.5);
-  });
-});
-
 /** A soft tint is an rgba laid over a surface; the figure is read against
  *  the blend, so the gate measures the blend. */
 function over(rgba: string, bg: string): string {
@@ -88,25 +47,73 @@ function over(rgba: string, bg: string): string {
   return `#${[r, g, b].map((v, i) => mix(v, i).toString(16).padStart(2, '0')).join('')}`;
 }
 
-/** v181 §5: every P&L figure is coloured, so the valence tokens are text. */
-describe('v181: profit/loss figures read on every surface and on their own tint', () => {
-  for (const fg of ['--pos', '--neg', '--warn']) {
-    for (const bg of SURFACES) {
-      it(`${fg} on ${bg} clears 4.5:1`, () => {
-        expect(ratio(resolveToken(fg), resolveToken(bg))).toBeGreaterThanOrEqual(4.5);
-      });
-    }
-  }
-
-  for (const [fg, soft] of [['--pos', '--pos-soft'], ['--neg', '--neg-soft']]) {
-    for (const bg of ['--surface', '--surface-raised']) {
-      it(`${fg} on ${soft} over ${bg} clears 4.5:1`, () => {
-        const ground = over(resolveToken(soft), resolveToken(bg));
-        expect(ratio(resolveToken(fg), ground)).toBeGreaterThanOrEqual(4.5);
-      });
-    }
+describe('--text-faint is documented as non-text', () => {
+  for (const name of NON_TEXT) {
+    it(`${name} is documented as non-text`, () => {
+      expect(CSS).toMatch(new RegExp(`${name}[\\s\\S]{0,400}?rule and divider`, 'i'));
+    });
   }
 });
+
+for (const theme of TOKEN_THEMES) {
+  const tok = (name: string) => resolveTokenIn(theme, name);
+
+  describe(`WCAG AA on every text/surface pair (${theme})`, () => {
+    for (const fg of ['--text', '--text-secondary', '--text-muted']) {
+      for (const bg of SURFACES) {
+        it(`${fg} on ${bg} clears 4.5:1`, () => {
+          expect(ratio(tok(fg), tok(bg))).toBeGreaterThanOrEqual(4.5);
+        });
+      }
+    }
+  });
+
+  /**
+   * v80 D1. The accent is two tokens: --accent is interactive TEXT and state
+   * (links, active tab, sort arrow) and must read on every surface;
+   * --accent-fill is what a filled button paints, carrying --on-accent.
+   */
+  describe(`accent legibility (v80 D1) (${theme})`, () => {
+    for (const bg of SURFACES) {
+      it(`--accent as text on ${bg} clears 4.5:1`, () => {
+        expect(ratio(tok('--accent'), tok(bg))).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+
+    it('--on-accent on --accent-fill clears 4.5:1', () => {
+      expect(ratio(tok('--on-accent'), tok('--accent-fill'))).toBeGreaterThanOrEqual(4.5);
+    });
+
+    /* v167 §2 / v195 §1.1: --accent-fill-hi is the hover fill of the primary
+     * button, so white ink sits on it too. Under Graphite it measures 5.00:1
+     * against --accent-fill's 5.74:1; the thinner margin is why it is checked
+     * by name rather than assumed from --accent-fill. */
+    it('--on-accent on --accent-fill-hi clears 4.5:1', () => {
+      expect(ratio(tok('--on-accent'), tok('--accent-fill-hi'))).toBeGreaterThanOrEqual(4.5);
+    });
+  });
+
+  /** v181 §5: every P&L figure is coloured, so the valence tokens are text. */
+  describe(`v181: profit/loss figures read on every surface and on their own tint (${theme})`, () => {
+    for (const fg of ['--pos', '--neg', '--warn']) {
+      for (const bg of SURFACES) {
+        it(`${fg} on ${bg} clears 4.5:1`, () => {
+          expect(ratio(tok(fg), tok(bg))).toBeGreaterThanOrEqual(4.5);
+        });
+      }
+    }
+
+    // --neg on --neg-soft over --surface-overlay is 4.48:1 in both themes (spec v225 § Palette): out of scope, not gated.
+    for (const [fg, soft] of [['--pos', '--pos-soft'], ['--neg', '--neg-soft']]) {
+      for (const bg of ['--surface', '--surface-raised']) {
+        it(`${fg} on ${soft} over ${bg} clears 4.5:1`, () => {
+          const ground = over(tok(soft), tok(bg));
+          expect(ratio(tok(fg), ground)).toBeGreaterThanOrEqual(4.5);
+        });
+      }
+    }
+  });
+}
 
 /**
  * v186 (D2, D3, D4): no text in the primitives v186 touched is painted in

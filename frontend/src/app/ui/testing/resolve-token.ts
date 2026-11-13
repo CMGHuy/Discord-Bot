@@ -16,6 +16,7 @@ import { join } from 'node:path';
  * recursively; an undefined reference, a cycle or a `var(--x, fallback)` is an
  * error. Both must reproduce tests/charts/resolved_tokens.json exactly
  * (resolve-token.spec.ts here, test_chart_theme.py there).
+ * The `[data-theme]` blocks are deliberately invisible here; never teach this resolver a theme (v225).
  *
  * Files are read from `process.cwd()` (= frontend/ under `ng test`), never
  * `import.meta.url` or `?raw`: see test-setup.ts for why both fail here.
