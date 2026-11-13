@@ -185,6 +185,17 @@
 }
 .palette-trigger .shortcut { font-family: var(--font-mono); font-size: var(--text-micro); color: var(--text-muted); }
 
+/* v225: the theme toggle. Icon buttons have no pressed look of their own,
+   so Dark blue on shows the segmented controls' selected look -- the
+   accent glyph on the accent tint -- and keeps it under the pointer (the
+   :hover selector outranks the icon variant's own hover). */
+.theme-toggle { flex: none; }
+.theme-toggle[aria-pressed="true"],
+.theme-toggle[aria-pressed="true"]:not([disabled]):hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
 /* The ticker tape, a strip under the bar (v195 Phase 3). Its lane draws its
    own hairline and surface, so an empty strip takes no space. Not sticky:
    it scrolls away with the page, the chips above it do not. */
