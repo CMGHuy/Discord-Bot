@@ -56,8 +56,12 @@ jobs:
           cut-off: 45d
           keep-n-most-recent: 10
           # Never the moving tag, and never an untagged version that a
-          # multi-arch manifest still references.
-          image-tags: "!latest"
+          # multi-arch manifest still references. v221: never a `stable-*`
+          # tag either -- pin-stable-image.yml adds one to both images of every
+          # stable point, and the version keeps its `sha-` tag beside it.
+          # snok/container-retention-policy v3.1.0 README: "Works the same way as the `image-names` parameter" (supports filtering with `*` and `!`, `!` meaning do not select matching names).
+          # snok/container-retention-policy v3.1.0 README: not stated; v3.1.0 source (src/core/select_package_versions.rs) keeps a version when any of its tags matches a negative matcher.
+          image-tags: "!latest,!stable-*"
           dry-run: false
 
       # Deleting a version does not always reclaim what you expect (a layer
