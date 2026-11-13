@@ -10,7 +10,7 @@ disable-model-invocation: true
 Spec sections 1, 2 and 4 of
 `docs/superpowers/specs/implemented/2026-10-01-v120-stable-snapshots-offsite-pull-design.md`,
 then `docs/deploy/DB_RESTORE.md`. Rollback fields and image pinning (v221): Section 2
-of `docs/superpowers/specs/2026-11-08-v220-code-only-rollback-design.md`. Ask the
+of `docs/superpowers/specs/implemented/2026-11-08-v220-code-only-rollback-design.md`. Ask the
 partner for a one-line tag note.
 
 ## Step 2 — Preconditions (create nothing until all hold)

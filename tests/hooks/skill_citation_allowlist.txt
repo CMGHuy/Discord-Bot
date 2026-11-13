@@ -40,3 +40,6 @@ etoro-public-api-operations|~/.codeium/windsurf/mcp_config.json|vendored; a clie
 
 # --- runtime output on the VM, never tracked
 stable-snapshot|backups/deploys.jsonl|runtime log written on the VM, never tracked
+
+# --- runtime path on the VM, not a repo file
+stable-snapshot|/opt/swing-bot/backups/deploy_hold.json|runtime path on the VM
