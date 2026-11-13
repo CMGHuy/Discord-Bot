@@ -195,3 +195,116 @@ def test_the_rebuilt_table_equals_the_real_replays_own_stats(tmp_path, monkeypat
     assert rr._stats_from_checkpoint(target, ["4w"]) == {"pooled": stats["pooled"],
                                                           "by_horizon": stats["by_horizon"]}
     assert _lines(target) == json.loads(json.dumps(stats["rows"], default=rr._jsonable))
+
+
+# --- run_scenario_mode --trades-jsonl (V226-4b) ----------------------------------
+
+def _stub(monkeypatch, seen, interrupt_after=None):
+    """run_scenario_mode with the loaders faked and a replay that fires the
+    hook per ticker; Ctrl-C after `interrupt_after` is already on disk."""
+    monkeypatch.setattr(rr, "_tickers_for_run", lambda universe, tickers_file=None: list(TICKERS))
+    monkeypatch.setattr(rr, "_membership_for_run", lambda universe, tickers: None)
+    monkeypatch.setattr(rr, "load_cached", lambda ticker: f"frame-{ticker}")
+    monkeypatch.setattr(rr, "_with_context", lambda df, **kw: df)
+    monkeypatch.setattr(rr, "_exclusion_reason", lambda df, ticker, pit: None)
+    monkeypatch.setattr(rr, "_market_frame", lambda: "SPY")
+
+    def fake_asof(tickers, frames, universe):
+        seen.setdefault("asof_tickers", []).append(list(tickers))
+        return {ticker: f"asof-{ticker}" for ticker in tickers}
+
+    def fake_backtest(frames, start, end, **kwargs):
+        seen.setdefault("replayed", []).append(list(frames))
+        seen["asof_map"] = kwargs["asof_map"]
+        for done, ticker in enumerate(frames, 1):
+            kwargs["on_ticker_result"](ticker, FAKE_EXITS[ticker], _rows(ticker))
+            kwargs["on_ticker_done"](done, len(frames))
+            if ticker == interrupt_after:
+                raise KeyboardInterrupt
+        return {"pooled": None, "by_horizon": None, "rows": []}   # ignored by the checkpoint path
+
+    monkeypatch.setattr(rr, "_build_asof_map", fake_asof)
+    monkeypatch.setattr(rr, "run_scenario_backtest", fake_backtest)
+
+
+def _run(directory, monkeypatch, date_to="2023-12-29"):
+    directory.mkdir(exist_ok=True)
+    monkeypatch.chdir(directory)                # backtest_range_summary.txt lands in cwd
+    target = directory / "out" / "rows.jsonl"
+    rr.run_scenario_mode("2020-01-06", date_to, 30, "TRAIN", scale_out=True,
+                         trades_jsonl=str(target))
+    return target
+
+
+def _interrupted(directory, monkeypatch, seen, after="AAA"):
+    _stub(monkeypatch, seen, interrupt_after=after)
+    with pytest.raises(KeyboardInterrupt):
+        _run(directory, monkeypatch)
+    return directory / "out" / "rows.jsonl"
+
+
+def _files(target):
+    """Rows, done-list, run sidecar and the printed table, as bytes."""
+    summary = target.parent.parent / "backtest_range_summary.txt"
+    return [path.read_bytes() for path in
+            (target, rr._done_path(target), rr._run_sidecar_path(target), summary)]
+
+
+def _full_run(tmp_path, monkeypatch):
+    _stub(monkeypatch, {})
+    return _run(tmp_path / "full", monkeypatch)
+
+
+def test_an_uninterrupted_run_writes_rows_done_list_sidecar_and_table(tmp_path, monkeypatch):
+    target = _full_run(tmp_path, monkeypatch)
+
+    assert _lines(target) == [row for ticker in TICKERS for row in _rows(ticker)]
+    assert [entry["ticker"] for entry in _lines(rr._done_path(target))] == TICKERS
+    sidecar = json.loads(rr._run_sidecar_path(target).read_text(encoding="utf-8"))
+    assert tuple(sorted(sidecar)) == tuple(sorted(rr.RUN_SIDECAR_KEYS))
+    assert sidecar["watchlist"]["tickers"] == TICKERS and sidecar["git_head"] == "c" * 40
+    assert not rr._progress_path(target).exists()
+    summary = (tmp_path / "full" / "backtest_range_summary.txt").read_text(encoding="utf-8")
+    pooled = rr._scenario_row_stats(rr._stats_from_checkpoint(target, list(LEGACY_HORIZONS))["pooled"])
+    assert f"{'confluence/pooled':22s} {pooled['n_eval']:5d}" in summary
+
+
+def test_a_restart_skips_finished_tickers_and_equals_an_uninterrupted_run(tmp_path, monkeypatch):
+    full = _files(_full_run(tmp_path, monkeypatch))
+    seen = {}
+    target = _interrupted(tmp_path / "part", monkeypatch, seen)
+    assert [entry["ticker"] for entry in _lines(rr._done_path(target))] == ["AAA"]
+
+    _stub(monkeypatch, seen)
+    _run(tmp_path / "part", monkeypatch)
+
+    assert seen["replayed"] == [TICKERS, ["BBB", "CCC"]]
+    assert seen["asof_tickers"] == [TICKERS, TICKERS]          # full set on the restart too
+    assert set(seen["asof_map"]) == set(TICKERS)
+    assert _files(target) == full
+
+
+def test_a_restart_after_every_ticker_finished_replays_nothing(tmp_path, monkeypatch):
+    full = _files(_full_run(tmp_path, monkeypatch))
+    seen = {}
+    target = _interrupted(tmp_path / "part", monkeypatch, seen, after="CCC")
+
+    _stub(monkeypatch, seen)
+    _run(tmp_path / "part", monkeypatch)
+
+    assert seen["replayed"][-1] == []
+    assert _files(target) == full
+
+
+def test_a_restart_with_another_window_is_refused_before_any_replay(tmp_path, monkeypatch):
+    seen = {}
+    target = _interrupted(tmp_path / "part", monkeypatch, seen)
+    rows_before = target.read_bytes()
+
+    _stub(monkeypatch, seen)
+    with pytest.raises(SystemExit) as exc:
+        _run(tmp_path / "part", monkeypatch, date_to="2022-12-30")
+
+    assert exc.value.code == 2
+    assert target.read_bytes() == rows_before
+    assert len(seen["replayed"]) == 1 and len(seen["asof_tickers"]) == 1
