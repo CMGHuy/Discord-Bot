@@ -8,6 +8,10 @@ data/reports/expectancy-attribution.json unless --no-write is given.
 
 Run: python scripts/reports/expectancy_attribution.py \
          --train-jsonl data/reports/v146-train-scenarios.jsonl
+
+v226: --study stop-width runs the stop-width study instead (its own report,
+data/reports/stop-width-attribution.json, and its Markdown on stdout); the
+default report and the v146 verdict of record are never touched by it.
 """
 from __future__ import annotations
 
@@ -47,11 +51,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=None,
                         help="bootstrap seed (default: the instrument's WEEK_BOOTSTRAP_SEED)")
     parser.add_argument("--no-write", action="store_true",
-                        help="do not replace data/reports/expectancy-attribution.json")
+                        help="do not replace data/reports/expectancy-attribution.json "
+                             "(with --study stop-width: stop-width-attribution.json)")
+    parser.add_argument("--study", choices=("stop-width",), default=None,
+                        help="v226: run the stop-width study and print its Markdown "
+                             "instead of the v146 report")
     args = parser.parse_args(argv)
 
     from swingbot.core.analytics import expectancy_attribution as study
     seed = study.WEEK_BOOTSTRAP_SEED if args.seed is None else args.seed
+    if args.study == "stop-width":
+        report = study.run_stop_width(args.train_jsonl, seed=seed, write=not args.no_write)
+        print(study.stop_width_markdown(report), end="")
+        return 0
     report = study.run(args.train_jsonl, seed=seed, write=not args.no_write)
     print(summary(report))
     return 0

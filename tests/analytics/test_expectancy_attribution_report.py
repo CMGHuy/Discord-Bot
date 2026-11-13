@@ -271,3 +271,60 @@ def test_the_script_parses_calls_and_prints(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "Expectancy attribution" in out and "verdict of record: WEAK" in out
     assert "live  no rows" in out and "train n=180" in out
+
+
+# --- v226: --study stop-width ----------------------------------------------------
+
+def test_the_stop_width_flag_routes_to_the_stop_width_study_only(monkeypatch, capsys):
+    calls = []
+
+    def fake_stop_width(train_jsonl, *, seed, write):
+        calls.append((train_jsonl, seed, write))
+        return {"marker": len(calls)}
+
+    monkeypatch.setattr(ea, "run", lambda *a, **k: pytest.fail("--study must not run the v146 study"))
+    monkeypatch.setattr(ea, "run_stop_width", fake_stop_width)
+    monkeypatch.setattr(ea, "stop_width_markdown", lambda report: f"MD {report['marker']}\n")
+    script = _script()
+    assert script.main(["--train-jsonl", "rows.jsonl", "--study", "stop-width"]) == 0
+    assert script.main(["--train-jsonl", "rows.jsonl", "--study", "stop-width",
+                        "--seed", "9", "--no-write"]) == 0
+    assert calls == [("rows.jsonl", ea.WEEK_BOOTSTRAP_SEED, True), ("rows.jsonl", 9, False)]
+    assert capsys.readouterr().out == "MD 1\nMD 2\n"
+
+
+def test_an_unknown_study_is_refused(capsys):
+    with pytest.raises(SystemExit) as exc:
+        _script().main(["--train-jsonl", "rows.jsonl", "--study", "atr-pct"])
+    assert exc.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
+
+
+def test_without_the_flag_the_stop_width_study_never_runs(monkeypatch, capsys):
+    report = ea.build_report([], population("predictive"), seed=42,
+                             generated_at="2026-10-12T08:00:00+00:00")
+    monkeypatch.setattr(ea, "run", lambda train_jsonl, *, seed, write: report)
+    monkeypatch.setattr(ea, "run_stop_width",
+                        lambda *a, **k: pytest.fail("no --study, no stop-width run"))
+    script = _script()
+    assert script.main(["--train-jsonl", "rows.jsonl"]) == 0
+    assert capsys.readouterr().out == script.summary(report) + "\n"
+
+
+def test_the_stop_width_flag_writes_only_its_own_file(monkeypatch, tmp_path, capsys):
+    from tests.analytics.test_stop_width_report import stop_width_rows
+    data = tmp_path / "data"
+    monkeypatch.setattr(config, "DATA_DIR", str(data))
+    monkeypatch.setattr(store, "REPORT_PATH", data / "reports" / "expectancy-attribution.json")
+    monkeypatch.setattr(ea, "load_stop_width_train_rows", lambda path: stop_width_rows(160))
+    monkeypatch.setattr(ea, "load_stop_width_live_rows", lambda: stop_width_rows(40, live=True))
+    monkeypatch.setattr(ea, "run", lambda *a, **k: pytest.fail("--study must not run the v146 study"))
+    rows = _write_jsonl(tmp_path / "rows.jsonl", [_replay_row()])
+    assert _script().main(["--train-jsonl", str(rows), "--study", "stop-width"]) == 0
+    files = sorted(p.relative_to(data).as_posix() for p in data.rglob("*") if p.is_file())
+    assert files == ["reports/stop-width-attribution.json"]
+    written = json.loads((data / "reports" / "stop-width-attribution.json").read_text(encoding="utf-8"))
+    assert written["study"] == ea.STUDY_ID
+    out = capsys.readouterr().out
+    assert f"**Verdict: {written['verdict']['verdict']}**" in out
+    assert "Expectancy attribution" not in out          # the v146 summary is not printed
