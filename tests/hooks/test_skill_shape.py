@@ -239,3 +239,22 @@ def test_deploy_skill_refuses_while_a_rollback_holds_deploys():
     step3 = body[body.index("## Step 3"):body.index("## Step 4")]
     assert "deploy_hold.json" in step3 and "/rollback --release" in step3
     assert step3.index("deploy_hold.json") < step3.index("git push origin")
+
+
+def test_stable_snapshot_pins_images_and_reports_rollback_fields():
+    """v221 (v220 spec Section 2): images pinned before the tag, report carries
+    the features, the /rollback command and the floor verdict."""
+    snap = (SKILLS_DIR / "stable-snapshot" / "SKILL.md").read_text(encoding="utf-8")
+    pin, tag = snap.index("## Step 4b"), snap.index("## Step 5")
+    assert pin < tag
+    step = snap[pin:tag]
+    assert "gh workflow run pin-stable-image.yml" in step
+    assert "-f name=<name> -f bot_image=<bot_image> -f db_image=<db_image>" in step
+    assert 'displayTitle=="pin <name>"' in step
+    assert "gh run watch <id> --exit-status" in step
+    assert "do NOT tag" in step
+    report = snap[snap.index("## Step 7"):]
+    for needle in ("`features`", "`alembic_head`", "`config_keys_sha256`",
+                   "/rollback stable-<name>", "python scripts/ops/rollback_plan.py floor <git_sha>"):
+        assert needle in report, needle
+    assert "backups/deploy_hold.json" in snap[snap.index("## Step 2"):snap.index("## Step 3")]

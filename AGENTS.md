@@ -245,7 +245,7 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
 whenever Claude would run `/<name>`: `gate` (pre-push: complexity gate, changed tests, CI watch), `deploy` (Hetzner deploy
-sequence; refuses while held), `stable-snapshot` (pin a known-good point),
+sequence; refuses while held), `stable-snapshot` (pin a known-good point and its images),
 `rollback` (code-only, keeps trades; holds deploys until `--release`), `backup-pull` (off-VM pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
 output verbatim),
 `handoff` (write the plan's `## Handoff` block before a session stops),
