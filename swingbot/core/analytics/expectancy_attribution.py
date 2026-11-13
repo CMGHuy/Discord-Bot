@@ -1148,3 +1148,147 @@ def run_stop_width(train_jsonl, *, seed: int = WEEK_BOOTSTRAP_SEED, write: bool 
     if write:
         jsonio.atomic_write_json(str(stop_width_report_path()), report)
     return report
+
+
+# --- v226 Markdown (the results doc body) ---------------------------------------
+
+_VERDICT_BUYS = (
+    ("VETO-CANDIDATE", "licenses a veto idea, not a veto: it must earn a SCREEN-AVOID-PASS "
+                       "from a Stage -2 avoid idea before its spec, and that spec measures "
+                       "the veto on the bot's own replay with replacement trades included "
+                       "(paired)."),
+    ("NO CANDIDATE", "closes \"tight stops in ATR terms\" as measured "
+                     "(backtest-methodology.md § Closed pre-registrations)."),
+    ("UNDERPOWERED", "leaves the question open and names the N that would power it."),
+)
+_DESCRIPTIVE_TEXT = (
+    "Descriptive, not a veto. Each bucket's filled TRAIN rows are compared with the "
+    "rest; this does not estimate what a veto would do to pooled ExpR, because a "
+    "vetoed plan frees a slot that a different plan would take. A VETO-CANDIDATE only "
+    "licenses the Stage -2 screen and the paired replay that would measure that.")
+_VOLATILITY_TEXT = ("|rho| between stop_atr and atr_pct is {rho} on TRAIN (>= 0.8): this "
+                    "verdict is about ticker volatility, not stop placement.")
+_CLAUSE_HEADERS = ("1 Δ≤−0.10", "2 CI<0", "3 ExpR<0", "4 ≥3/4 yrs", "5 N≥300", "6 q<0.10")
+_BUCKET_HEADERS = ("Bucket", "N", "Win%", "ExpR", "ExpR gross", "median RR",
+                   "clamped share", "clamped None", "Δ long", "Δ short")
+_REMOVAL_HEADERS = ("Bucket", "pooled ExpR", "ExpR without", "ΔTotal R", "N removed")
+
+
+def _fmt(value, spec: str = ".4f") -> str:
+    if value is None:
+        return "n/a"
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    return format(value, spec)
+
+
+def _table(headers, rows) -> list[str]:
+    out = ["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
+    return out + ["| " + " | ".join(cells) + " |" for cells in rows]
+
+
+def _md_verdict(report: dict) -> list[str]:
+    outcome = report["verdict"]
+    edges = ", ".join(f"{edge:.2f}" for edge in report["edges"]) or "none"
+    return ["## Verdict", "",
+            f"**Verdict: {outcome['verdict']}** -- {dict(_VERDICT_BUYS)[outcome['verdict']]}", "",
+            f"Candidates: {', '.join(outcome['candidates']) or 'none'}.",
+            f"Powered buckets (N ≥ {outcome['n_needed']}): {outcome['powered']} of "
+            f"{outcome['family_size']}; BH family size {outcome['family_size']} (this "
+            "study's bucket looks only). Computed once on TRAIN; VALIDATION never read.", "",
+            f"Edges (TRAIN quartiles of stop_atr, frozen, outcome-blind): {edges}.", ""]
+
+
+def _clause_cells(label: str, look: dict) -> list[str]:
+    return [label, str(look["n"]), _fmt(look["exp_r"]), _fmt(look["delta"]),
+            f"[{_fmt(look['ci_low'])}, {_fmt(look['ci_high'])}]", _fmt(look["p"]),
+            _fmt(look["q"]), f"{look['years_negative']}/{len(VETO_YEARS)}",
+            *(_fmt(look["clauses"][key]) for key in CLAUSE_KEYS), _fmt(look["candidate"])]
+
+
+def _md_clauses(report: dict) -> list[str]:
+    looks, labels = report["verdict"]["looks"], report["labels"]
+    headers = ("Bucket", "N", "ExpR", "Δ", "95% CI", "p", "q", "years Δ<0",
+               *_CLAUSE_HEADERS, "candidate")
+    years = [[label, *(_fmt(looks[label]["years"][year]) for year in VETO_YEARS)]
+             for label in labels]
+    return (["## TRAIN: the six pre-registered clauses", ""]
+            + _table(headers, [_clause_cells(label, looks[label]) for label in labels])
+            + ["", "Δ per TRAIN year (bucket ExpR − rest ExpR; n/a = no rows that year, "
+                   "which counts against clause 4):", ""]
+            + _table(("Bucket", *VETO_YEARS), years) + [""])
+
+
+def _bucket_cells(label: str, bucket: dict, live: bool) -> list[str]:
+    deltas = bucket["delta_by_direction"]
+    cells = [label, str(bucket["n"]), _fmt(bucket["win_rate"], ".1f"), _fmt(bucket["exp_r"]),
+             _fmt(bucket["exp_r_gross"]), _fmt(bucket["median_rr"], ".2f"),
+             _fmt(bucket["clamped_share"], ".3f"), str(bucket["clamped_none"]),
+             _fmt(deltas.get("bullish")), _fmt(deltas.get("bearish"))]
+    if live:
+        cells.append(_fmt(bucket["same_day_loss_share"], ".3f"))
+    return cells
+
+
+def _removal_cells(label: str, bucket: dict) -> list[str]:
+    removal = bucket["removal"]
+    return [label, _fmt(removal["pooled_exp_r"]), _fmt(removal["without_exp_r"]),
+            _fmt(removal["delta_total_r"]), str(removal["n_removed"])]
+
+
+def _shares_text(shares: dict) -> str:
+    return ", ".join(f"{key} {value:.2f}" for key, value in shares.items()) or "none"
+
+
+def _mix_line(label: str, bucket: dict, live: bool) -> str:
+    line = (f"- {label}: direction {_shares_text(bucket['direction_share'])}; "
+            f"horizon {_shares_text(bucket['horizon_share'])}")
+    if live:
+        line += f"; family {_shares_text(bucket['family_share'])}"
+    return line
+
+
+def _md_population(title: str, disc: dict, labels: list[str], *, live: bool) -> list[str]:
+    buckets = disc["buckets"]
+    headers = _BUCKET_HEADERS + (("same-day loss share",) if live else ())
+    return ([f"## {title}", "",
+             f"Unknown stop_atr rows (outside the edges and the bootstrap base): "
+             f"{disc['unknown']}. The clamped share is a lower-bound provenance flag "
+             "(identity-based, read at run time); None rows leave its denominator.", ""]
+            + _table(headers, [_bucket_cells(label, buckets[label], live) for label in labels])
+            + ["", "Removal arithmetic (descriptive; ignores replacement trades):", ""]
+            + _table(_REMOVAL_HEADERS, [_removal_cells(label, buckets[label]) for label in labels])
+            + ["", "Mix:", ""] + [_mix_line(label, buckets[label], live) for label in labels]
+            + [""])
+
+
+def _md_volatility(report: dict) -> list[str]:
+    disc = report["disclosures"]
+    lines = ["## stop_atr against atr_pct (disclosed, never a look)", ""]
+    for name, key in (("TRAIN", "train"), ("Live", "live")):
+        lines.append(f"- {name}: Spearman rho {_fmt(disc[key]['rho'])}, mirrored-bucket "
+                     f"overlap {_fmt(disc[key]['overlap'], '.3f')}")
+    lines.append("")
+    if report["volatility_note"]:
+        lines += [_VOLATILITY_TEXT.format(rho=_fmt(abs(disc["train"]["rho"]))), ""]
+    return lines
+
+
+def _md_tail() -> list[str]:
+    return (["## What this is", "", _DESCRIPTIVE_TEXT, "", "## What each verdict buys", ""]
+            + [f"- **{name}** {text}" for name, text in _VERDICT_BUYS])
+
+
+def stop_width_markdown(report: dict) -> str:
+    """The printed body of the results doc: verdict, clause table, both
+    populations' disclosures (live beside TRAIN, never gating), rho and the
+    two fixed paragraphs."""
+    disc, labels = report["disclosures"], report["labels"]
+    lines = [f"# v226 stop-width attribution ({report['generated_at'][:10]}, "
+             f"seed {report['seed']})", ""]
+    lines += _md_verdict(report) + _md_clauses(report)
+    lines += _md_population("TRAIN buckets", disc["train"], labels, live=False)
+    lines += _md_population("Live buckets (TRAIN edges; printed beside TRAIN, never gates)",
+                            disc["live"], labels, live=True)
+    lines += _md_volatility(report) + _md_tail()
+    return "\n".join(lines) + "\n"
