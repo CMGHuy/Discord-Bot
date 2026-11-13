@@ -10,8 +10,8 @@ import { describe, expect, it } from 'vitest';
 import { FeedKindFamily } from '../../api/models';
 import { FakeSpeech, fakeUtterance } from '../../voice/fake-speech';
 import { VOICE_STORAGE, VOICE_STORAGE_KEY } from '../../voice/voice-prefs';
-import { SPEECH, UTTERANCE } from '../../voice/voice-speaker';
-import { VOICE_OFF_REASON, VoiceSettings, familyRow, spokenHint } from './voice-settings';
+import { SPEECH, UTTERANCE, VoiceSpeaker } from '../../voice/voice-speaker';
+import { NO_VOICE_NOTE, VOICE_OFF_REASON, VoiceSettings, familyRow, spokenHint } from './voice-settings';
 
 const KINDS_URL = '/api/v1/feed-posts/kinds';
 
@@ -200,5 +200,41 @@ describe('VoiceSettings layout (v227)', () => {
   it('never truncates a label and explains nothing through title', () => {
     expect(source).not.toMatch(/text-overflow|white-space: nowrap/);
     expect(source).not.toMatch(/\stitle=/);
+  });
+});
+
+describe('VoiceSettings previews and the no-voice note (v227)', () => {
+  it('previews a kind sample on tap, without unlocking the chip', async () => {
+    const speech = new FakeSpeech();
+    const { el } = await loaded(null, speech);
+    const preview = el.querySelector<HTMLButtonElement>('button[aria-label="Preview FILLED"]')!;
+    expect(preview.disabled).toBe(false);
+    expect(preview.textContent!.trim()).toBe('▶');
+    preview.click();
+    expect(speech.texts()).toEqual(['Order filled, AAPL']);
+    expect(TestBed.inject(VoiceSpeaker).state()).toBe('locked');
+  });
+
+  it('has one preview per kind, all disabled while the master is off', async () => {
+    const { el, fixture } = await loaded();
+    const previews = () => [...el.querySelectorAll<HTMLButtonElement>('button.preview')];
+    expect(previews().length).toBe(4);
+    click(fixture, switchNamed(el, 'Speak simple-channel posts'));
+    expect(previews().every((button) => button.disabled)).toBe(true);
+  });
+
+  it('says so when this browser has no voice, and disables the previews', async () => {
+    const { el } = await loaded(null, null);
+    const status = el.querySelector('.master [role="status"]')!;
+    expect(status.textContent!.trim()).toBe(NO_VOICE_NOTE);
+    expect(el.textContent).not.toContain(VOICE_OFF_REASON);
+    const previews = [...el.querySelectorAll<HTMLButtonElement>('button.preview')];
+    expect(previews.length).toBe(4);
+    expect(previews.every((button) => button.disabled)).toBe(true);
+  });
+
+  it('gives the preview a full hit area', () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/workspaces/system/voice-settings.ts'), 'utf8');
+    expect(source).toMatch(/\.preview \{[^}]*min-width: var\(--hit-min\);/);
   });
 });

@@ -3,13 +3,16 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { ApiClient } from '../../api/api-client';
 import { FeedKind, FeedKindFamily } from '../../api/models';
+import { Button } from '../../ui/button';
 import { Panel } from '../../ui/layout';
 import { PanelError } from '../../ui/panel-error';
 import { Spinner } from '../../ui/spinner';
 import { Switch } from '../../ui/switch';
 import { VoicePrefs } from '../../voice/voice-prefs';
+import { VoiceSpeaker } from '../../voice/voice-speaker';
 
 export const VOICE_OFF_REASON = 'Turn on voice to choose kinds';
+export const NO_VOICE_NOTE = 'No voice on this browser';
 
 /** The plain-words line under a kind: what the site will say for it. */
 export function spokenHint(phrase: string): string {
@@ -59,12 +62,14 @@ export function familyRow(family: FeedKindFamily, isOn: (kind: string) => boolea
 @Component({
   selector: 'sb-voice-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Switch, Spinner, PanelError],
+  imports: [Panel, Switch, Button, Spinner, PanelError],
   template: `
     <sb-panel heading="Voice notifications">
       <div class="master">
         <sb-switch label="Speak simple-channel posts" [checked]="enabled()" (checkedChange)="prefs.setEnabled($event)" />
-        @if (!enabled()) {
+        @if (unavailable()) {
+          <p class="reason" role="status">{{ noVoice }}</p>
+        } @else if (!enabled()) {
           <p class="reason">{{ offReason }}</p>
         }
       </div>
@@ -95,6 +100,15 @@ export function familyRow(family: FeedKindFamily, isOn: (kind: string) => boolea
                         [disabled]="!enabled()"
                         (checkedChange)="prefs.setKind(kind.kind, $event)"
                       />
+                      <button
+                        sb-button
+                        variant="ghost"
+                        type="button"
+                        class="preview"
+                        [attr.aria-label]="'Preview ' + kind.label"
+                        [disabled]="!canSpeak()"
+                        (click)="speaker.preview(kind.sample)"
+                      >▶</button>
                     </li>
                   }
                 </ul>
@@ -120,20 +134,26 @@ export function familyRow(family: FeedKindFamily, isOn: (kind: string) => boolea
     .kinds { display: grid; gap: var(--space-4); margin: var(--space-4) 0 0; padding: 0 0 0 var(--space-14); list-style: none; }
     .kind { display: flex; align-items: flex-start; gap: var(--space-8); min-width: 0; }
     .kind sb-switch { flex: 1 1 auto; min-width: 0; }
+    .preview { flex: none; min-width: var(--hit-min); }
   `,
 })
 export class VoiceSettings {
   protected readonly prefs = inject(VoicePrefs);
+  protected readonly speaker = inject(VoiceSpeaker);
   private readonly api = inject(ApiClient);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly offReason = VOICE_OFF_REASON;
+  protected readonly noVoice = NO_VOICE_NOTE;
 
   private readonly kindList = signal<FeedKindFamily[] | null>(null);
   protected readonly loadError = signal(false);
 
   readonly families: Signal<FeedKindFamily[] | null> = this.kindList.asReadonly();
   readonly enabled = computed(() => this.prefs.value().enabled);
+  readonly unavailable = computed(() => this.speaker.state() === 'unavailable');
+  /** Previews and Test voice: the master is on and the browser can speak. */
+  readonly canSpeak = computed(() => this.enabled() && !this.unavailable());
 
   /** isKindOn reads the prefs signal, so a toggle recomputes the rows. */
   protected readonly rows = computed(() =>
