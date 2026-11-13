@@ -888,3 +888,82 @@ def stop_width_groups(train_rows: list[dict], live_rows: list[dict]) -> dict:
     return {"edges": edges, "labels": labels,
             "train": _bucketed(train_rows, edges, labels),
             "live": _bucketed(live_rows, edges, labels)}
+
+
+#: Spec § The pre-registered verdict (TRAIN only, computed once).
+VETO_DELTA = -0.10            # clause 1: delta <= -0.10R (exactly -0.10 passes)
+VETO_MIN_N = 300              # clause 5, and the N per bucket "powered" means
+VETO_Q = 0.10                 # clause 6: BH q < 0.10 over this study's own family
+VETO_YEARS = ("2020", "2021", "2022", "2023")    # clause 4: the TRAIN calendar years
+VETO_MIN_YEARS = 3            # clause 4: delta < 0 in at least 3 of them
+STUDY_VERDICTS = ("VETO-CANDIDATE", "UNDERPOWERED", "NO CANDIDATE")
+#: Clauses 1-6 in spec order.
+CLAUSE_KEYS = ("delta", "upper_bound", "negative_exp_r", "years", "n", "bh")
+
+
+def _rest_of(bucket: list[dict], known: list[dict]) -> list[dict]:
+    ids = {id(row) for row in bucket}
+    return [row for row in known if id(row) not in ids]
+
+
+def _year_deltas(bucket: list[dict], rest: list[dict]) -> dict:
+    """Per TRAIN year (``week[:4]``): bucket ExpR - rest ExpR, None when
+    either side has no row that year (such a year counts against clause 4)."""
+    out = {}
+    for year in VETO_YEARS:
+        mine = _mean([row["r"] for row in bucket if row["week"][:4] == year])
+        other = _mean([row["r"] for row in rest if row["week"][:4] == year])
+        out[year] = None if mine is None or other is None else mine - other
+    return out
+
+
+def _bucket_look(bucket: list[dict], known: list[dict], seed: int) -> dict:
+    rest = _rest_of(bucket, known)
+    look = _look(rest, bucket, seed)
+    years = _year_deltas(bucket, rest)
+    return {"n": len(bucket), "exp_r": _mean([row["r"] for row in bucket]),
+            "delta": look["delta"], "ci_low": look["ci_low"], "ci_high": look["ci_high"],
+            "p": look["p"], "q": None, "years": years,
+            "years_negative": sum(1 for value in years.values()
+                                  if value is not None and value < 0)}
+
+
+def _clauses(look: dict) -> dict:
+    """The six pre-registered clauses; a missing number fails its clause."""
+    delta, high, exp_r, q = look["delta"], look["ci_high"], look["exp_r"], look["q"]
+    return {"delta": delta is not None and delta <= VETO_DELTA,
+            "upper_bound": high is not None and high < 0,
+            "negative_exp_r": exp_r is not None and exp_r < 0,
+            "years": look["years_negative"] >= VETO_MIN_YEARS,
+            "n": look["n"] >= VETO_MIN_N,
+            "bh": q is not None and q < VETO_Q}
+
+
+def _study_verdict(candidates: list[str], powered: int) -> str:
+    if candidates:
+        return "VETO-CANDIDATE"
+    if powered < 2:
+        return "UNDERPOWERED"
+    return "NO CANDIDATE"
+
+
+def stop_width_verdict(train_groups: dict, *, seed: int) -> dict:
+    """The pre-registered verdict over the TRAIN buckets of
+    ``stop_width_groups(...)["train"]``: one look per bucket against every
+    other known TRAIN row, BH over these looks only (never ``assign_qvalues``,
+    never a live look), six clauses per bucket, one study verdict."""
+    known = train_groups["known"]
+    looks = {label: _bucket_look(bucket, known, seed)
+             for label, bucket in train_groups["buckets"].items()}
+    labels = list(looks)
+    qvalues = stats.bh_qvalues([looks[label]["p"] for label in labels])
+    for label, q in zip(labels, qvalues):
+        look = looks[label]
+        look["q"] = q
+        look["clauses"] = _clauses(look)
+        look["candidate"] = all(look["clauses"].values())
+    candidates = [label for label in labels if looks[label]["candidate"]]
+    powered = sum(1 for label in labels if looks[label]["n"] >= VETO_MIN_N)
+    return {"verdict": _study_verdict(candidates, powered), "candidates": candidates,
+            "family_size": len(labels), "powered": powered, "n_needed": VETO_MIN_N,
+            "looks": looks}
