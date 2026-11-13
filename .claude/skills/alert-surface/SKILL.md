@@ -59,6 +59,7 @@ suite that never renders the surface it claims to fix proves nothing here.
 | "I'll edit `embeds.py`" | It is a 23-line re-export facade; the builder lives in `alert_embeds.py` / `lifecycle_embeds.py` / `plan_table.py`. |
 | "The cache looked stale, so I cleared both" | The two caches serve different consumers at different freshness by design; clearing the wrong one degrades a working path to fix a broken one. |
 | "It's just a copy edit on the embed text" | Field order and grouping route through a shared accumulator, not raw field calls -- a hand-added field silently breaks that ordering. |
+| "I'll post to the simple channel from a new sender" | Only `commands/scanning/alerts.py::_mirror` and the feed branch of `lifecycle_embeds._send_instruction` post there, and each calls `record_feed_post` right after `log_posted`, inside the `try` (v227). A new simple-channel sender without it never reaches bomeo-capital.com's voice notifications; a call outside the `try` speaks posts Discord refused. `FEED_POSTS_ENABLED=false` silences the site without touching Discord. |
 
 ## Trigger table
 
