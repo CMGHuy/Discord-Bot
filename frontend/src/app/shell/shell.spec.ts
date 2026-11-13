@@ -18,6 +18,7 @@ import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventStream } from '../api/event-stream';
+import { VoiceNotifier } from '../voice/voice-notifier';
 import { ScanEventProgress, TapeShock } from '../api/models';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { PreferencesStore } from '../stores/preferences.store';
@@ -764,16 +765,18 @@ describe('shell top-bar cluster (v195 Phase 3)', () => {
     bot_session_active: true, bot_scan_paused: false, progress: null, ...overrides,
   });
 
-  it('keeps only the alarm and killswitch chips in the cluster, hidden at no width', async () => {
+  it('keeps only the voice, alarm and killswitch chips in the cluster, hidden at no width', async () => {
     // v203 Retired 'puts the killswitch and freshness chips in the cluster' and
     // 'ages the freshness chip …' (spec v202 D5: freshness, connection and the clock
     // live in the dock and strip; V203-4's botRows pins the freshness words).
+    // v227: the voice chip joins, before the alarm chip.
     const { el } = await mount();
     const cluster = el.querySelector('header.topbar > .status-cluster')!;
-    expect([...cluster.children].map((c) => c.tagName.toLowerCase())).toEqual(['sb-alarm-chip', 'sb-killswitch-chip']);
+    expect([...cluster.children].map((c) => c.tagName.toLowerCase()))
+      .toEqual(['sb-voice-chip', 'sb-alarm-chip', 'sb-killswitch-chip']);
     expect(el.querySelector('header.topbar sb-freshness-chip, header.topbar sb-connection-status')).toBeNull();
     const css = readSource('src/app/shell/shell.css').replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(css).not.toMatch(/(sb-killswitch-chip|sb-alarm-chip|\.status-cluster)[^{}]*\{[^}]*display:\s*none/);
+    expect(css).not.toMatch(/(sb-killswitch-chip|sb-alarm-chip|sb-voice-chip|\.status-cluster)[^{}]*\{[^}]*display:\s*none/);
   });
 
   const alarmText = (el: HTMLElement) =>
@@ -1548,5 +1551,31 @@ describe('shell phone shock pill (v210)', () => {
 
   it('renders no pill above phone width: the tape badge covers it there', () => {
     expect(mount(false, shockState).querySelector('sb-shock-pill')).toBeNull();
+  });
+});
+
+describe('shell voice notifications (v227)', () => {
+  it('starts the voice notifier once, when the shell is created', () => {
+    const start = vi.fn();
+    TestBed.configureTestingModule({
+      providers: [...shellProviders(), { provide: VoiceNotifier, useValue: { start } }],
+    });
+    createShell().detectChanges();
+    expect(start).toHaveBeenCalledTimes(1);
+  });
+
+  it('mounts the chip after the viewer badge and before the alarm chip', () => {
+    const html = readSource('src/app/shell/shell.html');
+    const cluster = html.slice(html.indexOf('class="status-cluster"'));
+    const at = (tag: string) => cluster.indexOf(tag);
+    expect(at('<sb-voice-chip />')).toBeGreaterThan(at('<sb-read-only-badge'));
+    expect(at('<sb-voice-chip />')).toBeGreaterThan(at('<sb-shock-pill'));
+    expect(at('<sb-voice-chip />')).toBeLessThan(at('<sb-alarm-chip'));
+  });
+
+  it('never lets the chip shrink on a phone', () => {
+    const css = readSource('src/app/shell/shell.css');
+    const phone = css.slice(css.lastIndexOf('@media (max-width: 639px)'));
+    expect(phone).toMatch(/sb-voice-chip \{[^}]*flex: none;/);
   });
 });

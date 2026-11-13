@@ -12,6 +12,7 @@ import { dateTime } from '../../ui/format';
 import { ControlRow, Panel } from '../../ui/layout';
 import { edgeFades, revealActive } from '../../ui/scroll-rail';
 import { controlOf, groupByControl, settingsCategories } from './settings-grouping';
+import { VoiceSettings } from './voice-settings';
 
 /**
  * The settings form — rendered from the schema, with no field list anywhere.
@@ -33,7 +34,7 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
   selector: 'sb-settings-tab',
   host: { '(window:resize)': 'measureRail()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow, Async, Hint],
+  imports: [Panel, Button, TextInput, Select, Checkbox, ControlRow, Async, Hint, VoiceSettings],
   template: `
     @if (store.settingsStale()) {
       <!-- Spec v14 Decision 8: warn, do not silently reload. Another
@@ -308,6 +309,11 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
       </p>
     }
     </sb-async>
+
+    <!-- v227: per-browser voice choices. Outside sb-async on purpose: they
+         never touch the /system/settings payload, so they render (and work)
+         while it loads or fails. -->
+    <sb-voice-settings />
 
     <!-- audit, export, import ------------------------------------------ -->
 

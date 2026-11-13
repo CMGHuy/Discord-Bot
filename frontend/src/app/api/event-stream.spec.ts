@@ -470,8 +470,8 @@ describe('EventStream', () => {
 });
 
 describe('market event (v201)', () => {
-  it('is the last name EVENT_NAMES subscribes to', () => {
-    expect(EVENT_NAMES[EVENT_NAMES.length - 1]).toBe('market');
+  it('sits just before feed, the last name EVENT_NAMES subscribes to', () => {
+    expect(EVENT_NAMES[EVENT_NAMES.length - 2]).toBe('market');
   });
 
   it('a market SSE message bumps changes(market)', () => {
@@ -483,6 +483,27 @@ describe('market event (v201)', () => {
     const market = stream.changes('market');
     FakeEventSource.latest().emit('market');
     expect(market()).toBe(1);
+    stream.disconnect();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('feed event (v227)', () => {
+  it('is the last name EVENT_NAMES subscribes to', () => {
+    expect(EVENT_NAMES[EVENT_NAMES.length - 1]).toBe('feed');
+  });
+
+  it('a feed SSE message bumps changes(feed) and nothing else', () => {
+    FakeEventSource.reset();
+    vi.stubGlobal('EventSource', FakeEventSource);
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const stream = TestBed.inject(EventStream);
+    stream.connect();
+    const feed = stream.changes('feed');
+    const market = stream.changes('market');
+    FakeEventSource.latest().emit('feed');
+    expect(feed()).toBe(1);
+    expect(market()).toBe(0);
     stream.disconnect();
     vi.unstubAllGlobals();
   });

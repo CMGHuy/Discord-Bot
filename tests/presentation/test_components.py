@@ -147,6 +147,12 @@ def test_push_kwargs_without_a_view_never_adds_the_view_key():
     assert list(c.push_kwargs(plain, view=None)) == ["embed"]
 
 
+def test_push_embed_slots_carry_v227_spoken_fields():
+    # v227: direction and entry_price ride on the embed for the spoken headline
+    # (swingbot.core.presentation.feed_headline) and are never sent.
+    assert c.PushEmbed.__slots__ == ("push_text", "kind", "direction", "entry_price")
+
+
 def test_push_kwargs_adds_a_given_view_last():
     view = object()                         # any object: push_kwargs never inspects it
     pushed = c.push_embed(Kind.BOT_ONLINE)

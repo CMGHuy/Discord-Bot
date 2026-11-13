@@ -2657,3 +2657,38 @@ export interface LiveSnapshot {
   heat: LiveHeat; awaiting: LiveAwaiting; killswitch: LiveKillswitch;
   events: LiveEvent[]; events_meta: LiveEventsMeta;
 }
+
+/* -- v227: simple-channel posts the admin speaks ------------------------- */
+
+/** One recorded simple-channel post. `family` is null for a kind this
+ *  server's registry no longer knows. */
+export interface FeedPost {
+  id: number;
+  posted_at: string;
+  kind: string;
+  family: string | null;
+  ticker: string | null;
+  headline: string;
+}
+
+/** A page after a cursor, oldest first; `latest_id` is read before the page. */
+export interface FeedPostsPage {
+  items: FeedPost[];
+  latest_id: number;
+}
+
+/** A toggleable kind: Discord label, the spoken phrase and a sample headline. */
+export interface FeedKind {
+  kind: string;
+  label: string;
+  phrase: string;
+  sample: string;
+}
+
+/** One family of kinds, in the server's order. */
+export interface FeedKindFamily {
+  family: string;
+  label: string;
+  default_on: boolean;
+  kinds: FeedKind[];
+}

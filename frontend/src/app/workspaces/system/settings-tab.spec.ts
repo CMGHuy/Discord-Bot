@@ -203,3 +203,23 @@ describe('SettingsTab after System moved onto sb-page (v195 Phase 4)', () => {
     expect(el.querySelector('sb-confirm-dialog')).toBeNull();
   });
 });
+
+describe('SettingsTab voice block (v227)', () => {
+  it('renders the voice block while the settings payload is still loading', () => {
+    const { fixture } = seed();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.skeleton')).toBeTruthy();
+    expect(el.querySelector('sb-voice-settings')).toBeTruthy();
+  });
+
+  it('keeps the voice block outside sb-async, before Recent changes', () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/workspaces/system/settings-tab.ts'), 'utf8');
+    const asyncEnd = source.indexOf('</sb-async>');
+    const voice = source.indexOf('<sb-voice-settings />');
+    const recent = source.indexOf('<sb-panel heading="Recent changes">');
+    expect(asyncEnd).toBeGreaterThan(0);
+    expect(voice).toBeGreaterThan(asyncEnd);
+    expect(voice).toBeLessThan(recent);
+  });
+});

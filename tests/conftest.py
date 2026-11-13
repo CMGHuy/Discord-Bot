@@ -132,6 +132,10 @@ def _pin_dotenv_settings(config, monkeypatch):
     monkeypatch.setattr(config, "ALPACA_API_KEY_ID", "")
     monkeypatch.setattr(config, "ALPACA_API_SECRET_KEY", "")
     monkeypatch.setattr(config, "MARKETDATA_LAYER", "off")
+    # v227: the feed-post recorder writes through the side engine, which reads
+    # config.DATABASE_URL (the .env database), not the per-worker test engine.
+    # Off for every test; recorder tests switch it on with their own database.
+    monkeypatch.setattr(config, "FEED_POSTS_ENABLED", False)
     # Strategy/plan knobs a deployment tunes in .env; the goldens and witnesses
     # replay the shipped defaults.
     by_key = {f.key: f for f in config.FIELDS}

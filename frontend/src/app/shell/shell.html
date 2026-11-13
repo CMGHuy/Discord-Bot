@@ -81,6 +81,9 @@
         @if (isPhone()) {
           <sb-shock-pill [shock]="shock()" />
         }
+        <!-- v227: speech for simple-channel posts. Every width, never in a menu:
+             browsers need this chip's tap on every load before they speak. -->
+        <sb-voice-chip />
         <sb-alarm-chip [alarm]="alarm()" (reveal)="dock.reveal()" />
         <sb-killswitch-chip [on]="killswitchOn()" [stale]="killswitchStale()" />
       </div>

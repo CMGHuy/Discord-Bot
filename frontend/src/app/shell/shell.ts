@@ -55,6 +55,8 @@ import { LiveStrip } from './live/live-strip';
 import { alarmFor, heatStripText, liveWarnings } from './live/live-state';
 import { Tape } from './tape/tape';
 import { ToastHost } from './toast-host';
+import { VoiceChip } from './voice-chip';
+import { VoiceNotifier } from '../voice/voice-notifier';
 
 /**
  * Labelled rail, top bar, connection status, toast host, outlet -- v195 Phase 3.
@@ -84,7 +86,7 @@ const ZOOM_DEFAULT = 100;
   selector: 'sb-shell',
   imports: [
     RouterOutlet, RouterLink, AlarmChip, ToastHost,
-    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, ProfileMenu, Tape,
+    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, VoiceChip, ProfileMenu, Tape,
     Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
     LiveDock, LiveEdgeTab, LiveStrip, LiveSheet, ReadOnlyBadge, ShockPill,
   ],
@@ -378,6 +380,9 @@ export class Shell {
       risk();
       this.refreshKillswitch();
     });
+    // v227: speak simple-channel posts while this tab is open. Root service;
+    // start() is idempotent and does nothing on a browser without speech.
+    inject(VoiceNotifier).start();
   }
 
   protected refreshKillswitch(): void {

@@ -41,6 +41,9 @@ const RAW_BUTTON_ALLOWLIST = new Map<string, string>([
   ['shell/alarm-chip.ts', 'class="alarm-chip sb-hit"'],
   ['shell/live/live-edge-tab.ts', 'class="edge-tab sb-hit"'],
   ['shell/live/live-strip.ts', 'class="live-strip sb-hit"'],
+  // v227: the voice chip is a top-bar chip like the alarm chip -- speaker glyph
+  // + state word, padded to 44px by .sb-hit, aria-label naming its action.
+  ['shell/voice-chip.ts', 'class="voice-chip sb-hit"'],
 ]);
 
 describe('no call site hand-rolls a button', () => {
@@ -71,6 +74,10 @@ const RAW_CONTROL_ALLOWLIST = new Map<string, string>([
   // plain field and exposes none of that; growing it a combobox mode for one
   // call site would be the worse trade.
   ['shell/palette/command-palette.ts', 'role="combobox"'],
+  // v227: the voice rate slider. A range input has no primitive (this is the
+  // app's only one), and a ui/ wrapper used exactly once is the worse trade;
+  // its thumb takes the --hit-min square from voice-settings.ts.
+  ['workspaces/system/voice-settings.ts', 'type="range"'],
 ]);
 
 describe('no call site hand-rolls a form control', () => {
