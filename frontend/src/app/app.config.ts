@@ -30,6 +30,7 @@ import { SubtitleTitleStrategy } from './routing/route-title.service';
 import { provideRouteFocus } from './shell/route-focus';
 import { SessionStore } from './stores/session.store';
 import { DensityService } from './ui/density.service';
+import { ThemeService } from './ui/theme.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -119,5 +120,10 @@ export const appConfig: ApplicationConfig = {
     // never delays bootstrap; tokens.css's :root default is already dense,
     // so the frame before this runs is dense too.
     provideAppInitializer(() => { inject(DensityService); }),
+    // v225: writes <html data-theme> and the theme-color meta from the
+    // per-browser ui.theme preference. index.html's inline script has
+    // usually applied a stored Dark blue already; this keeps the two in step
+    // and covers a page whose pre-paint script failed.
+    provideAppInitializer(() => { inject(ThemeService); }),
   ],
 };
