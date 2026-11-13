@@ -1100,6 +1100,12 @@ FIELDS: list[Field] = [
                "horizon is not posted when one was posted within this many hours. The plan is still "
                "built, managed and in the book -- only the Discord post is held, and the ops channel "
                "says how many. !check and the admin-UI scan are never held. 0 = off."),
+    Field("FEED_POSTS_ENABLED", "FEED_POSTS_ENABLED", "Discord Alerts",
+          "Record simple-channel posts for voice notifications (v227)",
+          type="checkbox", default="true",
+          help="v227. On (default): every post the simple trades channel accepts is also written "
+               "to the feed_posts table, and an open bomeo-capital.com tab speaks its headline. "
+               "Off: nothing is recorded and the site stays silent; Discord is unaffected."),
 
     # --- Execution Realism (Edge plan Task E11) ---
     Field("SLIPPAGE_BPS", "SLIPPAGE_BPS", "Execution Realism", "Slippage (bps per side)",
