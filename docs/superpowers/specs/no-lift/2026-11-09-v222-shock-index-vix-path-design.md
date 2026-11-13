@@ -1,7 +1,7 @@
 # v222 — Market-shock detector: index + VIX entry path
 
 **Version:** ui 1.40.3 · bot 2.17.3
-**Bump:** bot patch (a third entry condition inside the shadow-only v209 detector; no new surface)
+**Bump:** none (predicted bot patch; Stage 1 returned NO-LIFT, nothing shipped)
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, quant-researcher, veteran-trader

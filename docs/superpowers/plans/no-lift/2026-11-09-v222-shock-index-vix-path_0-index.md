@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Bump:** bot patch
+**Bump:** none (predicted bot patch; Stage 1 returned NO-LIFT at gate 1, nothing shipped)
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 **Spec:** [`docs/superpowers/specs/2026-11-09-v222-shock-index-vix-path-design.md`](../specs/2026-11-09-v222-shock-index-vix-path-design.md) (amended 1494eab1, panel applied d39b5d88)
