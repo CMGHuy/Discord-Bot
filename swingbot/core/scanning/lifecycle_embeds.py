@@ -11,6 +11,7 @@ from swingbot.core.charts.trade_chart import DEFAULT_TRENDLINE_LOOKBACK_DAYS, ge
 from swingbot.core.market.strategy import HORIZONS
 from swingbot.core.marketdata.data import get_currency_symbol, get_daily_data
 from swingbot.core import presentation as ui
+from swingbot.core.infra.feed_posts import record_feed_post
 from swingbot.core.infra.posted_log import log_posted
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.presentation import kinds
@@ -555,6 +556,7 @@ async def _send_instruction(feed, history, embed, plan, event) -> bool:
         try:
             await feed.send(**ui.push_kwargs(embed, view=_feed_view(plan.plan_id)))
             log_posted(embed, plan.ticker, feed)
+            record_feed_post(embed, plan.ticker)   # v227: the simple channel only, never history
             pinged = True
         except Exception as exc:
             swallowed(log, "scan.notify_plan_events.feed", exc, level=logging.DEBUG)
