@@ -559,7 +559,9 @@ Pending V222-5.
 
 ### Stage 2 day list
 
-Pending V222-5.
+- First Alpaca-buildable date (first row of `data/market_data_pit/daily/SPY.csv`,
+  written before the list is drawn): 2016-01-04.
+- List: pending (drawn by the Stage 1 run below).
 
 ### Stage 2
 
