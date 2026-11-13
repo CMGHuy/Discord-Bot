@@ -48,7 +48,7 @@ def record_feed_post(embed, ticker: str | None, kind=None) -> None:
     try:
         recorded = _insert(embed, ticker, kind)
     except Exception as exc:  # noqa: BLE001 -- a lost notification, never a lost send
-        swallowed(log, "feed_posts.record", exc, level=logging.DEBUG)
+        swallowed(log, "ops.feed_posts_record", exc, level=logging.DEBUG)
         return
     if recorded:
         _maybe_prune()
@@ -81,4 +81,4 @@ def _maybe_prune() -> None:
         with side_engine.side_connection() as conn:
             feed_posts_repo().prune(RETENTION_DAYS, conn=conn)
     except Exception as exc:  # noqa: BLE001 -- retention is best effort
-        swallowed(log, "feed_posts.prune", exc, level=logging.DEBUG)
+        swallowed(log, "ops.feed_posts_prune", exc, level=logging.DEBUG)
