@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-11-13 08:58:30 UTC",
+  "generated_at": "2026-11-13 14:48:58 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.41.0",
+    "ui": "1.42.0",
     "bot": "2.18.6"
   },
   "releases": [
@@ -2609,6 +2609,33 @@
       "subject": "release(bot): 2.18.6 -- stable snapshots carry rollback fields and pinned images",
       "versions": {
         "ui": "1.41.0",
+        "bot": "2.18.6"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-13",
+      "last_seen": "2026-11-13",
+      "commit": "28c3515a",
+      "subject": "release(ui): 1.42.0 -- Dark blue theme beside Black, picked per browser (v225)",
+      "versions": {
+        "ui": "1.42.0",
+        "bot": "2.18.5"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-13",
+      "last_seen": "2026-11-13",
+      "commit": "8e0dd5ad",
+      "subject": "merge: v225 -- Dark blue theme beside Black, picked per browser",
+      "versions": {
+        "ui": "1.42.0",
         "bot": "2.18.6"
       },
       "changed": [
