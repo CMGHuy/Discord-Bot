@@ -967,3 +967,113 @@ def stop_width_verdict(train_groups: dict, *, seed: int) -> dict:
     return {"verdict": _study_verdict(candidates, powered), "candidates": candidates,
             "family_size": len(labels), "powered": powered, "n_needed": VETO_MIN_N,
             "looks": looks}
+
+
+#: |Spearman rho(stop_atr, atr_pct)| on TRAIN at or above this: the results
+#: doc says the verdict is about ticker volatility, not stop placement.
+VOLATILITY_RHO = 0.8
+#: Delta within one direction is shown only from this many bucket rows of it.
+DIRECTION_MIN_N = 100
+_DIRECTIONS = ("bullish", "bearish")
+
+
+def _shares(rows: list[dict], key: str) -> dict:
+    counts: dict[str, int] = {}
+    for row in rows:
+        label = _label(row.get(key))
+        counts[label] = counts.get(label, 0) + 1
+    return {label: counts[label] / len(rows) for label in sorted(counts, key=_sort_key)}
+
+
+def _median_rr(rows: list[dict]) -> float | None:
+    values = [float(value) for value in (row.get("risk_reward_ratio") for row in rows)
+              if isinstance(value, (int, float)) and not isinstance(value, bool)]
+    return float(np.median(values)) if values else None
+
+
+def _direction_deltas(bucket: list[dict], rest: list[dict]) -> dict:
+    out = {}
+    for direction in _DIRECTIONS:
+        mine = [row["r"] for row in bucket if row.get("direction") == direction]
+        other = [row["r"] for row in rest if row.get("direction") == direction]
+        out[direction] = (_mean(mine) - _mean(other)
+                          if len(mine) >= DIRECTION_MIN_N and other else None)
+    return out
+
+
+def _clamped_share(rows: list[dict]) -> dict:
+    """A lower-bound provenance flag: None rows leave the denominator and are
+    counted on their own."""
+    flags = [row.get("stop_clamped") for row in rows]
+    yes = sum(1 for flag in flags if flag is True)
+    no = sum(1 for flag in flags if flag is False)
+    return {"clamped_share": yes / (yes + no) if yes + no else None,
+            "clamped_none": len(flags) - yes - no}
+
+
+def _removal(bucket: list[dict], rest: list[dict], known: list[dict]) -> dict:
+    return {"pooled_exp_r": _mean([row["r"] for row in known]),
+            "without_exp_r": _mean([row["r"] for row in rest]),
+            "delta_total_r": 0.0 - sum(row["r"] for row in bucket),
+            "n_removed": len(bucket)}
+
+
+def _same_day(row: dict) -> bool:
+    opened, closed = row.get("opened_at"), row.get("closed_at")
+    return bool(opened and closed) and opened[:10] == closed[:10]
+
+
+def _same_day_loss_share(rows: list[dict]) -> float | None:
+    """Live only: losses closed on their entry day (UTC dates as stored)."""
+    losses = [row for row in rows if row["r"] < 0]
+    if not losses:
+        return None
+    return sum(1 for row in losses if _same_day(row)) / len(losses)
+
+
+def _bucket_disclosure(bucket: list[dict], known: list[dict], *, live: bool) -> dict:
+    rest = _rest_of(bucket, known)
+    base = bucket_stats(bucket)
+    out = {"n": base["n"], "win_rate": base["win_rate"], "exp_r": base["exp_r"],
+           "exp_r_gross": base["exp_r_gross"], "median_rr": _median_rr(bucket),
+           "direction_share": _shares(bucket, "direction"),
+           "horizon_share": _shares(bucket, "horizon"),
+           "delta_by_direction": _direction_deltas(bucket, rest),
+           **_clamped_share(bucket),
+           "removal": _removal(bucket, rest, known)}
+    if live:
+        out["family_share"] = _shares(bucket, "strategy")
+        out["same_day_loss_share"] = _same_day_loss_share(bucket)
+    return out
+
+
+def _rho_and_overlap(known: list[dict], edges: list[float],
+                     atr_edges: list[float]) -> tuple[float | None, float | None]:
+    """Spearman rho of stop_atr vs atr_pct, and the share of rows whose
+    stop_atr bucket mirrors their atr_pct bucket (atr_pct on TRAIN edges)."""
+    pairs = [(row["stop_atr"], value) for row in known
+             if (value := _positive_number(row.get("atr_pct"))) is not None]
+    if not pairs:
+        return None, None
+    rho = _spearman([stop for stop, _ in pairs], [pct for _, pct in pairs])
+    top = len(atr_edges)
+    same = sum(1 for stop, pct in pairs
+               if bisect.bisect_right(edges, stop) == top - bisect.bisect_right(atr_edges, pct))
+    return rho, same / len(pairs)
+
+
+def _population_disclosure(pop: dict, edges: list[float], atr_edges: list[float],
+                           *, live: bool) -> dict:
+    rho, overlap = _rho_and_overlap(pop["known"], edges, atr_edges)
+    return {"unknown": pop["unknown"], "rho": rho, "overlap": overlap,
+            "buckets": {label: _bucket_disclosure(rows, pop["known"], live=live)
+                        for label, rows in pop["buckets"].items()}}
+
+
+def stop_width_disclosures(groups: dict) -> dict:
+    """Printed beside the verdict, never gating: per population (TRAIN and
+    live, never pooled) and per bucket on the TRAIN edges."""
+    atr_edges = frozen_edges(groups["train"]["known"], "atr_pct")
+    return {name: _population_disclosure(groups[name], groups["edges"], atr_edges,
+                                         live=name == "live")
+            for name in ("train", "live")}
