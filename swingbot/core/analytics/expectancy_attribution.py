@@ -33,6 +33,7 @@ from swingbot.core.analytics.scope import closed_only
 from swingbot.core.backtesting.instrument import stats
 from swingbot.core.edge.frictions import apply_frictions, commission_r
 from swingbot.core.infra.expectancy_attribution_store import load_latest, write_latest  # noqa: F401  (load_latest is re-exported for v150)
+from swingbot.core.infra import jsonio
 from swingbot.core.market import earnings_calendar
 from swingbot.core.market.earnings_calendar import EARNINGS_CSV_DIR
 from swingbot.core.market.strategy_types import HORIZONS
@@ -1077,3 +1078,73 @@ def stop_width_disclosures(groups: dict) -> dict:
     return {name: _population_disclosure(groups[name], groups["edges"], atr_edges,
                                          live=name == "live")
             for name in ("train", "live")}
+
+
+# --- v226 report and run --------------------------------------------------------
+
+#: The report's ``study`` field and the pre-registration ledger id.
+STUDY_ID = "v226-stop-width"
+_RUN_SIDECAR_SUFFIX = ".run.json"     # run_backtest_range._run_sidecar_path (V226-3)
+
+
+def stop_width_report_path() -> Path:
+    """data/reports/stop-width-attribution.json, resolved at call time so a
+    test's DATA_DIR wins. Never the v146 expectancy-attribution.json."""
+    return Path(config.DATA_DIR) / "reports" / "stop-width-attribution.json"
+
+
+def build_stop_width_report(train_rows: list[dict], live_rows: list[dict], *, seed: int,
+                            generated_at: str | None = None) -> dict:
+    """The whole stop-width report, pure: TRAIN-frozen edges, the
+    pre-registered verdict on TRAIN only, disclosures for both populations
+    (live on the TRAIN edges, never gating). ``provenance`` is filled by
+    ``run_stop_width``."""
+    groups = stop_width_groups(train_rows, live_rows)
+    outcome = stop_width_verdict(groups["train"], seed=seed)
+    disclosures = stop_width_disclosures(groups)
+    rho = disclosures["train"]["rho"]
+    return {
+        "generated_at": generated_at or dt.datetime.now(dt.timezone.utc).isoformat(),
+        "study": STUDY_ID,
+        "seed": seed,
+        "edges": groups["edges"],
+        "labels": groups["labels"],
+        "verdict": outcome,
+        "disclosures": disclosures,
+        "volatility_note": rho is not None and abs(rho) >= VOLATILITY_RHO,
+        "provenance": {},
+    }
+
+
+def _run_sidecar_of(train_jsonl) -> Path:
+    return Path(str(train_jsonl) + _RUN_SIDECAR_SUFFIX)
+
+
+def _json_or_none(path) -> dict | None:
+    path = Path(path)
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def run_stop_width(train_jsonl, *, seed: int = WEEK_BOOTSTRAP_SEED, write: bool = True) -> dict:
+    """Load both stop-width populations, build the report, quote both replay
+    sidecars, and write it to its own file (unless ``write=False``). Never
+    ``write_latest``: v146's verdict of record is not touched."""
+    from swingbot.core.marketdata import training_data
+    train_rows = load_stop_width_train_rows(train_jsonl)
+    live_rows = load_stop_width_live_rows()
+    report = build_stop_width_report(train_rows, live_rows, seed=seed)
+    report["provenance"] = {
+        "train_rows": {"path": str(train_jsonl), "rows": len(train_rows),
+                       "sha256": _file_sha256(train_jsonl)},
+        "run_sidecar": _json_or_none(_run_sidecar_of(train_jsonl)),
+        "store_provenance": _json_or_none(training_data.provenance_path(train_jsonl)),
+        "frictions": {"slippage_bps": getattr(config, "SLIPPAGE_BPS", 5.0),
+                      "commission_r": commission_r()},
+        "live_fills_include_frictions": LIVE_FILLS_INCLUDE_FRICTIONS,
+        "n_resamples": N_RESAMPLES,
+    }
+    if write:
+        jsonio.atomic_write_json(str(stop_width_report_path()), report)
+    return report
