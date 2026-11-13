@@ -347,4 +347,11 @@ describe('VoiceSettings voice, rate and Test voice (v227)', () => {
     expect(source).toMatch(/::-webkit-slider-thumb \{[^}]*width: var\(--hit-min\);[^}]*height: var\(--hit-min\);/);
     expect(source).toMatch(/::-moz-range-thumb \{[^}]*width: var\(--hit-min\);[^}]*height: var\(--hit-min\);/);
   });
+
+  it('aligns the kind rows and the voice controls on one baseline (v227 audit)', () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/workspaces/system/voice-settings.ts'), 'utf8');
+    expect(source).toMatch(/\.kind \{[^}]*align-items: center;/);
+    expect(source).toMatch(/\.voice-controls \{[^}]*align-items: flex-start;/);
+    expect(source).toMatch(/\.voice-controls > button \{[^}]*align-self: flex-end;/);
+  });
 });

@@ -186,11 +186,12 @@ export function familyRow(family: FeedKindFamily, isOn: (kind: string) => boolea
     }
     .family { min-width: 0; }
     .kinds { display: grid; gap: var(--space-4); margin: var(--space-4) 0 0; padding: 0 0 0 var(--space-14); list-style: none; }
-    .kind { display: flex; align-items: flex-start; gap: var(--space-8); min-width: 0; }
+    .kind { display: flex; align-items: center; gap: var(--space-8); min-width: 0; }
     .kind sb-switch { flex: 1 1 auto; min-width: 0; }
     .preview { flex: none; min-width: var(--hit-min); }
-    .voice-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-10) var(--space-14); margin-top: var(--space-14); }
+    .voice-controls { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-10) var(--space-14); margin-top: var(--space-14); }
     .missing { flex-basis: 100%; }
+    .voice-controls > button { align-self: flex-end; }
     .rate { display: inline-flex; flex: 1 1 220px; flex-direction: column; gap: var(--space-4); min-width: 0; }
     .rate-row { display: flex; align-items: center; gap: var(--space-8); }
     .rate input {
