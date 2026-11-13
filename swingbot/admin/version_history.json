@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-11-12 11:31:02 UTC",
+  "generated_at": "2026-11-13 13:54:36 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.41.0",
+    "ui": "1.42.0",
     "bot": "2.18.5"
   },
   "releases": [
@@ -2600,6 +2600,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-11-13",
+      "last_seen": "2026-11-13",
+      "commit": "28c3515a",
+      "subject": "release(ui): 1.42.0 -- Dark blue theme beside Black, picked per browser (v225)",
+      "versions": {
+        "ui": "1.42.0",
+        "bot": "2.18.5"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]
