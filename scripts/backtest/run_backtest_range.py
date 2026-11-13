@@ -268,6 +268,29 @@ def _stats_from_checkpoint(trades_jsonl, horizons: list[str]) -> dict:
             "by_horizon": {hk: _aggregate(results) for hk, results in by_hz.items()}}
 
 
+def _checkpointed_stats(frames, date_from, date_to, *, scale_out, universe, membership,
+                        trades_jsonl) -> dict:
+    """v226: the --trades-jsonl replay, one ticker at a time onto disk. The
+    as-of map is built on the FULL frame set even on a restart: it is
+    cross-sectional (rs_pctile ranks across tickers)."""
+    sidecar = run_sidecar(date_from=date_from, date_to=date_to, tickers=list(frames),
+                          universe=universe, membership=membership, argv=sys.argv[1:],
+                          today=_utc_today())
+    done = _resume_checkpoint(trades_jsonl, sidecar)
+    asof_map = _build_asof_map(list(frames), frames, universe)
+    remaining = {ticker: df for ticker, df in frames.items() if ticker not in done}
+    run_scenario_backtest(
+        remaining, date_from, date_to, gates=CONFLUENCE_GATES, scale_out=scale_out,
+        horizons=list(LEGACY_HORIZONS), membership=membership, asof_map=asof_map,
+        spy_df=_market_frame(), collect_rows=True,
+        on_ticker_done=_scenario_progress(trades_jsonl),
+        on_ticker_result=_checkpoint_writer(trades_jsonl))
+    stats = _stats_from_checkpoint(trades_jsonl, list(LEGACY_HORIZONS))
+    _progress_path(trades_jsonl).unlink(missing_ok=True)
+    print(f"Wrote {len(_jsonl_lines(Path(trades_jsonl)))} trade rows to {trades_jsonl}", flush=True)
+    return stats
+
+
 def _context_symbols(symbols) -> list:
     """Context-only symbols (sector ETFs) the selected training data holds.
     One absent from the store is skipped rather than loaded: loading it would
@@ -433,23 +456,21 @@ def _scenario_stats(frames, date_from, date_to, *, scale_out, universe, membersh
                     record_blocked=None) -> dict:
     """run_scenario_mode's replay call. v146 I3: every scenario run builds
     the as-of map, so entry_context carries rs_pctile / regime2_state (it
-    feeds stamp_entry_context only -- the table cannot move). With
-    --trades-jsonl it also ships SPY to the workers, collects one row per
-    closed exit, writes them and deletes the progress file. v147's
-    --record-blocked rides the same call (gate rows written by _write_blocked)."""
+    feeds stamp_entry_context only -- the table cannot move). v226: with
+    --trades-jsonl the replay is checkpointed per ticker (_checkpointed_stats).
+    v147's --record-blocked rides the plain call (gate rows written by
+    _write_blocked); it is refused together with --trades-jsonl."""
+    if trades_jsonl:
+        return _checkpointed_stats(frames, date_from, date_to, scale_out=scale_out,
+                                   universe=universe, membership=membership,
+                                   trades_jsonl=trades_jsonl)
     stats = run_scenario_backtest(
         frames, date_from, date_to, gates=CONFLUENCE_GATES, scale_out=scale_out,
         horizons=list(LEGACY_HORIZONS), membership=membership,
         asof_map=_build_asof_map(list(frames), frames, universe),
-        spy_df=_market_frame() if trades_jsonl else None,
-        collect_rows=bool(trades_jsonl), on_ticker_done=_scenario_progress(trades_jsonl),
+        spy_df=None, collect_rows=False, on_ticker_done=None,
         record_blocked=bool(record_blocked))
     _write_blocked(stats, record_blocked)
-    if trades_jsonl:
-        rows = stats.pop("rows")
-        write_scenario_trades_jsonl(rows, trades_jsonl)
-        _progress_path(trades_jsonl).unlink(missing_ok=True)
-        print(f"Wrote {len(rows)} trade rows to {trades_jsonl}", flush=True)
     return stats
 
 
