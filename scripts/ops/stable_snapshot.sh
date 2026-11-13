@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Pin a known-good point on the VM (v120 section 1): a fresh DB dump, .env,
 # the deploy record, row counts read from that dump and a tagged restic
-# snapshot of market_data/, sealed by a manifest under backups/stable/<name>/.
+# snapshot of market_data/, sealed by a manifest under backups/stable/<name>/ that
+# also records the Alembic head, versions, config key hash and the features since
+# the previous point (v221).
 # Usage (root, on the VM): scripts/ops/stable_snapshot.sh stable-YYYY-MM-DD[-N]
 # Built in <name>.partial and renamed last, so a half snapshot never carries
 # the final name. Prints the manifest JSON as its last output.
@@ -64,6 +66,19 @@ tail -n 1 backups/deploys.jsonl > "$DIR.partial/deploy.json"
 python3 scripts/ops/backup_manifest.py count-dump "$DIR.partial/db.sql.gz" > "$WORK/rows.json"
 PGV="$(docker compose exec -T db psql -U swingbot -d swingbot -At -c 'SHOW server_version' | tr -d '\r')"
 
+# v221 rollback fields: the Alembic head of the database this dump came from,
+# versions and config key names from the running commit, and the commits on
+# main since the previous stable point (none when this is the first one).
+ALEMBIC_HEAD="$(docker compose exec -T db psql -U swingbot -d swingbot -At -c 'SELECT version_num FROM alembic_version ORDER BY 1' </dev/null | tr -d '\r' | paste -sd, -)"
+runuser -u deploy -- git show "$GIT_SHA:VERSION.json" > "$WORK/VERSION.json"
+runuser -u deploy -- git show "$GIT_SHA:swingbot/config.py" > "$WORK/config.py"
+PREV_SHA="$(python3 scripts/ops/backup_manifest.py prev-sha backups/stable --exclude "$NAME")"
+: > "$WORK/features.tsv"
+if [ -n "$PREV_SHA" ]; then
+  runuser -u deploy -- git log --format='%H%x09%s' "$PREV_SHA..$GIT_SHA" > "$WORK/features.tsv" \
+    || echo "stable_snapshot: WARNING could not list commits since $PREV_SHA; features left empty" >&2
+fi
+
 RESTIC_PASSWORD="$(python3 scripts/ops/env_set.py --get RESTIC_PASSWORD)"
 if [ -z "$RESTIC_PASSWORD" ]; then
   echo "stable_snapshot: RESTIC_PASSWORD is not set in .env" >&2
@@ -93,7 +108,7 @@ if [ -z "$SNAP_ID" ]; then
   exit 1
 fi
 
-python3 scripts/ops/backup_manifest.py build "$DIR.partial" --git-sha "$GIT_SHA" --deploy-json "$DIR.partial/deploy.json" --restic-id "$SNAP_ID" --row-counts "$WORK/rows.json" --pg-version "$PGV" --vm-epoch "$(date +%s)" > "$WORK/manifest.json"
+python3 scripts/ops/backup_manifest.py build "$DIR.partial" --git-sha "$GIT_SHA" --deploy-json "$DIR.partial/deploy.json" --restic-id "$SNAP_ID" --row-counts "$WORK/rows.json" --pg-version "$PGV" --vm-epoch "$(date +%s)" --alembic-head "$ALEMBIC_HEAD" --version-json "$WORK/VERSION.json" --config-source "$WORK/config.py" --features-log "$WORK/features.tsv" > "$WORK/manifest.json"
 python3 scripts/ops/backup_manifest.py verify "$DIR.partial"
 mv -T "$DIR.partial" "$DIR"
 DONE=1
