@@ -9,7 +9,8 @@ import { EquityCandle, EquityCandlesResponse } from '../../../api/models';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
 import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.stub';
 import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
-import { token } from '../../../ui/chart/chart-theme';
+import { chartPalette, token } from '../../../ui/chart/chart-theme';
+import { THEME_STORAGE, ThemeService } from '../../../ui/theme.service';
 import { EquityCandles, GESTURE_GRACE_MS, targetLogicalRange, targetNeedsOlder } from './equity-candles';
 import { TimeWindow, inWindowCandles } from './equity-range.model';
 
@@ -36,7 +37,8 @@ function render(data: EquityCandlesResponse | null, error: string | null = null)
   const stub = equityCandlesStoreStub(data);
   stub.error.set(error);
   TestBed.configureTestingModule({
-    providers: [provideZonelessChangeDetection(), { provide: EquityCandlesStore, useValue: stub }],
+    providers: [provideZonelessChangeDetection(), { provide: EquityCandlesStore, useValue: stub },
+      { provide: THEME_STORAGE, useValue: { get: () => null, set: () => {} } }],
   });
   const fixture = TestBed.createComponent(EquityCandles);
   fixture.componentRef.setInput('currency', '€');
@@ -96,6 +98,8 @@ const userGesture = (fixture: { componentInstance: EquityCandles }) => {
 };
 
 describe('sb-equity-candles', () => {
+  afterEach(() => { delete document.documentElement.dataset['theme']; });
+
   describe('preset target helpers (v181 §1)', () => {
     it('selects the whole buckets that meet the window, read back by inWindowCandles', () => {
       const candles = dailyCandles(10);
@@ -852,4 +856,68 @@ describe('sb-equity-candles', () => {
     });
   });
 
+  describe('follows the theme (v225)', () => {
+    // jsdom resolves token() against the flat Graphite fixture (test-setup.ts);
+    // the Navy ground is layered here the way tokens.css layers it.
+    const NAVY_CSS = ':root[data-theme="navy"]{--surface:#0c1424;--text-muted:#9fb0c8;--text-faint:#5f6f8a}';
+    let style: HTMLStyleElement;
+    type Internals = {
+      chart: { applyOptions(o: unknown): void; options(): { timeScale: { timeVisible: boolean } } };
+      series: { applyOptions(o: unknown): void };
+      seam: { current(): { label: string; color: string; textColor: string } | null } | null;
+      baseline: { current(): { line: string } | null } | null;
+    };
+    const internals = (fixture: { componentInstance: EquityCandles }) => fixture.componentInstance as unknown as Internals;
+
+    beforeEach(() => {
+      style = document.createElement('style');
+      style.textContent = NAVY_CSS;
+      document.head.appendChild(style);
+    });
+
+    afterEach(() => style.remove());
+
+    async function flip(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }, theme: 'graphite' | 'navy') {
+      TestBed.inject(ThemeService).set(theme);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+
+    it('re-applies the chart ground and the candle colours, and keeps the intraday time axis', async () => {
+      const { fixture } = render(response(hourlyCandles(30), { tf: '1H' }));
+      const component = internals(fixture);
+      const applied = vi.spyOn(component.chart, 'applyOptions');
+      const series = vi.spyOn(component.series, 'applyOptions');
+
+      await flip(fixture, 'navy');
+
+      expect(applied).toHaveBeenCalledWith(expect.objectContaining({
+        layout: expect.objectContaining({ background: { color: '#0c1424' }, textColor: '#9fb0c8' }),
+      }));
+      expect(series).toHaveBeenCalledWith(expect.objectContaining({
+        upColor: chartPalette().up, downColor: chartPalette().down, wickUpColor: chartPalette().up,
+      }));
+      expect(component.chart.options().timeScale.timeVisible).toBe(true);
+    });
+
+    it('redraws the seam and the baseline in the new inks', async () => {
+      const { fixture } = render(response(MIXED));
+      at(fixture, 0, 2);
+      await flip(fixture, 'navy');
+      at(fixture, 0, 2);
+      const component = internals(fixture);
+      expect(component.seam!.current()).toMatchObject({ label: 'Recording started', color: '#5f6f8a', textColor: '#9fb0c8' });
+      expect(component.baseline!.current()).toMatchObject({ line: '#9fb0c8' });
+    });
+
+    it('returns to the Graphite inks when flipped back', async () => {
+      const { fixture } = render(response(MIXED));
+      const graphiteFaint = token('--text-faint');
+      await flip(fixture, 'navy');
+      await flip(fixture, 'graphite');
+      expect(graphiteFaint).not.toBe('#5f6f8a');
+      expect(internals(fixture).seam!.current()!.color).toBe(graphiteFaint);
+    });
+  });
 });

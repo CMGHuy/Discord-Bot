@@ -27,7 +27,8 @@ import { Async } from '../../../ui/async';
 import { Button } from '../../../ui/button';
 import { BaselinePrimitive } from '../../../ui/chart/primitives/baseline-primitive';
 import { ChartTarget, TimeWindow, bucketEndInstant, bucketStartInstant, windowBounds, LogicalWindow, inWindowCandles, nextTimeframe, rangeStats, shouldLoadOlder } from './equity-range.model';
-import { chartOptions, chartPalette, token } from '../../../ui/chart/chart-theme';
+import { ChartPalette, chartOptions, chartPalette, token } from '../../../ui/chart/chart-theme';
+import { ThemeService } from '../../../ui/theme.service';
 import { VLinePrimitive } from '../../../ui/chart/primitives/vline-primitive';
 import { EQUITY_BASES, EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
 import { Hint } from '../../../ui/hint';
@@ -52,6 +53,21 @@ import {
   changedCandles,
   toSeriesData,
 } from './equity-candles.model';
+
+/** The candle series' six colours: bodies, borders and wicks by side. */
+function candleSeriesColors(palette: ChartPalette) {
+  return {
+    upColor: palette.up, downColor: palette.down,
+    borderUpColor: palette.up, borderDownColor: palette.down,
+    wickUpColor: palette.up, wickDownColor: palette.down,
+  };
+}
+
+/** Time on the axis for 1H/4H only; one place for render() and a theme flip,
+ *  because chartOptions() alone resets timeVisible to false. */
+function timeScaleOptions(data: EquityCandlesResponse | null) {
+  return { timeVisible: data ? isIntraday(data.tf) : false, secondsVisible: false };
+}
 
 type ChartState = 'loading' | 'error' | 'empty' | 'chart';
 
@@ -323,13 +339,16 @@ export class EquityCandles {
 
   private resizeObserver: ResizeObserver | null = null;
 
-  /** Read once: chart colours come from the tokens at creation, as in
-   *  `TradeChart`. `--text-faint` is the hollow candle's wick. */
-  private readonly colors = (() => {
+  private readonly theme = inject(ThemeService);
+
+  /** Chart colours from the tokens, re-read when the theme flips (spec v225).
+   *  `--text-faint` is the hollow candle's wick. */
+  private readonly colors = computed(() => {
+    this.theme.theme();
     const palette = chartPalette();
     return { up: palette.up, down: palette.down, faint: token('--text-faint'), muted: palette.textMuted,
              posSoft: palette.posSoft, negSoft: palette.negSoft };
-  })();
+  });
 
   private readonly hoverIndex = signal<number | null>(null);
   protected readonly visible = signal<LogicalWindow | null>(null);
@@ -354,7 +373,7 @@ export class EquityCandles {
 
   protected readonly seriesData = computed<CandlestickData<Time>[]>(() => {
     const data = this.store.data();
-    return data ? toSeriesData(this.candles(), data.tf, this.colors) : [];
+    return data ? toSeriesData(this.candles(), data.tf, this.colors()) : [];
   });
 
   /** The whole buckets in view (spec v181 §4): readout, baseline and, in
@@ -402,6 +421,13 @@ export class EquityCandles {
       untracked(() => this.create(element));
     });
 
+    // v225: the chart options and the series colours were read once in
+    // create(); re-apply them whenever the theme-tracked colours change.
+    effect(() => {
+      this.colors();
+      untracked(() => this.restyle());
+    });
+
     effect(() => {
       const data = this.store.data();
       const points = this.seriesData();
@@ -410,8 +436,9 @@ export class EquityCandles {
 
     effect(() => {
       const first = this.inWindow()[0];
+      const colors = this.colors();
       untracked(() => this.baseline?.setBaseline(first
-        ? { value: first.o, line: this.colors.muted, above: this.colors.posSoft, below: this.colors.negSoft }
+        ? { value: first.o, line: colors.muted, above: colors.posSoft, below: colors.negSoft }
         : null));
     });
 
@@ -581,12 +608,7 @@ export class EquityCandles {
     const palette = chartPalette();
     const chart = createChart(element, chartOptions(palette));
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: palette.up,
-      downColor: palette.down,
-      borderUpColor: palette.up,
-      borderDownColor: palette.down,
-      wickUpColor: palette.up,
-      wickDownColor: palette.down,
+      ...candleSeriesColors(palette),
       priceLineVisible: false,
       priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
     });
@@ -610,16 +632,27 @@ export class EquityCandles {
     }
   }
 
+  /** v225: what create() copied out of the palette, re-applied on a flip. */
+  private restyle(): void {
+    const chart = this.chart;
+    const series = this.series;
+    if (!chart || !series) return;
+    const palette = chartPalette();
+    chart.applyOptions(chartOptions(palette));
+    chart.applyOptions({ timeScale: timeScaleOptions(this.store.data()) });
+    series.applyOptions(candleSeriesColors(palette));
+  }
+
   private render(data: EquityCandlesResponse | null, points: CandlestickData<Time>[]): void {
     const chart = this.chart;
     const series = this.series;
     if (!chart || !series) return;
     this.hoverIndex.set(null);
     this.moveProgrammatically(() => series.setData(points));
-    chart.applyOptions({ timeScale: { timeVisible: data ? isIntraday(data.tf) : false, secondsVisible: false } });
+    chart.applyOptions({ timeScale: timeScaleOptions(data) });
     const seam = data ? seamIndex(this.candles()) : -1;
     this.seam?.setLine(seam >= 0
-      ? { time: points[seam].time, label: SEAM_LABEL, color: this.colors.faint, textColor: this.colors.muted }
+      ? { time: points[seam].time, label: SEAM_LABEL, color: this.colors().faint, textColor: this.colors().muted }
       : null);
     const view = data ? `${data.tf}/${data.basis}` : '';
     if (view && view !== this.renderedView) this.pendingView = view;
