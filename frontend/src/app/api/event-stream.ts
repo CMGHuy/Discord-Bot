@@ -4,10 +4,11 @@ import { Subject } from 'rxjs';
 import { ScanEventProgress } from './models';
 import { parseScanEventProgress } from './scan-event-progress';
 
-/** The ten event types the server can raise, plus the two it synthesises.
+/** The event types the server can raise, plus the two it synthesises.
  *  Mirrors spec v12's taxonomy table -- one type per *concern*, so several
  *  files raise the same event and the client never learns the storage
- *  layout. */
+ *  layout. `feed` (v227) is the simple-channel post log the voice notifier
+ *  reads. */
 export type EventName =
   | 'trades'
   | 'account'
@@ -19,11 +20,12 @@ export type EventName =
   | 'watchlist'
   | 'jobs'
   | 'settings'
-  | 'market';
+  | 'market'
+  | 'feed';
 
 export const EVENT_NAMES: readonly EventName[] = [
   'trades', 'account', 'analytics', 'journal', 'scan',
-  'bot', 'risk', 'watchlist', 'jobs', 'settings', 'market',
+  'bot', 'risk', 'watchlist', 'jobs', 'settings', 'market', 'feed',
 ] as const;
 
 export type StreamState = 'connecting' | 'live' | 'degraded';
