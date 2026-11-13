@@ -13,6 +13,7 @@ pre-registered verdict always compares exact values.
 """
 from __future__ import annotations
 
+import bisect
 import datetime as dt
 import hashlib
 import json
@@ -802,3 +803,88 @@ def load_stop_width_live_rows() -> list[dict]:
         if base is not None:
             rows.append(stop_width_row(base, trade, live=True))
     return rows
+
+
+#: The label of a row with no usable ``stop_atr``: counted, never bucketed,
+#: never a look.
+UNKNOWN = "unknown"
+#: TRAIN quartile cut points (spec § Frozen bucket edges).
+_QUARTILES = (0.25, 0.5, 0.75)
+
+
+def _known_values(rows: list[dict], key: str) -> list[float]:
+    return [value for value in (_positive_number(row.get(key)) for row in rows)
+            if value is not None]
+
+
+def _bucket_holds(values: list[float], low: float | None, high: float) -> bool:
+    return any((low is None or value >= low) and value < high for value in values)
+
+
+def _keeps_edge(values: list[float], previous: float | None, edge: float) -> bool:
+    """False for an edge at or below the minimum, at or below the previous
+    kept edge, or whose bucket ``[previous, edge)`` holds no value."""
+    if edge <= values[0] or (previous is not None and edge <= previous):
+        return False
+    return _bucket_holds(values, previous, edge)
+
+
+def frozen_edges(rows: list[dict], key: str) -> list[float]:
+    """Quartile cut points of ``key`` over the rows' known values
+    (``numpy.quantile``, linear), merged so that no bucket is empty. Reads
+    nothing but ``key``: never ``r``. A value equal to an edge belongs to
+    the bucket above it (``edge_label``)."""
+    values = sorted(_known_values(rows, key))
+    if len(values) < 2:
+        return []
+    edges: list[float] = []
+    for edge in (float(cut) for cut in np.quantile(values, _QUARTILES, method="linear")):
+        if _keeps_edge(values, edges[-1] if edges else None, edge):
+            edges.append(edge)
+    while edges and values[-1] < edges[-1]:
+        edges.pop()
+    return edges
+
+
+def edge_labels(edges: list[float]) -> list[str]:
+    """``Q1 (<a)``, ``Q2 (a–b)``, ..., ``Qk (≥c)``; ``Q1 (all)`` with no edge."""
+    if not edges:
+        return ["Q1 (all)"]
+    labels = [f"Q1 (<{edges[0]:.2f})"]
+    labels += [f"Q{index + 2} ({low:.2f}–{high:.2f})"
+               for index, (low, high) in enumerate(zip(edges, edges[1:]))]
+    labels.append(f"Q{len(edges) + 1} (≥{edges[-1]:.2f})")
+    return labels
+
+
+def edge_label(value, edges: list[float]) -> str:
+    """The bucket label of one value on frozen ``edges``; UNKNOWN when the
+    value is not a finite positive number."""
+    number = _positive_number(value)
+    if number is None:
+        return UNKNOWN
+    return edge_labels(edges)[bisect.bisect_right(edges, number)]
+
+
+def _bucketed(rows: list[dict], edges: list[float], labels: list[str]) -> dict:
+    buckets: dict[str, list[dict]] = {label: [] for label in labels}
+    known: list[dict] = []
+    unknown = 0
+    for row in rows:
+        label = edge_label(row.get("stop_atr"), edges)
+        if label == UNKNOWN:
+            unknown += 1
+            continue
+        buckets[label].append(row)
+        known.append(row)
+    return {"buckets": buckets, "known": known, "unknown": unknown}
+
+
+def stop_width_groups(train_rows: list[dict], live_rows: list[dict]) -> dict:
+    """Both populations bucketed by ``stop_atr`` on edges frozen from TRAIN
+    alone. The live book never moves an edge."""
+    edges = frozen_edges(train_rows, "stop_atr")
+    labels = edge_labels(edges)
+    return {"edges": edges, "labels": labels,
+            "train": _bucketed(train_rows, edges, labels),
+            "live": _bucketed(live_rows, edges, labels)}
