@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Backup manifest helper (v120 section 3). Standard library only: it runs under
-the VM host's python3 and on Windows. Subcommands: build, verify, prune, next-name, count-dump, report-market."""
+the VM host's python3 and on Windows. Subcommands: build, verify, prune, next-name,
+prev-sha, count-dump, report-market."""
 from __future__ import annotations
 
 import argparse
@@ -15,6 +16,11 @@ from pathlib import Path
 
 MANIFEST = "manifest.json"
 CHUNK = 1 << 20
+# v221 (v220 spec Section 2): what a stable point needs for /rollback stable-...
+ROLLBACK_FIELDS = ("alembic_head", "bot_version", "ui_version", "config_keys_sha256", "features")
+PLAN_ID_RE = re.compile(r"\((v\d+)\)")
+STABLE_DIR_RE = re.compile(r"^stable-(\d{4}-\d{2}-\d{2})(?:-(\d+))?$")
+PRE_V220_NOTE = "era: pre-v220 (no rollback fields: alembic_head, versions, config keys, features)"
 
 
 def _sha256(path: Path) -> str:
@@ -31,7 +37,7 @@ def _folder_files(folder: Path) -> list[Path]:
 
 def build_manifest(folder: Path, *, git_sha=None, deploy=None, restic_id=None,
                    row_counts=None, pg_server_version=None, vm_epoch=None,
-                   market_files=None) -> dict:
+                   market_files=None, rollback=None) -> dict:
     folder = Path(folder)
     deploy = deploy or {}
     manifest = {
@@ -48,6 +54,8 @@ def build_manifest(folder: Path, *, git_sha=None, deploy=None, restic_id=None,
                   for p in _folder_files(folder)},
         "market_files": market_files,
     }
+    if rollback is not None:
+        manifest.update({k: rollback.get(k) for k in ROLLBACK_FIELDS})
     (folder / MANIFEST).write_text(json.dumps(manifest, sort_keys=True, indent=2),
                                    encoding="utf-8")
     return manifest
@@ -137,6 +145,56 @@ def next_stable_name(date: str, existing: set[str]) -> str:
     return f"{base}-{n}"
 
 
+def config_keys_sha256(config_source: str) -> str:
+    """sha256 of the sorted declared config field names, one per line. Names only:
+    a value never enters the hash, so adding or removing a key changes it."""
+    from rollback_checks import declared_config_keys  # sibling module, stdlib only (v220)
+    names = sorted(set(declared_config_keys(config_source)))
+    return hashlib.sha256("\n".join(names).encode("utf-8")).hexdigest()
+
+
+def features_from_log(lines: list[str]) -> list[dict]:
+    """`git log --format=%H%x09%s` lines -> [{"plan", "sha", "subject"}], same order."""
+    out = []
+    for line in lines:
+        sha, _, subject = line.rstrip("\r\n").partition("\t")
+        if not sha.strip():
+            continue
+        m = PLAN_ID_RE.search(subject)
+        out.append({"plan": m.group(1) if m else None, "sha": sha.strip(), "subject": subject})
+    return out
+
+
+def _stable_key(name: str):
+    m = STABLE_DIR_RE.match(name)
+    return (m.group(1), int(m.group(2) or 1)) if m else None
+
+
+def _manifest_git_sha(folder: Path) -> str | None:
+    try:
+        return json.loads((folder / MANIFEST).read_text(encoding="utf-8")).get("git_sha") or None
+    except (OSError, ValueError):
+        return None
+
+
+def previous_stable_sha(stable_dir: Path, exclude: str = "") -> str | None:
+    """git_sha of the newest stable point folder holding a manifest, `exclude` skipped."""
+    stable_dir = Path(stable_dir)
+    if not stable_dir.is_dir():
+        return None
+    points = sorted((key, p) for p in stable_dir.iterdir()
+                    if p.is_dir() and p.name != exclude and (key := _stable_key(p.name)))
+    for _, folder in reversed(points):
+        sha = _manifest_git_sha(folder)
+        if sha:
+            return sha
+    return None
+
+
+def manifest_era(manifest: dict) -> str:
+    return "v220" if all(k in manifest for k in ROLLBACK_FIELDS) else "pre-v220"
+
+
 def _load_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8")) if path else None
 
@@ -152,23 +210,58 @@ def _read_market_files(path):
     return out
 
 
+def _rollback_inputs(args) -> dict | None:
+    given = (args.alembic_head, args.version_json, args.config_source, args.features_log)
+    if all(v is None for v in given):
+        return None
+    versions = _load_json(args.version_json) or {}
+    config = Path(args.config_source).read_text(encoding="utf-8") if args.config_source else None
+    log = (Path(args.features_log).read_text(encoding="utf-8").splitlines()
+           if args.features_log else [])
+    return {"alembic_head": args.alembic_head or None,
+            "bot_version": versions.get("bot"), "ui_version": versions.get("ui"),
+            "config_keys_sha256": config_keys_sha256(config) if config is not None else None,
+            "features": features_from_log(log)}
+
+
 def _cmd_build(args) -> int:
     m = build_manifest(
         Path(args.dir), git_sha=args.git_sha, deploy=_load_json(args.deploy_json),
         restic_id=args.restic_id, row_counts=_load_json(args.row_counts),
         pg_server_version=args.pg_version, vm_epoch=args.vm_epoch,
-        market_files=_read_market_files(args.market_files))
+        market_files=_read_market_files(args.market_files),
+        rollback=_rollback_inputs(args))
     print(json.dumps(m, sort_keys=True, indent=2))
     return 0
 
 
+def _era_note(folder: Path) -> str | None:
+    """A stable manifest (it has a restic id) from before v221 gets a note, never a problem."""
+    try:
+        manifest = json.loads((folder / MANIFEST).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if manifest.get("restic_id") and manifest_era(manifest) == "pre-v220":
+        return PRE_V220_NOTE
+    return None
+
+
 def _cmd_verify(args) -> int:
-    problems = verify_folder(Path(args.dir))
+    folder = Path(args.dir)
+    problems = verify_folder(folder)
     for p in problems:
         print(p)
     if problems:
         return 1
+    note = _era_note(folder)
+    if note:
+        print(note)
     print("PASS")
+    return 0
+
+
+def _cmd_prev_sha(args) -> int:
+    print(previous_stable_sha(Path(args.dir), exclude=args.exclude) or "")
     return 0
 
 
@@ -255,6 +348,10 @@ def _parser() -> argparse.ArgumentParser:
     b.add_argument("--pg-version")
     b.add_argument("--vm-epoch", type=int)
     b.add_argument("--market-files")
+    b.add_argument("--alembic-head")
+    b.add_argument("--version-json")
+    b.add_argument("--config-source")
+    b.add_argument("--features-log")
     v = sub.add_parser("verify")
     v.add_argument("dir")
     p = sub.add_parser("prune")
@@ -268,11 +365,15 @@ def _parser() -> argparse.ArgumentParser:
     n = sub.add_parser("next-name")
     n.add_argument("date")
     n.add_argument("--existing", required=True)
+    ps = sub.add_parser("prev-sha")
+    ps.add_argument("dir")
+    ps.add_argument("--exclude", default="")
     return ap
 
 
 HANDLERS = {"build": _cmd_build, "verify": _cmd_verify,
             "prune": _cmd_prune, "next-name": _cmd_next_name,
+            "prev-sha": _cmd_prev_sha,
             "count-dump": _cmd_count_dump, "report-market": _cmd_report_market}
 
 
