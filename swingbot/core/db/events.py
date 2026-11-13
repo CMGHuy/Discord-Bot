@@ -31,6 +31,9 @@ TABLE_CHANNELS: dict[str, str] = {
     # raises `watchlist`, the concern whose rows show data freshness.
     "scan_progress": "scan",
     "market_data_state": "watchlist",
+    # v227: the simple-channel post log; raises its own concern so only the
+    # voice notifier refetches, never a panel.
+    "feed_posts": "feed",
 }
 
 from swingbot.core.db.notify import CHANNELS  # noqa: E402

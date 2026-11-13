@@ -264,6 +264,20 @@ alert_posts = register(sa.Table(
     sa.Index("alert_posts_ticker_at_idx", "ticker", "at"),
 ), ("ticker", "at", "outcome"))
 
+# v227: one row per simple-channel post Discord accepted, written synchronously by
+# the bot process only (id order = commit order, which makes ?after=<id> paging
+# gap-free). Pruned after 7 days by the recorder itself. SSE `feed`.
+feed_posts = register(sa.Table(
+    "feed_posts", METADATA, sa.Column("id", sa.BigInteger, primary_key=True),
+    sa.Column("posted_at", sa.TIMESTAMP(timezone=True), nullable=False,
+              server_default=sa.func.now()),
+    sa.Column("kind", sa.Text, nullable=False),
+    sa.Column("ticker", sa.Text, nullable=True),
+    sa.Column("headline", sa.Text, nullable=False),
+    *standard_columns(),
+    sa.Index("feed_posts_posted_at_idx", "posted_at"),
+), ("posted_at", "kind", "ticker", "headline"))
+
 
 # v147: one row per candidate a live gate (RS, plan rejection, compression) threw away, resolved once
 # by the nightly counterfactual resolver. Append-only: only cf_status/resolved_at and the outcome doc
@@ -718,5 +732,11 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "vix_session_high": "running VIX high this session; the admin badge",
         "last_reading_id": "FK to market_shock_readings.id (SET NULL on prune); never dangles",
         "last_notice_at": "time of the last market_shock notice; the rate limit",
+    },
+    "feed_posts": {
+        "posted_at": "feed_posts_posted_at_idx: the 7-day prune's WHERE and its existence check",
+        "kind": "NOT NULL Kind member name; the SPA's per-kind voice filter",
+        "ticker": "ticker spoken in the headline; NULL for a post without one",
+        "headline": "NOT NULL spoken text, served as is by GET /feed-posts",
     },
 }
