@@ -90,6 +90,28 @@ export class VoiceSpeaker {
     this.speakOne(UNLOCK_PHRASE, () => this.settleUnlock(true), () => this.settleUnlock(false));
   }
 
+  /** Queue headlines; ignored unless live. */
+  say(lines: string[]): void {
+    if (this.state() !== 'live') return;
+    const clean = lines.filter((line) => line.trim() !== '');
+    if (clean.length === 0) return;
+    this.queue.update((queued) => [...queued, ...clean]);
+    this.pump();
+  }
+
+  /** A Settings preview: a user's tap, so it speaks now in any switched-on state. */
+  preview(text: string): void {
+    const state = this.state();
+    if (state === 'off' || state === 'unavailable') return;
+    if (this.inFlight()) {
+      this.generation += 1;
+      this.clearWatchdog();
+      this.speech!.cancel();
+      this.inFlight.set(false);
+    }
+    this.speakOne(text);
+  }
+
   /** The chip's tap while live: stop, clear and stay quiet this session. */
   mute(): void {
     if (this.state() === 'live') this.silence('muted');

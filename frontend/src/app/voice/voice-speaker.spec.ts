@@ -172,4 +172,119 @@ describe('VoiceSpeaker (v227)', () => {
     speech.setVoices(['Alex', 'Daniel']);
     expect(speaker.voices()).toEqual(['Alex', 'Daniel']);
   });
+
+  it('says and previews nothing without speechSynthesis or with voice off', () => {
+    const none = setup(null).speaker;
+    none.say(['Order filled, MSFT']);
+    none.preview('New long alert, AAPL');
+    expect(none.busy()).toBe(false);
+
+    TestBed.resetTestingModule();
+    const speech = new FakeSpeech();
+    const off = setup(speech, { enabled: false }).speaker;
+    off.say(['Order filled, MSFT']);
+    off.preview('New long alert, AAPL');
+    expect(speech.texts()).toEqual([]);
+  });
+
+  it('ignores say() until live', () => {
+    const speech = new FakeSpeech();
+    const { speaker } = setup(speech);
+    speaker.say(['Order filled, MSFT']);
+    expect(speaker.busy()).toBe(false);
+    speaker.unlock();
+    speech.start();
+    speech.finish();
+    expect(speech.texts()).toEqual([UNLOCK_PHRASE]);
+  });
+
+  it('speaks one line at a time, in order, and only after the unlock phrase ends', () => {
+    const speech = new FakeSpeech();
+    const { speaker } = setup(speech);
+    speaker.unlock();
+    speech.start();
+    speaker.say(['A', 'B']);
+    expect(speech.texts()).toEqual([UNLOCK_PHRASE]);
+    expect(speaker.busy()).toBe(true);
+    speech.finish();
+    expect(speech.texts()).toEqual([UNLOCK_PHRASE, 'A']);
+    speaker.say(['C']);
+    expect(speech.texts()).toEqual([UNLOCK_PHRASE, 'A']);
+    speech.finish();
+    speech.finish();
+    expect(speech.texts()).toEqual([UNLOCK_PHRASE, 'A', 'B', 'C']);
+    expect(speaker.busy()).toBe(true);
+    speech.finish();
+    expect(speaker.busy()).toBe(false);
+  });
+
+  it('drops blank lines', () => {
+    const speech = new FakeSpeech();
+    const { speaker } = live(speech);
+    speaker.say(['', '   ']);
+    expect(speaker.busy()).toBe(false);
+    expect(speech.texts()).toEqual([UNLOCK_PHRASE]);
+  });
+
+  it('moves on to the next line when one errors, and stays live', () => {
+    const speech = new FakeSpeech();
+    const { speaker } = live(speech);
+    speaker.say(['A', 'B']);
+    speech.fail('synthesis-failed');
+    expect(speech.texts().slice(-1)).toEqual(['B']);
+    expect(speaker.state()).toBe('live');
+  });
+
+  it('mute cancels, clears the queue and ignores the cancelled line; rearm goes live again', () => {
+    const speech = new FakeSpeech();
+    const { speaker } = live(speech);
+    speaker.say(['A', 'B', 'C']);
+    speaker.mute();
+    expect(speech.cancelled).toBeGreaterThan(0);
+    expect(speaker.state()).toBe('muted');
+    expect(speaker.busy()).toBe(false);
+    expect(speech.texts()).toEqual([UNLOCK_PHRASE, 'A']);
+    speaker.say(['D']);
+    expect(speech.texts()).toEqual([UNLOCK_PHRASE, 'A']);
+    speaker.rearm();
+    expect(speaker.state()).toBe('live');
+    speaker.say(['E']);
+    expect(speech.texts()).toEqual([UNLOCK_PHRASE, 'A', 'E']);
+  });
+
+  it('turning voice off drops the queue', () => {
+    const speech = new FakeSpeech();
+    const { speaker, prefs } = live(speech);
+    speaker.say(['A', 'B']);
+    expect(speaker.busy()).toBe(true);
+    prefs.setEnabled(false);
+    TestBed.tick();
+    expect(speaker.busy()).toBe(false);
+    expect(speech.texts()).toEqual([UNLOCK_PHRASE, 'A']);
+  });
+
+  it('speaks each headline with the current rate', () => {
+    const speech = new FakeSpeech();
+    const { speaker, prefs } = live(speech);
+    prefs.setRate(1.3);
+    speaker.say(['A']);
+    expect(speech.spoken.at(-1)!.rate).toBe(1.3);
+  });
+
+  it('previews while locked without unlocking, and cuts off what is speaking', () => {
+    const speech = new FakeSpeech();
+    const { speaker } = setup(speech);
+    speaker.preview('Order filled, AAPL');
+    expect(speech.texts()).toEqual(['Order filled, AAPL']);
+    expect(speaker.state()).toBe('locked');
+
+    TestBed.resetTestingModule();
+    const busy = new FakeSpeech();
+    const ctx = live(busy);
+    ctx.speaker.say(['A', 'B']);
+    ctx.speaker.preview('Stopped out, AAPL');
+    expect(busy.texts()).toEqual([UNLOCK_PHRASE, 'A', 'Stopped out, AAPL']);
+    busy.finish();
+    expect(busy.texts().at(-1)).toBe('B');
+  });
 });
