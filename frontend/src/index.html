@@ -27,6 +27,31 @@
        primitives.spec.ts allow-lists it and asserts it equals the resolved
        --bg (spec v167 §7). -->
   <meta name="theme-color" content="#0d0f12">
+  <!-- v225: a browser that chose Dark blue (localStorage ui.theme = navy,
+       written by ui/theme.service.ts) paints Navy from the first frame.
+       Runs before the bundle parses; on exactly 'navy' it sets
+       data-theme, swaps the theme-color meta above and adds a Navy ground
+       scoped to html[data-theme="navy"], so a later switch to Black drops
+       it. Any failure leaves the page Graphite and ThemeService applies the
+       stored theme on bootstrap. NAVY_BG is a copy of palette.css
+       --midnight-950; primitives.spec.ts pins it. -->
+  <script>
+    (function () {
+      var NAVY_BG = '#070c18';
+      try {
+        if (localStorage.getItem('ui.theme') === 'navy') {
+          document.documentElement.setAttribute('data-theme', 'navy');
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', NAVY_BG);
+          var ground = document.createElement('style');
+          ground.textContent = 'html[data-theme="navy"], html[data-theme="navy"] body { background: ' + NAVY_BG + '; }';
+          document.head.appendChild(ground);
+        }
+      } catch (e) {
+        /* Blocked storage: stay Graphite. */
+      }
+    })();
+  </script>
   <!-- iOS Safari ignores the manifest above for "Add to Home Screen" (pre
        iOS 16.4) -- these three are what it actually reads: standalone
        display (no browser chrome), a dark status bar to match the app's own
@@ -41,14 +66,20 @@
        ground colour rather than a white flash on a UI that is dark by
        definition.
 
-       This hex is one of the two colour literals the colour gate
-       deliberately leaves in place: it has to be inline and it has to work
+       This hex is one of the three colour literals the colour gate
+       deliberately leaves in place (the theme-color meta, the Navy NAVY_BG
+       above, and this one): it has to be inline and it has to work
        before any stylesheet loads, so it cannot read `--bg`. It is therefore
        a copy, and copies drift -- so primitives.spec.ts ('the cold-load
        copies equal the resolved --bg', spec v167 §7) fails when it differs
        from --bg in styles/palette.css, as does the manifest's pair. The
        symptom it prevents is a one-frame flash of the old colour on a cold
-       load, which is easy to miss and easy to explain once seen. -->
+       load, which is easy to miss and easy to explain once seen.
+
+       manifest.webmanifest stays Graphite (spec v225): a manifest is
+       static and installed once, so it cannot follow a per-browser choice;
+       a Dark blue user's home-screen splash is black for an instant,
+       accepted. The manifest is JSON and cannot carry this note itself. -->
   <style>html, body { background: #0d0f12; }</style>
 </head>
 <body>
