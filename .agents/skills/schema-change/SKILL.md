@@ -40,6 +40,10 @@ database, and the round-trip committed as a test someone else can re-run. Before
 a drop or rename runs on production, a point-in-time-rollback drill within the
 last 7 days (`docs/deploy/DB_RESTORE.md`); the rollback is
 `scripts/ops/rollback_to.sh`.
+Every new revision states its rollback safety: `ROLLBACK_SAFE = "<reason>"`
+only with a real reason, and an `INCOMPATIBLE_BOUNDARIES` entry in
+`scripts/ops/rollback_plan.py` when older code would mishandle the new data
+(`docs/claude/schema-evolution.md` § Rollback safety).
 
 ## Known wrong turns
 
@@ -49,6 +53,7 @@ last 7 days (`docs/deploy/DB_RESTORE.md`); the rollback is
 | "The row counts match" | Counts matching says nothing about field content; a field can be dropped or mangled on every row while the count holds. |
 | "I'll read the old field name too, just in case" | That is a second code path per field forever; the revision converts the rows once. |
 | "A JSON file under data/ is a backup" | No store is backed by a file any more; the backup is `rollback_to.sh` and the `pg_dump` files. |
+| "Older code just ignores the new field" | Pre-v116 code strips unknown JSONB fields on re-save; such a break is an `INCOMPATIBLE_BOUNDARIES` entry, or `/rollback` lets old code damage new rows. |
 
 ## Trigger table
 
