@@ -313,6 +313,9 @@
      the pill and the badge both show the wordmark gives way to the diamond; its words stay in
      the link's accessible name. */
   .status-cluster { min-width: 0; }
+  /* v227: the voice chip's word is the state and the tap target; the badge
+     ellipsises first, the chip never shrinks. */
+  sb-voice-chip { flex: none; }
   .topbar:has(.shock-pill):has(sb-read-only-badge) .brand .word {
     position: absolute;
     width: 1px;
