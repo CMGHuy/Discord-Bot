@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -175,6 +178,68 @@ describe('ProfileMenu', () => {
       openMenu();
       expect(el.querySelector('.density-row .menu-note')!.textContent!.trim())
         .toBe('Desktop only: touch screens keep 44px rows.');
+    });
+  });
+
+  describe('Theme control (v225)', () => {
+    const control = () => el.querySelector('sb-segmented.theme-control');
+    const segments = () =>
+      Array.from(el.querySelectorAll<HTMLButtonElement>('sb-segmented.theme-control .segment'));
+    const pressed = () =>
+      segments().find((b) => b.getAttribute('aria-pressed') === 'true')!.textContent!.trim();
+
+    it('offers Black and Dark blue under the label "Theme"', () => {
+      openMenu();
+      expect(control()!.querySelector('[role=group]')!.getAttribute('aria-label')).toBe('Theme');
+      expect(el.querySelector('.theme-row .menu-label')!.textContent!.trim()).toBe('Theme');
+      expect(segments().map((b) => b.textContent!.trim())).toEqual(['Black', 'Dark blue']);
+    });
+
+    it('sits under Density and directly above Sign out', () => {
+      openMenu();
+      const row = el.querySelector('.theme-row')!;
+      expect(row.previousElementSibling!.classList.contains('density-row')).toBe(true);
+      expect(row.nextElementSibling!.textContent).toContain('Sign out');
+    });
+
+    it('defaults to Black and marks the theme it is given', () => {
+      openMenu();
+      expect(pressed()).toBe('Black');
+      fixture.componentRef.setInput('theme', 'navy');
+      fixture.detectChanges();
+      expect(pressed()).toBe('Dark blue');
+    });
+
+    it('emits the chosen theme and keeps the menu open', () => {
+      const chosen: string[] = [];
+      fixture.componentInstance.themeChanged.subscribe((theme) => chosen.push(theme));
+      openMenu();
+      segments()[1].click();
+      fixture.detectChanges();
+      segments()[0].click();
+      fixture.detectChanges();
+      expect(chosen).toEqual(['navy', 'graphite']);
+      expect(menu()).not.toBeNull();
+    });
+
+    it('reads anything but navy as graphite: the segmented control hands back a string', () => {
+      const chosen: string[] = [];
+      fixture.componentInstance.themeChanged.subscribe((theme) => chosen.push(theme));
+      for (const value of ['navy', 'NAVY', 'navy ', '', 'dark']) fixture.componentInstance['onTheme'](value);
+      expect(chosen).toEqual(['navy', 'graphite', 'graphite', 'graphite', 'graphite']);
+    });
+
+    it('carries no "Desktop only" note: the theme changes every device', () => {
+      openMenu();
+      expect(el.querySelector('.theme-row .menu-note')).toBeNull();
+    });
+
+    it('lays the row out like Motion and Density, with 44px segments on touch', () => {
+      const source = readFileSync(join(process.cwd(), 'src/app/shell/profile-menu.ts'), 'utf8');
+      expect(source).toMatch(/\.motion-row,\s*\.density-row,\s*\.theme-row\s*\{\s*display: flex;/);
+      expect(source).toMatch(
+        /@media \(pointer: coarse\), \(max-width: 1023px\) \{[^{}]*\.theme-control \.segment \{ min-width: 44px;/,
+      );
     });
   });
 });

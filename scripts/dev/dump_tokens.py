@@ -19,6 +19,7 @@ Rules (resolve-token.ts mirrors them): comments are stripped; only top-level
 declarations apply in file order, later wins; names lose their leading `--`;
 values are whitespace-collapsed; `var(--x)` is followed recursively. An
 undefined reference, a cycle or a `var(--x, fallback)` is an error.
+The `[data-theme]` blocks are deliberately invisible here; never teach this resolver a theme (v225).
 """
 from __future__ import annotations
 

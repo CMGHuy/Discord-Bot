@@ -27,6 +27,7 @@ import { TapeStore } from '../stores/tape.store';
 import { ViewportService } from '../ui/breakpoints';
 import { CLOCK } from '../ui/clock';
 import { DENSITY_STORAGE } from '../ui/density.service';
+import { THEME_STORAGE, ThemeStorage } from '../ui/theme.service';
 import { provideMotion } from '../ui/motion/motion.service';
 import { NAV_ENTRIES } from './nav';
 import { Shell } from './shell';
@@ -90,6 +91,11 @@ function createShell() {
   return TestBed.createComponent(Shell);
 }
 
+/** An in-memory ui.theme store, so no shell spec writes the real localStorage (v225). */
+function memoryThemeStorage(map = new Map<string, string>()): ThemeStorage {
+  return { get: (key) => map.get(key) ?? null, set: (key, value) => void map.set(key, value) };
+}
+
 /** The providers every v195 shell describe uses: the same fakes as the
  *  `shell navigation` block, with a route table the breadcrumb can read. */
 function shellProviders(routes: Routes = []) {
@@ -101,10 +107,15 @@ function shellProviders(routes: Routes = []) {
     { provide: EventStream, useValue: new FakeEventStream() },
     { provide: TapeStore, useValue: { load: vi.fn(), visible: signal(false), rows: signal([]), asOf: signal(null) } },
     { provide: LiveValuesStore, useValue: fakeLiveValues() },
+    { provide: THEME_STORAGE, useValue: memoryThemeStorage() },
   ];
 }
 
 const readSource = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+
+afterEach(() => {
+  delete document.documentElement.dataset['theme'];
+});
 
 describe('shell navigation', () => {
   let events: FakeEventStream;
@@ -722,6 +733,7 @@ describe('shell top-bar cluster (v195 Phase 3)', () => {
       providers: [
         ...shellProviders(),
         { provide: DENSITY_STORAGE, useValue: { get: (key: string) => stored.get(key) ?? null, set: (key: string, value: string) => stored.set(key, value) } },
+        { provide: THEME_STORAGE, useValue: memoryThemeStorage(stored) },
       ],
     });
     TestBed.overrideProvider(CLOCK, { useValue: signal(NOW) });
@@ -729,6 +741,7 @@ describe('shell top-bar cluster (v195 Phase 3)', () => {
 
   afterEach(() => {
     delete html.dataset['density'];
+    delete html.dataset['theme'];
   });
 
   async function mount() {
@@ -823,6 +836,146 @@ describe('shell top-bar cluster (v195 Phase 3)', () => {
       .find((button) => button.getAttribute('aria-pressed') === 'true')!;
     expect(pressed.textContent!.trim()).toBe('Comfortable');
   });
+
+  const themeButton = (el: HTMLElement) => el.querySelector<HTMLButtonElement>('header.topbar > button.theme-toggle')!;
+
+  it('toggles Dark blue from the bar: aria-pressed, data-theme and ui.theme move together', async () => {
+    const { fixture, el } = await mount();
+    const button = themeButton(el);
+    expect(button.getAttribute('aria-label')).toBe('Dark blue theme');
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(html.dataset['theme']).toBe('graphite');
+
+    button.click();
+    await settle(fixture);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(html.dataset['theme']).toBe('navy');
+    expect(stored.get('ui.theme')).toBe('navy');
+    expect(button.getAttribute('aria-label')).toBe('Dark blue theme');
+
+    button.click();
+    await settle(fixture);
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(html.dataset['theme']).toBe('graphite');
+    expect(stored.get('ui.theme')).toBe('graphite');
+  });
+
+  it('starts pressed when this browser stored Dark blue', async () => {
+    stored.set('ui.theme', 'navy');
+    const { el } = await mount();
+    expect(themeButton(el).getAttribute('aria-pressed')).toBe('true');
+    expect(html.dataset['theme']).toBe('navy');
+  });
+
+  it('is a 44px-hit icon button with the theme glyph and an anchored "Dark blue theme" hint', async () => {
+    const { el } = await mount();
+    const button = themeButton(el);
+    expect(button.classList).toContain('sb-hit');
+    expect(button.classList).toContain('icon');
+    expect(button.querySelector('sb-icon')).not.toBeNull();
+    const tip = el.querySelector('header.topbar > sb-hint [role=tooltip]')!;
+    expect(tip.textContent!.trim()).toBe('Dark blue theme');
+    expect(button.getAttribute('aria-describedby')).toBe(tip.id);
+  });
+
+  it('shows the pressed state as the accent glyph on the accent tint', () => {
+    const css = readSource('src/app/shell/shell.css');
+    const rule = css.match(/\.theme-toggle\[aria-pressed="true"\][^{]*\{[^}]*\}/)?.[0] ?? '';
+    expect(rule).toContain('color: var(--accent);');
+    expect(rule).toContain('background: var(--accent-soft);');
+    expect(css).toMatch(/\.theme-toggle\[aria-pressed="true"\]:not\(\[disabled\]\):hover/);
+  });
+});
+
+describe('v225: one theme across the bar button and the profile menu', () => {
+  const NOW = Date.parse('2026-10-27T12:00:00Z');
+  const html = document.documentElement;
+  let stored: Map<string, string>;
+  const fakeStorage = () => ({
+    get: (key: string) => stored.get(key) ?? null,
+    set: (key: string, value: string) => stored.set(key, value),
+  });
+
+  beforeEach(() => {
+    stored = new Map();
+    TestBed.configureTestingModule({
+      providers: [
+        ...shellProviders(),
+        { provide: DENSITY_STORAGE, useValue: fakeStorage() },
+        { provide: THEME_STORAGE, useValue: memoryThemeStorage(stored) },
+      ],
+    });
+    TestBed.overrideProvider(CLOCK, { useValue: signal(NOW) });
+  });
+
+  afterEach(() => {
+    delete html.dataset['density'];   // data-theme is cleared by the file-level afterEach (V225-6)
+  });
+
+  async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  async function mount() {
+    const fixture = createShell();
+    await settle(fixture);
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  const openMenu = async (fixture: ComponentFixture<unknown>, el: HTMLElement) => {
+    el.querySelector<HTMLButtonElement>('sb-profile-menu .avatar')!.click();
+    await settle(fixture);
+  };
+  const themeSegments = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll<HTMLButtonElement>('sb-profile-menu .theme-control .segment'));
+  const segment = (el: HTMLElement, label: 'Black' | 'Dark blue') =>
+    themeSegments(el).find((button) => button.textContent!.trim() === label)!;
+  const pressedSegment = (el: HTMLElement) =>
+    themeSegments(el).find((button) => button.getAttribute('aria-pressed') === 'true')!.textContent!.trim();
+  const barButton = (el: HTMLElement) => el.querySelector<HTMLButtonElement>('header.topbar button.theme-toggle');
+
+  it('writes ui.theme and data-theme from the menu row, and the bar button follows', async () => {
+    const { fixture, el } = await mount();
+    expect(html.dataset['theme']).toBe('graphite');
+    await openMenu(fixture, el);
+    segment(el, 'Dark blue').click();
+    await settle(fixture);
+    expect(html.dataset['theme']).toBe('navy');
+    expect(stored.get('ui.theme')).toBe('navy');
+    expect(pressedSegment(el)).toBe('Dark blue');
+    expect(barButton(el)!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('moves the pressed segment when the bar button is clicked, and the bar when the menu is', async () => {
+    const { fixture, el } = await mount();
+    await openMenu(fixture, el);
+    expect(pressedSegment(el)).toBe('Black');
+    barButton(el)!.click();
+    await settle(fixture);
+    expect(html.dataset['theme']).toBe('navy');
+    // A click outside the menu closes it (ProfileMenu's document click); reopen to read it.
+    if (!el.querySelector('sb-profile-menu [role=menu]')) await openMenu(fixture, el);
+    expect(pressedSegment(el)).toBe('Dark blue');
+    segment(el, 'Black').click();
+    await settle(fixture);
+    expect(barButton(el)!.getAttribute('aria-pressed')).toBe('false');
+    expect(stored.get('ui.theme')).toBe('graphite');
+  });
+
+  it('keeps the Theme row on a phone, where it is the only switch', async () => {
+    TestBed.overrideProvider(ViewportService, {
+      useValue: { isPhone: signal(true), isNarrow: signal(true), viewport: signal('xs') },
+    });
+    const { fixture, el } = await mount();
+    expect(barButton(el)).toBeNull();
+    await openMenu(fixture, el);
+    segment(el, 'Dark blue').click();
+    await settle(fixture);
+    expect(html.dataset['theme']).toBe('navy');
+    expect(stored.get('ui.theme')).toBe('navy');
+  });
 });
 
 describe('shell on a phone (v195 Phase 3)', () => {
@@ -875,6 +1028,7 @@ describe('shell on a phone (v195 Phase 3)', () => {
     expect(brand.firstElementChild!.matches('sb-icon')).toBe(true);
     expect(brand.querySelectorAll('.word span')).toHaveLength(2);
     expect(bar.querySelector('sb-breadcrumb, span.topbar-divider, button.palette-trigger')).toBeNull();
+    expect(bar.querySelector('button.theme-toggle')).toBeNull();
     const search = bar.querySelector('button.search-trigger')!;
     expect(search.getAttribute('aria-label')).toBe('Search or jump to a page');
     // The magnifier: sb-icon's default label for 'search' (V195-14).
@@ -994,7 +1148,7 @@ describe('shell command palette (v195 §3.1)', () => {
     const trigger = el.querySelector<HTMLButtonElement>('header.topbar > button.palette-trigger')!;
     // v203 Moved (spec v202 §3): the Ctrl K trigger follows the cluster.
     expect(trigger.previousElementSibling!.matches('div.status-cluster')).toBe(true);
-    expect(trigger.nextElementSibling!.matches('sb-profile-menu')).toBe(true);
+    expect(trigger.nextElementSibling!.matches('button.theme-toggle')).toBe(true);   // v225: then the theme toggle, then the avatar
     expect(trigger.textContent).toContain('Search or jump…');
     expect(trigger.getAttribute('aria-keyshortcuts')).toBe('Control+K Meta+K /');
     expect(trigger.querySelector('kbd.shortcut')!.getAttribute('aria-hidden')).toBe('true');
@@ -1310,13 +1464,14 @@ describe('shell top bar (v203, spec v202 §3)', () => {
   function render(): HTMLElement {
     const f = createShell();
     f.detectChanges();
+    f.detectChanges();
     return f.nativeElement as HTMLElement;
   }
 
-  it('orders the bar: wordmark, divider, breadcrumb, cluster, search, avatar', () => {
+  it('orders the bar: wordmark, divider, breadcrumb, cluster, search, theme, avatar', () => {
     const bar = render().querySelector('header.topbar')!;
     const order = ['a.brand', 'span.topbar-divider', 'sb-breadcrumb.topbar-lead', 'div.status-cluster',
-      'button.palette-trigger', 'sb-profile-menu', 'sb-scan-progress'];
+      'button.palette-trigger', 'button.theme-toggle', 'sb-hint', 'sb-profile-menu', 'sb-scan-progress'];
     expect(bar.children).toHaveLength(order.length);
     order.forEach((selector, index) => expect(bar.children[index].matches(selector), selector).toBe(true));
     expect(bar.querySelector('span.topbar-divider')!.getAttribute('aria-hidden')).toBe('true');

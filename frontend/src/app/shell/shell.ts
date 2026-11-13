@@ -3,9 +3,11 @@ import {
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
@@ -26,6 +28,7 @@ import { ViewportService } from '../ui/breakpoints';
 import { Button } from '../ui/button';
 import { DensityService } from '../ui/density.service';
 import { Hint } from '../ui/hint';
+import { ThemeService } from '../ui/theme.service';
 import { Icon } from '../ui/icon';
 import { ProfileMenu } from './profile-menu';
 import { RouteLoadingService } from '../routing/route-loading.service';
@@ -290,6 +293,15 @@ export class Shell {
    *  written through DensityService, which owns `ui.density` and the
    *  `data-density` attribute on <html>. */
   protected readonly density = inject(DensityService);
+
+  /** Black or Dark blue for this browser (spec v225): the bar button and the
+   *  profile menu's Theme row both write through ThemeService, which owns
+   *  `ui.theme`, `data-theme` and the theme-color meta. */
+  protected readonly theme = inject(ThemeService);
+
+  /** The bar button's element, for its anchored hint: `#themeToggle` on a
+   *  `button[sb-button]` names the Button component, not the element. */
+  protected readonly themeToggleRef = viewChild('themeToggle', { read: ElementRef<HTMLElement> });
 
   protected setMotion(mode: MotionMode): void {
     this.motion.set(mode);

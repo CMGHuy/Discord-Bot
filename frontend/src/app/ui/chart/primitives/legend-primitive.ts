@@ -88,7 +88,7 @@ export function legendLayout(lines: string[], fontSize: number, paneWidth?: numb
 class LegendRenderer implements IPrimitivePaneRenderer {
   constructor(
     private readonly lines: () => readonly string[],
-    private readonly palette: ChartPalette,
+    private readonly palette: () => ChartPalette,
   ) {}
 
   draw(target: {
@@ -101,6 +101,7 @@ class LegendRenderer implements IPrimitivePaneRenderer {
   }): void {
     const lines = this.lines();
     if (lines.length === 0) return;
+    const palette = this.palette();
 
     target.useMediaCoordinateSpace(({ context, mediaSize }) => {
       // `--text-table` (13px): the same size the tables around this chart
@@ -119,11 +120,11 @@ class LegendRenderer implements IPrimitivePaneRenderer {
       // v54 D5: the box reads as this chart's version of the other three
       // charts' `.tooltip` -- `chart-frame.ts`'s CHART_CHROME.tooltipSurface
       // / tooltipBorder, not the plain chart surface/grid border.
-      context.fillStyle = this.palette.tooltipSurface;
+      context.fillStyle = palette.tooltipSurface;
       context.globalAlpha = 0.85;
       context.fillRect(MARGIN, MARGIN, box.width, box.height);
       context.globalAlpha = 1;
-      context.strokeStyle = this.palette.tooltipBorder;
+      context.strokeStyle = palette.tooltipBorder;
       context.lineWidth = 1;
       context.strokeRect(MARGIN + 0.5, MARGIN + 0.5, box.width - 1, box.height - 1);
 
@@ -132,7 +133,7 @@ class LegendRenderer implements IPrimitivePaneRenderer {
       // The first line is the identity (ticker · horizon); the rest are
       // supporting detail, so only it takes the full-emphasis colour.
       lines.forEach((line, index) => {
-        context.fillStyle = index === 0 ? this.palette.text : this.palette.textMuted;
+        context.fillStyle = index === 0 ? palette.text : palette.textMuted;
         context.fillText(line, MARGIN + PADDING, MARGIN + PADDING + index * box.lineHeight);
       });
       context.restore();
@@ -143,7 +144,7 @@ class LegendRenderer implements IPrimitivePaneRenderer {
 class LegendPaneView implements IPrimitivePaneView {
   private readonly renderer_: LegendRenderer;
 
-  constructor(lines: () => readonly string[], palette: ChartPalette) {
+  constructor(lines: () => readonly string[], palette: () => ChartPalette) {
     this.renderer_ = new LegendRenderer(lines, palette);
   }
 
@@ -161,17 +162,27 @@ class LegendPaneView implements IPrimitivePaneView {
 /**
  * The legend primitive itself: no price/time anchoring, because the pane's
  * corner is a fixed pixel position, not a point on the chart. Task 11 attaches
- * one per chart and calls `setLines` whenever the trade, the crosshair, or the
- * theme changes.
+ * one per chart and calls `setLines` whenever the trade or the crosshair changes,
+ * and `setPalette` when the theme does (v225).
  */
 export class LegendPrimitive implements ISeriesPrimitive<Time> {
   private currentLines: readonly string[];
   private readonly views: LegendPaneView[];
   private requestUpdate: (() => void) | null = null;
 
+  private currentPalette: ChartPalette;
+
   constructor(palette: ChartPalette, lines: string[]) {
     this.currentLines = lines;
-    this.views = [new LegendPaneView(() => this.currentLines, palette)];
+    this.currentPalette = palette;
+    this.views = [new LegendPaneView(() => this.currentLines, () => this.currentPalette)];
+  }
+
+  /** Swaps the colours in place after a theme flip (spec v225) and asks for
+   *  a redraw, the same way `setLines` does. */
+  setPalette(palette: ChartPalette): void {
+    this.currentPalette = palette;
+    this.requestUpdate?.();
   }
 
   /** Replaces the drawn lines in place. Cheap enough to call on every

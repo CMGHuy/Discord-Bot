@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SessionStore } from '../../stores/session.store';
 import { DENSITY_STORAGE } from '../../ui/density.service';
+import { THEME_STORAGE } from '../../ui/theme.service';
 import { stripComments } from '../../ui/testing/all-sources';
 import { CommandPalette, isPaletteShortcut, isTypingTarget, shortcutLabel } from './command-palette';
 
@@ -57,6 +58,7 @@ describe('CommandPalette (v195 §3.1)', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: DENSITY_STORAGE, useValue: { get: (k: string) => stored.get(k) ?? null, set: (k: string, v: string) => stored.set(k, v) } },
+        { provide: THEME_STORAGE, useValue: { get: (k: string) => stored.get(k) ?? null, set: (k: string, v: string) => stored.set(k, v) } },
       ],
     });
     patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: 'admin', role: 'admin' });
@@ -64,6 +66,7 @@ describe('CommandPalette (v195 §3.1)', () => {
 
   afterEach(() => {
     delete document.documentElement.dataset['density'];
+    delete document.documentElement.dataset['theme'];
   });
 
   async function settle(fixture: ComponentFixture<Host>): Promise<void> {
@@ -216,6 +219,27 @@ describe('CommandPalette (v195 §3.1)', () => {
     expect(host.closes).toBe(1);
   });
 
+  it('switches the theme in place, without navigating, and back again', async () => {
+    const { fixture, el, host } = await mount();
+    const router = TestBed.inject(Router);
+    const before = router.url;
+    await type(fixture, el, 'theme');
+    expect(optionLabels(el)).toEqual(['Switch theme']);
+    await press(fixture, el, 'Enter');
+    expect(document.documentElement.dataset['theme']).toBe('navy');
+    expect(stored.get('ui.theme')).toBe('navy');
+    expect(router.url).toBe(before);
+    expect(host.closes).toBe(1);
+
+    host.open.set(true);
+    await settle(fixture);
+    await type(fixture, el, 'switch');
+    await press(fixture, el, 'Enter');
+    expect(document.documentElement.dataset['theme']).toBe('graphite');
+    expect(stored.get('ui.theme')).toBe('graphite');
+    expect(host.closes).toBe(2);
+  });
+
   it('closes on Escape, on the scrim and on Close', async () => {
     const { fixture, el, host } = await mount();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -265,10 +289,10 @@ describe('CommandPalette (v195 §3.1)', () => {
     expect(optionLabels(el)).toEqual(['Density: Dense']);
   });
 
-  it('can only navigate and set density: it injects nothing that acts', () => {
+  it('can only navigate, set density and switch the theme: it injects nothing that acts', () => {
     const source = stripComments(readFileSync(join(process.cwd(), 'src/app/shell/palette/command-palette.ts'), 'utf8'));
     const injected = [...source.matchAll(/inject\((\w+)\)/g)].map(([, name]) => name).sort();
-    expect(injected).toEqual(['DensityService', 'Router', 'SearchIndexStore', 'SessionStore']);
+    expect(injected).toEqual(['DensityService', 'Router', 'SearchIndexStore', 'SessionStore', 'ThemeService']);
     expect(source).not.toMatch(/ApiClient|EventStream|killswitch|restart|triggerScan|HttpClient/i);
   });
 });

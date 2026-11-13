@@ -36,6 +36,30 @@ export interface PricePane {
   volume: ISeriesApi<'Histogram'>;
 }
 
+function priceSeriesColors(palette: ChartPalette) {
+  return {
+    candles: {
+      upColor: palette.up,
+      downColor: palette.down,
+      // Bodies, borders and wicks share their side's colour: a candle is one
+      // object, and outlining it in a third colour only adds edges to read.
+      borderUpColor: palette.up,
+      borderDownColor: palette.down,
+      wickUpColor: palette.up,
+      wickDownColor: palette.down,
+    },
+    volume: { color: palette.volume },
+  };
+}
+
+/** Re-colours an existing pane after a theme flip (spec v225): the same
+ *  colours `createPricePane` gave it, read from a fresh palette. */
+export function applyPricePanePalette(pane: PricePane, palette: ChartPalette): void {
+  const colors = priceSeriesColors(palette);
+  pane.candles.applyOptions(colors.candles);
+  pane.volume.applyOptions(colors.volume);
+}
+
 /**
  * @param levels a getter, not a value — the library asks the autoscale
  *   provider on every frame and the plan changes with the trade.
@@ -51,14 +75,7 @@ export function createPricePane(
   const candles = chart.addSeries(
     CandlestickSeries,
     {
-      upColor: palette.up,
-      downColor: palette.down,
-      // Bodies, borders and wicks share their side's colour: a candle is one
-      // object, and outlining it in a third colour only adds edges to read.
-      borderUpColor: palette.up,
-      borderDownColor: palette.down,
-      wickUpColor: palette.up,
-      wickDownColor: palette.down,
+      ...priceSeriesColors(palette).candles,
       // The plan levels are price LINES, which take no part in autoscale — so a
       // target above the frame's high draws off the top of the pane, correct
       // and invisible. SR40's walk against the PNG is what found it: matplotlib
@@ -77,10 +94,11 @@ export function createPricePane(
   const volume = chart.addSeries(
     HistogramSeries,
     {
-      // One colour for every bar, not green-up/red-down. Under the token
+      // One colour for every bar, not green-up/red-down (see `volume` in
+      // `priceSeriesColors`). Under the token
       // palette a hue carries a MEANING — `--pos` is profit, `--neg` is loss —
       // and volume has no valence: a heavy down day is information, not a loss.
-      color: palette.volume,
+      ...priceSeriesColors(palette).volume,
       priceFormat: { type: 'volume' },
       priceScaleId: VOLUME_SCALE,
       // The volume axis is never read as a number — the bars are read against

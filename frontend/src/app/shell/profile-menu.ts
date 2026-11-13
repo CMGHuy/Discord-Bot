@@ -13,6 +13,7 @@ import { ConnectionState } from '../stores/connection.store';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { RowDensity } from '../ui/density.service';
+import { Theme } from '../ui/theme.service';
 import { MotionMode, parseMotion } from '../ui/motion/motion.service';
 import { SegmentOption, Segmented } from '../ui/segmented';
 
@@ -27,6 +28,13 @@ const MOTION_OPTIONS: SegmentOption[] = [
 const DENSITY_OPTIONS: SegmentOption[] = [
   { value: 'dense', label: 'Dense' },
   { value: 'comfortable', label: 'Comfortable' },
+];
+
+/** The two grounds, in the order the control shows them (spec v225). The
+ *  stored values stay `graphite` | `navy`; the labels are what a user reads. */
+const THEME_OPTIONS: SegmentOption[] = [
+  { value: 'graphite', label: 'Black' },
+  { value: 'navy', label: 'Dark blue' },
 ];
 
 /**
@@ -45,6 +53,11 @@ const DENSITY_OPTIONS: SegmentOption[] = [
  * writes through `DensityService`. It changes rows only on a desktop with a
  * fine pointer; the note under it says so, because on a phone or tablet the
  * 44px touch rules win and the control would otherwise seem broken.
+ *
+ * Theme (spec v225) sits under Density: Black (Graphite) or Dark blue (Navy),
+ * a per-browser choice the shell writes through `ThemeService`. Unlike
+ * Density it changes every device, so it carries no note; on a phone it is
+ * the only switch, because the bar button is tablet and desktop only.
  */
 @Component({
   selector: 'sb-profile-menu',
@@ -108,6 +121,16 @@ const DENSITY_OPTIONS: SegmentOption[] = [
           />
           <span class="menu-note">Desktop only: touch screens keep 44px rows.</span>
         </div>
+        <div class="theme-row" role="none">
+          <span class="menu-label" aria-hidden="true">Theme</span>
+          <sb-segmented
+            class="theme-control"
+            label="Theme"
+            [options]="themeOptions"
+            [value]="theme()"
+            (valueChange)="onTheme($event)"
+          />
+        </div>
         <button sb-button variant="ghost" type="button" role="menuitem" (click)="signOut()">
           <sb-icon name="signout" />
           <span>Sign out</span>
@@ -168,7 +191,8 @@ const DENSITY_OPTIONS: SegmentOption[] = [
        them (emulated encapsulation scopes it to this template's own
        buttons), so nothing has to be undone here. */
     .motion-row,
-    .density-row {
+    .density-row,
+    .theme-row {
       display: flex;
       flex-direction: column;
       gap: var(--space-4);
@@ -188,7 +212,8 @@ const DENSITY_OPTIONS: SegmentOption[] = [
        height there; this gives a short label like "On" the same width. */
     @media (pointer: coarse), (max-width: 1023px) {
       :host ::ng-deep .motion-control .segment,
-      :host ::ng-deep .density-control .segment { min-width: 44px; justify-content: center; }
+      :host ::ng-deep .density-control .segment,
+      :host ::ng-deep .theme-control .segment { min-width: 44px; justify-content: center; }
     }
   `,
 })
@@ -237,6 +262,17 @@ export class ProfileMenu {
   /** Validated, not trusted: anything but 'comfortable' is the default. */
   protected onDensity(value: string): void {
     this.densityChanged.emit(value === 'comfortable' ? 'comfortable' : 'dense');
+  }
+
+  /** The current ground, owned by the shell's ThemeService (spec v225). */
+  readonly theme = input<Theme>('graphite');
+  readonly themeChanged = output<Theme>();
+
+  protected readonly themeOptions = THEME_OPTIONS;
+
+  /** Validated, not trusted: anything but exactly 'navy' is the default. */
+  protected onTheme(value: string): void {
+    this.themeChanged.emit(value === 'navy' ? 'navy' : 'graphite');
   }
 
   protected readonly open = signal(false);

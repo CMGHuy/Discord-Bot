@@ -87,27 +87,38 @@ describe('palette items (v195 §3.1)', () => {
     expect(tradeItems([trade('2', 'Y', 'ACTIVE', null)])[0].recency).toBe(0);
   });
 
-  it('offers the density preference both ways, applied in place', () => {
-    expect(PREFERENCE_ITEMS.map((item) => [item.label, item.density, item.route])).toEqual([
-      ['Density: Dense', 'dense', null],
-      ['Density: Comfortable', 'comfortable', null],
+  it('offers the density preference both ways and the theme switch, all applied in place', () => {
+    expect(PREFERENCE_ITEMS.map((item) => [item.label, item.density, item.action, item.route])).toEqual([
+      ['Density: Dense', 'dense', undefined, null],
+      ['Density: Comfortable', 'comfortable', undefined, null],
+      ['Switch theme', undefined, 'toggle-theme', null],
     ]);
+    expect(PREFERENCE_ITEMS.at(-1)).toEqual({
+      key: 'pref:theme:toggle', group: 'preferences', label: 'Switch theme',
+      sub: 'Black or Dark blue', route: null, action: 'toggle-theme',
+    });
     expect(PALETTE_GROUP_LABELS).toEqual({ tickers: 'Ticker', trades: 'Trade', pages: 'Page', preferences: 'Preference' });
   });
 
-  it('registers no destructive or money-moving action: every item navigates or sets density', () => {
+  it('finds the theme switch by "theme", "switch", "dark blue" and "black"', () => {
+    for (const query of ['theme', 'switch', 'dark blue', 'black']) {
+      expect(rankPaletteItems(query, PREFERENCE_ITEMS).map((item) => item.label), query).toEqual(['Switch theme']);
+    }
+  });
+
+  it('registers no destructive or money-moving action: every item navigates, sets density or switches the theme', () => {
     const all = [
       ...tickerItems([ticker('NVDA', 'NVIDIA Corp')]),
       ...tradeItems([trade('812', 'NVDA', 'ACTIVE', null)]),
       ...pageItems(),
       ...PREFERENCE_ITEMS,
     ];
-    const allowedKeys = new Set(['key', 'group', 'label', 'sub', 'route', 'queryParams', 'density', 'recency']);
+    const allowedKeys = new Set(['key', 'group', 'label', 'sub', 'route', 'queryParams', 'density', 'action', 'recency']);
     for (const item of all) {
       // An item is data, never a callback: no field can carry an action.
       expect(Object.keys(item).filter((key) => !allowedKeys.has(key)), item.key).toEqual([]);
       expect(Object.values(item).some((value) => typeof value === 'function'), item.key).toBe(false);
-      expect(item.route !== null || item.density !== undefined, item.key).toBe(true);
+      expect(item.route !== null || item.density !== undefined || item.action === 'toggle-theme', item.key).toBe(true);
       expect(`${item.label} ${item.sub ?? ''} ${item.route ?? ''}`, item.key)
         .not.toMatch(/kill|halt|restart|stop bot|clear|delete|close all|discard|scan now|order/i);
     }

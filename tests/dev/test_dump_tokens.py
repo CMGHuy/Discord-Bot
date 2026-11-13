@@ -1,6 +1,7 @@
 """scripts/dev/dump_tokens.py: the Python half of the token resolver pair
 (spec v167 § 1). frontend/src/app/ui/resolve-token.spec.ts holds the
 TypeScript half to the same committed fixture."""
+import re
 import sys
 from pathlib import Path
 
@@ -96,3 +97,31 @@ def test_the_committed_fixture_is_current():
     """A palette.css / tokens.css edit without `python scripts/dev/dump_tokens.py`
     fails here, in the fast tier (test_chart_theme.py runs only in the slow tier)."""
     assert dt.main(["--check"]) == 0
+
+
+_NAVY_BLOCK = re.compile(r':root\[data-theme="navy"\]\s*\{[^}]*\}')
+
+
+def test_parse_root_skips_the_navy_selector():
+    css = ':root { --a: 1; }\n:root[data-theme="navy"] { --a: 2; --b: 3; }\n'
+    assert dt.parse_root(css) == {"a": "1"}
+
+
+def test_navy_block_is_invisible_to_the_discord_fixture(tmp_path):
+    """Spec v225: the Discord PNGs stay Graphite. Two in-memory runs over the
+    real palette.css + tokens.css, with and without the Navy block, must give
+    the same tokens -- never compared against the committed file, so a
+    regenerated fixture cannot hide a resolver that learned the theme."""
+    palette_src, tokens_src = (p.read_text(encoding="utf-8") for p in dt.STYLE_FILES)
+    assert len(_NAVY_BLOCK.findall(tokens_src)) == 1, "the Navy block moved, was renamed or holds a brace"
+    palette = tmp_path / "palette.css"
+    with_navy = tmp_path / "tokens-navy.css"
+    without_navy = tmp_path / "tokens-graphite.css"
+    palette.write_text(palette_src, encoding="utf-8")
+    with_navy.write_text(tokens_src, encoding="utf-8")
+    without_navy.write_text(_NAVY_BLOCK.sub("", tokens_src), encoding="utf-8")
+
+    navy = dt.resolve_tokens((palette, with_navy))
+    assert navy == dt.resolve_tokens((palette, without_navy))
+    assert navy["bg"] == navy["graphite-950"]
+    assert navy["text"] == navy["grey-100"]

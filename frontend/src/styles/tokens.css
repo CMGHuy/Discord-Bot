@@ -4,16 +4,27 @@
  * `2026-08-08-v20-admin-design-system-design.md` Decision 3, which are marked
  * as superseded in that document rather than deleted from it.
  *
- * **Dark only. There is no light theme and there is not going to be one**, so
- * there is no `prefers-color-scheme` block here and no `[data-theme]` hook to
- * hang one on. A terminal aesthetic has no light counterpart worth
- * maintaining, and this is a single-user private tool. Adding one later means
- * revisiting the spec, not adding a media query.
+ * **Dark only. Two dark grounds, no light theme** (spec v225,
+ * docs/superpowers/specs/2026-11-10-v225-dark-blue-theme-design.md): Black
+ * (Graphite, the bare :root below) and Dark blue (Navy), selected by
+ * <html data-theme="navy"> -- no attribute, or any other value, is
+ * Graphite. There is still no light theme and no `prefers-color-scheme`
+ * block; `data-theme` exists for the ground only. ui/theme.service.ts
+ * writes it from the per-browser localStorage key ui.theme.
+ *
+ * The ground and ink are a named list: --bg, --surface, --surface-raised,
+ * --surface-overlay, --overlay-dim, --border, --border-strong, --text,
+ * --text-secondary, --text-muted, --text-faint. Every token on that list
+ * has a Navy value in the :root[data-theme="navy"] block; every token off
+ * it is shared by both themes. A new ground or ink token joins the list and
+ * gets its Navy value in the same commit (tokens.spec.ts checks both ways).
  *
  * The bot's Discord chart PNGs share this palette (spec v80 D5):
  * `swingbot/core/charts/chart_style.py`'s THEME names these tokens and
  * tests/charts/test_chart_theme.py compares the two byte for byte. Change a
  * colour here and that test names the chart constant that must follow.
+ * The PNGs are always Graphite: both resolvers read bare :root blocks
+ * only, so the Navy block never reaches the fixture (spec v225).
  */
 
 :root {
@@ -406,6 +417,26 @@
     --panel-pad: var(--space-20);
     --text-table: calc(14px * var(--text-scale));
   }
+}
+
+/* v225 -- the Dark blue (Navy) ground, a per-browser choice. Re-points the
+ * eleven ground and ink tokens named in the header to the midnight/frost
+ * palette and nothing else; var() references only, the hues live in
+ * palette.css. Outside the bare :root on purpose -- dump_tokens.py and
+ * resolve-token.ts read only `:root`, so the fixture and the Discord PNGs
+ * stay Graphite. Never write this selector as part of a `:root, ...` list. */
+:root[data-theme="navy"] {
+  --bg: var(--midnight-950);
+  --surface: var(--midnight-900);
+  --surface-raised: var(--midnight-850);
+  --surface-overlay: var(--midnight-800);
+  --overlay-dim: var(--midnight-950-a72);
+  --border: var(--midnight-750);
+  --border-strong: var(--midnight-700);
+  --text: var(--frost-100);
+  --text-secondary: var(--frost-300);
+  --text-muted: var(--frost-400);
+  --text-faint: var(--midnight-500);
 }
 
 /* Breakpoints are 640 / 1024 / 1440 / 1920.
