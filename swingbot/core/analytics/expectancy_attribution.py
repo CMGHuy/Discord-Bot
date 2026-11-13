@@ -17,6 +17,7 @@ import datetime as dt
 import hashlib
 import json
 import logging
+import math
 import sys
 from pathlib import Path
 from typing import NamedTuple
@@ -715,3 +716,89 @@ def run(train_jsonl, *, seed: int = WEEK_BOOTSTRAP_SEED, write: bool = True) -> 
         "n_resamples": N_RESAMPLES,
     }
     return write_latest(report) if write else report
+
+
+# --------------------------------------------------------------------------
+# v226: stop-width attribution -- a study of its own. Nothing above this line
+# reads anything below it; the v146 report stays byte-identical.
+# --------------------------------------------------------------------------
+
+#: A stop-width row is an attribution row (ROW_KEYS, unchanged) plus these.
+#: ``stop_atr`` = |signal close - stop| / ATR14, both from the signal bar
+#: (``entry_context["stop_atr"]``); ``atr_pct`` = ``stop_pct / stop_atr``
+#: (disclosed only); ``stop_clamped`` is the identity-based clamp flag.
+STOP_WIDTH_KEYS = ("stop_atr", "atr_pct", "stop_clamped")
+#: Live rows only: the TRAIN scenario row carries neither timestamps nor a
+#: strategy field, and its contract is not widened for them.
+STOP_WIDTH_LIVE_KEYS = ("opened_at", "closed_at", "strategy")
+
+
+def _positive_number(value) -> float | None:
+    """``float(value)`` when it is a finite number > 0, else None. Bools are
+    not numbers here, and neither are numeric strings."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def _text_or_none(value) -> str | None:
+    return None if value is None else str(value)
+
+
+def _family(trade: dict) -> str | None:
+    """The live trade's strategy family as the admin UI shows it (the raw
+    ``strategy`` field is the constant "S/R Confluence"). Lazy import: the
+    label pulls chart code."""
+    from swingbot.core.tracking.performance import primary_strategy_label
+    label = primary_strategy_label(trade)
+    return None if label == "--" else label
+
+
+def stop_width_row(base_row: dict, source: dict, *, live: bool = False) -> dict:
+    """``base_row`` (an attribution row) plus STOP_WIDTH_KEYS read from
+    ``source["entry_context"]``, plus STOP_WIDTH_LIVE_KEYS when ``live``.
+    Returns a new dict; ``base_row`` is not touched."""
+    context = source.get("entry_context")
+    context = context if isinstance(context, dict) else {}
+    stop_atr = _positive_number(context.get("stop_atr"))
+    stop_pct = _positive_number(context.get("stop_pct"))
+    clamped = context.get("stop_clamped")
+    row = {**base_row,
+           "stop_atr": stop_atr,
+           "atr_pct": stop_pct / stop_atr if stop_atr and stop_pct else None,
+           "stop_clamped": clamped if isinstance(clamped, bool) else None}
+    if live:
+        row["opened_at"] = _text_or_none(source.get("opened_at"))
+        row["closed_at"] = _text_or_none(source.get("closed_at"))
+        row["strategy"] = _family(source)
+    return row
+
+
+def load_stop_width_train_rows(path, *, source=None) -> list[dict]:
+    """``load_train_rows`` again, each kept row wrapped by ``stop_width_row``."""
+    source = source if source is not None else earnings_calendar.CsvSource()
+    rows = []
+    with Path(path).open(encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            raw = json.loads(line)
+            base = _train_row(raw, source)
+            if base is not None:
+                rows.append(stop_width_row(base, raw))
+    return rows
+
+
+def load_stop_width_live_rows() -> list[dict]:
+    """``load_live_rows`` again (every closed trade of both ledgers, read from
+    the database ``DATABASE_URL`` names at call time), each kept row wrapped
+    by ``stop_width_row(..., live=True)``."""
+    from swingbot.core.tracking.performance import TradeLog
+    closed = closed_only(TradeLog().get_trades(status=None, limit=None, ledger=None) or [])
+    rows = []
+    for trade in closed:
+        base = live_row(trade)
+        if base is not None:
+            rows.append(stop_width_row(base, trade, live=True))
+    return rows
