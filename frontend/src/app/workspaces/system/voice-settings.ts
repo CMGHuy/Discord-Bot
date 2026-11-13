@@ -76,7 +76,7 @@ export function familyRow(family: FeedKindFamily, isOn: (kind: string) => boolea
  *
  * Per-browser choices only (VoicePrefs, localStorage): nothing here reads or
  * writes the /system/settings payload, which is why the tab mounts this block
- * outside its sb-async -- it works while that payload loads or fails.
+ * outside its async panel -- it works while that payload loads or fails.
  *
  * The kinds come from GET /feed-posts/kinds, so a kind added to the server's
  * registry appears here with no frontend change. The master switch sits
@@ -180,10 +180,7 @@ export function familyRow(family: FeedKindFamily, isOn: (kind: string) => boolea
     .reason { margin: 0; color: var(--text-secondary); font-size: var(--text-table); overflow-wrap: anywhere; }
     .voice { margin-top: var(--space-14); font-size: var(--text-table); }
     summary { color: var(--text-secondary); cursor: pointer; }
-    .families { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-14); margin-top: var(--space-10); }
-    @media (min-width: 640px) {
-      .families { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
+    .families { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: var(--space-14); margin-top: var(--space-10); }
     .family { min-width: 0; }
     .kinds { display: grid; gap: var(--space-4); margin: var(--space-4) 0 0; padding: 0 0 0 var(--space-14); list-style: none; }
     .kind { display: flex; align-items: center; gap: var(--space-8); min-width: 0; }

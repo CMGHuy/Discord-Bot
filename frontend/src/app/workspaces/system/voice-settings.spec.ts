@@ -195,9 +195,8 @@ describe('familyRow (v227)', () => {
 describe('VoiceSettings layout (v227)', () => {
   const source = readFileSync(join(process.cwd(), 'src/app/workspaces/system/voice-settings.ts'), 'utf8');
 
-  it('stacks the families on a phone and sets two columns from the 640px breakpoint', () => {
-    expect(source).toMatch(/\.families \{[^}]*grid-template-columns: minmax\(0, 1fr\);/);
-    expect(source).toMatch(/@media \(min-width: 640px\) \{\s*\.families \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
+  it('sizes the families with auto-fit: one column on a phone, two once they fit', () => {
+    expect(source).toMatch(/\.families \{[^}]*grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 20rem\), 1fr\)\);/);
   });
 
   it('never truncates a label and explains nothing through title', () => {

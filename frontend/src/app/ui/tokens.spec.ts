@@ -269,6 +269,12 @@ const NOT_CONTROL_ROWS = new Set([
   // Users tab: the action group inside a table cell (Reset password, Delete); it wraps on a
   // phone and stays on one line from 640px, which is not a control lane (v207).
   'row-actions',
+  // Settings -> Voice notifications (v227). `kind`: a switch beside its ▶ preview, centred so the
+  // label and glyph share a line; `voice-controls`: select, slider and Test button top-aligned by
+  // label with the button pinned to the bottom; `rate-row`: slider beside its value readout. The
+  // layout audit (v227 results) measured these as baseline-clean; bottom-aligning a switch with a
+  // hint line is the regression sb-control-row would introduce.
+  'kind', 'voice-controls', 'rate-row',
 ]);
 
 describe('no workspace hand-rolls a control row', () => {
