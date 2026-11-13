@@ -245,10 +245,8 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 `task-brief` (trap preflight for a plan task's handoff) is not explicit-only: run it right after `task_handoff.py` writes one.
 
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
-whenever Claude would run `/<name>`: `gate` (pre-push: complexity gate, changed tests, CI watch), `deploy` (Hetzner deploy
-sequence; refuses while held), `stable-snapshot` (pin a known-good point and its images),
-`rollback` (code-only, keeps trades; holds deploys until `--release`), `backup-pull` (off-VM pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
-output verbatim),
+whenever Claude would run `/<name>`: `gate` (pre-push checks), `deploy` (Hetzner deploy; refuses while held), `stable-snapshot` (pin a known-good point),
+`rollback` (code-only, keeps trades; holds deploys until `--release`), `backup-pull` (off-VM pull), `result-digest` (compare two backtest `--json` files),
 `handoff` (write the plan's `## Handoff` block before a session stops),
 `screen` (one real idea-screen run per idea, after the definition, ledger and
 results-doc checks), `prereg` (commit a pre-registration stub before the
