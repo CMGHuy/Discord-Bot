@@ -39,6 +39,9 @@ const RAW_BUTTON_ALLOWLIST = new Map<string, string>([
   ['shell/alarm-chip.ts', 'class="alarm-chip sb-hit"'],
   ['shell/live/live-edge-tab.ts', 'class="edge-tab sb-hit"'],
   ['shell/live/live-strip.ts', 'class="live-strip sb-hit"'],
+  // v227: the voice chip is a top-bar chip like the alarm chip -- speaker glyph
+  // + state word, padded to 44px by .sb-hit, aria-label naming its action.
+  ['shell/voice-chip.ts', 'class="voice-chip sb-hit"'],
 ]);
 
 describe('no call site hand-rolls a button', () => {
