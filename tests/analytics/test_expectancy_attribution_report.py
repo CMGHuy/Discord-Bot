@@ -328,3 +328,20 @@ def test_the_stop_width_flag_writes_only_its_own_file(monkeypatch, tmp_path, cap
     out = capsys.readouterr().out
     assert f"**Verdict: {written['verdict']['verdict']}**" in out
     assert "Expectancy attribution" not in out          # the v146 summary is not printed
+
+
+def test_the_stop_width_markdown_prints_on_a_cp1252_console(monkeypatch):
+    """The real v226 run died printing "≥" to a Windows cp1252 stdout after
+    writing its JSON report; the Markdown must reach any console as UTF-8."""
+    import io
+    import sys
+
+    raw = io.BytesIO()
+    console = io.TextIOWrapper(raw, encoding="cp1252", errors="strict", newline="\n",
+                               write_through=True)
+    monkeypatch.setattr(sys, "stdout", console)
+    monkeypatch.setattr(ea, "run_stop_width", lambda *a, **k: {})
+    monkeypatch.setattr(ea, "stop_width_markdown", lambda report: "Q4 (≥0.49)\n")
+    assert _script().main(["--train-jsonl", "rows.jsonl", "--study", "stop-width"]) == 0
+    console.flush()
+    assert raw.getvalue().decode("utf-8") == "Q4 (≥0.49)\n"

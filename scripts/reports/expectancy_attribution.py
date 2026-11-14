@@ -62,6 +62,9 @@ def main(argv: list[str] | None = None) -> int:
     seed = study.WEEK_BOOTSTRAP_SEED if args.seed is None else args.seed
     if args.study == "stop-width":
         report = study.run_stop_width(args.train_jsonl, seed=seed, write=not args.no_write)
+        # The Markdown carries non-ASCII (">="); a Windows cp1252 console would crash
+        # here after the report was already written, so emit UTF-8 explicitly.
+        sys.stdout.reconfigure(encoding="utf-8")
         print(study.stop_width_markdown(report), end="")
         return 0
     report = study.run(args.train_jsonl, seed=seed, write=not args.no_write)
