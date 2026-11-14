@@ -20,9 +20,10 @@ Two things stop the usual route:
 
 - **The idea screen cannot see it.** Stage -2 races daily bars; the session a
   plan was issued in does not exist there.
-- **Intraday history is short.** The VM's 5-minute archive holds 60 days. A
-  replay over a longer window would need hourly bars from December 2023, all of
-  it inside the VALIDATION and holdout windows.
+- **Intraday history is short.** The VM's 5-minute archive starts on
+  2026-06-23 (Yahoo serves about 60 days; the bot archives forward, merge-only,
+  and never prunes). A replay over a longer window would need hourly bars from
+  December 2023, all of it inside the VALIDATION and holdout windows.
 
 So this spec measures the question on the bot's **own live plans**, twice: an
 exploratory read on plans already closed, then a forward confirmation on plans
@@ -42,9 +43,18 @@ instead have produced a better result per alert?
 
 ### 1. One script: `scripts/reports/deferred_entry_counterfactual.py`
 
-Inputs: closed trades (`--rows <csv>` from `scripts/ops/export_book_rows.sh`, or
-`--from-db` read-only inside the bot container) and a 5-minute bars directory
-(`--bars-dir`, default `market_data/5min`).
+Inputs: closed trades as `--rows <csv>`, the output of
+`scripts/ops/export_book_rows.sh` (the one proven read path; no database mode is
+added), and a 5-minute bars directory (`--bars-dir`, default
+`market_data/5min`).
+
+**Time basis.** The export writes `opened_at` and `closed_at` as UTC text. The
+archive CSVs carry explicit UTC offsets and each bar is stamped with its
+**start**; the script reads them itself with UTC parsing and does not go through
+`data_store.load_normalized`, which drops the zone. 15:30 ET is derived per
+entry date with `zoneinfo` (`America/New_York`) and converted to UTC, so it
+moves with daylight saving. A test pins a date on each side of a DST change,
+and a test on a real archive file pins the offset and the bar-start stamp.
 
 **Population.** A trade is eligible when all hold:
 
@@ -66,7 +76,7 @@ function on the same 5-minute bars, so simulator error cancels in the pair:
 |---|---|---|
 | **C** control | the trade's own `entry`, from the first bar starting at or after `opened_at` | never |
 | **A** defer | open of the first bar starting at or after 15:30 ET on the entry date | never |
-| **B** defer if held | as A | no trade when any bar between `opened_at` and 15:30 traded at or below the plan's original stop |
+| **B** defer if held | as A | no trade when any bar starting at or after `opened_at` and **strictly before** the 15:30 bar traded at or below the plan's original stop |
 
 For A and B the stop keeps its **distance** (`fill - (entry - stop_loss)`) and
 TP1 keeps its **distance** (`fill + (take_profit - entry)`), so risk and reward
@@ -81,19 +91,25 @@ still open at the end of the fifth session after entry is marked to that bar's
 close. A skipped arm-B plan scores 0R. No runner, no TP2: the live scale-out is
 not reproduced, and that is disclosed in every output.
 
-**Frictions.** Every arm's R is net, through `net_r`
-(`swingbot/core/analytics/expectancy_attribution.py`): `SLIPPAGE_BPS` on both
-fills plus `commission_r()`, the constants of `swingbot/core/edge/frictions.py`.
-Arms A and B pay **twice** the entry slippage, because their fill is a market
-order in the last half hour (the convention `range_breakdown_stop` used for a
-worse fill). Zero frictions are refused. The gross figures are printed beside
+**Frictions.** Every arm's R is net, through the screen's
+`net_r(entry, price, risk, direction=..., entry_bps=...)`
+(`swingbot/core/backtesting/screen/sides.py`), which applies
+`frictions.apply_frictions` once per fill and `commission_r()` once. The
+control uses the default entry slippage; arms A and B pass
+`entry_bps = 2 x SLIPPAGE_BPS`, because their fill is a market order in the
+last half hour (the convention `range_breakdown_stop` used for a worse fill).
+Frictions are applied in this one call and nowhere else. Zero frictions are refused. The gross figures are printed beside
 the net ones and gate nothing.
 
 **Statistic.** Per eligible plan, `d_A = R_A - R_C` and `d_B = R_B - R_C`. The
 estimate is the mean per plan (ExpR per alert, skipped plans included at 0R).
 Intervals come from the repo's `week_cluster_bootstrap`
-(`swingbot/core/backtesting/instrument/stats.py`), clustered by the ISO week of
-`opened_at`, 10,000 resamples, seed fixed in the script: trades are held up to
+(`swingbot/core/backtesting/instrument/stats.py`), called with
+`baseline = R_C`, `component = R_A` (then `R_B`) and the mean-difference
+statistic, clustered by the ISO week of `opened_at`, 10,000 resamples, seed
+`WEEK_BOOTSTRAP_SEED`. The one-sided 97.5% lower bound is the 2.5th percentile
+of the resampled statistic, and the one-sided `p` is the share of resamples at
+or below zero: trades are held up to
 five sessions, so pairs from neighbouring dates share bars and a date cluster
 would understate the dependence. Two arms are read, so each uses a one-sided
 97.5% lower bound (a Bonferroni split of the acceptance gate's 95%).
@@ -147,11 +163,18 @@ printed as disclosure and gates nothing:
 
 ### 2. The pair log
 
-5-minute bars expire after 60 days, so pairs are persisted as they are computed:
-`data/v229/pairs.jsonl`, one row per eligible plan (trade id, entry date, the
-three arm results, coverage flags), appended once per trade id and never
-rewritten. A re-run skips trade ids already present. The file is registered as
-a data file per the `DATA_READERS` convention.
+Pairs are persisted as they are computed, so a verdict never depends on
+re-deriving twelve weeks at once: `data/v229/pairs.jsonl`, one row per eligible
+plan (trade id, entry date, the three arm results, the tradeability record,
+coverage flags), appended once per trade id and never rewritten. A re-run skips
+trade ids already present, and a partially written last line (a killed run) is
+dropped and redone rather than refused. `./data` is a host mount of the bot
+container, so the file lives on the VM's disk, not in Postgres. It gets its own
+row in `DATA_READERS` (`scripts/dev/select_tests.py`), placed before any
+broader `data/` row because the table is first-match-wins.
+
+Each results doc records the archive's last bar timestamp and the git SHA of
+the script, so a run can be reproduced.
 
 ### 3. Two reads, frozen before either
 
@@ -161,7 +184,7 @@ a data file per the `DATA_READERS` convention.
 is `T0`.
 
 **Exploratory read.** Eligible plans opened before `T0`, as far back as the
-5-minute archive reaches (about 60 days). Run once. It is labelled exploratory,
+5-minute archive reaches (2026-06-23, which covers the live book). Run once. It is labelled exploratory,
 issues no verdict and ships nothing; its only purpose is to check calibration.
 Its window overlaps the data that motivated the idea, so it is not evidence.
 **Nothing in the forward rule may change after it is read**: arms, deferral
@@ -193,8 +216,10 @@ when the partner places orders. Fewer than 300 forward LONG pairs or fewer than
 **Verdict rule, per arm.** `PASS` when the forward mean delta is at least
 +0.10R, its one-sided 97.5% lower bound is above 0, and the forward run is
 calibrated. Otherwise `NO-LIFT`. `UNCALIBRATED` closes the read as inconclusive.
-The ledger row is scored with the other ideas through `ledger_qvalues`, because
-the session cell was picked from many slices.
+The ledger row (`id, date, hypothesis, instrument, n, exp_r, p, verdict,
+record, data_source`) carries a non-null `p`, the smaller arm's one-sided
+bootstrap p doubled for the two arms, so `ledger_qvalues` can score it with the
+other ideas; the session cell was picked from many slices.
 
 - A `PASS` earns a spec for a deferred-entry mode. It ships nothing by itself.
   **Binding on that follow-on (partner, 2026-11-14):** this spec is
@@ -238,6 +263,8 @@ the session cell was picked from many slices.
   bars only; five-session mark; gap through the stop at a session open.
 - Arms: distance-preserving stop and TP1; arm-B skip on a touch and no skip
   without one; half-day exclusion; no-coverage exclusion.
+- No lookahead: removing every bar at or after 15:30 leaves arm B's skip
+  decision and the day-low record unchanged.
 - Pair log: append-once per trade id, restart skips, malformed row refused.
 - Verdict guard: refuses before the window's five-session mark, refuses a
   second verdict, `UNDERPOWERED` and `UNCALIBRATED` paths.
@@ -273,3 +300,11 @@ the session cell was picked from many slices.
 - veteran-trader: earnings after the close, OPEX and FOMC on the entry date -- applied (flags, with and without).
 - veteran-trader: capture the 15:30 bar, a close-fill proxy and plan validity now -- applied.
 - veteran-trader: entry-bar exclusion flatters the control -- applied (count printed, direction of bias stated).
+- quant-engineer (BLOCKING): time basis, bar stamping and the DST derivation of 15:30 ET undefined -- applied (Time basis rule; the script parses the archive's UTC offsets itself; DST and real-file tests).
+- quant-engineer (BLOCKING): doubled entry slippage is not expressible through `expectancy_attribution.net_r` -- applied (`screen/sides.py:net_r` with `entry_bps`).
+- quant-engineer: the archive is merge-only and unpruned, not a 60-day window -- applied (checked on the VM: first 5-minute bar 2026-06-23).
+- quant-engineer: `--from-db` does not exist -- applied (export script only).
+- quant-engineer: `week_cluster_bootstrap` call shape, one-sided bound and seed unspecified -- applied.
+- quant-engineer: state "strictly before the 15:30 bar" and pin it with a truncation test -- applied.
+- quant-engineer: restart tolerance, archive timestamp and SHA in the results doc -- applied.
+- quant-engineer: the ledger row needs a non-null `p` -- applied.
