@@ -20,9 +20,9 @@ def test_is_a_hot_reloadable_data_sources_text_key():
     assert "v208" in field.help
 
 
-def test_sits_right_after_the_tape_proxy_key():
+def test_sits_after_the_v204_snapshot_knobs():
     attrs = [f.attr for f in config.FIELDS]
-    assert attrs.index(ATTR) == attrs.index("TAPE_PROXY_SYMBOLS") + 1
+    assert attrs.index(ATTR) == attrs.index("ADMIN_STALE_SNAPSHOT_EXTENDED_S") + 1
 
 
 def test_default_casts_to_itself():
