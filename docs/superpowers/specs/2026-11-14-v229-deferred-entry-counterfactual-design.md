@@ -83,14 +83,25 @@ not reproduced, and that is disclosed in every output.
 
 **Statistic.** Per eligible plan, `d_A = R_A - R_C` and `d_B = R_B - R_C`. The
 estimate is the mean per plan (ExpR per alert, skipped plans included at 0R).
-Intervals come from a bootstrap clustered by entry date, 10,000 resamples, seed
-fixed in the script. Two arms are read, so each uses a one-sided 97.5% lower
-bound.
+Intervals come from the repo's `week_cluster_bootstrap`
+(`swingbot/core/backtesting/instrument/stats.py`), clustered by the ISO week of
+`opened_at`, 10,000 resamples, seed fixed in the script: trades are held up to
+five sessions, so pairs from neighbouring dates share bars and a date cluster
+would understate the dependence. Two arms are read, so each uses a one-sided
+97.5% lower bound (a Bonferroni split of the acceptance gate's 95%).
 
-**Calibration clause.** The script also prints mean `R_C` beside the mean live
-`r_realized` of the same trades, and their rank correlation. When the absolute
-difference of means exceeds 0.25R or the correlation is under 0.6, the output
-is stamped `UNCALIBRATED` and no verdict is issued from it.
+Every arm's line prints trades taken and total R beside ExpR. Arm B's lift is
+partly built in (a plan stopped before 15:30 is about -1R in C and 0R skipped),
+so `d_B` is also printed over the plans B actually took, as a disclosure.
+
+**Calibration clause.** The simulator races to TP1 only, so its R cannot match
+the live scale-out's R and a gap in means would say nothing. What must match is
+the **path class**: stop first (`loss`), breakeven stop (`scratch`), or TP1
+reached (any `tp1_*` leg live, `win` simulated). The script prints the 3 × 3
+agreement table of simulated control against live outcome for the same trades.
+When agreement is under 80% the output is stamped `UNCALIBRATED` and no verdict
+is issued from it. Mean `R_C`, mean live `r_realized` and their rank
+correlation are printed for information and gate nothing.
 
 **Outputs.** One Markdown results doc and one JSON beside it: population funnel
 (eligible, `no_coverage`, per-bucket counts), the three arms' N, win rate and
@@ -115,19 +126,39 @@ is `T0`.
 
 **Exploratory read.** Eligible plans opened before `T0`, as far back as the
 5-minute archive reaches (about 60 days). Run once. It is labelled exploratory,
-issues no verdict and ships nothing; its purpose is to check calibration and
-give the forward read a prior.
+issues no verdict and ships nothing; its only purpose is to check calibration.
+Its window overlaps the data that motivated the idea, so it is not evidence.
+**Nothing in the forward rule may change after it is read**: arms, deferral
+time, race, thresholds, window length and cluster unit are those of this spec.
+If the exploratory read is `UNCALIBRATED`, the forward read is not started and
+the question closes inconclusive; the simulator is not tuned to pass.
 
-**Forward read.** Eligible plans opened at or after `T0`. A weekly VM cron
-(`scripts/ops/`, per `docs/claude/working-conventions.md` § Scheduling)
-appends new pairs to the log and prints only the count. The verdict is computed
-**once**, the first time the forward log holds N ≥ 300 LONG pairs (about five
-weeks at the current rate); the script refuses a verdict below N and refuses a
-second one after the ledger row carries a verdict.
+**Forward read.** The population is fixed by **entry date**, not by when
+trades happen to close: eligible plans with `opened_at` in the twelve complete
+ISO weeks that follow `T0`. A weekly VM cron (`scripts/ops/`, per
+`docs/claude/working-conventions.md` § Scheduling) appends new pairs to the log
+and prints only the count. The verdict is computed **once**, after the window's
+last plan has passed its five-session mark, so slow trades opened late are in
+and same-day losers are not over-represented. The script refuses a verdict
+before that date and refuses a second one after the ledger row carries a
+verdict. The window, the thresholds and the floor below cannot be changed once
+the first weekly count has been printed.
+
+**Power, stated up front.** Twelve weeks at the current rate is roughly 800
+LONG pairs in 12 week clusters. With the paired difference's standard deviation
+near 1.5R and same-week correlation, the standard error is on the order of
+0.08–0.10R, so the smallest lift this read can reliably detect is about
+0.20–0.30R. The +0.10R floor below rarely binds; the lower bound is the real
+gate. That is accepted: the live cell that motivates the read is a 0.7R
+difference, and a lift too small to see here is too small to justify changing
+when the partner places orders. Fewer than 300 forward LONG pairs or fewer than
+10 week clusters at the verdict date is `UNDERPOWERED`, closed like a fail.
 
 **Verdict rule, per arm.** `PASS` when the forward mean delta is at least
 +0.10R, its one-sided 97.5% lower bound is above 0, and the forward run is
 calibrated. Otherwise `NO-LIFT`. `UNCALIBRATED` closes the read as inconclusive.
+The ledger row is scored with the other ideas through `ledger_qvalues`, because
+the session cell was picked from many slices.
 
 - A `PASS` earns a spec for a deferred-entry mode. It ships nothing by itself.
 - `NO-LIFT` or `UNCALIBRATED` closes the question in
@@ -156,7 +187,7 @@ calibrated. Otherwise `NO-LIFT`. `UNCALIBRATED` closes the read as inconclusive.
 - **Arm B, stop touched in the entry bar.** The entry bar is excluded from the
   held check, consistent with the control.
 - **Same ticker, several plans in a day.** Each plan is its own pair; the
-  date-clustered bootstrap carries the dependence.
+  week-clustered bootstrap carries the dependence.
 - **Empty forward log** (bot paused, holiday week): the cron prints 0 and exits
   0.
 
@@ -167,20 +198,28 @@ calibrated. Otherwise `NO-LIFT`. `UNCALIBRATED` closes the read as inconclusive.
 - Arms: distance-preserving stop and TP1; arm-B skip on a touch and no skip
   without one; half-day exclusion; no-coverage exclusion.
 - Pair log: append-once per trade id, restart skips, malformed row refused.
-- Verdict guard: refuses below N, refuses a second verdict, `UNCALIBRATED`
-  path.
-- Bootstrap: deterministic under the fixed seed; single-date book returns no
+- Verdict guard: refuses before the window's five-session mark, refuses a
+  second verdict, `UNDERPOWERED` and `UNCALIBRATED` paths.
+- Calibration: the agreement table and the 80% threshold on both sides.
+- Bootstrap: deterministic under the fixed seed; a single-week book returns no
   interval rather than a zero-width one.
 - Empty inputs: no trades, no bars.
 
 ## Open questions for the panel
 
-- Whether single-leg-to-TP1 is an acceptable stand-in for the live scale-out in
-  a paired design, or whether the calibration thresholds (0.25R, 0.6) need to
-  be tighter.
 - Whether a `PASS` could ever be confirmed out of sample beyond the forward
   read, given the funnel replays daily bars; the follow-on spec would have to
   name its gate.
 - For the partner's real orders: a deferred entry means placing the order near
   the close, which changes the day's routine. Out of scope here, in scope for
   any follow-on.
+
+## Panel review
+
+- quant-researcher: N=300 is underpowered and the +0.10R floor never binds -- applied (twelve-week window, MDE stated, `UNDERPOWERED` floor).
+- quant-researcher: date clusters miss the five-session overlap; too few week clusters in five weeks -- applied (`week_cluster_bootstrap`, twelve weeks, ten-cluster floor).
+- quant-researcher: a count-triggered verdict over-represents fast losers -- applied (population fixed by `opened_at` window, verdict after the five-session mark).
+- quant-researcher: arm B's lift is partly built in -- applied (trades taken, total R and `d_B` over taken plans printed).
+- quant-researcher: calibration thresholds untied to the effect; exploratory read could contaminate the forward rule -- applied (path-class agreement at 80%; forward rule frozen; `UNCALIBRATED` exploratory read stops the study).
+- quant-researcher: ledger row should go through `ledger_qvalues` -- applied.
+- quant-researcher: thresholds must be unchangeable after the first weekly count -- applied.
