@@ -21,7 +21,7 @@ export const BENCHMARK_FIXTURE: AnalyticsBenchmark = {
   as_of: '2026-11-05T15:35:00+00:00', session_state: 'open',
   account_currency: 'USD', mixed_tickers: [],
   benchmarks_status: 'ok', benchmarks_last_session: '2026-11-04',
-  today: { session: '2026-11-05', final: false, lines: {
+  today: { session: '2026-11-05', final: false, as_of: '2026-11-05T15:35:00+00:00', lines: {
     bot_account: { pct: 0.31, final: false }, bot_deployed: { pct: 0.82, final: false },
     SPY: { pct: 1.02, final: false }, QQQ: { pct: 1.4, final: false },
     '^IXIC': { pct: null, final: false }, '^DJI': { pct: -0.55, final: false } } },

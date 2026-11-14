@@ -715,7 +715,7 @@ export interface BenchmarkSeries {
   key: BenchmarkKey; label: string; kind: 'bot' | 'index'; total_return: boolean; points: BenchmarkPoint[];
 }
 export interface BenchmarkTodayLine { pct: number | null; final: boolean; }
-export interface BenchmarkToday { session: string; final: boolean; lines: Partial<Record<BenchmarkKey, BenchmarkTodayLine>>; }
+export interface BenchmarkToday { session: string | null; final: boolean; as_of: string | null; lines: Partial<Record<BenchmarkKey, BenchmarkTodayLine>>; }
 export interface BenchmarkSeriesStats {
   total_pct: BenchmarkStat; max_dd_pct: BenchmarkStat; sharpe: BenchmarkStat;
   money_dd?: BenchmarkStat; losing_streak?: number; approx_share?: number | null;
@@ -730,7 +730,7 @@ export interface BenchmarkDailyRow {
   date: string; lines: Partial<Record<BenchmarkKey, number | null>>; exposure_pct: number | null;
   open_n: number | null; beat: boolean | null; span: number; missing: boolean;
 }
-export interface BenchmarkExposure { date: string; pct: number | null; open_n: number; approx: boolean; }
+export interface BenchmarkExposure { date: string; pct: number | null; open_n: number | null; approx: boolean; }
 export interface AnalyticsBenchmark {
   range: { from: string | null; to: string | null; live_since: string | null; sessions_n: number; clamped: boolean; is_all: boolean };
   as_of: string; session_state: 'pre' | 'open' | 'closed';

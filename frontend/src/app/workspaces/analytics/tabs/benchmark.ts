@@ -53,8 +53,10 @@ export function etClock(iso: string): string {
 export function stateStamp(payload: AnalyticsBenchmark): string {
   const today = payload.today;
   if (!today?.session) return 'no session yet';
-  if (payload.session_state === 'open' && !today.final) return `as of ${etClock(payload.as_of)} ET`;
-  return `${today.session} · final`;
+  if (today.final) return `${today.session} · final`;
+  if (!today.as_of) return `${today.session} · awaiting final data`;
+  const stamp = `as of ${etClock(today.as_of)} ET`;
+  return payload.session_state === 'open' ? stamp : `${today.session} · ${stamp} · not final`;
 }
 
 export interface TodayCell { key: BenchmarkKey; label: string; value: string; caption: string | null; }
@@ -132,8 +134,8 @@ function betaText(value: number, estimate: BenchmarkEstimate): string {
 
 function alphaTile(alpha: BenchmarkEstimate): BenchmarkTile {
   const hint = alpha.headline
-    ? 'Headline cell: SPY over the whole live book. Annualised Jensen alpha, rf = 0; indicative, not evidence of edge.'
-    : `${ALPHA_CELLS_HINT}: annualised Jensen alpha, rf = 0; indicative, not evidence of edge.`;
+    ? 'Headline cell: SPY over the whole live book. Annualised Jensen alpha, rf = 0; indicative, not evidence of edge. The t-statistic uses unadjusted OLS errors, assuming independent, constant-variance observations.'
+    : `${ALPHA_CELLS_HINT}: annualised Jensen alpha, rf = 0; indicative, not evidence of edge. The t-statistic uses unadjusted OLS errors, assuming independent, constant-variance observations.`;
   return { ...tile('Alpha (rf = 0)', alpha,
     (v) => `α ${signedPct(v, 1)}${alpha.t == null ? '' : ` (t ${alpha.t.toFixed(1)})`}`, hint), bold: !!alpha.headline };
 }
@@ -145,7 +147,7 @@ function indexTiles(stats: BenchmarkSeriesStats, key: BenchmarkIndexKey, vs: Ben
     tile(`Lead vs ${CHIP_LABELS[key]}`, vs.lead_pp, (v) => signedPct(v).replace('%', ' pp'),
       "Bot · account total minus this index's total; descriptive, not evidence of edge.", signTone(vs.lead_pp.value)),
     tile('Beta', vs.beta, (v) => betaText(v, vs.beta),
-      'OLS slope of Bot · account daily returns on this index, ± standard error.'), alphaTile(vs.alpha)];
+      'OLS slope of Bot · account daily returns on this index, ± standard error. The unadjusted OLS error assumes independent, constant-variance observations.'), alphaTile(vs.alpha)];
 }
 
 function groupNote(key: BenchmarkKey, stats: BenchmarkSeriesStats): string | null {
@@ -286,7 +288,7 @@ export function beatLine(p: AnalyticsBenchmark): string {
         <sb-empty-state [title]="emptyBars" reason="measured-zero" hint="Index bars arrive after the refresher's first cycle." />
       }
       @if (p.benchmarks_status === 'stale') {
-        <p class="stale" role="status">{{ staleBars }} · last stored session {{ p.benchmarks_last_session }}</p>
+        <p class="stale" role="status">{{ staleBars }}@if (p.benchmarks_last_session) { · last stored session {{ p.benchmarks_last_session }} }</p>
       }
       @if (p.benchmarks_status !== 'empty') {
 <section class="stats" aria-label="Range statistics">
@@ -418,6 +420,9 @@ export class BenchmarkTab {
   }
 
   poll(): void {
-    if (this.data()?.session_state === 'open' && document.visibilityState === 'visible') this.store.refreshBenchmark();
+    const data = this.data();
+    if (document.visibilityState === 'visible' && (data?.session_state === 'open' || (data?.today?.session && !data.today.final))) {
+      this.store.refreshBenchmark();
+    }
   }
 }

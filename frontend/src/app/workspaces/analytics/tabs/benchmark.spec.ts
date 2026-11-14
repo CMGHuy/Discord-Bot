@@ -37,21 +37,29 @@ describe('benchmark helpers (v208)', () => {
     expect(stateStamp(BENCHMARK_FIXTURE)).toBe('as of 10:35 ET');
     expect(stateStamp(benchmarkWith({ session_state: 'closed', today: { ...BENCHMARK_FIXTURE.today!, final: true } })))
       .toBe('2026-11-05 · final');
-    expect(stateStamp(benchmarkWith({ session_state: 'pre', today: { session: '2026-11-04', final: true, lines: {} } })))
+    expect(stateStamp(benchmarkWith({ session_state: 'pre', today: { session: '2026-11-04', final: true, as_of: null, lines: {} } })))
       .toBe('2026-11-04 · final');
-    expect(stateStamp(benchmarkWith({ today: { session: null as never, final: false, lines: {} } }))).toBe('no session yet');
+    expect(stateStamp(benchmarkWith({ today: { session: null, final: false, as_of: null, lines: {} } }))).toBe('no session yet');
     expect(stateStamp(benchmarkWith({ today: null }))).toBe('no session yet');
+  });
+  it('shows the oldest mark timestamp and never calls provisional data final', () => {
+    const today = { ...BENCHMARK_FIXTURE.today!, as_of: '2026-11-05T15:20:00+00:00', final: false };
+    expect(stateStamp(benchmarkWith({ today: today as never }))).toBe('as of 10:20 ET');
+    expect(stateStamp(benchmarkWith({ session_state: 'closed', today: today as never })))
+      .toBe('2026-11-05 · as of 10:20 ET · not final');
+    expect(stateStamp(benchmarkWith({ session_state: 'closed', today: { ...today, as_of: null } as never })))
+      .toBe('2026-11-05 · awaiting final data');
   });
   it('gives every line a Today cell, bot cells unrealised while open, null as —', () => {
     expect(todayCells(BENCHMARK_FIXTURE).map((c) => [c.label, c.value, c.caption])).toEqual([
       ['Bot · account', '+0.31%', 'unrealised · paper'], ['Bot · deployed', '+0.82%', 'unrealised · paper'],
       ['SPY', '+1.02%', null], ['QQQ', '+1.40%', null], ['Nasdaq Comp. (price)', '—', null], ['Dow (price)', '−0.55%', null]]);
     // Open session with no live sample yet: the bot cell is —, never 0%.
-    const noSample = todayCells(benchmarkWith({ today: { session: '2026-11-05', final: false,
+    const noSample = todayCells(benchmarkWith({ today: { session: '2026-11-05', final: false, as_of: null,
       lines: { bot_account: { pct: null, final: false }, SPY: { pct: 0.2, final: false } } } }));
     expect(noSample.map((c) => c.value)).toEqual(['—', '+0.20%']);
     const closed = todayCells(benchmarkWith({ session_state: 'closed',
-      today: { session: '2026-11-05', final: true, lines: { bot_account: { pct: 0.1, final: true } } } }));
+      today: { session: '2026-11-05', final: true, as_of: null, lines: { bot_account: { pct: 0.1, final: true } } } }));
     expect(closed).toEqual([{ key: 'bot_account', label: 'Bot · account', value: '+0.10%', caption: null }]);
     expect(todayCells(benchmarkWith({ today: null }))).toEqual([]);
   });
@@ -147,6 +155,11 @@ describe('BenchmarkTab frame (v208)', () => {
   it('shows "No benchmark data yet" when there are no bars', () => {
     expect(text(renderTab(stubStore(benchmarkWith({ benchmarks_status: 'empty' }))).el)).toContain('No benchmark data yet');
   });
+  it('does not claim a last stored session when one index has no history', () => {
+    const payload = benchmarkWith({ benchmarks_status: 'stale', benchmarks_last_session: null });
+    const { el } = renderTab(stubStore(payload));
+    expect(text(el.querySelector('.stale'))).toBe('Benchmarks not updating — refresher is off');
+  });
   it('shows the refresher-off note with the last stored session', () => {
     const { el } = renderTab(stubStore(benchmarkWith({ benchmarks_status: 'stale' })));
     expect(text(el.querySelector('.stale'))).toBe('Benchmarks not updating — refresher is off · last stored session 2026-11-04');
@@ -169,11 +182,14 @@ describe('BenchmarkTab frame (v208)', () => {
     hidden.mockRestore();
     store.benchmark.set(benchmarkWith({ session_state: 'closed' }));
     vi.advanceTimersByTime(POLL_MS);
-    expect(store.refreshBenchmark).toHaveBeenCalledTimes(1);
+    expect(store.refreshBenchmark).toHaveBeenCalledTimes(2);
+    store.benchmark.set(benchmarkWith({ session_state: 'closed', today: { ...BENCHMARK_FIXTURE.today!, final: true } }));
+    vi.advanceTimersByTime(POLL_MS);
+    expect(store.refreshBenchmark).toHaveBeenCalledTimes(2);
     store.benchmark.set(BENCHMARK_FIXTURE);
     fixture.destroy();
     vi.advanceTimersByTime(POLL_MS);
-    expect(store.refreshBenchmark).toHaveBeenCalledTimes(1);
+    expect(store.refreshBenchmark).toHaveBeenCalledTimes(2);
   });
 });
 describe('benchmark stat strip (v208)', () => {
@@ -210,6 +226,8 @@ describe('benchmark stat strip (v208)', () => {
     const alpha = tile('QQQ', 'Alpha (rf = 0)');
     expect([alpha.value, alpha.bold, alpha.sample]).toEqual(['α +6.1% (t 0.9)', false, 61]);
     expect(alpha.hint).toContain(ALPHA_CELLS_HINT);
+    expect(alpha.hint).toContain('unadjusted OLS');
+    expect(tile('QQQ', 'Beta').hint).toContain('unadjusted OLS');
     expect(ALPHA_CELLS_HINT).toBe('1 of 24 cells');
     const headline = statGroups(benchmarkWith({ vs: { ...BENCHMARK_FIXTURE.vs, SPY: { ...BENCHMARK_FIXTURE.vs.SPY!,
       alpha: { value: 4.2, t: 1.1, n: 80, reason: null, headline: true } } } }), ALL, '$');
