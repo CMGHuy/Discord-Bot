@@ -53,10 +53,14 @@ apart; a frame that breaks this is skipped like an uncovered one
 (`known-traps.md`: a stale or truncated `market_data` file is never used
 silently).
 
-**Time basis.** Journal `opened_at` and `closed_at` are naive UTC. The archive
-CSVs carry UTC offsets and `data_store.load_normalized` strips the zone with
-`tz_localize(None)`, so the index it returns is naive UTC, and each bar is
-stamped with its **start**. The plan's first task pins both facts with a test
+**Time basis.** Journal `opened_at` and `closed_at` are aware ISO strings in
+UTC (`+00:00`). The archive CSVs carry UTC offsets (checked on production
+2026-11-14 for Yahoo-only and Alpaca-eligible tickers, all `+00:00`) and
+`data_store.load_normalized` strips the zone with `tz_localize(None)`, so the
+index it returns is naive UTC, and each bar is stamped with its **start**. The
+function converts the trade's times to naive UTC before comparing.
+`load_normalized` returns `None` for a file with mixed offsets; that is counted
+as an unreadable file, never as no coverage. The plan's first task pins both facts with a test
 on real archive files for every provider that writes them (Yahoo and Alpaca);
 if either fails for a provider, the function converts that frame to naive UTC
 bar starts before comparing, and nothing is compared across bases.
@@ -85,7 +89,10 @@ removed.
 
 ### 2. The journal records the source
 
-`journal.build_entry` adds `excursion_source` to the entry. It is a new field in
+`journal.build_entry` and `journal_trade_close` take the frames mapping in
+place of the single daily frame (their other callers,
+`backfill_journal.py` and `rejournal_fill_mismatch.py`, are updated in the same
+task), and `build_entry` adds `excursion_source` to the entry. It is a new field in
 the journal `doc` (schema operation **add**, no DDL).
 
 At close time the 15-minute and 5-minute archives may be up to 24 hours stale
@@ -107,7 +114,15 @@ one, rewrite `mfe_r`, `mae_r`, `exit_efficiency`, `excursion_source`, `tags` and
 `auto_lesson` on that entry. An entry is never downgraded, and an unchanged
 entry is not written.
 
-**Write path.** The pass writes through `JournalRepository.patch` (the atomic
+**Inputs per entry.** A journal entry does not carry the entry, stop and exit
+prices, so the pass joins each entry to its `TradeLog` trade by id and hands
+the trade to `compute_excursion` and `tags_for`. An entry whose trade is gone
+is counted `no_trade` and skipped.
+
+**Write path.** `Repository.patch` (`swingbot/core/db/repositories/base.py`)
+has no condition today, so this spec adds one: an optional predicate on a doc
+field, used here as "stored `excursion_source` is in the set of coarser
+sources". The pass writes through `JournalRepository.patch` (the atomic
 JSONB merge `set_note` already uses), never `JournalStore.add` or
 `build_entry`: `add` upserts the whole record and `build_entry` writes
 `"note": ""`, which would wipe the partner's notes. The patch carries only the
@@ -136,7 +151,8 @@ and an uncovered trade are counted separately.
 
 ### 4. Existing rows
 
-One Alembic data revision stamps `excursion_source = "daily"` on every journal
+One Alembic data revision, chained to the Alembic head on disk when the task
+runs (`v208_001` on 2026-11-14; the task re-reads it), stamps `excursion_source = "daily"` on every journal
 entry that has `mfe_r` and no source. After it, no reader has to treat a
 missing source as anything. Its downgrade is a **no-op**: stripping the field
 would also strip `5min` and `hourly` sources written later, and a re-upgrade
@@ -176,22 +192,34 @@ mirror recorded in the repo.
     marker, since efficiency is derived from MFE.
   - *Calendar day card* (`calendar/day/day-trade-card.ts`): the marker goes
     inside the existing `MFE · MAE` text line and wraps with it; the layout
-    audit checks the card at 390 px for no sideways scroll.
+    audit checks the card at 390 px for no sideways scroll. The card's data
+    comes from `pnl_calendar.ROW_KEYS`, so `excursion_source` joins `ROW_KEYS`
+    and `CalendarTrade` in `api/models.ts`, and the three contract tests that
+    pin those shapes are updated (`tests/analytics/test_pnl_calendar.py`,
+    `tests/admin/test_api_v1_calendar.py`, `_ENTRY_SHAPE` in
+    `tests/admin/test_api_journal.py`).
   - *Analytics execution tab*: it shows no per-trade figure, so no marker. The
     Exit efficiency panel's caption states the exclusion in plain text, "n of N
-    trades; M short holds on daily bars excluded", visible on a phone.
+    trades; M short holds on daily bars excluded", visible on a phone. The
+    Execution verdict card also quotes exit efficiency and carries the same
+    count in its hint.
   - Checked at phone, tablet and desktop together per `docs/claude/ui-design.md`.
 - **Discord trade-view chart** (`swingbot/core/scanning/lifecycle_embeds.py`):
   the MFE and MAE annotations take a `(daily est.)` suffix under the same rule,
-  so the embed and the admin screen read the same.
+  so the embed and the admin screen read the same. Closed-trade chart images are
+  cached at a deterministic path; charts already rendered are not re-rendered,
+  so the suffix appears on charts drawn after this ships.
 - **`scripts/ops/export_book_rows.sh`** appends `excursion_source` as column 39
   in **both** branches of the `UNION` (`NULL::text` in the plan branch), which
   keeps the positional `ORDER BY`; `tests/scout/test_export_script.py` is
   updated to pin it.
 - **`scripts/reports/book_autopsy.py`** builds MFE- and MAE-derived cells only
   from rows with an intraday source, and prints how many rows that dropped. A
-  CSV without the column (exported before this change) stops the run with a
-  message naming the fix, rather than dropping every MFE row quietly.
+  CSV without the column stops the run with a message naming the fix, rather
+  than dropping every MFE row quietly. The loader accepts two older header
+  shapes today (38 and 36 columns); both now stop the same way unless the run
+  passes `--no-excursion-cells`, which builds every other cell and prints that
+  the excursion cells were left out.
 
 ## What does not change
 
@@ -231,6 +259,10 @@ mirror recorded in the repo.
   1280 px.
 - Export script column pin; autopsy drop count.
 
+Suite size: `tests/analytics/` holds about 1,121 tests against a `max_tests`
+of 1,200. If these tests would pass the limit, the excursion tests go in their
+own directory joined to one suite in the same commit; the limit is not raised.
+
 ## What follows
 
 - The scout's exit-harvester role reads the next autopsy on corrected figures.
@@ -261,3 +293,4 @@ mirror recorded in the repo.
 - ux-designer: the Discord trade-view chart shows the same figures unmarked -- applied (suffix).
 - ux-designer: "daily estimate" wording unclear -- applied (`est. (daily bars)`; explanation says overstated, which is the measured direction, not understated).
 - quant-engineer (v229 review, carried here): the sub-hourly archive is merge-only and unpruned, not 60 days -- applied (backfill covers the whole book).
+- plan brief (code check, 2026-11-14): journal times are aware UTC, not naive; `Repository.patch` has no condition; the pass must join trades by id; the calendar card reads `pnl_calendar.ROW_KEYS`; `build_entry` takes one frame; chart images are cached; the autopsy loader accepts older headers; the Alembic head is `v208_001`; the analytics suite is near its limit -- all applied above.
