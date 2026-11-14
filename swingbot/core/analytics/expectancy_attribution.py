@@ -13,10 +13,12 @@ pre-registered verdict always compares exact values.
 """
 from __future__ import annotations
 
+import bisect
 import datetime as dt
 import hashlib
 import json
 import logging
+import math
 import sys
 from pathlib import Path
 from typing import NamedTuple
@@ -31,6 +33,7 @@ from swingbot.core.analytics.scope import closed_only
 from swingbot.core.backtesting.instrument import stats
 from swingbot.core.edge.frictions import apply_frictions, commission_r
 from swingbot.core.infra.expectancy_attribution_store import load_latest, write_latest  # noqa: F401  (load_latest is re-exported for v150)
+from swingbot.core.infra import jsonio
 from swingbot.core.market import earnings_calendar
 from swingbot.core.market.earnings_calendar import EARNINGS_CSV_DIR
 from swingbot.core.market.strategy_types import HORIZONS
@@ -715,3 +718,577 @@ def run(train_jsonl, *, seed: int = WEEK_BOOTSTRAP_SEED, write: bool = True) -> 
         "n_resamples": N_RESAMPLES,
     }
     return write_latest(report) if write else report
+
+
+# --------------------------------------------------------------------------
+# v226: stop-width attribution -- a study of its own. Nothing above this line
+# reads anything below it; the v146 report stays byte-identical.
+# --------------------------------------------------------------------------
+
+#: A stop-width row is an attribution row (ROW_KEYS, unchanged) plus these.
+#: ``stop_atr`` = |signal close - stop| / ATR14, both from the signal bar
+#: (``entry_context["stop_atr"]``); ``atr_pct`` = ``stop_pct / stop_atr``
+#: (disclosed only); ``stop_clamped`` is the identity-based clamp flag.
+STOP_WIDTH_KEYS = ("stop_atr", "atr_pct", "stop_clamped")
+#: Live rows only: the TRAIN scenario row carries neither timestamps nor a
+#: strategy field, and its contract is not widened for them.
+STOP_WIDTH_LIVE_KEYS = ("opened_at", "closed_at", "strategy")
+
+
+def _positive_number(value) -> float | None:
+    """``float(value)`` when it is a finite number > 0, else None. Bools are
+    not numbers here, and neither are numeric strings."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def _text_or_none(value) -> str | None:
+    return None if value is None else str(value)
+
+
+def _family(trade: dict) -> str | None:
+    """The live trade's strategy family as the admin UI shows it (the raw
+    ``strategy`` field is the constant "S/R Confluence"). Lazy import: the
+    label pulls chart code."""
+    from swingbot.core.tracking.performance import primary_strategy_label
+    label = primary_strategy_label(trade)
+    return None if label == "--" else label
+
+
+def stop_width_row(base_row: dict, source: dict, *, live: bool = False) -> dict:
+    """``base_row`` (an attribution row) plus STOP_WIDTH_KEYS read from
+    ``source["entry_context"]``, plus STOP_WIDTH_LIVE_KEYS when ``live``.
+    Returns a new dict; ``base_row`` is not touched."""
+    context = source.get("entry_context")
+    context = context if isinstance(context, dict) else {}
+    stop_atr = _positive_number(context.get("stop_atr"))
+    stop_pct = _positive_number(context.get("stop_pct"))
+    clamped = context.get("stop_clamped")
+    row = {**base_row,
+           "stop_atr": stop_atr,
+           "atr_pct": stop_pct / stop_atr if stop_atr and stop_pct else None,
+           "stop_clamped": clamped if isinstance(clamped, bool) else None}
+    if live:
+        row["opened_at"] = _text_or_none(source.get("opened_at"))
+        row["closed_at"] = _text_or_none(source.get("closed_at"))
+        row["strategy"] = _family(source)
+    return row
+
+
+def load_stop_width_train_rows(path, *, source=None) -> list[dict]:
+    """``load_train_rows`` again, each kept row wrapped by ``stop_width_row``."""
+    source = source if source is not None else earnings_calendar.CsvSource()
+    rows = []
+    with Path(path).open(encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            raw = json.loads(line)
+            base = _train_row(raw, source)
+            if base is not None:
+                rows.append(stop_width_row(base, raw))
+    return rows
+
+
+def load_stop_width_live_rows() -> list[dict]:
+    """``load_live_rows`` again (every closed trade of both ledgers, read from
+    the database ``DATABASE_URL`` names at call time), each kept row wrapped
+    by ``stop_width_row(..., live=True)``."""
+    from swingbot.core.tracking.performance import TradeLog
+    closed = closed_only(TradeLog().get_trades(status=None, limit=None, ledger=None) or [])
+    rows = []
+    for trade in closed:
+        base = live_row(trade)
+        if base is not None:
+            rows.append(stop_width_row(base, trade, live=True))
+    return rows
+
+
+#: The label of a row with no usable ``stop_atr``: counted, never bucketed,
+#: never a look.
+UNKNOWN = "unknown"
+#: TRAIN quartile cut points (spec § Frozen bucket edges).
+_QUARTILES = (0.25, 0.5, 0.75)
+
+
+def _known_values(rows: list[dict], key: str) -> list[float]:
+    return [value for value in (_positive_number(row.get(key)) for row in rows)
+            if value is not None]
+
+
+def _bucket_holds(values: list[float], low: float | None, high: float) -> bool:
+    return any((low is None or value >= low) and value < high for value in values)
+
+
+def _keeps_edge(values: list[float], previous: float | None, edge: float) -> bool:
+    """False for an edge at or below the minimum, at or below the previous
+    kept edge, or whose bucket ``[previous, edge)`` holds no value."""
+    if edge <= values[0] or (previous is not None and edge <= previous):
+        return False
+    return _bucket_holds(values, previous, edge)
+
+
+def frozen_edges(rows: list[dict], key: str) -> list[float]:
+    """Quartile cut points of ``key`` over the rows' known values
+    (``numpy.quantile``, linear), merged so that no bucket is empty. Reads
+    nothing but ``key``: never ``r``. A value equal to an edge belongs to
+    the bucket above it (``edge_label``)."""
+    values = sorted(_known_values(rows, key))
+    if len(values) < 2:
+        return []
+    edges: list[float] = []
+    for edge in (float(cut) for cut in np.quantile(values, _QUARTILES, method="linear")):
+        if _keeps_edge(values, edges[-1] if edges else None, edge):
+            edges.append(edge)
+    while edges and values[-1] < edges[-1]:
+        edges.pop()
+    return edges
+
+
+def edge_labels(edges: list[float]) -> list[str]:
+    """``Q1 (<a)``, ``Q2 (a–b)``, ..., ``Qk (≥c)``; ``Q1 (all)`` with no edge."""
+    if not edges:
+        return ["Q1 (all)"]
+    labels = [f"Q1 (<{edges[0]:.2f})"]
+    labels += [f"Q{index + 2} ({low:.2f}–{high:.2f})"
+               for index, (low, high) in enumerate(zip(edges, edges[1:]))]
+    labels.append(f"Q{len(edges) + 1} (≥{edges[-1]:.2f})")
+    return labels
+
+
+def edge_label(value, edges: list[float]) -> str:
+    """The bucket label of one value on frozen ``edges``; UNKNOWN when the
+    value is not a finite positive number."""
+    number = _positive_number(value)
+    if number is None:
+        return UNKNOWN
+    return edge_labels(edges)[bisect.bisect_right(edges, number)]
+
+
+def _bucketed(rows: list[dict], edges: list[float], labels: list[str]) -> dict:
+    buckets: dict[str, list[dict]] = {label: [] for label in labels}
+    known: list[dict] = []
+    unknown = 0
+    for row in rows:
+        label = edge_label(row.get("stop_atr"), edges)
+        if label == UNKNOWN:
+            unknown += 1
+            continue
+        buckets[label].append(row)
+        known.append(row)
+    return {"buckets": buckets, "known": known, "unknown": unknown}
+
+
+def stop_width_groups(train_rows: list[dict], live_rows: list[dict]) -> dict:
+    """Both populations bucketed by ``stop_atr`` on edges frozen from TRAIN
+    alone. The live book never moves an edge."""
+    edges = frozen_edges(train_rows, "stop_atr")
+    labels = edge_labels(edges)
+    return {"edges": edges, "labels": labels,
+            "train": _bucketed(train_rows, edges, labels),
+            "live": _bucketed(live_rows, edges, labels)}
+
+
+#: Spec § The pre-registered verdict (TRAIN only, computed once).
+VETO_DELTA = -0.10            # clause 1: delta <= -0.10R (exactly -0.10 passes)
+VETO_MIN_N = 300              # clause 5, and the N per bucket "powered" means
+VETO_Q = 0.10                 # clause 6: BH q < 0.10 over this study's own family
+VETO_YEARS = ("2020", "2021", "2022", "2023")    # clause 4: the TRAIN calendar years
+VETO_MIN_YEARS = 3            # clause 4: delta < 0 in at least 3 of them
+STUDY_VERDICTS = ("VETO-CANDIDATE", "UNDERPOWERED", "NO CANDIDATE")
+#: Clauses 1-6 in spec order.
+CLAUSE_KEYS = ("delta", "upper_bound", "negative_exp_r", "years", "n", "bh")
+
+
+def _rest_of(bucket: list[dict], known: list[dict]) -> list[dict]:
+    ids = {id(row) for row in bucket}
+    return [row for row in known if id(row) not in ids]
+
+
+def _year_deltas(bucket: list[dict], rest: list[dict]) -> dict:
+    """Per TRAIN year (``week[:4]``): bucket ExpR - rest ExpR, None when
+    either side has no row that year (such a year counts against clause 4)."""
+    out = {}
+    for year in VETO_YEARS:
+        mine = _mean([row["r"] for row in bucket if row["week"][:4] == year])
+        other = _mean([row["r"] for row in rest if row["week"][:4] == year])
+        out[year] = None if mine is None or other is None else mine - other
+    return out
+
+
+def _bucket_look(bucket: list[dict], known: list[dict], seed: int) -> dict:
+    rest = _rest_of(bucket, known)
+    look = _look(rest, bucket, seed)
+    years = _year_deltas(bucket, rest)
+    return {"n": len(bucket), "exp_r": _mean([row["r"] for row in bucket]),
+            "delta": look["delta"], "ci_low": look["ci_low"], "ci_high": look["ci_high"],
+            "p": look["p"], "q": None, "years": years,
+            "years_negative": sum(1 for value in years.values()
+                                  if value is not None and value < 0)}
+
+
+def _clauses(look: dict) -> dict:
+    """The six pre-registered clauses; a missing number fails its clause."""
+    delta, high, exp_r, q = look["delta"], look["ci_high"], look["exp_r"], look["q"]
+    return {"delta": delta is not None and delta <= VETO_DELTA,
+            "upper_bound": high is not None and high < 0,
+            "negative_exp_r": exp_r is not None and exp_r < 0,
+            "years": look["years_negative"] >= VETO_MIN_YEARS,
+            "n": look["n"] >= VETO_MIN_N,
+            "bh": q is not None and q < VETO_Q}
+
+
+def _study_verdict(candidates: list[str], powered: int) -> str:
+    if candidates:
+        return "VETO-CANDIDATE"
+    if powered < 2:
+        return "UNDERPOWERED"
+    return "NO CANDIDATE"
+
+
+def stop_width_verdict(train_groups: dict, *, seed: int) -> dict:
+    """The pre-registered verdict over the TRAIN buckets of
+    ``stop_width_groups(...)["train"]``: one look per bucket against every
+    other known TRAIN row, BH over these looks only (never ``assign_qvalues``,
+    never a live look), six clauses per bucket, one study verdict."""
+    known = train_groups["known"]
+    looks = {label: _bucket_look(bucket, known, seed)
+             for label, bucket in train_groups["buckets"].items()}
+    labels = list(looks)
+    qvalues = stats.bh_qvalues([looks[label]["p"] for label in labels])
+    for label, q in zip(labels, qvalues):
+        look = looks[label]
+        look["q"] = q
+        look["clauses"] = _clauses(look)
+        look["candidate"] = all(look["clauses"].values())
+    candidates = [label for label in labels if looks[label]["candidate"]]
+    powered = sum(1 for label in labels if looks[label]["n"] >= VETO_MIN_N)
+    return {"verdict": _study_verdict(candidates, powered), "candidates": candidates,
+            "family_size": len(labels), "powered": powered, "n_needed": VETO_MIN_N,
+            "looks": looks}
+
+
+#: |Spearman rho(stop_atr, atr_pct)| on TRAIN at or above this: the results
+#: doc says the verdict is about ticker volatility, not stop placement.
+VOLATILITY_RHO = 0.8
+#: Delta within one direction is shown only from this many bucket rows of it.
+DIRECTION_MIN_N = 100
+_DIRECTIONS = ("bullish", "bearish")
+
+
+def _shares(rows: list[dict], key: str) -> dict:
+    counts: dict[str, int] = {}
+    for row in rows:
+        label = _label(row.get(key))
+        counts[label] = counts.get(label, 0) + 1
+    return {label: counts[label] / len(rows) for label in sorted(counts, key=_sort_key)}
+
+
+def _median_rr(rows: list[dict]) -> float | None:
+    values = [float(value) for value in (row.get("risk_reward_ratio") for row in rows)
+              if isinstance(value, (int, float)) and not isinstance(value, bool)]
+    return float(np.median(values)) if values else None
+
+
+def _direction_deltas(bucket: list[dict], rest: list[dict]) -> dict:
+    out = {}
+    for direction in _DIRECTIONS:
+        mine = [row["r"] for row in bucket if row.get("direction") == direction]
+        other = [row["r"] for row in rest if row.get("direction") == direction]
+        out[direction] = (_mean(mine) - _mean(other)
+                          if len(mine) >= DIRECTION_MIN_N and other else None)
+    return out
+
+
+def _clamped_share(rows: list[dict]) -> dict:
+    """A lower-bound provenance flag: None rows leave the denominator and are
+    counted on their own."""
+    flags = [row.get("stop_clamped") for row in rows]
+    yes = sum(1 for flag in flags if flag is True)
+    no = sum(1 for flag in flags if flag is False)
+    return {"clamped_share": yes / (yes + no) if yes + no else None,
+            "clamped_none": len(flags) - yes - no}
+
+
+def _removal(bucket: list[dict], rest: list[dict], known: list[dict]) -> dict:
+    return {"pooled_exp_r": _mean([row["r"] for row in known]),
+            "without_exp_r": _mean([row["r"] for row in rest]),
+            "delta_total_r": 0.0 - sum(row["r"] for row in bucket),
+            "n_removed": len(bucket)}
+
+
+def _same_day(row: dict) -> bool:
+    opened, closed = row.get("opened_at"), row.get("closed_at")
+    return bool(opened and closed) and opened[:10] == closed[:10]
+
+
+def _same_day_loss_share(rows: list[dict]) -> float | None:
+    """Live only: losses closed on their entry day (UTC dates as stored)."""
+    losses = [row for row in rows if row["r"] < 0]
+    if not losses:
+        return None
+    return sum(1 for row in losses if _same_day(row)) / len(losses)
+
+
+def _bucket_disclosure(bucket: list[dict], known: list[dict], *, live: bool) -> dict:
+    rest = _rest_of(bucket, known)
+    base = bucket_stats(bucket)
+    out = {"n": base["n"], "win_rate": base["win_rate"], "exp_r": base["exp_r"],
+           "exp_r_gross": base["exp_r_gross"], "median_rr": _median_rr(bucket),
+           "direction_share": _shares(bucket, "direction"),
+           "horizon_share": _shares(bucket, "horizon"),
+           "delta_by_direction": _direction_deltas(bucket, rest),
+           **_clamped_share(bucket),
+           "removal": _removal(bucket, rest, known)}
+    if live:
+        out["family_share"] = _shares(bucket, "strategy")
+        out["same_day_loss_share"] = _same_day_loss_share(bucket)
+    return out
+
+
+def _rho_and_overlap(known: list[dict], edges: list[float],
+                     atr_edges: list[float]) -> tuple[float | None, float | None]:
+    """Spearman rho of stop_atr vs atr_pct, and the share of rows whose
+    stop_atr bucket mirrors their atr_pct bucket (atr_pct on TRAIN edges)."""
+    pairs = [(row["stop_atr"], value) for row in known
+             if (value := _positive_number(row.get("atr_pct"))) is not None]
+    if not pairs:
+        return None, None
+    rho = _spearman([stop for stop, _ in pairs], [pct for _, pct in pairs])
+    top = len(atr_edges)
+    same = sum(1 for stop, pct in pairs
+               if bisect.bisect_right(edges, stop) == top - bisect.bisect_right(atr_edges, pct))
+    return rho, same / len(pairs)
+
+
+def _population_disclosure(pop: dict, edges: list[float], atr_edges: list[float],
+                           *, live: bool) -> dict:
+    rho, overlap = _rho_and_overlap(pop["known"], edges, atr_edges)
+    return {"unknown": pop["unknown"], "rho": rho, "overlap": overlap,
+            "buckets": {label: _bucket_disclosure(rows, pop["known"], live=live)
+                        for label, rows in pop["buckets"].items()}}
+
+
+def stop_width_disclosures(groups: dict) -> dict:
+    """Printed beside the verdict, never gating: per population (TRAIN and
+    live, never pooled) and per bucket on the TRAIN edges."""
+    atr_edges = frozen_edges(groups["train"]["known"], "atr_pct")
+    return {name: _population_disclosure(groups[name], groups["edges"], atr_edges,
+                                         live=name == "live")
+            for name in ("train", "live")}
+
+
+# --- v226 report and run --------------------------------------------------------
+
+#: The report's ``study`` field and the pre-registration ledger id.
+STUDY_ID = "v226-stop-width"
+_RUN_SIDECAR_SUFFIX = ".run.json"     # run_backtest_range._run_sidecar_path (V226-3)
+
+
+def stop_width_report_path() -> Path:
+    """data/reports/stop-width-attribution.json, resolved at call time so a
+    test's DATA_DIR wins. Never the v146 expectancy-attribution.json."""
+    return Path(config.DATA_DIR) / "reports" / "stop-width-attribution.json"
+
+
+def build_stop_width_report(train_rows: list[dict], live_rows: list[dict], *, seed: int,
+                            generated_at: str | None = None) -> dict:
+    """The whole stop-width report, pure: TRAIN-frozen edges, the
+    pre-registered verdict on TRAIN only, disclosures for both populations
+    (live on the TRAIN edges, never gating). ``provenance`` is filled by
+    ``run_stop_width``."""
+    groups = stop_width_groups(train_rows, live_rows)
+    outcome = stop_width_verdict(groups["train"], seed=seed)
+    disclosures = stop_width_disclosures(groups)
+    rho = disclosures["train"]["rho"]
+    return {
+        "generated_at": generated_at or dt.datetime.now(dt.timezone.utc).isoformat(),
+        "study": STUDY_ID,
+        "seed": seed,
+        "edges": groups["edges"],
+        "labels": groups["labels"],
+        "verdict": outcome,
+        "disclosures": disclosures,
+        "volatility_note": rho is not None and abs(rho) >= VOLATILITY_RHO,
+        "provenance": {},
+    }
+
+
+def _run_sidecar_of(train_jsonl) -> Path:
+    return Path(str(train_jsonl) + _RUN_SIDECAR_SUFFIX)
+
+
+def _json_or_none(path) -> dict | None:
+    path = Path(path)
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def run_stop_width(train_jsonl, *, seed: int = WEEK_BOOTSTRAP_SEED, write: bool = True) -> dict:
+    """Load both stop-width populations, build the report, quote both replay
+    sidecars, and write it to its own file (unless ``write=False``). Never
+    ``write_latest``: v146's verdict of record is not touched."""
+    from swingbot.core.marketdata import training_data
+    train_rows = load_stop_width_train_rows(train_jsonl)
+    live_rows = load_stop_width_live_rows()
+    report = build_stop_width_report(train_rows, live_rows, seed=seed)
+    report["provenance"] = {
+        "train_rows": {"path": str(train_jsonl), "rows": len(train_rows),
+                       "sha256": _file_sha256(train_jsonl)},
+        "run_sidecar": _json_or_none(_run_sidecar_of(train_jsonl)),
+        "store_provenance": _json_or_none(training_data.provenance_path(train_jsonl)),
+        "frictions": {"slippage_bps": getattr(config, "SLIPPAGE_BPS", 5.0),
+                      "commission_r": commission_r()},
+        "live_fills_include_frictions": LIVE_FILLS_INCLUDE_FRICTIONS,
+        "n_resamples": N_RESAMPLES,
+    }
+    if write:
+        jsonio.atomic_write_json(str(stop_width_report_path()), report)
+    return report
+
+
+# --- v226 Markdown (the results doc body) ---------------------------------------
+
+_VERDICT_BUYS = (
+    ("VETO-CANDIDATE", "licenses a veto idea, not a veto: it must earn a SCREEN-AVOID-PASS "
+                       "from a Stage -2 avoid idea before its spec, and that spec measures "
+                       "the veto on the bot's own replay with replacement trades included "
+                       "(paired)."),
+    ("NO CANDIDATE", "closes \"tight stops in ATR terms\" as measured "
+                     "(backtest-methodology.md § Closed pre-registrations)."),
+    ("UNDERPOWERED", "leaves the question open and names the N that would power it."),
+)
+_DESCRIPTIVE_TEXT = (
+    "Descriptive, not a veto. Each bucket's filled TRAIN rows are compared with the "
+    "rest; this does not estimate what a veto would do to pooled ExpR, because a "
+    "vetoed plan frees a slot that a different plan would take. A VETO-CANDIDATE only "
+    "licenses the Stage -2 screen and the paired replay that would measure that.")
+_VOLATILITY_TEXT = ("|rho| between stop_atr and atr_pct is {rho} on TRAIN (>= 0.8): this "
+                    "verdict is about ticker volatility, not stop placement.")
+_CLAUSE_HEADERS = ("1 Δ≤−0.10", "2 CI<0", "3 ExpR<0", "4 ≥3/4 yrs", "5 N≥300", "6 q<0.10")
+_BUCKET_HEADERS = ("Bucket", "N", "Win%", "ExpR", "ExpR gross", "median RR",
+                   "clamped share", "clamped None", "Δ long", "Δ short")
+_REMOVAL_HEADERS = ("Bucket", "pooled ExpR", "ExpR without", "ΔTotal R", "N removed")
+
+
+def _fmt(value, spec: str = ".4f") -> str:
+    if value is None:
+        return "n/a"
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    return format(value, spec)
+
+
+def _table(headers, rows) -> list[str]:
+    out = ["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
+    return out + ["| " + " | ".join(cells) + " |" for cells in rows]
+
+
+def _md_verdict(report: dict) -> list[str]:
+    outcome = report["verdict"]
+    edges = ", ".join(f"{edge:.2f}" for edge in report["edges"]) or "none"
+    return ["## Verdict", "",
+            f"**Verdict: {outcome['verdict']}** -- {dict(_VERDICT_BUYS)[outcome['verdict']]}", "",
+            f"Candidates: {', '.join(outcome['candidates']) or 'none'}.",
+            f"Powered buckets (N ≥ {outcome['n_needed']}): {outcome['powered']} of "
+            f"{outcome['family_size']}; BH family size {outcome['family_size']} (this "
+            "study's bucket looks only). Computed once on TRAIN; VALIDATION never read.", "",
+            f"Edges (TRAIN quartiles of stop_atr, frozen, outcome-blind): {edges}.", ""]
+
+
+def _clause_cells(label: str, look: dict) -> list[str]:
+    return [label, str(look["n"]), _fmt(look["exp_r"]), _fmt(look["delta"]),
+            f"[{_fmt(look['ci_low'])}, {_fmt(look['ci_high'])}]", _fmt(look["p"]),
+            _fmt(look["q"]), f"{look['years_negative']}/{len(VETO_YEARS)}",
+            *(_fmt(look["clauses"][key]) for key in CLAUSE_KEYS), _fmt(look["candidate"])]
+
+
+def _md_clauses(report: dict) -> list[str]:
+    looks, labels = report["verdict"]["looks"], report["labels"]
+    headers = ("Bucket", "N", "ExpR", "Δ", "95% CI", "p", "q", "years Δ<0",
+               *_CLAUSE_HEADERS, "candidate")
+    years = [[label, *(_fmt(looks[label]["years"][year]) for year in VETO_YEARS)]
+             for label in labels]
+    return (["## TRAIN: the six pre-registered clauses", ""]
+            + _table(headers, [_clause_cells(label, looks[label]) for label in labels])
+            + ["", "Δ per TRAIN year (bucket ExpR − rest ExpR; n/a = no rows that year, "
+                   "which counts against clause 4):", ""]
+            + _table(("Bucket", *VETO_YEARS), years) + [""])
+
+
+def _bucket_cells(label: str, bucket: dict, live: bool) -> list[str]:
+    deltas = bucket["delta_by_direction"]
+    cells = [label, str(bucket["n"]), _fmt(bucket["win_rate"], ".1f"), _fmt(bucket["exp_r"]),
+             _fmt(bucket["exp_r_gross"]), _fmt(bucket["median_rr"], ".2f"),
+             _fmt(bucket["clamped_share"], ".3f"), str(bucket["clamped_none"]),
+             _fmt(deltas.get("bullish")), _fmt(deltas.get("bearish"))]
+    if live:
+        cells.append(_fmt(bucket["same_day_loss_share"], ".3f"))
+    return cells
+
+
+def _removal_cells(label: str, bucket: dict) -> list[str]:
+    removal = bucket["removal"]
+    return [label, _fmt(removal["pooled_exp_r"]), _fmt(removal["without_exp_r"]),
+            _fmt(removal["delta_total_r"]), str(removal["n_removed"])]
+
+
+def _shares_text(shares: dict) -> str:
+    return ", ".join(f"{key} {value:.2f}" for key, value in shares.items()) or "none"
+
+
+def _mix_line(label: str, bucket: dict, live: bool) -> str:
+    line = (f"- {label}: direction {_shares_text(bucket['direction_share'])}; "
+            f"horizon {_shares_text(bucket['horizon_share'])}")
+    if live:
+        line += f"; family {_shares_text(bucket['family_share'])}"
+    return line
+
+
+def _md_population(title: str, disc: dict, labels: list[str], *, live: bool) -> list[str]:
+    buckets = disc["buckets"]
+    headers = _BUCKET_HEADERS + (("same-day loss share",) if live else ())
+    return ([f"## {title}", "",
+             f"Unknown stop_atr rows (outside the edges and the bootstrap base): "
+             f"{disc['unknown']}. The clamped share is a lower-bound provenance flag "
+             "(identity-based, read at run time); None rows leave its denominator.", ""]
+            + _table(headers, [_bucket_cells(label, buckets[label], live) for label in labels])
+            + ["", "Removal arithmetic (descriptive; ignores replacement trades):", ""]
+            + _table(_REMOVAL_HEADERS, [_removal_cells(label, buckets[label]) for label in labels])
+            + ["", "Mix:", ""] + [_mix_line(label, buckets[label], live) for label in labels]
+            + [""])
+
+
+def _md_volatility(report: dict) -> list[str]:
+    disc = report["disclosures"]
+    lines = ["## stop_atr against atr_pct (disclosed, never a look)", ""]
+    for name, key in (("TRAIN", "train"), ("Live", "live")):
+        lines.append(f"- {name}: Spearman rho {_fmt(disc[key]['rho'])}, mirrored-bucket "
+                     f"overlap {_fmt(disc[key]['overlap'], '.3f')}")
+    lines.append("")
+    if report["volatility_note"]:
+        lines += [_VOLATILITY_TEXT.format(rho=_fmt(abs(disc["train"]["rho"]))), ""]
+    return lines
+
+
+def _md_tail() -> list[str]:
+    return (["## What this is", "", _DESCRIPTIVE_TEXT, "", "## What each verdict buys", ""]
+            + [f"- **{name}** {text}" for name, text in _VERDICT_BUYS])
+
+
+def stop_width_markdown(report: dict) -> str:
+    """The printed body of the results doc: verdict, clause table, both
+    populations' disclosures (live beside TRAIN, never gating), rho and the
+    two fixed paragraphs."""
+    disc, labels = report["disclosures"], report["labels"]
+    lines = [f"# v226 stop-width attribution ({report['generated_at'][:10]}, "
+             f"seed {report['seed']})", ""]
+    lines += _md_verdict(report) + _md_clauses(report)
+    lines += _md_population("TRAIN buckets", disc["train"], labels, live=False)
+    lines += _md_population("Live buckets (TRAIN edges; printed beside TRAIN, never gates)",
+                            disc["live"], labels, live=True)
+    lines += _md_volatility(report) + _md_tail()
+    return "\n".join(lines) + "\n"

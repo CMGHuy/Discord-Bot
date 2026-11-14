@@ -139,6 +139,7 @@ wrapper; it reads flags only from the shell segment that runs
 | `no-lookahead` | 1 | model-invocable | `architecture.md`, `known-traps.md` |
 | `pooled-numbers` | 1 | model-invocable | `edge-priorities.md`, `backtest-methodology.md` |
 | `mirror-prod` | 1 | model-invocable | `working-conventions.md` |
+| `prod-incident` | 1 | model-invocable, whenever the partner reports a production issue | `known-traps.md` (plus `docs/deploy/DEPLOY_HETZNER.md`) |
 | `edge-module` | 3 | model-invocable | `architecture.md` |
 | `alert-surface` | 3 | model-invocable | `known-traps.md` |
 | `schema-change` | 3 | model-invocable | `schema-evolution.md` — Step 1 reads it to pick add/rename/drop/promote |
@@ -148,6 +149,7 @@ wrapper; it reads flags only from the shell segment that runs
 | `deploy` | 2 | slash-only (`/deploy`) | none — Step 1 reads `docs/deploy/DEPLOY_HETZNER.md` and `docs/deploy/DOCKER.md`, not `docs/claude/` |
 | `stable-snapshot` | 2 | slash-only (`/stable-snapshot`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
 | `backup-pull` | 2 | slash-only (`/backup-pull`) | none — Step 1 reads the v120 spec and `docs/deploy/DB_RESTORE.md`, not `docs/claude/` |
+| `rollback` | 2 | slash-only (`/rollback [target] [--release]`) | none — Step 1 reads `docs/deploy/DB_RESTORE.md` and the header of `scripts/ops/rollback_code.sh`, not `docs/claude/` |
 | `replicate-prod-db` | 2 | `/replicate-prod-db`, or Claude before a task's first test run against the database | none — Step 1 reads `docs/deploy/DB_RESTORE.md` and `DEPLOY_HETZNER.md` § PostgreSQL, not `docs/claude/` |
 | `result-digest` | 2 | slash-only (`/result-digest`) | none — runs `scripts/backtest/compare_backtest_json.py` on the two files it is given, reads no `docs/claude/` file |
 | `handoff` | 2 | slash-only (`/handoff`) | `skills-tools.md` — only the "Handing a plan to another session or account" paragraph of § Plan writing, by `grep` |
@@ -165,7 +167,7 @@ pooled numbers, unmirrored prod changes), Tier 3 briefs an architectural seam
 before it's crossed (edge module boundaries, the alert surface, a schema
 change, worktree lifecycle). Tier 2 skills carry no Trigger table — they are
 checklists for an explicit slash command. `/deploy`, `/stable-snapshot`,
-`/backup-pull`, `/result-digest`, `/handoff`, `/screen`,
+`/backup-pull`, `/rollback`, `/result-digest`, `/handoff`, `/screen`,
 `/prereg` and `/data-check` also carry
 `disable-model-invocation: true`: the model never decides to run them. `/new-doc`, `/close-out` and `/replicate-prod-db` do not (the partner let
 Claude run the first two 2026-10-08, the third 2026-10-18): Claude invokes `new-doc` right before creating a
@@ -174,41 +176,14 @@ green and its results are recorded, and `replicate-prod-db` before a task's
 first test run against the database. `/task-brief` (grandfathered, outside the tiers) was opened to Claude too (partner, 2026-11-05): Claude invokes it right after `task_handoff.py` writes a handoff. `MODEL_RUN_RITUALS` in
 `tests/hooks/test_skill_shape.py` pins the split.
 
-## Proving a skill fires: the eval suites
+## Proving a skill fires: free checks only
 
-**Never run these unless the partner asks by name** — each case is a billed
-child `claude` run (`working-conventions.md` § Paid usage). The suites are kept
-as the written record of each trigger table.
-
-Every Tier 1 and Tier 3 trigger table is wired into a runnable suite under
-`.claude/skills/<skill>/evals/` — one case per table row, `fire-*` for a
-should-fire row and `no-fire-*` for a near-miss. A case is a `prompt.md` (the
-request as a session would really phrase it, `allowed_tools: [Read, Glob,
-Grep, Skill]`) plus `graders/skill-fired.md`, a `tool_used` grader on the
-`Skill` tool: `min: 1` for a fire, `min: 0` **and** `max: 0` for a near-miss.
-A near-miss grader must set `min: 0` explicitly — `min` defaults to 1, so a
-bare `max: 0` asks for the impossible range `1..0` and fails every case that
-behaved correctly.
-
-```bash
-claude plugin eval .claude/skills/<skill> --runs 1 --no-publish --trust-plugin --ablation none
-```
-
-`--ablation none` keeps the run to a single arm. Omit it and the run defaults
-to `with-without`, which adds a no-plugin baseline arm at twice the runs and
-cost. That arm is worth paying for when the question is whether the *skill*
-rather than the base model produced the behaviour — a should-fire case then
-reports `with 1.00 / without 0.00 / Δ +1.00`. It adds nothing on a near-miss,
-where the baseline arm trivially scores 1.00.
-
-Each case is a real child `claude` run on your own credential. The full
-52-case sweep is about $3.50 and about 8 minutes; per-skill suites are 3–8
-cases each. Results land in `.claude/skills/<skill>/evals/results/`, which is
-gitignored. Baseline at 2026-09-21: 52/52 cases pass, all eight suites exit 0.
-v145 role suites, 2026-10-09: 54/54 cases pass across the nine role
-suites (one description revision each for quant-engineer and senior-engineer: a
-missed fire case, fixed by naming the reproducibility and behaviour-preserving
-refactor questions in the description).
+Skills carry no eval suites. `claude plugin eval` runs a billed child `claude`
+per case, so the partner had every `evals/` folder removed on 2026-11-11
+(`working-conventions.md` § Paid usage). A skill's `## Trigger table` is its
+record; `tests/hooks/test_skill_shape.py` (which also fails if an `evals/`
+folder reappears) and `tests/hooks/test_role_skills.py` are the free checks,
+plus a subscription subagent run of a realistic prompt when wording matters.
 
 ## Repo tooling (`.claude/`)
 

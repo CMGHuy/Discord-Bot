@@ -158,6 +158,12 @@ def test_write_scenario_trades_jsonl_round_trips(tmp_path):
         {"ticker": "MSFT", "r_total": -1.0, "legs": [], "entry_context": {}}]
 
 
+def _row(ticker):
+    """A minimal checkpointed row: the fields the rebuilt table reads."""
+    return {"ticker": ticker, "horizon_key": LEGACY_HORIZONS[0], "outcome": "win",
+            "runner_outcome": None, "r_total": 1.0}
+
+
 def _stub_scenario_mode(monkeypatch, rr, tmp_path, seen):
     """run_scenario_mode with every loader and the replay itself faked."""
     monkeypatch.chdir(tmp_path)                 # it writes backtest_range_summary.txt to cwd
@@ -174,10 +180,13 @@ def _stub_scenario_mode(monkeypatch, rr, tmp_path, seen):
         if kwargs["on_ticker_done"] is not None:
             kwargs["on_ticker_done"](1, 2)
             seen["progress_text"] = (tmp_path / "out" / "rows.jsonl.progress").read_text(encoding="utf-8")
+        if kwargs.get("on_ticker_result") is not None:      # v226: rows reach disk per ticker
+            for ticker in frames:
+                kwargs["on_ticker_result"](ticker, {}, [_row(ticker)])
         empty = bs._aggregate([])
         stats = {"pooled": empty, "by_horizon": {hk: empty for hk in LEGACY_HORIZONS}}
         if kwargs["collect_rows"]:
-            stats["rows"] = [{"ticker": "AAA"}, {"ticker": "BBB"}]
+            stats["rows"] = [_row(ticker) for ticker in frames]
         return stats
 
     monkeypatch.setattr(rr, "run_scenario_backtest", fake_backtest)
@@ -197,7 +206,8 @@ def test_scenario_mode_writes_rows_and_clears_the_progress_file(monkeypatch, tmp
     assert seen["asof_map"] == {"AAA": "asof-a"}
     assert seen["progress_text"].startswith("50.0% (1/2 tickers)")
     assert [json.loads(line) for line in target.read_text(encoding="utf-8").splitlines()] == [
-        {"ticker": "AAA"}, {"ticker": "BBB"}]
+        _row("AAA"), _row("BBB")]
+    assert seen["on_ticker_result"] is not None
     assert not Path(str(target) + ".progress").exists()     # deleted on completion
 
 

@@ -941,22 +941,44 @@ export interface PartialsKpis {
   median_tp1_exit_sessions: number | null; tp1_exit_n: number;
 }
 export type PartialsStage = 'filled' | 'tp1' | 'runner_closed' | 'tp2';
-export type PartialsBucket = 'tp2' | 'trail' | 'floor' | 'stall' | 'time' | 'manual' | 'no_tp2' | 'open' | 'other';
 export type PartialsDimension = 'strategy' | 'horizon' | 'side' | 'month';
 export type PartialsHoldStage = 'entry_tp1' | 'tp1_exit' | 'entry_exit';
 export interface PartialsHold { p25: number | null; median: number | null; p75: number | null; points: number[]; }
 export interface PartialsBreakdownRow extends PartialsKpis { key: string; n: number; thin: boolean; }
 export interface PartialsLadderRow { level_r: number; touch_rate: number | null; cf_exp_r: number | null; n: number; }
 export interface PartialsSplitRow { fraction: number; exp_r: number | null; n: number; }
-export interface PartialsOutcome { bucket: PartialsBucket; n: number; share: number | null; avg_runner_r: number | null; }
+/** v219 — `runner_endings` (`partials.py::runner_endings`): how closed runners
+ *  ended. Shares are percentages 0-100 (1 dp) with Wilson 95% bounds `lo`/`hi`;
+ *  all three are null when `denominator` is 0. Giveback's denominator is the
+ *  decidable runners, the four endings' is `n`. R figures are runner R on the
+ *  plan's initial risk; `progress` is % of the TP1→TP2 distance (0-100). */
+export type PartialsEnding = 'tp2' | 'trail' | 'floor' | 'other' | 'giveback';
+export interface PartialsShare {
+  n: number; denominator: number; share: number | null; lo: number | null; hi: number | null; thin: boolean;
+}
+export interface PartialsEndingCard extends PartialsShare { ending: 'tp2' | 'floor' | 'giveback' | 'trail'; }
+export interface PartialsEndingRow extends PartialsShare {
+  ending: PartialsEnding;
+  r_n: number; avg_r: number | null; median_r: number | null; total_r: number | null; vs_all_out: number | null;
+  path_n: number; best_r: number | null; progress: number | null; gave_back: number | null; sessions: number | null;
+}
+export interface PartialsOddsSegment {
+  ending: Exclude<PartialsEnding, 'giveback'>; n: number; share: number | null; lo: number | null; hi: number | null;
+}
+export interface PartialsOddsBar { level: number; n: number; thin: boolean; split: PartialsOddsSegment[]; }
+export interface PartialsRunnerEndings {
+  n: number; decidable: number;
+  cards: PartialsEndingCard[]; rows: PartialsEndingRow[]; odds: PartialsOddsBar[];
+  excluded: { no_tp2: number; runner_r_unavailable: number; manual_close: number; unpathed: number; no_tp2_distance: number };
+}
 export interface AnalyticsPartials extends Scoped {
   kpis: PartialsKpis;
   funnel: { stage: PartialsStage; n: number }[];
-  outcomes: PartialsOutcome[];
+  runner_endings: PartialsRunnerEndings;
   counterfactuals: {
     actual_exp_r: number | null; all_out_exp_r: number | null; giveback: number[];
     ladder: PartialsLadderRow[]; split: PartialsSplitRow[];
-    path_unavailable: number; runner_r_unavailable: number;
+    path_unavailable: number; runner_r_unavailable: number; giveback_excluded: number;
   };
   holds: Record<PartialsHoldStage, PartialsHold>;
   breakdowns: Record<PartialsDimension, PartialsBreakdownRow[]>;
@@ -2675,4 +2697,39 @@ export interface LiveEventsMeta { availability: LiveAvailability; as_of: string;
 export interface LiveSnapshot {
   heat: LiveHeat; awaiting: LiveAwaiting; killswitch: LiveKillswitch;
   events: LiveEvent[]; events_meta: LiveEventsMeta;
+}
+
+/* -- v227: simple-channel posts the admin speaks ------------------------- */
+
+/** One recorded simple-channel post. `family` is null for a kind this
+ *  server's registry no longer knows. */
+export interface FeedPost {
+  id: number;
+  posted_at: string;
+  kind: string;
+  family: string | null;
+  ticker: string | null;
+  headline: string;
+}
+
+/** A page after a cursor, oldest first; `latest_id` is read before the page. */
+export interface FeedPostsPage {
+  items: FeedPost[];
+  latest_id: number;
+}
+
+/** A toggleable kind: Discord label, the spoken phrase and a sample headline. */
+export interface FeedKind {
+  kind: string;
+  label: string;
+  phrase: string;
+  sample: string;
+}
+
+/** One family of kinds, in the server's order. */
+export interface FeedKindFamily {
+  family: string;
+  label: string;
+  default_on: boolean;
+  kinds: FeedKind[];
 }

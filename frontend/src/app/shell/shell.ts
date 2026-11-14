@@ -3,9 +3,11 @@ import {
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
@@ -26,6 +28,7 @@ import { ViewportService } from '../ui/breakpoints';
 import { Button } from '../ui/button';
 import { DensityService } from '../ui/density.service';
 import { Hint } from '../ui/hint';
+import { ThemeService } from '../ui/theme.service';
 import { Icon } from '../ui/icon';
 import { ProfileMenu } from './profile-menu';
 import { RouteLoadingService } from '../routing/route-loading.service';
@@ -52,6 +55,8 @@ import { LiveStrip } from './live/live-strip';
 import { alarmFor, heatStripText, liveWarnings } from './live/live-state';
 import { Tape } from './tape/tape';
 import { ToastHost } from './toast-host';
+import { VoiceChip } from './voice-chip';
+import { VoiceNotifier } from '../voice/voice-notifier';
 
 /**
  * Labelled rail, top bar, connection status, toast host, outlet -- v195 Phase 3.
@@ -81,7 +86,7 @@ const ZOOM_DEFAULT = 100;
   selector: 'sb-shell',
   imports: [
     RouterOutlet, RouterLink, AlarmChip, ToastHost,
-    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, ProfileMenu, Tape,
+    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, VoiceChip, ProfileMenu, Tape,
     Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
     LiveDock, LiveEdgeTab, LiveStrip, LiveSheet, ReadOnlyBadge, ShockPill,
   ],
@@ -291,6 +296,15 @@ export class Shell {
    *  `data-density` attribute on <html>. */
   protected readonly density = inject(DensityService);
 
+  /** Black or Dark blue for this browser (spec v225): the bar button and the
+   *  profile menu's Theme row both write through ThemeService, which owns
+   *  `ui.theme`, `data-theme` and the theme-color meta. */
+  protected readonly theme = inject(ThemeService);
+
+  /** The bar button's element, for its anchored hint: `#themeToggle` on a
+   *  `button[sb-button]` names the Button component, not the element. */
+  protected readonly themeToggleRef = viewChild('themeToggle', { read: ElementRef<HTMLElement> });
+
   protected setMotion(mode: MotionMode): void {
     this.motion.set(mode);
   }
@@ -366,6 +380,9 @@ export class Shell {
       risk();
       this.refreshKillswitch();
     });
+    // v227: speak simple-channel posts while this tab is open. Root service;
+    // start() is idempotent and does nothing on a browser without speech.
+    inject(VoiceNotifier).start();
   }
 
   protected refreshKillswitch(): void {

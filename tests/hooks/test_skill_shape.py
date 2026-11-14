@@ -30,13 +30,14 @@ MAX_SKILL_LINES = 80
 
 # Tier 1 and Tier 3 are model-invocable, so they carry a trigger table.
 # Tier 2 is slash-only and carries disable-model-invocation instead.
-TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers", "mirror-prod", "edge-module", "alert-surface", "schema-change", "worktree-lifecycle",
+TIER_1_AND_3 = {"backtest-gate", "no-lookahead", "pooled-numbers", "mirror-prod", "prod-incident", "edge-module", "alert-surface", "schema-change", "worktree-lifecycle",
                 "quant-researcher", "risk-manager", "financial-advisor",
                 "veteran-trader", "technical-analyst", "fundamental-analyst",
                 "staff-engineer", "quant-engineer", "senior-engineer", "ux-designer",
                 "exit-harvester", "setup-scout", "regime-desk", "trade-scout"}   # each skill task appends its own name
 TIER_2 = {"close-out", "new-doc", "deploy", "stable-snapshot", "backup-pull", "panel",
-          "result-digest", "handoff", "screen", "prereg", "data-check", "replicate-prod-db"}        # each ritual task appends its own name
+          "result-digest", "handoff", "screen", "prereg", "data-check", "replicate-prod-db",
+          "rollback"}        # each ritual task appends its own name
 # Rituals the partner lets Claude run on its own (2026-10-08; replicate-prod-db
 # 2026-10-18). Still checklists with no Trigger table; their description names
 # the moment they run.
@@ -128,6 +129,12 @@ def test_model_run_rituals_are_invocable_and_say_when():
         assert f"Run as /{name}, or by Claude itself" in meta["description"]
 
 
+def test_no_skill_ships_a_billed_eval_suite():
+    """Partner, 2026-11-11: `claude plugin eval` is billed beyond the
+    subscription, so no skill carries an evals/ suite to run."""
+    assert [p.parent.name for p in SKILLS_DIR.glob("*/evals")] == []
+
+
 def test_every_skill_is_registered_in_exactly_one_tier():
     on_disk = {p.name for p in _skill_dirs()}
     assert on_disk == GRANDFATHERED | VENDORED | TIER_1_AND_3 | TIER_2
@@ -207,3 +214,47 @@ def test_handoff_writes_the_plan_handoff_block_in_the_main_context():
     assert "AskUserQuestion" in body
     assert "never rewrite, renumber or delete" in body
     assert "write nothing" in body
+
+
+def test_rollback_skill_runs_main_s_script_and_asks_before_every_override():
+    """v220: the checkout may be an older target without the script, so it
+    always comes from origin/main; the partner answers before the writer
+    override and before anything changes."""
+    meta, body = _read_skill("rollback")
+    assert meta.get("disable-model-invocation") == "true"
+    assert "bash scripts/ops/ssh-hetzner.sh" in body
+    assert "git show origin/main:scripts/ops/rollback_code.sh" in body
+    for flag in ("--resolve", "--candidates", "--dry-run", "--release"):
+        assert flag in body, flag
+    assert "Ask with `AskUserQuestion` before adding `--allow-writer-drift`" in body
+    assert body.count("Ask with `AskUserQuestion` before `--i-mean-it`") == 2   # rollback and release
+    assert "market-data writer differs" in body
+    assert "manifest `git_sha` or its git tag" in body
+    assert "scripts/ops/restore_stable.sh" in body and "scripts/ops/rollback_to.sh" in body
+    assert "alembic upgrade" not in body.lower()
+
+
+def test_deploy_skill_refuses_while_a_rollback_holds_deploys():
+    _, body = _read_skill("deploy")
+    step3 = body[body.index("## Step 3"):body.index("## Step 4")]
+    assert "deploy_hold.json" in step3 and "/rollback --release" in step3
+    assert step3.index("deploy_hold.json") < step3.index("git push origin")
+
+
+def test_stable_snapshot_pins_images_and_reports_rollback_fields():
+    """v221 (v220 spec Section 2): images pinned before the tag, report carries
+    the features, the /rollback command and the floor verdict."""
+    snap = (SKILLS_DIR / "stable-snapshot" / "SKILL.md").read_text(encoding="utf-8")
+    pin, tag = snap.index("## Step 4b"), snap.index("## Step 5")
+    assert pin < tag
+    step = snap[pin:tag]
+    assert "gh workflow run pin-stable-image.yml" in step
+    assert "-f name=<name> -f bot_image=<bot_image> -f db_image=<db_image>" in step
+    assert 'displayTitle=="pin <name>"' in step
+    assert "gh run watch <id> --exit-status" in step
+    assert "do NOT tag" in step
+    report = snap[snap.index("## Step 7"):]
+    for needle in ("`features`", "`alembic_head`", "`config_keys_sha256`",
+                   "/rollback stable-<name>", "python scripts/ops/rollback_plan.py floor <git_sha>"):
+        assert needle in report, needle
+    assert "backups/deploy_hold.json" in snap[snap.index("## Step 2"):snap.index("## Step 3")]

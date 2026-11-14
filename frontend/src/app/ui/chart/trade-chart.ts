@@ -27,8 +27,9 @@ import { IndicatorPanes } from './indicator-panes';
 import { BasicOverlays } from './overlays-basic';
 import { LegendPrimitive } from './primitives/legend-primitive';
 import { PlanLines } from './plan-lines';
-import { createPricePane } from './price-pane';
+import { applyPricePanePalette, createPricePane } from './price-pane';
 import { StrategyOverlay } from './strategy-overlay';
+import { ThemeService } from '../theme.service';
 
 /**
  * The interactive chart — the scaffold (SR35).
@@ -103,6 +104,8 @@ export class TradeChart {
    *  one instance, so hiding RSI in one tab hides it everywhere at once. */
   private readonly prefs = inject(ChartPrefs);
 
+  private readonly theme = inject(ThemeService);
+
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
   private chart: IChartApi | null = null;
@@ -166,6 +169,14 @@ export class TradeChart {
       // only disappear on the next trade change rather than immediately.
       const visible = this.prefs.visible();
       untracked(() => this.render(data, visible));
+    });
+
+    // v225: create() read the palette once. A theme flip re-reads it and
+    // re-applies everything that copied a colour, so no pixel keeps the
+    // other ground. untracked: data and layer changes stay render()'s job.
+    effect(() => {
+      this.theme.theme();
+      untracked(() => this.restyle());
     });
 
     destroyRef.onDestroy(() => {
@@ -244,6 +255,14 @@ export class TradeChart {
     );
     volume.setData(data.ohlcv.map((bar) => ({ time: bar.t as UTCTimestamp, value: bar.v })));
 
+    this.paintLayers(data, visible);
+    this.chart?.timeScale().fitContent();
+  }
+
+  /** Everything `render()` draws on top of the two price series, re-reading the
+   *  palette each time — which is why a theme flip can re-run it alone, with no
+   *  `setData` and no viewport change (v225). */
+  private paintLayers(data: ChartResponse, visible: Record<ChartLayer, boolean>): void {
     // Each gate below hides a whole layer rather than dimming it: `indicators`
     // feeds `IndicatorPanes`, which omits a pane entirely when its key is
     // absent (the same path an indicator with too little history already
@@ -272,7 +291,17 @@ export class TradeChart {
     this.strategy?.render(data.overlays, chartPalette());
     this.renderPlan(data, visible.plan);
     this.legend?.setLines(this.legendLines());
-    this.chart?.timeScale().fitContent();
+  }
+
+  private restyle(): void {
+    if (!this.chart || !this.candles || !this.volume) return;
+    const palette = chartPalette();
+    this.chart.applyOptions(chartOptions(palette));
+    applyPricePanePalette({ candles: this.candles, volume: this.volume }, palette);
+    this.legend?.setPalette(palette);
+    // No `fitContent`: a flip must not move the viewport.
+    const data = this.data();
+    if (data) this.paintLayers(data, this.prefs.visible());
   }
 
   /** The bands span the whole loaded frame, first bar to last, because risk and

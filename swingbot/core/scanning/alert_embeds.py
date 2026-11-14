@@ -66,6 +66,7 @@ def build_strategy_simple_embed(plan) -> "discord.Embed":
     ui.apply_chrome(embed, kind=Kind.STRATEGY_SIGNAL,
                     level=getattr(plan, "confidence_level", None), plan_id=plan.plan_id,
                     link_base=config.ADMIN_PUBLIC_URL)
+    embed.entry_price = plan.trigger_price    # v227: spoken "buy at <entry>"
     return embed
 
 
@@ -458,4 +459,5 @@ def _legacy_simple_alert(item) -> discord.Embed:
     ui.apply_chrome(embed, kind=Kind.SETUP_SIMPLE, level=conf.level,
                     plan_id=plan_v2.plan_id if plan_v2 else None,
                     link_base=config.ADMIN_PUBLIC_URL)
+    embed.entry_price = nums["entry"]    # v227: the entry the plan line prints
     return embed

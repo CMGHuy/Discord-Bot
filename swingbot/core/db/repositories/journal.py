@@ -39,6 +39,14 @@ class JournalRepository(Repository):
                 journal_entries.c.closed_at, journal_entries.c.created_at)),
         )
 
+    def version(self, *, conn=None) -> tuple[int, str | None]:
+        """(row count, newest updated_at) over journal_entries -- the twin of
+        PlanRepository.version(); same commit-order caveat (V218-1)."""
+        statement = sa.select(sa.func.count(), sa.func.max(journal_entries.c.updated_at))
+        with self._tx(conn) as connection:
+            count, newest = connection.execute(statement).one()
+        return int(count), None if newest is None else newest.isoformat()
+
 
 _repo: JournalRepository | None = None
 

@@ -432,31 +432,42 @@ def _resolve_replay_workers(workers: int | None) -> int:
     return max(1, (os.cpu_count() or 2) - 1)
 
 
-def _run_replay_tasks(worker, tasks: list, workers, on_ticker_done=None) -> list:
+def _run_replay_tasks(worker, tasks: list, workers, on_ticker_done=None, on_result=None) -> list:
     """worker over every task, sequentially or across the process pool, in
     task order. on_ticker_done(done, total) fires as each result arrives
     (pool.map yields in task order, so the count is monotone but can lag a
-    slow early ticker)."""
+    slow early ticker). v226: on_result(index, result) fires first, with the
+    task index of that result."""
     n = _resolve_replay_workers(workers)
     if n <= 1 or len(tasks) <= 1:
-        return _drain(map(worker, tasks), len(tasks), on_ticker_done)
+        return _drain(map(worker, tasks), len(tasks), on_ticker_done, on_result)
     with ProcessPoolExecutor(max_workers=n) as pool:
-        return _drain(pool.map(worker, tasks), len(tasks), on_ticker_done)
+        return _drain(pool.map(worker, tasks), len(tasks), on_ticker_done, on_result)
 
 
-def _drain(results, total: int, on_ticker_done) -> list:
+def _drain(results, total: int, on_ticker_done, on_result=None) -> list:
+    """Collect the results in arrival (= task) order. on_result(index, result)
+    fires before on_ticker_done(done, total) for the same result, so progress
+    never counts a ticker whose result was not handed over yet."""
     out = []
     for result in results:
+        if on_result is not None:
+            on_result(len(out), result)
         out.append(result)
         if on_ticker_done is not None:
             on_ticker_done(len(out), total)
     return out
 
 
-def _replay_with_rows(tasks: list, workers, on_ticker_done) -> tuple:
+def _replay_with_rows(tasks: list, workers, on_ticker_done, on_ticker_result=None) -> tuple:
     """(per-ticker (exits, gate_rows) pairs, flat trade rows): the
-    row-collecting twin of the plain run. SPY already rides in args[10]."""
-    results = _run_replay_tasks(_replay_ticker_rows, tasks, workers, on_ticker_done)
+    row-collecting twin of the plain run. SPY already rides in args[10].
+    v226: on_ticker_result(ticker, exits, rows) fires per ticker in task order."""
+    on_result = None
+    if on_ticker_result is not None:
+        def on_result(index, result):
+            on_ticker_result(tasks[index][0], result[0], result[1])
+    results = _run_replay_tasks(_replay_ticker_rows, tasks, workers, on_ticker_done, on_result)
     return ([(exits, gate_rows) for exits, _, gate_rows in results],
             [row for _, ticker_rows, _ in results for row in ticker_rows])
 
@@ -466,7 +477,7 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
                           dcb_params: dict | None = None, asof_map: dict | None = None,
                           membership: dict | None = None, spy_df=None,
                           collect_rows: bool = False, on_ticker_done=None,
-                          record_blocked: bool = False) -> dict:
+                          record_blocked: bool = False, on_ticker_result=None) -> dict:
     """frames: {ticker: OHLCV df}. start/end (ISO or None) restrict SIGNAL
     dates -- the exit walk may run past `end`, same convention as
     run_backtest_daterange.
@@ -490,6 +501,11 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
     (scenario_rows.scenario_trade_row) -- and ships `spy_df` to the workers
     in args[10] (None otherwise); "pooled" and "by_horizon" are identical either way.
     `on_ticker_done(done, total)` is called after each ticker returns.
+    v226: with `collect_rows=True`, `on_ticker_result(ticker, exits, rows)`
+    fires as each ticker's result arrives, in task order, before
+    `on_ticker_done` for that ticker; `exits` is {horizon_key: [ExitResult]}
+    and `rows` that ticker's closed-exit rows. Ignored without collect_rows.
+    Every returned value is identical with or without it.
 
     `record_blocked` (v147): also return "gate_rows", the record-only TRAIN gate
     rows (`_horizon_gate_rows`); "pooled"/"by_horizon" are identical either way.
@@ -506,7 +522,8 @@ def run_scenario_backtest(frames: dict, start, end, *, gates,
     ]
 
     if collect_rows:
-        per_ticker_results, rows = _replay_with_rows(tasks, workers, on_ticker_done)
+        per_ticker_results, rows = _replay_with_rows(tasks, workers, on_ticker_done,
+                                                     on_ticker_result)
     else:
         per_ticker_results, rows = _run_replay_tasks(
             _replay_ticker_gate_rows, tasks, workers, on_ticker_done), None

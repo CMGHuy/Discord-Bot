@@ -41,6 +41,21 @@ fi
 # So the update is a separate phase that re-execs. Phase 1 updates the code
 # and hands off; phase 2 -- a fresh bash reading the NEW file from the top --
 # does the actual work. The flag is what stops it looping.
+# v220: while a code-only rollback (scripts/ops/rollback_code.sh) holds
+# deploys, nothing deploys -- not even by hand. Checked before the fetch and
+# reset below, which would move the checkout off the rollback target. CI
+# reads the same file in its own `hold` job; this covers a manual run.
+if [ -f backups/deploy_hold.json ]; then
+  python3 - backups/deploy_hold.json 2>/dev/null <<'PY' || echo "deploy held by rollback (backups/deploy_hold.json unreadable)"
+import json, sys
+h = json.load(open(sys.argv[1], encoding="utf-8"))
+print(f"deploy held by rollback to {h['sha']} ({h['reason']}, since {h['at']})")
+PY
+  echo "Nothing deployed. Release the hold with /rollback --release (scripts/ops/rollback_code.sh --release)."
+  exit 0
+fi
+
+
 if [ "${1:-}" != "--updated" ]; then
   echo "==> Fetching latest code (main)"
   git fetch origin main

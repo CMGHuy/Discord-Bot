@@ -81,7 +81,8 @@ def test_money_pointers_are_exactly_the_fx_sensitive_fields(name, golden_seed, f
     base = _get(logged_in, name)
     golden_seed.set_fx(2.0)                             # every USDEUR=X close doubled
     doubled = _get(logged_in, name)
-    assert gb.diff_pointers(gb.mask(base), gb.mask(doubled)) == set(mr.EXPECTED_MONEY[name])
+    assert gb.diff_pointers(gb.mask(gb.without_added(name, base)),
+                            gb.mask(gb.without_added(name, doubled))) == set(mr.EXPECTED_MONEY[name])
 
 
 def test_without_added_drops_only_the_listed_pointers():

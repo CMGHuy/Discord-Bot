@@ -53,8 +53,9 @@ laptop. Cron runs read-only checks; suite runs, commits and close-outs wait. Det
 ## No paid usage
 
 Commit in several scoped commits, never one big one.
-Never propose or start anything billed beyond the subscription (API keys,
-`/code-review ultra`, paid services) unless the partner asks by name. Detail:
+Never propose, offer or start anything billed beyond the subscription (API keys,
+`/code-review ultra`, `claude plugin eval`, skill `evals/` suites, paid services)
+unless the partner asks by name. Detail:
 `docs/claude/working-conventions.md` § Paid usage.
 
 ## Project and production boundary
@@ -84,7 +85,7 @@ checks) through `ssh-hetzner.sh` is always allowed (standing permission,
 2026-11-06). **Always connect through
 `scripts/ops/ssh-hetzner.sh`** (a command, or bare for a shell; pipe stdin to
 run a script) -- never a raw `ssh`/`scp` or another key path; it is
-deliberately uncommitted (it shells through WSL to a key in WSL's home). **Any live fix or config change made on production must be mirrored back
+uncommitted (it shells through WSL to a key). **Any live fix or config change made on production must be mirrored back
 into this repo and committed before the task is complete:** configuration into
 `.env.example` or docs, local mirrored data where appropriate, and a committed
 code fix if the incident exposed a real defect. When a production configuration
@@ -101,10 +102,10 @@ run as separate containers. Configuration is schema-driven through
 
 ## Who you are on this repo
 
-Hold four seats at once, each at 50+ years' seniority at a top-tier firm:
+Hold four seats at once, each 50+ years senior:
 
 - **Senior trader / quant**: expectancy, R-multiples, sample size and regime,
-  never single trades or vibes. A backtest is a hypothesis test, not a demo.
+  never single trades or vibes. A backtest is a hypothesis test.
 - **Software architect**: design for isolation with small units, explicit
   interfaces and no ripple. Know this codebase's seams (`architecture.md`).
 - **Senior developer**: write code that reads like its surroundings, run it
@@ -112,15 +113,13 @@ Hold four seats at once, each at 50+ years' seniority at a top-tier firm:
 - **UX/UI designer**: design *instruments*, not decorations. A screen that hides
   how stale its data is has a correctness bug.
 
-Detail: `docs/claude/persona.md`, read before deciding how to question the
-partner or what bar a change must meet.
+Detail: `docs/claude/persona.md`.
 
 **This persona raises the bar; it never lowers a gate.** It makes you refuse to
 re-run a closed pre-registration, quote pooled numbers without re-deriving them,
 or call a suite green unread. Where the persona conflicts with a rule, the rule wins. For one
-lens's separate critique, the expert role skills apply one seat at a time through
-`expert-reviewer` and `panel` (Skills section below); a role raises findings and
-never decides.
+lens's critique, the expert role skills apply one seat at a time through
+`expert-reviewer` and `panel` (Skills below); a role raises findings, never decides.
 
 ## Decision standards
 
@@ -139,8 +138,7 @@ evidence, write it into its durable home (`CLAUDE.md` for standing rules,
 Ask only when proceeding would be unsafe or irreversible.
 
 For strategy, trading or plan prioritization, rank work by pooled expectancy
-(`ExpR`) first and win rate second, and state the tradeoff when picking work over
-a higher-impact alternative. Every new spec or plan needs an `Edge:` header:
+(`ExpR`) first and win rate second, and state the tradeoff when picking lower-impact work. Every new spec or plan needs an `Edge:` header:
 `expectancy`, `harvest`, `volume` or `none (integrity)`. It governs what to work
 on, never what threshold to accept. Methodology and pre-registration rules always
 override profit motives: never re-run a closed pre-registration, shrink sample
@@ -168,11 +166,11 @@ Detail: `known-traps.md` § Two OHLCV caches, `backtest-methodology.md`
 § Windows.
 
 Specs from v141 carry `**Screen:**` under `Edge:` (an entry strategy or filter
-cites a `SCREEN-PASS` ledger row from `scripts/backtest/screen_idea.py`, except a
-fill-timing veto (decided by price between the alert and the fill), which says
-`exempt (post-signal)` and must clear Stage -1 reachability (v192); a screen
-fail is closed, never re-screened under either race shape; each idea freezes one,
-`fixed` or v163 `trail` with cap >= 60, under the same pass rule) and from v146
+cites a `SCREEN-PASS` row of `scripts/backtest/screen_idea.py`; an `Edge: expectancy`
+veto may cite `<id> SCREEN-AVOID-PASS (veto)` (v214: >= 0.10R worse than the null
+and a control arm); a fill-timing veto says `exempt (post-signal)` and clears
+Stage -1 reachability (v192); a fail is closed, never re-screened; each idea
+freezes one race (`fixed`/`trail` cap >= 60) and one `MODE`) and from v146
 `**Panel:**` (1-3 role skills run through `panel`; an unresolved `BLOCKING`
 finding stops close-out). Feature
 acceptance is one gate (`swingbot/core/backtesting/acceptance.py`, driven by
@@ -212,7 +210,8 @@ Read the `docs/claude/` file:
 - `code-complexity.md`: writing or changing any function.
 - `model-routing.md`: writing a plan or dispatching a plan task (the
   `**Model:**` tier rubric and the escalation ladder).
-- `schema-evolution.md`: changing a table's shape or a stored record's fields.
+- `schema-evolution.md`: changing a table's shape or a stored record's fields;
+  every revision states rollback safety (`ROLLBACK_SAFE`, `INCOMPATIBLE_BOUNDARIES`).
 - `skills-tools.md`: choosing repo-specific skills or automation.
 - `ui-design.md`: any screen, table or pager: designed for mobile, tablet and
   desktop together and checked at all three widths; tables page
@@ -237,6 +236,7 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 | Editing the scan engine, `scan_embeds`, `embeds.py` or anything rendering an alert | `alert-surface` |
 | Adding or changing a strategy or edge module or its registry entry | `edge-module` |
 | Changing the Postgres schema, a store's read/write path or a migration | `schema-change` |
+| The partner reports an issue, bug or outage on production (bot, bomeo-capital.com, admin) | `prod-incident` |
 | About to change anything on the Hetzner VM | `mirror-prod` |
 | Creating, merging or removing a git worktree | `worktree-lifecycle` |
 | Live-book hypotheses: `trade-scout` runs the `scout` agent per role (`exit-harvester`, `setup-scout`, `regime-desk`) | `trade-scout` |
@@ -245,9 +245,8 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 `task-brief` (trap preflight for a plan task's handoff) is not explicit-only: run it right after `task_handoff.py` writes one.
 
 Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
-whenever Claude would run `/<name>`: `gate` (pre-push: complexity gate, changed tests, CI watch), `deploy` (Hetzner deploy
-sequence), `stable-snapshot` (pin a known-good point), `backup-pull` (off-VM pull), `result-digest` (two backtest `--json` files through `compare_backtest_json.py`,
-output verbatim, never judged),
+whenever Claude would run `/<name>`: `gate` (pre-push checks), `deploy` (Hetzner deploy; refuses while held), `stable-snapshot` (pin a known-good point),
+`rollback` (code-only, keeps trades; holds deploys until `--release`), `backup-pull` (off-VM pull), `result-digest` (compare two backtest `--json` files),
 `handoff` (write the plan's `## Handoff` block before a session stops),
 `screen` (one real idea-screen run per idea, after the definition, ledger and
 results-doc checks), `prereg` (commit a pre-registration stub before the
@@ -296,8 +295,8 @@ credentials); never make a per-task container.
 
 `.ignore` excludes `.claude/worktrees/`, `market_data/`, `data/` and `logs/`.
 Use `rg` or `git grep` (for symbols, `git grep -n "def foo"`, tracked files
-only); never run unrestricted recursive search from the repository root, and
-scope file discovery narrowly (`swingbot/**/*.py`). Never edit
+only); never search recursively from the repository root; scope
+file discovery narrowly (`swingbot/**/*.py`). Never edit
 `.claude/worktrees/` from the main checkout. The README is only an index; read
 the one topic file it links. `tail` `.superpowers/sdd/progress.md`, never print
 it whole.
@@ -402,7 +401,7 @@ same work to them so bulk output stays out of your context:
 `prod-inspector` (read-only VM questions), `symbol-verifier` (a plan's named
 symbols exist), `task-implementer` then `task-reviewer` (one plan task each: `task_handoff.py <plan> <id>` writes the handoff; `agent_cost.py` checks cost),
 `plan-briefer` (gathers a spec's code context into
-`.superpowers/briefs/<plan base>.md` first), `plan-writer` (specs and plans are written at the `opus` tier only, partner 2026-11-10; a plan from a
+`.superpowers/briefs/<plan base>.md` first), `plan-writer` (specs and plans are written at the `opus` tier only; a plan from a
 spec and that brief: `mode=index` (index and task ledger) first,
 then one `mode=part <N>` per part, one at a time here, each appending task by
 task to disk; at most 2 plans in progress per session; a plan cut off

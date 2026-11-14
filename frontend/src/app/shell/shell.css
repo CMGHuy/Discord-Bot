@@ -185,6 +185,17 @@
 }
 .palette-trigger .shortcut { font-family: var(--font-mono); font-size: var(--text-micro); color: var(--text-muted); }
 
+/* v225: the theme toggle. Icon buttons have no pressed look of their own,
+   so Dark blue on shows the segmented controls' selected look -- the
+   accent glyph on the accent tint -- and keeps it under the pointer (the
+   :hover selector outranks the icon variant's own hover). */
+.theme-toggle { flex: none; }
+.theme-toggle[aria-pressed="true"],
+.theme-toggle[aria-pressed="true"]:not([disabled]):hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
 /* The ticker tape, a strip under the bar (v195 Phase 3). Its lane draws its
    own hairline and surface, so an empty strip takes no space. Not sticky:
    it scrolls away with the page, the chips above it do not. */
@@ -313,6 +324,9 @@
      the pill and the badge both show the wordmark gives way to the diamond; its words stay in
      the link's accessible name. */
   .status-cluster { min-width: 0; }
+  /* v227: the voice chip's word is the state and the tap target; the badge
+     ellipsises first, the chip never shrinks. */
+  sb-voice-chip { flex: none; }
   .topbar:has(.shock-pill):has(sb-read-only-badge) .brand .word {
     position: absolute;
     width: 1px;

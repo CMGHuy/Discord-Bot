@@ -64,6 +64,17 @@ class TradeRepository(Repository):
         with self._tx(conn) as connection:
             return connection.execute(statement).rowcount
 
+    def version(self, *, conn=None) -> tuple[int, str | None]:
+        """(row count, newest updated_at) -- the twin of PlanRepository.version().
+
+        Moves on any insert, update or delete, except that a write can commit
+        under an older stamp than a concurrent one (V218-1): a cache keyed on
+        it alone can miss that write, so v218 keys add the NOTIFY generation."""
+        statement = sa.select(sa.func.count(), sa.func.max(trades.c.updated_at))
+        with self._tx(conn) as connection:
+            count, newest = connection.execute(statement).one()
+        return int(count), None if newest is None else newest.isoformat()
+
 
 _repo: TradeRepository | None = None
 

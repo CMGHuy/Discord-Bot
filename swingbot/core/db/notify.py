@@ -18,6 +18,9 @@ CHANNELS: tuple[str, ...] = (
     "trades", "account", "analytics", "scan",
     "journal", "bot", "risk", "watchlist", "jobs", "settings",
     "market",
+    # v227: feed_posts -- one row per accepted simple-channel post; the SPA
+    # fetches the new rows and speaks their headlines.
+    "feed",
 )
 
 _IDENT = re.compile(r"^[a-z_][a-z0-9_]*$")

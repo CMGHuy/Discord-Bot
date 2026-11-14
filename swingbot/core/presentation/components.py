@@ -115,9 +115,11 @@ class PushEmbed(discord.Embed):
     pushed builder returns one of these and every sender passes
     ``push_kwargs(embed)`` to ``send()``. Carrying the line on the embed keeps
     the alert tuples' shape unchanged. ``kind`` is kept for v111's
-    "alert posted" log line and is never sent."""
+    "alert posted" log line, ``direction`` and ``entry_price`` for v227's
+    spoken headline (presentation.feed_headline); none of them is ever sent
+    (``Embed.to_dict`` reads only ``Embed``'s own underscore slots)."""
 
-    __slots__ = ("push_text", "kind")
+    __slots__ = ("push_text", "kind", "direction", "entry_price")
 
 
 def push_embed(kind: Kind, ticker: str = "", direction: str | None = None,
@@ -127,6 +129,8 @@ def push_embed(kind: Kind, ticker: str = "", direction: str | None = None,
     embed = PushEmbed(title=kinds.title(kind, ticker, direction, detail, factual=factual), description=description)
     embed.push_text = kinds.content_line(kind, ticker, direction, detail, factual=factual)
     embed.kind = kind
+    embed.direction = direction
+    embed.entry_price = None    # set by the builders whose post speaks a price
     return embed
 
 
@@ -138,6 +142,8 @@ def status_embed(title: str, description: str, colour: int) -> PushEmbed:
     embed = PushEmbed(title=title, description=description, colour=discord.Color(colour))
     embed.push_text = title
     embed.kind = None
+    embed.direction = None
+    embed.entry_price = None
     return embed
 
 

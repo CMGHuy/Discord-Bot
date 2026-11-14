@@ -91,8 +91,12 @@ description = "v202 GET /api/v1/live: heat, plans awaiting order, killswitch, ac
 paths = ["tests/live_api/"]
 
 [suites.discord]
-description = "slash commands, embeds/presentation, infra"
-paths = ["tests/commands/", "tests/presentation/", "tests/infra/"]
+description = "slash commands and embeds/presentation"
+paths = ["tests/commands/", "tests/presentation/"]
+
+[suites.infra]
+description = "bot infrastructure: posted log, feed posts, lifecycle events, env, logging"
+paths = ["tests/infra/"]
 
 [suites.tooling]
 description = "operational and analysis scripts under scripts/"

@@ -299,6 +299,8 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
                       "tests/dev/test_doc_section.py")),
     # The backup runbook is parsed for the commands it documents.
     ("docs/deploy/DEPLOY_HETZNER.md", ("tests/scripts/test_backup_db.py",)),
+    # v221: the restore runbook's three-way comparison is pinned by a doc test.
+    ("docs/deploy/DB_RESTORE.md", ("tests/scripts/test_rollback_docs.py",)),
     # The broken-frontmatter fixture is read by three tests (v154).
     ("tests/hooks/fixtures/broken_frontmatter_SKILL.md",
      ("tests/dev/test_skill_frontmatter.py", "tests/hooks/test_codex_mirror.py",

@@ -30,6 +30,7 @@ ALLOW = {
     "scripts/backtest/measure_alert_density.py": "v51 alert-density measurement; closed, TRAIN-only by its plan",
     "scripts/backtest/measure_armed_entries.py": "v88 armed-entry grid; closed pre-registration",
     "scripts/backtest/measure_bearish_arms.py": "bearish-arm TRAIN measurement; closed",
+    "scripts/backtest/measure_confluence_limit.py": "v212 one-shot pre-registered measurement; windows and fold years frozen in its record",
     "scripts/backtest/measure_confluence_stop.py": "v139 one-shot pre-registered measurement; windows frozen in its record",
     "scripts/backtest/measure_dcb_veto.py": "v68 dead-cat-bounce veto grid; closed TRAIN and VALIDATION shots",
     "scripts/backtest/measure_earnings_blackout.py": "v82 earnings-blackout table; closed pre-registration",

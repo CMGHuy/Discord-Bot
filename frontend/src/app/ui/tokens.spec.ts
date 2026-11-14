@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { resolveToken } from './testing/resolve-token';
 import { allSources, stripComments } from './testing/all-sources';
+import { GROUND_INK_TOKENS, NAVY_SELECTOR, navyRepoints, resolveTokenIn } from './testing/theme-tokens';
 
 /**
  * The token file is asserted as TEXT, not through a mounted component.
@@ -268,6 +269,12 @@ const NOT_CONTROL_ROWS = new Set([
   // Users tab: the action group inside a table cell (Reset password, Delete); it wraps on a
   // phone and stays on one line from 640px, which is not a control lane (v207).
   'row-actions',
+  // Settings -> Voice notifications (v227). `kind`: a switch beside its ▶ preview, centred so the
+  // label and glyph share a line; `voice-controls`: select, slider and Test button top-aligned by
+  // label with the button pinned to the bottom; `rate-row`: slider beside its value readout. The
+  // layout audit (v227 results) measured these as baseline-clean; bottom-aligning a switch with a
+  // hint line is the regression sb-control-row would introduce.
+  'kind', 'voice-controls', 'rate-row',
 ]);
 
 describe('no workspace hand-rolls a control row', () => {
@@ -354,6 +361,95 @@ describe('v195 §1.1: the Graphite palette', () => {
     for (const source of [CSS, PALETTE]) {
       expect(source).not.toMatch(/--(?:navy|slate|sky|teal)-\d/);
     }
+  });
+});
+
+/**
+ * v225: Dark blue (Navy) beside Graphite. One tier-2 block,
+ * `:root[data-theme="navy"]`, re-points exactly the ground and ink tokens
+ * to the midnight/frost palette; every other colour is shared, so a gain,
+ * a loss or a warning reads the same in both themes.
+ */
+describe('v225: the Navy ground', () => {
+  const NAVY: [token: string, palette: string, value: string][] = [
+    ['--bg', '--midnight-950', '#070c18'],
+    ['--surface', '--midnight-900', '#0c1424'],
+    ['--surface-raised', '--midnight-850', '#121c32'],
+    ['--surface-overlay', '--midnight-800', '#172440'],
+    ['--overlay-dim', '--midnight-950-a72', 'rgba(7, 12, 24, 0.72)'],
+    ['--border', '--midnight-750', '#182540'],
+    ['--border-strong', '--midnight-700', '#233453'],
+    ['--text', '--frost-100', '#e6ecf5'],
+    ['--text-secondary', '--frost-300', '#c9d4e3'],
+    ['--text-muted', '--frost-400', '#9fb0c8'],
+    ['--text-faint', '--midnight-500', '#5f6f8a'],
+  ];
+  /* Shared by both themes (spec v225 § Palette). --quality-3 is absent on
+   * purpose: it is var(--text-secondary), so it follows the ink. */
+  const SHARED = [
+    '--accent', '--accent-fill', '--accent-fill-hi', '--on-accent',
+    '--pos', '--neg', '--warn', '--info',
+    '--pos-soft', '--neg-soft', '--warn-soft', '--accent-soft', '--info-soft',
+    '--quality-1', '--quality-2', '--quality-4', '--quality-5',
+    '--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--chart-6',
+    '--scrim-soft', '--shadow-overlay',
+  ];
+  const NAVY_OPEN = /^:root\[data-theme="navy"\] \{/m;
+  const block = CSS.slice(CSS.search(NAVY_OPEN)).match(/\{([^}]*)\}/)?.[1] ?? '';
+
+  it('declares one Navy block, after the tier-2 ground and before the tier-3 banner', () => {
+    expect(NAVY_SELECTOR).toBe(':root[data-theme="navy"]');
+    expect(stripComments(CSS).match(/:root\[data-theme="navy"\]/g)).toHaveLength(1);
+    const at = CSS.search(NAVY_OPEN);
+    expect(at).toBeGreaterThan(CSS.search(/^\s*--text-faint:\s*var\(--graphite-500\);/m));
+    expect(at).toBeLessThan(CSS.indexOf(TIER3_BANNER));
+  });
+
+  it('re-points exactly the ground and ink tokens, and every one of them', () => {
+    expect([...GROUND_INK_TOKENS].sort()).toEqual(NAVY.map(([name]) => name).sort());
+    expect(Object.keys(navyRepoints()).sort()).toEqual([...GROUND_INK_TOKENS].sort());
+  });
+
+  for (const [name, palette, value] of NAVY) {
+    it(`${name} re-points to ${palette}, which is ${value}`, () => {
+      expect(navyRepoints()[name]).toBe(`var(${palette})`);
+      expect(resolveToken(palette)).toBe(value);
+      expect(resolveTokenIn('navy', name)).toBe(value);
+    });
+
+    it(`${name} stays Graphite outside the Navy block`, () => {
+      expect(resolveTokenIn('graphite', name)).toBe(resolveToken(name));
+      expect(resolveToken(name)).not.toBe(value);
+    });
+  }
+
+  it('holds var() references only, never a literal', () => {
+    expect(block).not.toBe('');
+    expect(stripComments(block)).not.toMatch(/#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?)\(/i);
+  });
+
+  it.each(SHARED)('%s resolves the same in both themes', (name) => {
+    expect(resolveTokenIn('navy', name)).toBe(resolveToken(name));
+  });
+
+  it('carries tier-3 tokens built on the ground over to Navy', () => {
+    expect(resolveTokenIn('navy', '--panel-bg')).toBe('#0c1424');
+  });
+
+  it('keeps the Arctic Navy guard clean of the new palette names', () => {
+    const PALETTE = readFileSync(join(process.cwd(), 'src/styles/palette.css'), 'utf8');
+    expect(PALETTE).toMatch(/^\s*--midnight-950:\s*#070c18;/m);
+    for (const source of [CSS, PALETTE, block]) {
+      expect(source).not.toMatch(/--(?:navy|slate|sky|teal)-\d/);
+    }
+  });
+
+  it('states the ground/ink rule in the tokens.css header', () => {
+    const header = CSS.slice(0, CSS.indexOf(':root {'));
+    expect(header).toMatch(/ground and ink/i);
+    expect(header).toContain('data-theme');
+    expect(header).toContain('v225');
+    expect(header).toMatch(/no light theme/i);
   });
 });
 

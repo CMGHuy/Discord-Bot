@@ -121,3 +121,30 @@ def test_run_with_no_file_leaves_sys_path_alone(monkeypatch):
     before = list(sys.path)
     timing._ensure_repo_on_path()
     assert sys.path == before
+
+
+def test_parse_reads_app_and_snap_and_ignores_the_cdn_entry():
+    header = ('total;dur=1234.6, db;dur=12.3;desc="3 statements", app;dur=1222.3, '
+              'snap;desc=hit, cfExtPri')
+    assert timing.parse_server_timing(header) == {
+        "total": {"dur": 1234.6}, "db": {"dur": 12.3, "statements": 3},
+        "app": {"dur": 1222.3}, "snap": {"desc": "hit"}}
+
+
+@pytest.mark.parametrize("header", ["snap;desc=maybe", "snap", "app;dur=x"])
+def test_an_unknown_snap_or_a_malformed_app_is_left_out(header):
+    parsed = timing.parse_server_timing(header)
+    assert "snap" not in parsed and "app" not in parsed
+
+
+def test_time_endpoints_rows_carry_app_and_snap():
+    client = _Client(_Response(header='total;dur=5.0, db;dur=1.5;desc="3 statements", '
+                                      'app;dur=3.5, snap;desc=miss'))
+    [row] = timing.time_endpoints(client, {}, {"trades": "/api/v1/trades"}, runs=1)
+    assert (row["app_ms"], row["snap"]) == (3.5, "miss")
+
+
+def test_an_older_server_without_the_entries_gives_none():
+    client = _Client(_Response(header='total;dur=5.0, db;dur=1.5;desc="3 statements"'))
+    [row] = timing.time_endpoints(client, {}, {"trades": "/api/v1/trades"}, runs=1)
+    assert row["app_ms"] is None and row["snap"] is None

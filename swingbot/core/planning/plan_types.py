@@ -230,6 +230,12 @@ class TradePlanV2:
     # or written live before v200 -- readers count an issued_at without a
     # source as live. Omitted from plan_to_dict while None (_OMIT_WHEN_NONE).
     issued_at_source: str | None = None
+    # v212 (planning/builders.apply_confluence_limit): the fraction f of the way
+    # from the market price to the level at which a confluence plan rests its
+    # limit. Set once at creation on an arm limit plan; None on every other plan
+    # (knob 0, out of scope, v113/v131 limits, every plan persisted before v212).
+    # Lives in the plans doc JSON, no promoted column. Omitted while None.
+    limit_entry_f: float | None = None
 
 
 def effective_stop(plan: TradePlanV2) -> float:
@@ -247,11 +253,12 @@ def breakeven_trigger(plan: TradePlanV2, entry: float) -> float:
 _PLAN_FIELDS = None   # cached field list
 
 
-# v183/v191/v192/v200: optional fields written only when set -- a None here is omitted, never
-# stored as null, so existing plan docs stay byte-identical while the new
+# v183/v191/v192/v200/v212: optional fields written only when set -- a None here is omitted,
+# never stored as null, so existing plan docs stay byte-identical while the new
 # fields are unused. plan_from_dict defaults omitted fields back.
 _OMIT_WHEN_NONE = ("gap_sizing", "risk_notice", "stop_moved_by", "issued_at_source",
-                   "reclaim_atr", "reclaim_level", "reclaim_session", "waits_next_open")
+                   "reclaim_atr", "reclaim_level", "reclaim_session", "waits_next_open",
+                   "limit_entry_f")
 
 
 def plan_to_dict(plan: TradePlanV2) -> dict:

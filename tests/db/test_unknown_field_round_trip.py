@@ -124,6 +124,8 @@ NOT_REPOSITORY_BACKED = {
                           "round trip is tests/db/test_market_shock_repository.py",
     "admin_snapshots": "compare-and-set put(key, doc, inputs, computed_at) only, no upsert/list_all; "
                        "doc is stored whole; its round trip is tests/db/test_v204_admin_snapshots.py",
+    "feed_posts": "append-only spoken-headline log written by FeedPostsRepository.insert with "
+                  "doc {} and read as promoted columns; tests/db/test_feed_posts_repository.py",
 }
 
 #: Tables whose rows need the probe plan first (a foreign key into plans).

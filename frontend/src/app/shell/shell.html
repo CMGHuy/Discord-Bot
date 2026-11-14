@@ -81,6 +81,9 @@
         @if (isPhone()) {
           <sb-shock-pill [shock]="shock()" />
         }
+        <!-- v227: speech for simple-channel posts. Every width, never in a menu:
+             browsers need this chip's tap on every load before they speak. -->
+        <sb-voice-chip />
         <sb-alarm-chip [alarm]="alarm()" (reveal)="dock.reveal()" />
         <sb-killswitch-chip [on]="killswitchOn()" [stale]="killswitchStale()" />
       </div>
@@ -100,10 +103,24 @@
           <sb-icon name="search" />
         </button>
       }
+      <!-- v225: Black / Dark blue, tablet and desktop only; a phone switches
+           in the profile menu's Theme row. The name stays fixed, the state is
+           aria-pressed, shown as the accent glyph on the accent tint. -->
+      @if (!isPhone()) {
+        <button sb-button variant="icon" type="button" class="theme-toggle sb-hit" #themeToggle
+                aria-label="Dark blue theme" [attr.aria-pressed]="theme.theme() === 'navy'"
+                (click)="theme.toggle()">
+          <sb-icon name="theme" title="" />
+        </button>
+        @if (themeToggleRef(); as toggle) {
+          <sb-hint [anchor]="toggle.nativeElement" text="Dark blue theme" />
+        }
+      }
       <sb-profile-menu [zoom]="zoom()" [state]="connection.state()"
                        [botAlive]="connection.botAlive()" [marketActive]="connection.marketActive()" (zoomCycled)="cycleZoom()"
                        [motion]="motionMode()" (motionChanged)="setMotion($event)"
                        [density]="density.density()" (densityChanged)="density.set($event)"
+                       [theme]="theme.theme()" (themeChanged)="theme.set($event)"
                        (signedOut)="logout()" />
       <!-- Hung from the bar's bottom edge (shell.css), never in the flow: an
            automatic scan runs every SCAN_INTERVAL_MINUTES all session, and a

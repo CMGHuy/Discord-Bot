@@ -38,6 +38,8 @@ import {
   EquityCandlesResponse,
   EquityTimeframe,
   ExpectancyAttribution,
+  FeedKindFamily,
+  FeedPostsPage,
   GateCounterfactual,
   Health,
   Identity,
@@ -179,6 +181,24 @@ export class ApiClient {
   /** Ask the refresher for fresh quotes or snapshots. The answer arrives as a market event. */
   refreshMarket(body: { symbols: string[]; snapshots?: string[] }): Observable<{ queued: number }> {
     return this.http.post<{ queued: number }>(`${this.base}/market/refresh`, body, this.skipRouteRefresh);
+  }
+
+  /* -- v227: voice notifications ------------------------------------------ */
+
+  /** Simple-channel posts after `after`, oldest first. `null` asks only for
+   *  `latest_id` (the server returns no items), which is how a fresh page
+   *  starts without speaking a backlog. */
+  feedPosts(after: number | null, limit = 20): Observable<FeedPostsPage> {
+    let params = new HttpParams().set('limit', String(limit));
+    if (after !== null) params = params.set('after', String(after));
+    return this.http.get<FeedPostsPage>(`${this.base}/feed-posts`, { params });
+  }
+
+  /** The kinds Settings may silence, grouped by family. */
+  feedPostKinds(): Observable<FeedKindFamily[]> {
+    return this.http
+      .get<{ families: FeedKindFamily[] }>(`${this.base}/feed-posts/kinds`)
+      .pipe(map((body) => body.families));
   }
 
   /* -- dashboard --------------------------------------------------------- */

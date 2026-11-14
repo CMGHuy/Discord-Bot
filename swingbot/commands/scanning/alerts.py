@@ -9,6 +9,7 @@ from swingbot.bot_core import bot
 from swingbot.core import presentation as ui
 from swingbot.core.scanning import engine as scan_engine
 from swingbot.core.scanning.short_candidates import admitted_short_modes
+from swingbot.core.infra.feed_posts import record_feed_post
 from swingbot.core.infra.posted_log import log_posted
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.presentation import kinds
@@ -223,6 +224,7 @@ async def _mirror(simple_channel, simple_embed, plan) -> bool:
         await simple_channel.send(**ui.push_kwargs(simple_embed,
                                                    view=_ticket_view(simple_embed, plan)))
         log_posted(simple_embed, getattr(plan, "ticker", None), simple_channel)
+        record_feed_post(simple_embed, getattr(plan, "ticker", None))   # v227: the site speaks it
     except Exception as exc:
         log.warning("Could not post simple alert for %s to channel %s: %s "
                     "-- full alert will notify instead.",

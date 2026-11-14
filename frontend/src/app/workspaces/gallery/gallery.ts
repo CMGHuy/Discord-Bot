@@ -26,6 +26,7 @@ import { FilterBar, FilterChip, FilterChips } from '../../ui/filter-bar';
 import { Flash } from '../../ui/flash';
 import { held, money, num, pct, rMultiple, signed } from '../../ui/format';
 import { Checkbox, Select, SelectOption, TextInput } from '../../ui/form-controls';
+import { Switch } from '../../ui/switch';
 import { AgeHint } from '../../ui/age-hint';
 import { IncompleteNote } from '../../ui/incomplete-note';
 import { MarketRefresh } from '../../ui/market-refresh';
@@ -146,6 +147,7 @@ interface ContractRow {
     Button,
     ChartContainer,
     Checkbox,
+    Switch,
     ChartTooltip,
     Chip,
     ChipRow,
@@ -301,6 +303,12 @@ interface ContractRow {
       </sb-control-row>
       <sb-control-row>
         <sb-checkbox topLabel="Top label" label="With top label" [checked]="true" />
+      </sb-control-row>
+      <sb-control-row>
+        <sb-switch label="Switch on" [checked]="true" />
+        <sb-switch label="Switch off" [checked]="false" />
+        <sb-switch label="Switch mixed" [checked]="false" [mixed]="true" />
+        <sb-switch label="Switch disabled" [checked]="false" [disabled]="true" hint="With a hint line" />
       </sb-control-row>
     </sb-panel>
 

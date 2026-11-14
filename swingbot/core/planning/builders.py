@@ -1,10 +1,12 @@
 """Plan v2 builders for strategy and confluence sources."""
 from __future__ import annotations
 
+import copy
 import math
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 from typing import NamedTuple
 
 import numpy as np
@@ -635,6 +637,124 @@ def confluence_stop_geometry(entry, level, is_bull, candidates, params):
     return today, None
 
 
+# v212 confluence limit entry (spec § The rule 1-5). A clamped confluence
+# market plan (clamped_distance is not None) rests a limit f of the way from
+# the price to the level, its stop LIMIT_STOP_BUFFER beyond the level, for
+# LIMIT_EXPIRY_BARS bars. Shared by live (build_confluence_plan, V212-3) and
+# the replay module (V212-11).
+LIMIT_STOP_BUFFER = 0.0025
+LIMIT_EXPIRY_BARS = 3
+LIMIT_DROP_REASONS = ("limit_scope", "limit_stop_beyond_cap", "limit_rr_fail")
+
+
+class LimitGeometry(NamedTuple):
+    limit: float
+    stop_loss: float
+    level_distance_pct: float
+
+
+def _round_toward_entry(price: float, entry: float, is_bull: bool) -> float:
+    """v212: round on the entry's tick toward entry -- longs ceil, shorts
+    floor. Nine decimals first, as atr_band.round_away_from_entry."""
+    tick = Decimal(str(atr_band.tick_size(entry)))
+    exact = Decimal(repr(round(float(price), 9)))
+    steps = (exact / tick).to_integral_value(rounding=ROUND_CEILING if is_bull else ROUND_FLOOR)
+    return float(steps * tick)
+
+
+def _limit_stop(level: float, limit: float, is_bull: bool) -> float:
+    """v212: the stop LIMIT_STOP_BUFFER beyond the level, rounded away from
+    the limit."""
+    factor = (1.0 - LIMIT_STOP_BUFFER) if is_bull else (1.0 + LIMIT_STOP_BUFFER)
+    return atr_band.round_away_from_entry(float(level) * factor, limit, is_bull)
+
+
+def _limit_reward_ok(limit, stop, tp1, is_bull, min_rr) -> bool:
+    """v212: tp1 lies beyond the limit on the reward side and clears min_rr
+    against the limit's risk."""
+    if tp1 is None:
+        return False
+    reward = (tp1 - limit) if is_bull else (limit - tp1)
+    if reward <= 0:
+        return False
+    return reward / abs(limit - stop) >= min_rr - STOP_GEOMETRY_TOL
+
+
+def _limit_degenerate(entry, limit, stop, is_bull) -> bool:
+    """v212: True unless stop < limit < entry (short: entry < limit < stop)."""
+    return not (stop < limit < entry) if is_bull else not (entry < limit < stop)
+
+
+def confluence_limit_geometry(entry: float, level: float | None, is_bull: bool,
+                              tp1: float | None, f: float,
+                              min_rr: float) -> LimitGeometry | str | None:
+    """v212 (spec § The rule): the limit geometry of a confluence plan.
+
+    None = out of scope, today's plan (f <= 0, or the level is not on the
+    stop side strictly beyond HARD_MAX_PLANNED_LOSS_PCT of entry); a str =
+    one of LIMIT_DROP_REASONS (degenerate rounded geometry, stop past the
+    hard cap from the limit, tp1 failing min_rr from the limit); else the
+    LimitGeometry. MIN_STOP_DISTANCE_PCT is deliberately not consulted
+    (spec rule 3). Shared by live (V212-3) and replay (V212-11)."""
+    if f <= 0:
+        return None
+    d = clamped_distance(entry, level, is_bull)
+    if d is None:
+        return None
+    limit = _round_toward_entry(entry - f * (entry - level), entry, is_bull)
+    stop = _limit_stop(level, limit, is_bull)
+    if _limit_degenerate(entry, limit, stop, is_bull):
+        return "limit_scope"
+    if planned_loss_pct(limit, stop) > HARD_MAX_PLANNED_LOSS_PCT + STOP_GEOMETRY_TOL:
+        return "limit_stop_beyond_cap"
+    if not _limit_reward_ok(limit, stop, tp1, is_bull, min_rr):
+        return "limit_rr_fail"
+    return LimitGeometry(limit, stop, d)
+
+
+def to_limit_plan(plan: TradePlanV2, geom: LimitGeometry, f: float) -> TradePlanV2:
+    """v212 (spec § The rule): a deep copy of `plan` resting as a limit at
+    geom; `plan` is never mutated. Status and history reset to a fresh
+    PENDING plan so the replay module (V212-11) can derive an arm from a
+    settled knob-0 reference plan; acceptance_level (the pre-clamp level)
+    is kept. Shared by live (V212-3) and replay (V212-11)."""
+    out = copy.deepcopy(plan)
+    out.entry_type = "limit"
+    out.trigger_price = geom.limit
+    out.entry_price = None
+    out.stop_loss = geom.stop_loss
+    out.status = PlanStatus.PENDING
+    out.status_history = []
+    out.working_stop = None
+    out.expiry_bars = LIMIT_EXPIRY_BARS
+    out.limit_cancel_level = plan.tp1
+    out.limit_strict_fill = True
+    out.limit_entry_f = f
+    out.stop_ceiling_pct = None
+    out.reclaim_atr = None
+    out.reclaim_level = None
+    out.reclaim_session = None
+    out.waits_next_open = None
+    return out
+
+
+def apply_confluence_limit(plan: TradePlanV2, level: float | None, f: float,
+                           min_rr: float) -> TradePlanV2 | str:
+    """v212 (spec § The rule): `plan` itself when out of scope (f <= 0, not a
+    confluence market plan, or confluence_limit_geometry says None), the drop
+    reason string, or the converted limit plan (to_limit_plan). Shared by
+    live (build_confluence_plan, V212-3) and replay (V212-11)."""
+    if f <= 0 or plan.source != "confluence" or plan.entry_type != "market":
+        return plan
+    geom = confluence_limit_geometry(plan.trigger_price, level, plan.direction == "bullish",
+                                     plan.tp1, f, min_rr)
+    if geom is None:
+        return plan
+    if isinstance(geom, str):
+        return geom
+    return to_limit_plan(plan, geom, f)
+
+
 # Today's percent band as arm K reads it: the v115 clamp target.
 TODAY_BAND_FLOOR_PCT = HARD_MAX_PLANNED_LOSS_PCT - CLAMP_HEADROOM_PCT
 
@@ -738,6 +858,42 @@ def confluence_stop_dropped(scenario, level_map=None, params=None) -> bool:
                                     scenario.direction == "bullish", candidates, params) is None
 
 
+def confluence_limit_dropped(scenario, df, level_map=None, params=None) -> str | None:
+    """v212: the LIMIT_DROP_REASONS token build_confluence_plan returned None
+    for, else None. Same inputs and geometry as the builder, so
+    analyze.attach_plan_v2 names the reason without a second rule."""
+    if params is None:
+        from swingbot.scan_params import ScanParams
+        params = ScanParams.from_config()
+    f = getattr(params, "confluence_limit_entry_f", 0.0)
+    if f <= 0 or scenario_is_breakout(scenario, df):
+        return None
+    geometry = _plan_geometry(scenario, _confluence_candidates(scenario, level_map), params)
+    if geometry is None or geometry.tp1 is None:
+        return None
+    reason = confluence_limit_geometry(scenario.entry, scenario.stop_loss,
+                                       scenario.direction == "bullish", geometry.tp1, f,
+                                       params.min_risk_reward_ratio)
+    return reason if isinstance(reason, str) else None
+
+
+def _confluence_tp2(scenario, level_map, entry: float, tp1: float, is_bull: bool) -> float | None:
+    """TP2 of a confluence plan: select_tp2 over the level map when one is
+    supplied, else the scenario's own target when it lies beyond tp1."""
+    if level_map is not None:
+        supports, resistances = level_map
+        resistances_prices = [float(lv.price) for lv in resistances]
+        supports_prices = [float(lv.price) for lv in supports]
+        tp2 = select_tp2(resistances_prices, supports_prices, scenario.direction, entry, tp1)
+    else:
+        tp2 = None
+        if scenario.take_profit is not None:
+            beyond_tp1 = scenario.take_profit > tp1 if is_bull else scenario.take_profit < tp1
+            if beyond_tp1:
+                tp2 = scenario.take_profit
+    return tp2
+
+
 def build_confluence_plan(scenario, df, *, ticker, horizon_key,
                           primary_strategy, level_map=None,
                           quality_inputs=None, params=None,
@@ -759,7 +915,9 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     CONFLUENCE_STRUCTURAL_STOP_PCT (tp1/tp2 against that risk, the ceiling
     stored as stop_ceiling_pct); arm D returns None beyond
     CONFLUENCE_STOP_DROP_PCT. v191: _plan_geometry uses the ATR band when the
-    floor is on and the scenario carries atr14_pct, else v139's geometry."""
+    floor is on and the scenario carries atr14_pct, else v139's geometry.
+    v212: with CONFLUENCE_LIMIT_ENTRY_F above 0 a clamped market plan becomes a
+    resting limit (apply_confluence_limit), or None when the limit is dropped."""
     if params is None:
         from swingbot.scan_params import ScanParams
         params = ScanParams.from_config()
@@ -771,18 +929,7 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
     if geometry is None or geometry.tp1 is None:
         return None              # v139 arm D, no target, or a v191 band reason
     stop_loss, stop_ceiling_pct, tp1 = geometry.stop_loss, geometry.stop_ceiling_pct, geometry.tp1
-
-    if level_map is not None:
-        supports, resistances = level_map
-        resistances_prices = [float(lv.price) for lv in resistances]
-        supports_prices = [float(lv.price) for lv in supports]
-        tp2 = select_tp2(resistances_prices, supports_prices, scenario.direction, entry, tp1)
-    else:
-        tp2 = None
-        if scenario.take_profit is not None:
-            beyond_tp1 = scenario.take_profit > tp1 if is_bull else scenario.take_profit < tp1
-            if beyond_tp1:
-                tp2 = scenario.take_profit
+    tp2 = _confluence_tp2(scenario, level_map, entry, tp1, is_bull)
 
     entry_type = "stop_entry" if scenario_is_breakout(scenario, df) else "market"
     created_at = df.index[-1].date().isoformat()
@@ -800,6 +947,10 @@ def build_confluence_plan(scenario, df, *, ticker, horizon_key,
         stop_ceiling_pct=stop_ceiling_pct,
         stop_moved_by=geometry.moved_by,
     )
+    plan = apply_confluence_limit(plan, level, getattr(params, "confluence_limit_entry_f", 0.0),
+                                  params.min_risk_reward_ratio)
+    if isinstance(plan, str):
+        return None          # v212 drop; confluence_limit_dropped names the reason
     _settle_market_entry(plan, df, len(df) - 1, created_at)
     plan_params.stamp_badge(plan)
     plan_params.stamp_cohort(plan, regime2_state)

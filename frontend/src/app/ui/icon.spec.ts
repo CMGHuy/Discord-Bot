@@ -72,6 +72,15 @@ describe('Icon', () => {
     expect(render('search').getAttribute('title')).toBe('Search');
   });
 
+  it('carries the half-filled circle the theme toggle uses (v225)', () => {
+    expect(ICON_NAMES).toContain('theme');
+    const path = render('theme').querySelector('svg path')!;
+    // An outline circle with its right half hatched solid, drawn in strokes
+    // like every other glyph (the svg is fill="none"), never an emoji.
+    expect(path.getAttribute('d')).toMatch(/^M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2z/);
+    expect(render('theme').getAttribute('title')).toBe('Theme');
+  });
+
   it('never draws two names with the same glyph -- an icon-only rail reads by shape', () => {
     const glyphs = new Map<string, string>();
     for (const name of ICON_NAMES) {

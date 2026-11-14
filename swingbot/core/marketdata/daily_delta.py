@@ -242,11 +242,15 @@ def _anchor_of(frame: pd.DataFrame) -> tuple[str | None, float | None]:
 
 
 def _next_meta(prev: DailyMeta | None, merged: pd.DataFrame, basis: str, full: bool,
-               today: date, anchor_checked: str | None) -> DailyMeta | None:
+               today: date, anchor_checked: str | None,
+               vendor: pd.DataFrame | None = None) -> DailyMeta | None:
     closed = merged[merged.index < pd.Timestamp(today)]
     last_verified = closed.index.max().date().isoformat() if not closed.empty else None
     if full:
-        anchor_date, anchor_close = _anchor_of(merged)
+        # The fingerprint is the vendor's own bar: older cached bars kept by
+        # _union_full are rescaled by one median ratio, so their closes sit a
+        # hair off the vendor's and would fail every later anchor probe.
+        anchor_date, anchor_close = _anchor_of(vendor if vendor is not None and not vendor.empty else merged)
         return DailyMeta(basis=basis, last_full_fetch=today.isoformat(), last_verified=last_verified,
                          anchor_date=anchor_date, anchor_close=anchor_close,
                          anchor_checked=today.isoformat())
@@ -286,7 +290,8 @@ def write_daily(ticker: str, fresh: pd.DataFrame, *, basis: str, full: bool,
         if merged is None or merged.empty:
             return existing
         data_store.atomic_write_csv(merged, cache_file(ticker, basis))
-        meta = _next_meta(read_meta(ticker, basis), merged, basis, full, today, anchor_checked)
+        meta = _next_meta(read_meta(ticker, basis), merged, basis, full, today, anchor_checked,
+                          vendor=closed)
         if meta is not None:
             _write_meta(ticker, basis, meta)
     return merged

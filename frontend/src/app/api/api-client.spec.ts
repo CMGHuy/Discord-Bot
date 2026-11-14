@@ -268,6 +268,63 @@ describe('ApiClient — live (v203)', () => {
   });
 });
 
+describe('ApiClient — v227 feed posts', () => {
+  let api: ApiClient;
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor])),
+        provideHttpClientTesting(),
+      ],
+    });
+    api = TestBed.inject(ApiClient);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => http.verify());
+
+  it('asks for the latest id only when there is no cursor', () => {
+    let latest = -1;
+    api.feedPosts(null).subscribe((page) => (latest = page.latest_id));
+    const req = http.expectOne((r) => r.url === '/api/v1/feed-posts');
+    expect(req.request.params.has('after')).toBe(false);
+    expect(req.request.params.get('limit')).toBe('20');
+    req.flush({ items: [], latest_id: 41 });
+    expect(latest).toBe(41);
+  });
+
+  it('pages after a cursor with the asked limit, oldest first as served', () => {
+    let ids: number[] = [];
+    api.feedPosts(41, 50).subscribe((page) => (ids = page.items.map((item) => item.id)));
+    const req = http.expectOne((r) => r.url === '/api/v1/feed-posts');
+    expect(req.request.params.get('after')).toBe('41');
+    expect(req.request.params.get('limit')).toBe('50');
+    req.flush({
+      items: [
+        { id: 42, posted_at: '2026-11-12T14:30:00Z', kind: 'FILLED', family: 'ENTRY', ticker: 'MSFT', headline: 'Order filled, MSFT' },
+        { id: 43, posted_at: '2026-11-12T14:31:00Z', kind: 'CANCEL', family: 'MANAGE', ticker: null, headline: 'Order cancelled' },
+      ],
+      latest_id: 43,
+    });
+    expect(ids).toEqual([42, 43]);
+  });
+
+  it('unwraps the kinds listing into its families', () => {
+    let families: string[] = [];
+    api.feedPostKinds().subscribe((list) => (families = list.map((f) => f.family)));
+    http.expectOne('/api/v1/feed-posts/kinds').flush({
+      families: [
+        { family: 'NEW_SETUP', label: 'New setup', default_on: true, kinds: [] },
+        { family: 'WATCH', label: 'Watch', default_on: false, kinds: [] },
+      ],
+    });
+    expect(families).toEqual(['NEW_SETUP', 'WATCH']);
+  });
+});
+
 describe('ApiClient — benchmark (v208)', () => {
   let api: ApiClient;
   let http: HttpTestingController;

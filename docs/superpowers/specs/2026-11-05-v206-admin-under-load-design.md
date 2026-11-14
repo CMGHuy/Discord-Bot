@@ -460,7 +460,7 @@ the table in `## Results`. Rollback is redeploying the previous image.
 Every client change works against an older server: a thin `scan` event
 falls back to fetching, a missing `today` or `prev_day` falls back to the
 old calls (v205 P3), and no ETag means plain 200s. Plan 3's server changes
-switch off with `ADMIN_STORE_SNAPSHOT=off` via SIGHUP.
+switch off with `ADMIN_STORE_SNAPSHOT=off`, set in place; the admin has no SIGHUP and re-reads `.env` on the next request when its mtime moved (DEPLOY_HETZNER § Rolling back).
 
 ## Panel review
 
@@ -657,3 +657,147 @@ The probe cannot show v217's own savings: it opens the Dashboard on 1D, which
 sent one `/dashboard` before v217 too, and a mid-month day page made no extra
 month call before either. The wider-scope Dashboard request and the
 day-edge month lookup are pinned by their specs (V217-3, V217-4, V217-5, V217-5b).
+
+### Plan 3 version() gap (V218-1)
+
+`(count, max(updated_at))` is built from stamps written before commit:
+`upsert()`/`patch()` use `clock_timestamp()` (`repositories/base.py:89,101`),
+`insert()` uses the column default `now()` (transaction start). A transaction that
+commits after a concurrent one can therefore land under an older stamp, and the
+token does not move although a row changed.
+`tests/db/test_v218_store_versions.py` reproduces it on two real connections for
+`trades` (`TradeRepository.version()`, new in V218-1) and `plans`.
+
+Existing callers of `plans_repo().version()`:
+
+| Caller | Use | Verdict |
+|---|---|---|
+| `swingbot/admin/api_v1/cancel_precision.py:38-41` `_memo_key()` | memo key `(version, UTC hour)` of the cancel-precision payload | affected: an upsert committed under an older stamp leaves `(count, max)` unchanged, so the memo serves the old payload until the hour turns |
+| `swingbot/admin/watchlist_rows.py:67-73` `_plans_signature()` | signature `("db", count, max)` of the watchlist plan projection | affected: same mechanism; stale until a later plan write moves the token |
+
+Fix: V218-6 appends `store_generation.generation("trades")` to both keys. The
+v218 snapshot listener bumps that generation on every `trades` NOTIFY, and the
+`plans` and `starred_plans` triggers fire that channel too. The snapshot (V218-4)
+and the ETag (V218-8) never trust versions alone either: their tokens carry the
+generations too.
+
+### Plan 3 build tag on the VM (V218-7)
+
+Checked 2026-11-11 (Berlin), read-only through `scripts/ops/ssh-hetzner.sh`:
+the admin container's environment does **not** carry `SWING_BOT_IMAGE`.
+`swingbot/admin/build_identity.build_version()` therefore rests on the
+SHA-256 of `VERSION.json` alone. Every release bumps `VERSION.json`, so a
+deploy or a rollback across releases still changes every ETag. Two images
+with the same `VERSION.json` (a hotfix redeployed without a bump) would
+share tags. Passing `SWING_BOT_IMAGE` into the admin service's
+`environment:` in `docker-compose.yml` closes that gap. It is a deploy
+change outside this plan, raised with the partner.
+
+### Plan 3 route audits (V218-10..12)
+
+Each allow-list candidate was audited against the ETag inputs (v218 index
+§ Global Constraints): every field of its body is either covered by an input,
+or the route (or the query shape) stays off the list. A dropped route keeps
+`Cache-Control: no-store`. The exact allow-list is pinned by
+`tests/admin_perf/test_conditional_routes.py`.
+
+- **`/trades`: admitted per query shape** (`trades.closed_only_query`, route
+  key `trades`). The shape: `status=closed` or `outcome=win|loss`; no `sort` on
+  `pnl_pct`, `r_multiple` or `status` (an alias of `progress_pct`), which price
+  every row; the refresher on; and the ET date equal to the Berlin date.
+  `tests/admin_perf/test_trades_conditional_audit.py` classifies every key of
+  the closed page (stored records, Berlin day, journal, FX daily, ET day,
+  unpriced, paging), and a new key fails it. Findings:
+  - With the refresher off, a closed row's FX can come from the pair frame
+    (`fx.fx_rate` → `rate_before`), which `fx_daily_rate_repo().version()`
+    does not cover. So the shape needs the refresher on.
+  - `follow_score` (`_attach_follow_scores`, `trades.py:772`) counts days from
+    the ET date (`rank.follow_score`, `session.market_today()`), which turns
+    at 06:00 Berlin. The tag keys the Berlin date, so the shape is admitted
+    only while the two dates agree (06:00–24:00 Berlin). The tag inputs did
+    not change.
+  - `held_hours` reads the clock only for a row without `closed_at`; every
+    closed row has one (asserted).
+  - Unfiltered `/trades`, `status=open` and every other shape keep
+    `no-store`: open rows carry live prices, `held_hours` to now,
+    `prices_as_of` and `market_meta`.
+- **`/calendar/pnl`: dropped.** The body's `as_of` is the time the filtered
+  view was composed (`core/analytics/page_bodies.py:352-354`), a per-request
+  stamp below day resolution that no ETag input covers: two requests five
+  minutes apart on an unchanged book differ in `as_of` and nothing else in the
+  month (`tests/admin_perf/test_calendar_conditional_audit.py`). Also outside
+  the tag: `market_meta` follows the refresher (`computed_at`, `refreshing`,
+  `stale_inputs`, `error` from the stored `admin_snapshots` row,
+  `api_v1/analytics.py:132-165`), and the default month is the process-local
+  `dt.date.today()` (`api_v1/calendar.py:62`). Admitting it would first need
+  `as_of` changed, which is a payload change outside v206. It keeps `no-store`.
+- **`/calendar/pnl/day`: dropped.** The body's `as_of` is stamped per request
+  (`api_v1/calendar.py:157`), below day resolution: two requests five minutes
+  apart on an unchanged book differ in `as_of` alone
+  (`tests/admin_perf/test_calendar_day_conditional_audit.py`). Its FX
+  conversion also fetches pair frames while the refresher is off
+  (`api_v1/money.py:23-25`), which no tag input versions. It keeps `no-store`.
+- **`/calendar/pnl/day/sparklines`: off, no key audit.** It stamps `as_of` per
+  request (`calendar.py:202`) and reads daily bar frames through
+  `data_store.load_normalized` (`calendar.py:198-199`), which are not
+  snapshot-backed and have no version among the tag inputs.
+
+### Plan 3 after (committed probe)
+
+After plan v218 deployed (ui 1.40.6, bot 2.18.3), with
+`scripts/ops/admin_browser_probe.py` at `e6595942`, against image
+`ghcr.io/cmghuy/discord-bot:sha-e6595942ac7b`, 16:44 Berlin, `--date 2026-11-03`,
+3 rounds × 12 pages, cap 90 s, quiet 2 s. Label **scan**. Reference: Plan 2's
+`v217-after-1` run (label `mixed`). Closed view: 20 cold GETs and 20
+revalidations of `/api/v1/trades?status=CLOSED&page=1&per_page=10` from the dev
+machine through Cloudflare, 16:56 Berlin. Credentials were absent from every output.
+
+| Measure | Plan 2 after (v217-after-1) | Plan 3 after (v218) |
+|---|---|---|
+| Label | mixed | scan |
+| `/trades` TTFB | p90 11095.9 / max 11358.8 ms (n 12, median 9340.3) | p90 10472.6 / max 10615.7 ms (n 11, median 2111.3) |
+| `/dashboard` TTFB | p90 11403.9 / max 16188.5 ms (n 19, median 8984.9) | p90 6024.2 / max 12318.1 ms (n 13, median 2813.3) |
+| `/live` TTFB | p90 8835.0 / max 10083.9 ms (n 49, median 5538.6) | p90 3089.7 / max 7227.5 ms (n 79, median 400.3) |
+| `/market/updates` TTFB | p90 1870.5 / max 4970.0 ms (n 229, median 274.3) | p90 374.7 / max 1081.1 ms (n 107, median 148.3) |
+| `/market/tape` TTFB | p90 6871.7 / max 9255.0 ms (n 78, median 4024.9) | p90 4813.9 / max 6141.4 ms (n 73, median 3220.3) |
+| `/system/scan` TTFB | p90 706.4 / max 2206.0 ms (n 78, median 166.7) | p90 361.9 / max 562.8 ms (n 75, median 187.8) |
+| `/health` TTFB | p90 153.3 / max 428.4 ms (n 78, median 57.7) | p90 156.8 / max 358.8 ms (n 75, median 88.5) |
+| `snap;desc` share, all /api calls | - | absent 3%, hit 13%, miss 4%, off 80% |
+| 304 responses seen by the probe | - | 0 |
+| Idle tab, requests per minute | 16.5 | 17.5 |
+| Idle tab, calls by endpoint (120 s) | `/market/updates` 12, `/dashboard` 9, `/equity/candles` 4, `/market/tape` 4, `/live` 4 | `/dashboard` 14, `/live` 7, `/market/updates` 4, `/equity/candles` 4, `/market/tape` 4, `/health` 1, `/system/scan` 1 |
+| Closed view `/trades?status=CLOSED`, cold 200 | 11.1 s p90 / 11.4 s max (unfiltered `/trades`, Plan 2) | p90 2226.3 / max 3549.0 ms (n 20, median 623.1) |
+| Closed view, revalidation 304 | - | p90 532.0 / max 900.9 ms (n 18, median 311.0) |
+| Closed view, ETag on cold / 200 on revalidate | - | 20 of 20 / 2 |
+| Closed view, `snap;desc` | - | hit 34, miss 6, off 0 |
+| Closed view, scan running at start / end | - | True / True |
+
+**What the figures can and cannot show.** The probe's `/trades` row is the
+Trades page's unfiltered request (`page=1&per_page=10`). It may include open
+rows, so it gets no ETag, and its change is the snapshot alone (`snap;desc`
+share). The ETag saving shows only in the closed-view rows, measured by a
+script because no SPA page requests that shape. The closed view is admitted
+06:00–24:00 Berlin with the refresher on (V218-10b), and both held here. The
+calendar routes stayed off the allow-list (`### Plan 3 route audits
+(V218-10..12)`). The idle tab's `/market/updates` count is V218-14's measure:
+it was 12 in 120 s before. The "Plan 2" cell of the closed-view cold row quotes
+Plan 2's unfiltered `/trades` figure, the only `/trades` figure Plan 2 has. The
+`snap;desc` share counts every /api call the probe saw: `off` is the calls whose request
+read no snapshot-backed store (`/health` and `/system/scan` showed `off` in the deploy check).
+Two of the 20 closed-view revalidations answered 200, each with a new ETag: a
+trade write moved the tag mid-scan between the cold GET and its revalidation
+(no 200 carried an unchanged tag). The dev machine was also running an unrelated
+local backtest during both runs, which adds noise to the dev-side timings.
+
+- The idle tab missed the Plan 1 target of under 10 requests per minute: 17.5
+  per minute (Plan 2: 16.5). `/market/updates` fell from 12 to 4 calls in 120 s,
+  but `/dashboard` rose from 9 to 14 and now dominates the idle traffic.
+- `/health` median TTFB rose from 57.7 to 88.5 ms (p90 153.3 to 156.8 ms); the
+  route showed `snap: off` (no snapshot read), so no v218 code path is on it; read it as dev-machine noise.
+
+### Plan 3 panel review (v218, staff-engineer, senior-engineer, quant-engineer)
+
+- staff-engineer BLOCKING: rollback runbook claimed a full image rollback changes every ETag; the admin container has no `SWING_BOT_IMAGE` -- applied: DEPLOY_HETZNER, the `build_identity` docstring and the SIGHUP line above now say what is true, with the off/on toggle as the interim step. **Open partner call:** forward `SWING_BOT_IMAGE` into the admin service's `environment:` in docker-compose.yml, which makes the claim true.
+- senior-engineer: dead `_TAG` -- applied (removed). Others carried as advisories, not applied: nested-record mutation is pinned for the profiled endpoints only (senior, quant); repeated `status` key in `_closed_filter` untested (senior); `outcome=win|loss` admitted without `status=closed`, unproven that no open PARTIAL/ACTIVE row can carry it (quant -- tighten the admit predicate if a fixture shows one); the idle-tab comparison mixes a `scan` run with Plan 2's `mixed` run and the under-10 target stays open (senior).
+- staff-engineer advisories carried: snapshot lock held across loads (serialises rebuilds); process-local settings counter restarts at 0; LISTEN connection has no keepalive so a half-open socket would silently reopen V218-1; `store_snapshot` placed in `core/infra` though admin-only; no owner or removal condition for `ADMIN_STORE_SNAPSHOT`.
+- quant-engineer advisories carried: FX version token has no NOTIFY backstop; Berlin-midnight straddle reads the date at two instants (self-healing); DST-mismatch-week admission window unpinned by a test.

@@ -234,6 +234,17 @@ FIELDS: list[Field] = [
                "today's 1.75-2% stop put it and the plan is dropped when its reward:risk against "
                "the band stop falls under the minimum. v191 verdicts: keep (arm K) NO-LIFT, "
                "rechoose (arm R) NO-LIFT."),
+    Field("CONFLUENCE_LIMIT_ENTRY_F", "CONFLUENCE_LIMIT_ENTRY_F", "Trade Filters & Risk",
+          "Confluence limit entry fraction f (v212)",
+          type="float", default="0", min=0, max=0.9, step=0.01,
+          help="v212 pre-registration. 0 = off: confluence plans enter at market as today. "
+               "Above 0, a confluence market plan whose level sits more than 2% from the "
+               "price rests a limit at price - f x (price - level) instead, with its stop "
+               "0.25% beyond the level, TP1/TP2 unchanged, valid through the close of the "
+               "3rd full session (3 sessions) after the alert and cancelled if TP1 trades "
+               "first. A plan whose stop would sit more than 2% from the limit is dropped "
+               "(limit_stop_beyond_cap). Unmeasured -- see "
+               "docs/superpowers/specs/2026-11-06-v212-confluence-limit-entry.md. Keep 0."),
     Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "
@@ -1054,6 +1065,12 @@ FIELDS: list[Field] = [
           help="v205. An /api/v1 request slower than this logs one 'slow request' line in the admin log "
                "(path, total, db time, statement count). Read on every request: a saved .env applies "
                "on the next request, no restart."),
+    Field("ADMIN_STORE_SNAPSHOT", "ADMIN_STORE_SNAPSHOT", "Admin UI", "Admin store snapshot",
+          type="select", default="on", options=["on", "off"],
+          help="v218. 'on' = the admin keeps trades, plans and journal notes in memory between "
+               "requests, invalidated by database notifications, and sends ETags on the closed "
+               "Trades view. 'off' = every request reads the database, exactly as before v218. "
+               "Read on every request: a saved .env applies on the next request, no restart."),
 
     # --- Discord Alerts (Cockpit v3 / Plan B) ---
     Field("ALERT_EMBED_LAYOUT", "ALERT_EMBED_LAYOUT", "Discord Alerts", "Alert embed layout",
@@ -1087,6 +1104,12 @@ FIELDS: list[Field] = [
                "horizon is not posted when one was posted within this many hours. The plan is still "
                "built, managed and in the book -- only the Discord post is held, and the ops channel "
                "says how many. !check and the admin-UI scan are never held. 0 = off."),
+    Field("FEED_POSTS_ENABLED", "FEED_POSTS_ENABLED", "Discord Alerts",
+          "Record simple-channel posts for voice notifications (v227)",
+          type="checkbox", default="true",
+          help="v227. On (default): every post the simple trades channel accepts is also written "
+               "to the feed_posts table, and an open bomeo-capital.com tab speaks its headline. "
+               "Off: nothing is recorded and the site stays silent; Discord is unaffected."),
 
     # --- Execution Realism (Edge plan Task E11) ---
     Field("SLIPPAGE_BPS", "SLIPPAGE_BPS", "Execution Realism", "Slippage (bps per side)",
@@ -1712,6 +1735,7 @@ _SEARCH_CLASSES = {
         "FVG_LEVELS_MODE", "FVG_DISPLACEMENT_ATR_K",
         "CONFLUENCE_STRUCTURAL_STOP_PCT", "CONFLUENCE_STOP_DROP_PCT",
         "CONFLUENCE_ATR_STOP_FLOOR", "CONFLUENCE_ATR_TARGET_MODE",
+        "CONFLUENCE_LIMIT_ENTRY_F",
     },
     "frozen": {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "EARNINGS_BLACKOUT_SESSIONS"},
     "live_only": {
@@ -1767,12 +1791,14 @@ _MODE_VALUES = {
     "FVG_LEVELS_MODE": ("all", "displacement", "off"),
     "TRAINING_DATA_SOURCE": ("alpaca", "yfinance"),
     "ADMIN_REFRESHER": ("on", "off"),
+    "ADMIN_STORE_SNAPSHOT": ("on", "off"),
     "MARKET_SHOCK_MODE": ("off", "shadow", "live"),
 }
 
 # v128: "off" is a signal change for FVG_LEVELS_MODE (it removes a level
 # source), so a typo must land on the pre-v128 behaviour instead.
-_MODE_FALLBACK = {"CONFLUENCE_ATR_TARGET_MODE": "rechoose", "FVG_LEVELS_MODE": "all", "TRAINING_DATA_SOURCE": "alpaca"}
+_MODE_FALLBACK = {"CONFLUENCE_ATR_TARGET_MODE": "rechoose", "FVG_LEVELS_MODE": "all", "TRAINING_DATA_SOURCE": "alpaca",
+                  "ADMIN_STORE_SNAPSHOT": "on"}
 
 # Floats that must be finite and > 0. Anything else is a parse failure, so
 # _apply_env falls back to the field default and knobs.parse_knob refuses the arm.
@@ -1943,6 +1969,10 @@ def reload() -> dict:
     _ENV_MTIME = _env_signature()
     changed = _apply_env()
     if changed:
+        # v218: the admin's snapshot and ETags key on this; the admin reloads by
+        # .env mtime per request (admin/app.py), never by SIGHUP.
+        from swingbot.core.infra import store_generation
+        store_generation.bump("settings")
         log.info("Config reloaded from %s -- %d value(s) changed:", ENV_PATH, len(changed))
         for attr, (old, new) in changed.items():
             f = next((f for f in FIELDS if f.attr == attr), None)

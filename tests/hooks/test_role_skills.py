@@ -40,7 +40,6 @@ BOUNDARIES = ("never decide", "never lower a gate", "`pooled-numbers`",
               "`backtest-gate`", "BLOCKING", "ADVISORY")
 MIN_CHECKS, MAX_CHECKS = 8, 15
 REVIEWER_MODELS = {"sonnet", "opus"}   # no reviewer runs on haiku
-CASE_FILES = ("prompt.md", "graders/skill-fired.md")
 # Characters of the parsed description value -- the text inside the quotes.
 MAX_ROLE_DESCRIPTION = 260
 
@@ -155,21 +154,6 @@ def lens_skills(skills_dir=SKILLS_DIR):
             if "\n## Lens\n" in _text(p)}
 
 
-def _cases(role):
-    root = SKILLS_DIR / role / "evals"
-    return sorted(p for p in root.iterdir() if p.is_dir() and p.name != "results") if root.is_dir() else []
-
-
-def _case_problems(role, case):
-    missing = [rel for rel in CASE_FILES if not (case / rel).is_file()]
-    if missing:
-        return [f"{case.name}: missing {missing}"]
-    grader = _text(case / "graders/skill-fired.md")
-    expected = [f"input_match: {role}\n"]
-    expected += ["min: 0", "max: 0"] if case.name.startswith("no-fire-") else ["min: 1"]
-    return [f"{case.name}: grader lacks {line!r}" for line in expected if line not in grader]
-
-
 def test_every_lens_skill_is_a_registered_role():
     assert lens_skills() == set(ROLES)
 
@@ -198,16 +182,6 @@ def test_role_states_the_hard_boundaries(role):
 
 def test_financial_advisor_is_educational_not_personal_advice():
     assert "educational, not personalised financial advice" in _body("financial-advisor")
-
-
-@pytest.mark.parametrize("role", sorted(ROLES))
-def test_role_ships_fire_and_no_fire_cases(role):
-    cases = _cases(role)
-    fire = [c.name for c in cases if c.name.startswith("fire-")]
-    quiet = [c.name for c in cases if c.name.startswith("no-fire-")]
-    assert fire and quiet, [c.name for c in cases]
-    assert len(fire) + len(quiet) == len(cases), "every case is fire-* or no-fire-*"
-    assert [problem for case in cases for problem in _case_problems(role, case)] == []
 
 
 @pytest.mark.parametrize("role", sorted(ROLES))

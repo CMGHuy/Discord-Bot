@@ -22,16 +22,22 @@ Audit verdict, per GET-path mutator (static audit 2026-11-04 plus this module):
 (A conviction found by this module is recorded here as "convicted: <fix>".)
 
 Limit: a C-level helper that writes a list in place without calling its methods
-(heapq) would not be caught; none is used on these paths."""
+(heapq) would not be caught; none is used on these paths.
+
+v218 V218-5: the same audit on the cross-request snapshot. frozen_snapshot freezes what the
+snapshot stores, and each endpoint is read in two separate requests, the second served from
+the snapshot."""
 import copy
 import json
+import pathlib
+from datetime import datetime, timezone
 
 import pytest
 import sqlalchemy as sa
 
 from swingbot.core.db.codec import normalise
 from swingbot.core.db.repositories.trades import trades_repo
-from swingbot.core.infra import read_memo
+from swingbot.core.infra import read_memo, store_snapshot
 from swingbot.core.planning import plan_store
 from swingbot.core.tracking import performance
 from tests.admin_perf import golden_book as gb
@@ -171,3 +177,83 @@ def test_memoised_records_still_equal_a_fresh_load(golden_seed, frozen_clock, lo
         if rows is not None:
             assert sorted(rows, key=lambda t: t["trade_id"]) == sorted(
                 normalise(trades_repo().list_all()), key=lambda t: t["trade_id"])
+
+
+@pytest.fixture
+def snap_states(monkeypatch):
+    """store_snapshot.request_state() of each /api/v1 request, taken as request_timing tears it down."""
+    states: list[str] = []
+    real = store_snapshot.end_request
+
+    def recording():
+        states.append(store_snapshot.request_state())
+        real()
+
+    monkeypatch.setattr(store_snapshot, "end_request", recording)
+    return states
+
+
+def test_a_backing_serves_each_scopes_first_load_only(monkeypatch):
+    seen = []
+    monkeypatch.setattr(read_memo, "_BACKING", None)        # restored on teardown
+    read_memo.set_backing(lambda key, loader: seen.append(key) or loader())
+    with read_memo.scope():
+        read_memo.records(read_memo.TRADES, lambda: [{"a": 1}])
+        assert read_memo.records(read_memo.TRADES, lambda: []) == [{"a": 1}]
+    assert seen == [read_memo.TRADES]
+    read_memo.records(read_memo.TRADES, lambda: [])         # outside a scope: never the backing
+    read_memo.set_backing(None)
+    with read_memo.scope():
+        assert read_memo.mapping(read_memo.PLANS, lambda: {"p": {"x": 1}}) == {"p": {"x": 1}}
+    assert seen == [read_memo.TRADES]
+
+
+def test_the_admin_app_installs_the_snapshot_backing(admin_app):
+    assert read_memo._BACKING is store_snapshot.read
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_endpoint_writes_into_no_snapshot_record_across_two_requests(
+        name, golden_seed, frozen_clock, logged_in, frozen_snapshot, no_writes, snap_states):
+    first = _get(logged_in, name)
+    second = _get(logged_in, name)                          # a new request, on the same snapshot
+    assert gb.mask(second) == gb.mask(first)
+    assert _matches_golden(name, first)
+    assert no_writes == [], f"{name} wrote inside a read scope: {no_writes}"
+    assert snap_states[-2:] == ["miss", "hit"], snap_states
+
+
+BEFORE_MIDNIGHT = datetime(2026, 11, 3, 22, 30, tzinfo=timezone.utc)   # 23:30 Berlin, 3 Nov
+AFTER_MIDNIGHT = datetime(2026, 11, 3, 23, 30, tzinfo=timezone.utc)    # 00:30 Berlin, 4 Nov
+
+
+def _today_counts(client) -> tuple[int, int]:
+    """(/trades rows flagged today, /dashboard?mode=today realized n)."""
+    items = _get_path(client, "/api/v1/trades")["items"]
+    realized = _get_path(client, "/api/v1/dashboard?mode=today")["realized"]
+    return sum(bool(row["today"]) for row in items), realized["n"]
+
+
+def _get_path(client, path):
+    response = client.get(path)
+    assert response.status_code == 200, (path, response.status_code, response.get_data()[:300])
+    return response.get_json()
+
+
+def test_berlin_midnight_moves_the_time_fields_while_the_snapshot_stays_a_hit(
+        golden_seed, frozen_clock, logged_in, snapshot_on, snap_states, monkeypatch):
+    monkeypatch.setattr(gb, "FROZEN_NOW", BEFORE_MIDNIGHT)
+    rows_before, realized_before = _today_counts(logged_in)
+    monkeypatch.setattr(gb, "FROZEN_NOW", AFTER_MIDNIGHT)
+    rows_after, realized_after = _today_counts(logged_in)
+    assert realized_before > 0 and realized_after == 0      # computed per request, not stored
+    assert rows_after < rows_before
+    assert snap_states[-2:] == ["hit", "hit"], snap_states  # the stored records did not change
+
+
+def test_the_snapshot_reads_no_clock():
+    for name in ("swingbot.core.infra.store_snapshot", "swingbot.core.infra.store_generation"):
+        assert name not in gb.CLOCK_MODULES
+    for module in (store_snapshot, store_snapshot.store_generation):
+        source = pathlib.Path(module.__file__).read_text(encoding="utf-8")
+        assert "datetime" not in source and "import time" not in source, module.__name__

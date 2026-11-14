@@ -94,6 +94,7 @@ class ScanParams:
     confluence_stop_drop_pct: float = 0.0         # v139 arm D ceiling c; 0 = no drop
     confluence_atr_stop_floor: float = 0.0        # v191 k; 0 = today's percent band
     confluence_atr_target_mode: str = "rechoose"  # v191: rechoose (arm R) | keep (arm K)
+    confluence_limit_entry_f: float = 0.0         # v212 f; 0 = market entry (today)
     headroom_scope: str = "off"             # v135: off | strategy | confluence
     headroom_min_r: float = 0.0             # v135: 0 disables the gate
     market_entry_next_open: bool = False    # v192: market plans wait for the next open
@@ -168,6 +169,7 @@ class ScanParams:
             confluence_stop_drop_pct=config.CONFLUENCE_STOP_DROP_PCT,
             confluence_atr_stop_floor=config.CONFLUENCE_ATR_STOP_FLOOR,
             confluence_atr_target_mode=config.CONFLUENCE_ATR_TARGET_MODE,
+            confluence_limit_entry_f=config.CONFLUENCE_LIMIT_ENTRY_F,
             headroom_scope=config.HEADROOM_SCOPE,
             headroom_min_r=config.HEADROOM_MIN_R,
             market_entry_next_open=config.MARKET_ENTRY_NEXT_OPEN,

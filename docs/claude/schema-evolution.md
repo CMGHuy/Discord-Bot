@@ -47,3 +47,26 @@ head. A new revision's `down_revision` is the current head
 A drop or rename touches every row. Check the last PITR drill passed
 (`docs/deploy/DB_RESTORE.md`) — the rollback is `scripts/ops/rollback_to.sh`
 to the second before the revision ran.
+
+## Rollback safety (v220)
+
+`/rollback` (`scripts/ops/rollback_code.sh`) runs older code on today's
+database, so every revision says whether older code survives it:
+
+- `scripts/ops/rollback_migrations.py` reads each revision's `upgrade()` with
+  `ast`. Safe without a note: `op.create_table`, `op.create_index`,
+  `op.add_column` with `nullable=True` or a `server_default`, and literal
+  `op.execute` SQL that only creates tables or indexes, inserts or comments.
+  Anything else refuses a rollback across the revision: drops, `alter_column`,
+  renames, `rename_doc_field`/`drop_doc_field`, `CREATE OR REPLACE` of a
+  function, trigger or view, `op.get_bind()`, `conn.execute`, non-literal SQL,
+  any helper call.
+- A revision unsafe by that rule but harmless to older code declares
+  `ROLLBACK_SAFE = "<reason>"` at module level. The reason says what older code
+  does with the new shape, never "reviewed" or "fine"; the `/rollback` report
+  prints it.
+- A change that makes older code unsafe against new data without a schema
+  change (a stored field older code strips on re-save, a queue older code
+  drains destructively, a heartbeat key it misreads) adds an
+  `INCOMPATIBLE_BOUNDARIES` entry `(sha, plan, reason)` to
+  `scripts/ops/rollback_plan.py` in the same plan. No rollback reaches below it.

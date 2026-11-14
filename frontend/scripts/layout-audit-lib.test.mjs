@@ -7,8 +7,8 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  CHECKS, DOCK_MIN_WIDTH, DOCK_SELECTORS, FULL_WIDTHS, RAIL_MIN_WIDTH, ROUTES, classify, countByCheck, dedupe, formatFinding, dockVerdict, hintVerdict, inScope, isVisuallyHidden,
-  parseArgs, pickIds, probeHint, probeHintTwice, railLabelVerdict, resolveRoute, slug, validateAllow, vcenterGeometry,
+  CHECKS, DOCK_MIN_WIDTH, DOCK_SELECTORS, FULL_WIDTHS, PROFILE_MENU_MAX_WIDTH, PROFILE_MENU_SELECTORS, RAIL_MIN_WIDTH, ROUTES, THEMES, THEME_KEY, classify, countByCheck, dedupe, formatFinding, dockVerdict, hintVerdict, inScope, isVisuallyHidden,
+  parseArgs, pickIds, probeHint, probeHintTwice, profileMenuVerdict, railLabelVerdict, resolveRoute, slug, themeSuffix, validateAllow, vcenterGeometry,
 } from './layout-audit-lib.mjs';
 
 function hintSteps(overrides = {}) {
@@ -115,8 +115,8 @@ test('ROUTES visits every destination, section and tab once, on the v202 paths o
   assert.deepEqual(ROUTES.filter((route) => old.test(route)), []);
 });
 
-test('CHECKS are the spec six plus vcenter, hint (v194 A2), rail-label (v195 Phase 7) and dock (v203), in order', () => {
-  assert.deepEqual([...CHECKS], ['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter', 'hint', 'rail-label', 'dock']);
+test('CHECKS are the spec six plus vcenter, hint (v194 A2), rail-label (v195 Phase 7), dock (v203) and profile-menu (v225), in order', () => {
+  assert.deepEqual([...CHECKS], ['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter', 'hint', 'rail-label', 'dock', 'profile-menu']);
 });
 
 test('parseArgs: defaults are the local replica at the three widths', () => {
@@ -128,17 +128,19 @@ test('parseArgs: defaults are the local replica at the three widths', () => {
   assert.equal(opts.allow, null);
   assert.equal(opts.prune, false);
   assert.equal(opts.settle, 1500);
+  assert.equal(opts.theme, 'graphite');
 });
 
 test('parseArgs: every flag, a trailing slash on --base, and --prune', () => {
   const opts = parseArgs(['--base', 'https://bomeo-capital.com/', '--widths', '390,1440', '--out', 'o',
-    '--allow', 'a.json', '--prune', '--settle', '800']);
+    '--allow', 'a.json', '--prune', '--settle', '800', '--theme', 'navy']);
   assert.equal(opts.base, 'https://bomeo-capital.com');
   assert.deepEqual(opts.widths, [390, 1440]);
   assert.equal(opts.out, 'o');
   assert.equal(opts.allow, 'a.json');
   assert.equal(opts.prune, true);
   assert.equal(opts.settle, 800);
+  assert.equal(opts.theme, 'navy');
 });
 
 test('parseArgs: unknown flags, missing values and bad widths throw', () => {
@@ -146,6 +148,9 @@ test('parseArgs: unknown flags, missing values and bad widths throw', () => {
   assert.throws(() => parseArgs(['--base']), /incomplete flag --base/);
   assert.throws(() => parseArgs(['--widths', '390,abc']), /bad --widths/);
   assert.throws(() => parseArgs(['--widths', '200']), /bad --widths/);
+  assert.throws(() => parseArgs(['--theme', 'blue']), /unknown theme blue/);
+  assert.throws(() => parseArgs(['--theme', 'NAVY']), /unknown theme NAVY/);
+  assert.throws(() => parseArgs(['--theme']), /incomplete flag --theme/);
 });
 
 test('resolveRoute fills every placeholder and encodes it', () => {
@@ -247,7 +252,7 @@ test('formatFinding names route, width, check, selector, text, detail and repeat
 
 test('countByCheck counts every check, zero included', () => {
   assert.deepEqual(countByCheck([finding(), finding({ check: 'tap' }), finding({ check: 'tap' })]),
-    { overflow: 0, offscreen: 1, clipped: 0, tap: 2, text: 0, baseline: 0, vcenter: 0, hint: 0, 'rail-label': 0, dock: 0 });
+    { overflow: 0, offscreen: 1, clipped: 0, tap: 2, text: 0, baseline: 0, vcenter: 0, hint: 0, 'rail-label': 0, dock: 0, 'profile-menu': 0 });
 });
 
 test('slug matches browse.mjs file names', () => {
@@ -438,4 +443,46 @@ test('DOCK_MIN_WIDTH docks at 1440 only of the three widths, and every reason na
   assert.deepEqual(Object.keys(DOCK_SELECTORS).sort(), ['docked-below-1024', 'no-column', 'no-strip', 'overlaps-workspace',
     'sheet-not-opened', 'sheet-off-screen', 'strip-when-docked']);
   assert.ok(Object.values(DOCK_SELECTORS).every((selector) => selector.length > 0));
+});
+
+test('the theme is seeded under the SPA key, and Navy output is told apart by a suffix', () => {
+  assert.equal(THEME_KEY, 'ui.theme');
+  assert.deepEqual([...THEMES], ['graphite', 'navy']);
+  assert.equal(themeSuffix('graphite'), '');
+  assert.equal(themeSuffix('navy'), '-navy');
+});
+
+test('PROFILE_MENU_MAX_WIDTH: the menu check runs at the phone width only of the three', () => {
+  assert.deepEqual(FULL_WIDTHS.filter((w) => w <= PROFILE_MENU_MAX_WIDTH), [390]);
+  assert.equal(PROFILE_MENU_MAX_WIDTH, RAIL_MIN_WIDTH - 1);
+});
+
+const PHONE_VIEW = { width: 390, height: 900 };
+const PHONE_MENU = { left: 150, right: 382, top: 56, bottom: 420 };
+
+test('profileMenuVerdict: an opened menu inside the viewport with two 44px theme segments passes', () => {
+  assert.deepEqual(profileMenuVerdict({ menu: PHONE_MENU, segments: [60, 88], viewport: PHONE_VIEW }), { ok: true, reason: null });
+  assert.deepEqual(profileMenuVerdict({ menu: { ...PHONE_MENU, right: 390.4 }, segments: [44, 44], viewport: PHONE_VIEW }), { ok: true, reason: null });
+});
+
+test('profileMenuVerdict: not opened, off-screen, no theme row, then a narrow segment, first rule first', () => {
+  assert.equal(profileMenuVerdict({ menu: null, segments: [], viewport: PHONE_VIEW }).reason, 'menu-not-opened');
+  assert.equal(profileMenuVerdict({ menu: { ...PHONE_MENU, right: 402 }, segments: [], viewport: PHONE_VIEW }).reason, 'menu-off-screen');
+  assert.equal(profileMenuVerdict({ menu: { ...PHONE_MENU, left: -8 }, segments: [60, 60], viewport: PHONE_VIEW }).reason, 'menu-off-screen');
+  assert.equal(profileMenuVerdict({ menu: PHONE_MENU, segments: [60], viewport: PHONE_VIEW }).reason, 'no-theme-row');
+  assert.equal(profileMenuVerdict({ menu: PHONE_MENU, segments: [60, 43], viewport: PHONE_VIEW }).reason, 'segment-under-44');
+});
+
+test('every profile-menu reason names its element', () => {
+  for (const reason of ['menu-not-opened', 'menu-off-screen', 'no-theme-row', 'segment-under-44']) {
+    assert.match(PROFILE_MENU_SELECTORS[reason], /^sb-profile-menu /);
+  }
+});
+
+test('the audit seeds the theme before any page script, and checks it took', () => {
+  const src = readFileSync(join(HERE, 'layout-audit.mjs'), 'utf8');
+  assert.match(src, /addInitScript\(/);
+  assert.match(src, /THEME_KEY/);
+  assert.match(src, /dataset\.theme/);
+  assert.match(src, /profileMenuVerdict/);
 });

@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { allSources, stripComments } from './testing/all-sources';
 import { callSites } from './testing/call-sites';
 import { resolveToken } from './testing/resolve-token';
+import { resolveTokenIn } from './testing/theme-tokens';
+import { THEME_PREF_KEY } from './theme.service';
 
 /**
  * Raw buttons that stay raw, each with the reason.
@@ -39,6 +41,9 @@ const RAW_BUTTON_ALLOWLIST = new Map<string, string>([
   ['shell/alarm-chip.ts', 'class="alarm-chip sb-hit"'],
   ['shell/live/live-edge-tab.ts', 'class="edge-tab sb-hit"'],
   ['shell/live/live-strip.ts', 'class="live-strip sb-hit"'],
+  // v227: the voice chip is a top-bar chip like the alarm chip -- speaker glyph
+  // + state word, padded to 44px by .sb-hit, aria-label naming its action.
+  ['shell/voice-chip.ts', 'class="voice-chip sb-hit"'],
 ]);
 
 describe('no call site hand-rolls a button', () => {
@@ -69,6 +74,10 @@ const RAW_CONTROL_ALLOWLIST = new Map<string, string>([
   // plain field and exposes none of that; growing it a combobox mode for one
   // call site would be the worse trade.
   ['shell/palette/command-palette.ts', 'role="combobox"'],
+  // v227: the voice rate slider. A range input has no primitive (this is the
+  // app's only one), and a ui/ wrapper used exactly once is the worse trade;
+  // its thumb takes the --hit-min square from voice-settings.ts.
+  ['workspaces/system/voice-settings.ts', 'type="range"'],
 ]);
 
 describe('no call site hand-rolls a form control', () => {
@@ -139,11 +148,12 @@ describe('no call site redefines a promoted composite', () => {
 const COLOUR_RE = /(?<!&)#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(/g;
 
 const HEX_ALLOWLIST = new Map<string, string[]>([
-  // The two cold-load copies of --bg: the theme-color meta and the inline
-  // html/body background paint before any stylesheet has loaded, so they
-  // cannot read var(--bg). 'the cold-load copies equal the resolved --bg'
-  // below fails the moment they drift from palette.css.
-  ['index.html', ['#0d0f12', '#0d0f12']],
+  // The three cold-load copies, in file order: the Graphite theme-color
+  // meta, the Navy --bg held once in index.html's pre-paint script (v225),
+  // and the Graphite inline html/body background. They paint before any
+  // stylesheet has loaded, so they cannot read var(--bg); the cold-load
+  // describes below fail the moment one drifts from palette.css.
+  ['index.html', ['#0d0f12', '#070c18', '#0d0f12']],
 ]);
 
 describe('no colour is declared outside the token files', () => {
@@ -238,6 +248,89 @@ describe('the cold-load copies equal the resolved --bg (v167 §7)', () => {
     const manifest = JSON.parse(read('public/manifest.webmanifest'));
     expect(manifest.theme_color.toLowerCase()).toBe(bg);
     expect(manifest.background_color.toLowerCase()).toBe(bg);
+  });
+});
+
+/**
+ * v225: a browser that chose Dark blue paints Navy from the first frame.
+ * index.html's inline script reads ui.theme before the bundle parses and,
+ * on exactly 'navy', sets data-theme, the theme-color meta and a Navy
+ * ground scoped to html[data-theme="navy"] -- so toggling back to Black
+ * later drops it. The manifest stays Graphite.
+ */
+describe('the Dark blue cold load (v225)', () => {
+  const INDEX = readFileSync(join(process.cwd(), 'src/index.html'), 'utf8');
+  const script = INDEX.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? '';
+  const html = document.documentElement;
+  let meta: HTMLMetaElement;
+
+  const run = () => new Function(script)();
+  const injected = () =>
+    [...document.head.querySelectorAll('style')].filter((s) => s.textContent!.includes('data-theme="navy"'));
+
+  beforeEach(() => {
+    meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    meta.content = resolveToken('--bg');
+    document.head.appendChild(meta);
+  });
+
+  afterEach(() => {
+    meta.remove();
+    injected().forEach((s) => s.remove());
+    delete html.dataset['theme'];
+    localStorage.removeItem(THEME_PREF_KEY);
+    vi.restoreAllMocks();
+  });
+
+  it('holds the Navy --bg once, equal to the resolved --midnight-950 and Navy --bg', () => {
+    const literal = script.match(/var NAVY_BG = '([^']+)';/)?.[1].toLowerCase();
+    expect(literal).toBe(resolveToken('--midnight-950').toLowerCase());
+    expect(literal).toBe(resolveTokenIn('navy', '--bg').toLowerCase());
+    expect(script.match(/#[0-9a-f]{6}/gi)).toHaveLength(1);
+  });
+
+  it('sits after the theme-color meta and before the inline Graphite style', () => {
+    const at = INDEX.indexOf('<script>');
+    expect(at).toBeGreaterThan(INDEX.indexOf('<meta name="theme-color"'));
+    expect(at).toBeLessThan(INDEX.indexOf('<style>html, body {'));
+  });
+
+  it(`acts only on exactly 'navy' under ${THEME_PREF_KEY}, inside try/catch`, () => {
+    expect(script).toContain(`localStorage.getItem('${THEME_PREF_KEY}') === 'navy'`);
+    expect(script).toMatch(/try \{[\s\S]*\} catch \(e\) \{/);
+  });
+
+  it('paints Navy when ui.theme is navy: attribute, meta and a scoped ground', () => {
+    localStorage.setItem(THEME_PREF_KEY, 'navy');
+    run();
+    expect(html.dataset['theme']).toBe('navy');
+    expect(meta.content.toLowerCase()).toBe(resolveToken('--midnight-950').toLowerCase());
+    const rules = injected();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].textContent).toBe(
+      `html[data-theme="navy"], html[data-theme="navy"] body { background: ${resolveToken('--midnight-950')}; }`,
+    );
+  });
+
+  it.each([null, 'graphite', 'NAVY', 'navy ', ''])('leaves the page Graphite for %j', (stored) => {
+    if (stored !== null) localStorage.setItem(THEME_PREF_KEY, stored);
+    run();
+    expect(html.dataset['theme']).toBeUndefined();
+    expect(meta.content).toBe(resolveToken('--bg'));
+    expect(injected()).toHaveLength(0);
+  });
+
+  it('swallows a throwing localStorage and leaves the page Graphite', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('denied', 'SecurityError'); });
+    expect(run).not.toThrow();
+    expect(html.dataset['theme']).toBeUndefined();
+  });
+
+  it('says beside the cold-load copies that the manifest stays Graphite', () => {
+    expect(INDEX).toMatch(/manifest\.webmanifest stays Graphite/);
+    const manifest = JSON.parse(readFileSync(join(process.cwd(), 'public/manifest.webmanifest'), 'utf8'));
+    expect(manifest.theme_color.toLowerCase()).toBe(resolveToken('--bg').toLowerCase());
   });
 });
 

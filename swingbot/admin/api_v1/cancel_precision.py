@@ -36,9 +36,13 @@ def _bar_loader(ticker: str):
 
 
 def _memo_key() -> tuple:
+    """(plans version, UTC hour, trades generation). The generation moves on every
+    plans NOTIFY, so a write committed under an older updated_at stamp, which leaves
+    version() unchanged (v218 V218-1), still invalidates the memo."""
     from swingbot.core.db.repositories.plans import plans_repo
+    from swingbot.core.infra import store_generation
     hour = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H")
-    return (plans_repo().version(), hour)
+    return (plans_repo().version(), hour, store_generation.generation("trades"))
 
 
 def reset_memo() -> None:

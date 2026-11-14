@@ -16,6 +16,13 @@ each caller owns its records' top level as it owns the fresh dicts a store's
 write into them (V205-8's frozen-memo test). A store call that passes ``conn``
 (a transaction) never reads through here.
 
+A **backing** (v218) may serve each scope's first load of a key:
+``set_backing(fn)`` makes ``_stored`` call ``fn(key, loader)`` instead of
+``loader()``. The admin app installs ``store_snapshot.read`` there (a
+cross-request snapshot of raw records); this module still copies per caller
+and still imports nothing from ``swingbot``. With no backing (the bot, the
+refresher, scripts) behaviour is exactly the above.
+
 The memo lives in a ``contextvars.ContextVar``: each gunicorn thread has its own
 context, and ``scope()`` resets its token in ``finally``, so no memo outlives
 its request or crosses to another thread.
@@ -33,6 +40,14 @@ NOTED_IDS = "noted_ids"     # admin trades._noted_ids: journal entries that carr
 
 _MEMO: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
     "swingbot_read_memo", default=None)
+
+_BACKING: Callable[[str, Callable[[], object]], object] | None = None
+
+
+def set_backing(fn: Callable[[str, Callable[[], object]], object] | None) -> None:
+    """Route each scope's first load of a key through ``fn(key, loader)``; None = load directly."""
+    global _BACKING
+    _BACKING = fn
 
 
 @contextlib.contextmanager
@@ -59,7 +74,9 @@ def _stored(key: str, loader: Callable[[], object]) -> object | None:
     if memo is None:
         return None
     if key not in memo:
-        memo[key] = loader()          # a raising loader stores nothing
+        backing = _BACKING
+        # A raising loader (or backing) stores nothing.
+        memo[key] = loader() if backing is None else backing(key, loader)
     return memo[key]
 
 

@@ -28,6 +28,9 @@ export interface PaletteItem {
   route: string | null;
   queryParams?: Record<string, string>;
   density?: RowDensity;
+  /** An in-place preference with no value to carry: the theme toggle (spec
+   *  v225). A closed union of names, never a callback, so an item stays data. */
+  action?: 'toggle-theme';
   /** Epoch ms; trades only, for the empty query's "most recent". */
   recency?: number;
 }
@@ -76,10 +79,11 @@ export const TAB_PAGES: readonly PaletteItem[] = [
   tab('/watchlist', 'Watchlist', 'earnings', 'Earnings'),
 ];
 
-/** Density, both ways (spec §1.4). Applied in place; no route. */
+/** Density, both ways (spec §1.4), and the theme switch (spec v225). Applied in place; no route. */
 export const PREFERENCE_ITEMS: readonly PaletteItem[] = [
   { key: 'pref:density:dense', group: 'preferences', label: 'Density: Dense', sub: '28px rows on desktop', route: null, density: 'dense' },
   { key: 'pref:density:comfortable', group: 'preferences', label: 'Density: Comfortable', sub: '44px rows on desktop', route: null, density: 'comfortable' },
+  { key: 'pref:theme:toggle', group: 'preferences', label: 'Switch theme', sub: 'Black or Dark blue', route: null, action: 'toggle-theme' },
 ];
 
 function pageItem(label: string, route: string, sub?: string): PaletteItem {

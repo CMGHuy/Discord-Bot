@@ -176,13 +176,20 @@ def replicate(seed: int, *, tickers: int = TICKERS, bars: int = BARS,
         raise ValueError(f"entry mode {entry!r} is not enabled")
     rng = np.random.default_rng(seed)
     paired = []
+    mode = "edge"
     for i in range(tickers):
         df = synthetic_frame(rng, bars, anchored=(entry == "level"))
         idea = _replicate_idea(df, rng, rate, direction, entry)
+        mode = idea.mode
         screen = screen_idea.screen_ticker(idea, f"R{seed}T{i:03d}", df, None)
         paired += [verdict.PairedEvent(row["entry_date"], row["r_event"] - row["r_null"])
                    for row in screen.events]
-    return verdict.decide(paired, n_resamples=n_resamples)
+    return verdict.decide(paired, mode=mode, n_resamples=n_resamples)
+
+
+def _false_passes(verdicts) -> int:
+    """v214 G5: only an edge pass is a false pass; SCREEN-AVOID-PASS answers a different question."""
+    return sum(v.verdict == verdict.SCREEN_PASS for v in verdicts)
 
 
 def _covers_zero(v) -> bool:
@@ -202,7 +209,7 @@ def calibrate(replicates: int = REPLICATES, seed: int = SEED, *, tickers: int = 
         if (r + 1) % PROGRESS_EVERY == 0 or r + 1 == replicates:
             out(f"[calibration] {r + 1}/{replicates} replicates "
                 f"({100.0 * (r + 1) / replicates:.0f}%)", flush=True)
-    false_pass = sum(v.verdict == verdict.SCREEN_PASS for v in verdicts)
+    false_pass = _false_passes(verdicts)
     covered = sum(_covers_zero(v) for v in verdicts)
     return {"replicates": replicates, "verdicts": verdicts, "false_pass": false_pass,
             "false_pass_rate": false_pass / replicates, "covered": covered,

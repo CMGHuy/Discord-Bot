@@ -125,7 +125,9 @@ def build_ticket_embed(item, plan) -> discord.Embed:
         level=item.conf.level,
     ), plan)
     kind = Kind.TICKET_DO_NOT_PLACE if instruction.verb == DO_NOT_PLACE else Kind.TICKET_PLACE
-    return render(instruction, kind, block=plan_levels_block(plan, plan.trigger_price))
+    embed = render(instruction, kind, block=plan_levels_block(plan, plan.trigger_price))
+    embed.entry_price = plan.trigger_price    # v227: spoken "buy at <entry>"
+    return embed
 
 
 #: v189 A7: a close with no exit behind it (the trade record was deleted) is

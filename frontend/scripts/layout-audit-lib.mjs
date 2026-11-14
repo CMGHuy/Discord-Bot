@@ -25,10 +25,17 @@ export const ROUTES = Object.freeze([
   '/ui',
 ]);
 
-export const CHECKS = Object.freeze(['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter', 'hint', 'rail-label', 'dock']);
+export const CHECKS = Object.freeze(['overflow', 'offscreen', 'clipped', 'tap', 'text', 'baseline', 'vcenter', 'hint', 'rail-label', 'dock', 'profile-menu']);
 
 /** Phone, tablet and desktop (docs/claude/ui-design.md § Device classes). */
 export const FULL_WIDTHS = Object.freeze([390, 768, 1440]);
+
+/** The two SPA grounds (spec v225); the audit seeds one into localStorage before load. */
+export const THEMES = Object.freeze(['graphite', 'navy']);
+/** The SPA's own key (ui/theme.service.ts THEME_PREF_KEY). */
+export const THEME_KEY = 'ui.theme';
+/** Navy runs write `<slug>@<width>-navy.png` and their own out dir, so both themes' shots sit side by side. */
+export const themeSuffix = (theme) => (theme === 'navy' ? '-navy' : '');
 /** The tap check runs at or below this width: the 44px rule covers phone
  *  and tablet, `(pointer: coarse), (max-width: 1023px)` (v179 V179-2). */
 export const TOUCH_MAX_WIDTH = 1023;
@@ -38,7 +45,7 @@ export const MAX_BASELINE_OFFSET_PX = 2;
 /** A table cell's content, or an icon beside its text, off centre by more than this. */
 export const MAX_CENTER_OFFSET_PX = 2;
 
-const DEFAULTS = Object.freeze({ base: 'http://localhost:1234', out: null, allow: null, prune: false, settle: 1500 });
+const DEFAULTS = Object.freeze({ base: 'http://localhost:1234', out: null, allow: null, prune: false, settle: 1500, theme: 'graphite' });
 
 function parseWidths(value) {
   const widths = value.split(',').map(Number);
@@ -52,6 +59,10 @@ const FLAGS = {
   '--out': (opts, value) => { opts.out = value; },
   '--allow': (opts, value) => { opts.allow = value; },
   '--settle': (opts, value) => { opts.settle = Number(value); },
+  '--theme': (opts, value) => {
+    if (!THEMES.includes(value)) throw new Error(`unknown theme ${value}`);
+    opts.theme = value;
+  },
 };
 
 export function parseArgs(argv) {
@@ -246,6 +257,31 @@ export const DOCK_SELECTORS = Object.freeze({
  */
 export function dockVerdict(facts) {
   const broken = DOCK_RULES.find(([, fails]) => fails(facts));
+  return broken ? { ok: false, reason: broken[0] } : { ok: true, reason: null };
+}
+
+/** The profile menu holds the phone's only theme switch (spec v225), so at phone widths the audit
+ *  opens it: below RAIL_MIN_WIDTH, i.e. 390 of the three widths. */
+export const PROFILE_MENU_MAX_WIDTH = RAIL_MIN_WIDTH - 1;
+
+const PROFILE_MENU_RULES = Object.freeze([
+  ['menu-not-opened', (f) => !f.menu],
+  ['menu-off-screen', (f) => outsideViewport(f.menu, f.viewport)],
+  ['no-theme-row', (f) => f.segments.length < 2],
+  ['segment-under-44', (f) => f.segments.some((width) => width < MIN_TAP_PX - DOCK_EDGE_SLACK_PX)],
+]);
+
+export const PROFILE_MENU_SELECTORS = Object.freeze({
+  'menu-not-opened': 'sb-profile-menu [role=menu]',
+  'menu-off-screen': 'sb-profile-menu [role=menu]',
+  'no-theme-row': 'sb-profile-menu .theme-control',
+  'segment-under-44': 'sb-profile-menu .theme-control .segment',
+});
+
+/** Verdict on `{ menu, segments, viewport }`: the opened menu's rect (or null), the widths of the
+ *  Theme row's segments, the viewport size. Runs in Node on measured numbers. */
+export function profileMenuVerdict(facts) {
+  const broken = PROFILE_MENU_RULES.find(([, fails]) => fails(facts));
   return broken ? { ok: false, reason: broken[0] } : { ok: true, reason: null };
 }
 

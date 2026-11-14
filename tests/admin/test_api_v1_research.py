@@ -149,3 +149,12 @@ def test_the_committed_ledger_loads_through_the_endpoint(logged_in):
         assert_shape(row, shape, where=f"row {row['id']}")
         assert row["record_kind"] in {"results", "specs", "plans", "other"}
     assert body["q_family_m"] == sum(1 for row in body["rows"] if row["p"] is not None)
+
+
+def test_the_avoid_label_is_listed_and_a_row_carrying_it_renders(logged_in, ledger):
+    """v214: SCREEN-AVOID-PASS reaches the SPA through the vocabulary and a row."""
+    ledger([_row(id="screen-demo", instrument="screen-v1", verdict="SCREEN-AVOID-PASS")])
+    body = logged_in.get(_URL).get_json()
+    assert body["verdicts"][-1] == "SCREEN-AVOID-PASS"
+    assert body["rows"][0]["verdict"] == "SCREEN-AVOID-PASS"
+    assert body["rows"][0]["q"] == pytest.approx(0.03)

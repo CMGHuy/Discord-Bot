@@ -1,0 +1,79 @@
+{
+ "stage": -1,
+ "verdict": "REACHABLE",
+ "alerts": 38630,
+ "cells": [
+  {
+   "cell": "f0.333",
+   "in_scope": 38630,
+   "drops": {
+    "limit_stop_beyond_cap": 15982,
+    "limit_scope": 129
+   },
+   "kept": 22519,
+   "observed_n": 15180,
+   "fill_states": {
+    "filled": 12921,
+    "gap_stopped": 2259,
+    "tp1_cancel": 6452,
+    "expired": 887
+   },
+   "filled_by_direction": {
+    "bullish": 7435,
+    "bearish": 7745
+   },
+   "d_range": [
+    2.000002402253978,
+    2.639143573551407
+   ]
+  },
+  {
+   "cell": "f0.5",
+   "in_scope": 38630,
+   "drops": {
+    "limit_stop_beyond_cap": 6165,
+    "limit_scope": 18
+   },
+   "kept": 32447,
+   "observed_n": 20162,
+   "fill_states": {
+    "filled": 16720,
+    "expired": 1920,
+    "gap_stopped": 3442,
+    "tp1_cancel": 10365
+   },
+   "filled_by_direction": {
+    "bullish": 9925,
+    "bearish": 10237
+   },
+   "d_range": [
+    2.000002402253978,
+    3.5415274584953185
+   ]
+  },
+  {
+   "cell": "f0.667",
+   "in_scope": 38630,
+   "drops": {
+    "limit_stop_beyond_cap": 1667,
+    "limit_scope": 6
+   },
+   "kept": 36957,
+   "observed_n": 20939,
+   "fill_states": {
+    "filled": 16815,
+    "gap_stopped": 4124,
+    "expired": 3113,
+    "tp1_cancel": 12905
+   },
+   "filled_by_direction": {
+    "bullish": 10518,
+    "bearish": 10421
+   },
+   "d_range": [
+    2.000002402253978,
+    5.414154363073433
+   ]
+  }
+ ]
+}

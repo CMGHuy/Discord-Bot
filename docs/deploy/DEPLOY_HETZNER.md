@@ -205,6 +205,8 @@ own secret and pass it as a build arg.
 
 ## Rolling back
 
+**Code-only rollback (v220):** `/rollback` (`scripts/ops/rollback_code.sh`) puts checkout and image back to an earlier `main` commit and keeps all trading data. While it holds, `backups/deploy_hold.json` makes `deploy/deploy.sh` print "Nothing deployed" and exit 0, and CI skips its deploy; `/rollback --release` ends the hold. If a failed release leaves no hold and an unknown checkout, rerun `--release` or deploy `main` by hand. Detail: `docs/deploy/DB_RESTORE.md` § Code-only rollback (v220).
+
 Every build is published under an immutable `sha-<12>` tag, so a rollback is
 a pull of an older tag — no rebuild, no revert commit, seconds not minutes. **From v197 this is only safe when the older image knows the database's current Alembic revision**; otherwise `deploy.sh` aborts before `up` with bot, admin and refresher stopped (recover with `unset SWING_BOT_IMAGE; docker compose up -d --no-build --wait bot admin refresher`, or use `scripts/ops/rollback_to.sh`):
 
@@ -260,6 +262,37 @@ image runs Flask's `app.run`. Rolling back to a pre-v148 tag therefore needs no
 compose edit. Never point the admin's compose `command:` at gunicorn: a
 pre-v148 image has neither gunicorn nor `admin_wsgi.py`, and the admin would
 crash-loop. Which one is running: `docker compose exec admin ps -o pid,args`.
+
+**Switching the v218 admin snapshot off without a rollback.** From v218 the
+admin keeps a per-process snapshot of the trade, plan and journal-note
+records between requests. It sends `ETag`/304 on the allow-listed `/trades`
+closed view, and every `/api` response's `Server-Timing` ends with
+`snap;desc=hit|miss|off`. One switch turns both features off and restores the
+v205 Layer 1 reads exactly: `ADMIN_STORE_SNAPSHOT=off`. The admin gets no
+SIGHUP. It re-reads `.env` on its next request when the file's mtime has
+changed (`config.auto_reload_if_changed()`), so no restart is needed. Set it
+**in place**, never with `sed -i`: `.env` is a single-file bind mount, and a
+rename leaves the containers reading the old inode
+(`docs/claude/known-traps.md` § Editing production `.env` with `sed -i`):
+
+```bash
+bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && python3 scripts/ops/env_set.py ADMIN_STORE_SNAPSHOT off"
+bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T admin grep ADMIN_STORE_SNAPSHOT /app/.env"
+```
+
+The Settings page (section "Admin UI") writes the same key in place too.
+Check it took: any `/api/v1/health` response's `Server-Timing` now ends
+`snap;desc=off`, and `/api/v1/trades?status=CLOSED` carries no `ETag`.
+Switch back with the same command and `on`. Like any VM change, record it
+per the `mirror-prod` skill. A rollback to an image with a *different*
+`VERSION.json` needs none of this: the build identity in every tag is a hash
+of that file, so a browser never gets a 304 for a body that image did not
+produce. The admin container does **not** carry `SWING_BOT_IMAGE` (checked
+2026-11-11, v206 § Plan 3 build tag on the VM), so two images with the *same*
+`VERSION.json` (a hotfix redeployed without a bump, or a rollback to one)
+share every ETag. After such a deploy or rollback, set `ADMIN_STORE_SNAPSHOT`
+to `off` and back to `on` (the settings generation moves, so every tag
+changes), or bump `VERSION.json`.
 
 That leaves `main` ahead of production, which is deliberate — it's a
 stop-the-bleeding move. Follow it with the real fix:

@@ -36,6 +36,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 from flask import jsonify, request
+from werkzeug.datastructures import MultiDict
 
 from swingbot import config
 from swingbot.admin import dashboard as dash
@@ -54,6 +55,7 @@ from swingbot.core.marketdata import fx_convert
 
 from . import api_v1, collection, error, parse_collection_params, ApiError
 from .auth import require_auth
+from .conditional import conditional
 from .read_scope import read_scope
 from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
 from .money import convert_amount, missing_count, to_account_currency
@@ -1108,8 +1110,44 @@ def _filter_by_status(rows: list[dict], value: str) -> list[dict]:
     return [r for r in rows if str(r.get("status") or "").lower() == want]
 
 
+#: v218 P3-c: sorts that price the whole set before slicing (see `list_trades`),
+#: so a page sorted on one may read a live price and is never conditional.
+_PRICED_SORT_FIELDS = frozenset({"progress_pct", "pnl_pct", "r_multiple"})
+_CLOSED_OUTCOMES = frozenset({"win", "loss"})
+
+
+def _closed_filter(args: MultiDict) -> bool:
+    """status=closed or outcome=win|loss, read the way `list_trades` reads them."""
+    status = str(args.get("status") or "").strip().lower()
+    outcome = str(args.get("outcome") or "").strip().lower()
+    return status == "closed" or outcome in _CLOSED_OUTCOMES
+
+
+def _priced_sort(args: MultiDict) -> bool:
+    field = str(args.get("sort") or "").lstrip("-")
+    return _SORT_ALIASES.get(field, field) in _PRICED_SORT_FIELDS
+
+
+def closed_only_query(args: MultiDict) -> bool:
+    """v218 P3-c: may this /trades query answer 304? The audit's verdict, as code.
+
+    Only a page that can hold closed rows alone, with no sort that prices rows.
+    Two more conditions come from the audit (v206 `### Plan 3 route audits`).
+    The refresher must be on: off, a closed row's FX can come from the pair
+    frame, which no tag input versions. And the ET date must equal the Berlin
+    date: `follow_score` counts days in ET (`rank.follow_score`), and the tag
+    keys only the Berlin date, so the shape is admitted from 06:00 to 24:00
+    Berlin, when one date also names the other.
+    """
+    from swingbot.core.market import session
+    from swingbot.core.marketdata.shared import admin_refresh
+    return (_closed_filter(args) and not _priced_sort(args) and admin_refresh.refresher_on()
+            and session.market_today() == fx_convert.berlin_today())
+
+
 @api_v1.route("/trades", methods=["GET"])
 @require_auth
+@conditional("trades", closed_only_query)
 @read_scope
 def list_trades():
     params = parse_collection_params(

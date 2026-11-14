@@ -45,6 +45,7 @@ export const ICON_NAMES = [
   'reports',
   'research',
   'search',
+  'theme',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -117,6 +118,10 @@ const PATHS: Record<IconName, string> = {
   // A magnifying glass: the command palette's trigger in the top bar and the
   // phone bar's search icon (v195 correction 1).
   search: 'M7.2 12A4.8 4.8 0 1 0 7.2 2.4a4.8 4.8 0 0 0 0 9.6z M10.7 10.7l3.3 3.3',
+  // A circle, half filled: the Black / Dark blue theme toggle (v225). The
+  // svg is fill="none", so the right half is solid by seven 1.5px strokes
+  // 1.5px apart, each stopping short of the outline for the round caps.
+  theme: 'M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2z M8 3.5h3.4 M8 5h4.6 M8 6.5h5.2 M8 8h5.4 M8 9.5h5.2 M8 11h4.6 M8 12.5h3.4',
 };
 
 /** The tooltip an icon shows when its caller gives none, so no icon is mute. */
@@ -128,6 +133,7 @@ const LABELS: Record<IconName, string> = {
   opened: 'Opened', closed: 'Closed', pending: 'Pending', partial: 'Partially closed',
   cancelled: 'Cancelled', trailing: 'Trailing stop', brand: 'Swingbot',
   reports: 'Reports', research: 'Research', search: 'Search',
+  theme: 'Theme',
 };
 
 @Component({

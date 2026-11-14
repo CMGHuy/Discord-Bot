@@ -15,6 +15,7 @@ import { SearchIndexStore } from '../../stores/search-index.store';
 import { SessionStore } from '../../stores/session.store';
 import { Button } from '../../ui/button';
 import { DensityService } from '../../ui/density.service';
+import { ThemeService } from '../../ui/theme.service';
 import { FocusTrap } from '../../ui/focus-trap';
 import { Icon } from '../../ui/icon';
 import {
@@ -63,10 +64,10 @@ const optionId = (index: number): string => `palette-option-${index}`;
 
 /**
  * The command palette -- v195 §3.1: jump to a ticker, a trade or plan, a
- * page or a workspace tab, or set the row density.
+ * page or a workspace tab, set the row density, or switch the theme.
  *
  * Navigation and preferences only. It injects the router, the search index
- * and the density service and nothing else, and its items are plain data
+ * and the density and theme services and nothing else, and its items are plain data
  * (palette-items.ts), so no path through it can act on the book or the bot.
  * command-palette.spec.ts pins the injections.
  *
@@ -213,6 +214,7 @@ export class CommandPalette {
 
   protected readonly index = inject(SearchIndexStore);
   private readonly density = inject(DensityService);
+  private readonly theme = inject(ThemeService);
   private readonly router = inject(Router);
 
   protected readonly query = signal('');
@@ -274,6 +276,7 @@ export class CommandPalette {
 
   protected choose(item: PaletteItem): void {
     if (item.density) this.density.set(item.density);
+    else if (item.action === 'toggle-theme') this.theme.toggle();
     else if (item.route) void this.router.navigate([item.route], { queryParams: item.queryParams ?? {} });
     this.closed.emit();
   }

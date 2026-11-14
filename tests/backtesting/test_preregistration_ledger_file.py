@@ -40,6 +40,7 @@ EXEMPT = {
     "v133": "descriptive TRAIN measurement (role coverage vs vote count), no VALIDATION budget spent, not merged",
     "v140": "ledgered as screen-<idea> (instrument screen-v1), not under a v140- prefix",
     "v72": "named only as the funnel pointer in a screen row's closing sentence",
+    "v214": "ledgered as screen-fvg_overhead_aged (instrument screen-v1), not under a v214- prefix",
 }
 
 

@@ -98,9 +98,9 @@ def _paired(rows) -> list:
             for row in rows]
 
 
-def _decide(rows):
+def _decide(rows, mode: str = "edge"):
     """``verdict.decide`` at call time; None for no rows."""
-    return verdict.decide(_paired(rows)) if rows else None
+    return verdict.decide(_paired(rows), mode=mode) if rows else None
 
 
 def _per_year(days, events) -> dict:
@@ -115,10 +115,11 @@ def _sample(events, days, runs) -> dict:
             "per_year": _per_year(days, events)}
 
 
-def _overlap(events, restricted, cap: int) -> dict:
+def _overlap(events, restricted, cap: int, mode: str = "edge") -> dict:
     return {"cap": cap, "n": len(events),
             "official": verdict.mean_d([], _paired(events)),
-            "restricted": None if restricted is None else verdict.decide(_paired(restricted))}
+            "restricted": None if restricted is None
+            else verdict.decide(_paired(restricted), mode=mode)}
 
 
 def _bucket(value) -> str:
@@ -127,7 +128,7 @@ def _bucket(value) -> str:
     return "down" if value < 0 else "up"
 
 
-def _selloff(events, signals, days, spy_r5) -> dict:
+def _selloff(events, signals, days, spy_r5, mode: str = "edge") -> dict:
     groups = {"down": [], "up": [], "undefined": []}
     for row, day in zip(events, signals):
         value = np.nan if pd.isna(day) else spy_r5.get(day, np.nan)
@@ -135,7 +136,7 @@ def _selloff(events, signals, days, spy_r5) -> dict:
     on_shock = spy_r5.reindex(days).dropna()
     return {"shock_down": int((on_shock < 0).sum()), "shock_up": int((on_shock >= 0).sum()),
             "shock_mean": float(on_shock.mean()) if len(on_shock) else None,
-            "down": _decide(groups["down"]), "up": _decide(groups["up"]),
+            "down": _decide(groups["down"], mode), "up": _decide(groups["up"], mode),
             "undefined": len(groups["undefined"])}
 
 
@@ -164,15 +165,16 @@ def _concentration(events, signals, runs) -> dict:
 def compute(idea, events: list[dict], restricted: list[dict] | None,
             data: pit.ContextData, *, event_start: str, event_end: str) -> dict:
     """The four computed diagnostics (§ 5.1-5.4); q and scope are rendered
-    from their own inputs. Pure: ``events`` and ``restricted`` are only read."""
+    from their own inputs. Pure: ``events`` and ``restricted`` are only read.
+    v214: every verdict carries idea.mode."""
     sessions = data.calendar.index
     days = shock_days(idea, data, event_start=event_start, event_end=event_end)
     runs = episodes(days, sessions)
     signals = signal_days([row["entry_date"] for row in events], sessions)
     spy_r5 = pit.r_lookback(data.calendar["Close"])
     return {"sample": _sample(events, days, runs),
-            "overlap": _overlap(events, restricted, idea.time_cap_bars),
-            "selloff": _selloff(events, signals, days, spy_r5),
+            "overlap": _overlap(events, restricted, idea.time_cap_bars, idea.mode),
+            "selloff": _selloff(events, signals, days, spy_r5, idea.mode),
             "concentration": _concentration(events, signals, runs)}
 
 

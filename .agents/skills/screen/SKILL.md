@@ -6,7 +6,7 @@ description: "Run the Stage -2 idea screen for one idea as a one-shot ritual: ch
 
 # Idea screen
 
-One real run per idea, ever, and a `SCREEN-FAIL` is a finished result.
+One real run per idea, ever, and a `SCREEN-FAIL` is a finished result. An idea's `mode` (v214: `edge` or `avoid`) is part of its committed definition; an avoid idea passes as `SCREEN-AVOID-PASS` and only backs a veto spec.
 Arguments: `$ARGUMENTS` (one idea name, written `<idea>` below).
 
 ## Step 1 — Read the authority

@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-10 18:48:21 UTC",
+  "generated_at": "2026-11-13 21:52:19 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.40.5",
-    "bot": "2.18.2"
+    "ui": "1.43.0",
+    "bot": "2.18.7"
   },
   "releases": [
     {
@@ -2543,6 +2543,113 @@
       "versions": {
         "ui": "1.40.5",
         "bot": "2.18.2"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-11",
+      "last_seen": "2026-11-11",
+      "commit": "a0b4190a",
+      "subject": "release(ui): 1.40.6 -- the idle tab reads /market/updates through the shared 30 s throttle (v218)",
+      "versions": {
+        "ui": "1.40.6",
+        "bot": "2.18.2"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-11-11",
+      "last_seen": "2026-11-11",
+      "commit": "b21cf124",
+      "subject": "release(bot): 2.18.3 -- admin store snapshot, ETag/304 on the closed /trades view, Server-Timing app and snap (v218)",
+      "versions": {
+        "ui": "1.40.6",
+        "bot": "2.18.3"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-12",
+      "last_seen": "2026-11-12",
+      "commit": "57eb022f",
+      "subject": "release(ui,bot): ui 1.41.0, bot 2.18.4 -- Partials tab Runner endings: ending cards, scorecard, odds; outcomes key replaced (v219)",
+      "versions": {
+        "ui": "1.41.0",
+        "bot": "2.18.4"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-12",
+      "last_seen": "2026-11-12",
+      "commit": "dbf67f2d",
+      "subject": "release(bot): 2.18.5 -- code-only rollback: /rollback, deploy hold, rollback_smoke (v220)",
+      "versions": {
+        "ui": "1.41.0",
+        "bot": "2.18.5"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-13",
+      "last_seen": "2026-11-13",
+      "commit": "5791cb73",
+      "subject": "release(bot): 2.18.6 -- stable snapshots carry rollback fields and pinned images",
+      "versions": {
+        "ui": "1.41.0",
+        "bot": "2.18.6"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-13",
+      "last_seen": "2026-11-13",
+      "commit": "28c3515a",
+      "subject": "release(ui): 1.42.0 -- Dark blue theme beside Black, picked per browser (v225)",
+      "versions": {
+        "ui": "1.42.0",
+        "bot": "2.18.5"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-13",
+      "last_seen": "2026-11-13",
+      "commit": "8e0dd5ad",
+      "subject": "merge: v225 -- Dark blue theme beside Black, picked per browser",
+      "versions": {
+        "ui": "1.42.0",
+        "bot": "2.18.6"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-13",
+      "last_seen": "2026-11-13",
+      "commit": "7bde905c",
+      "subject": "release(ui,bot): ui 1.43.0, bot 2.18.7 -- voice notifications for simple-channel posts (v227)",
+      "versions": {
+        "ui": "1.43.0",
+        "bot": "2.18.7"
       },
       "changed": [
         "ui",

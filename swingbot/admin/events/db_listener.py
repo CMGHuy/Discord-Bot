@@ -19,6 +19,7 @@ import time
 from typing import Callable
 
 from swingbot.core.db import notify
+from swingbot.core.infra.swallowed import swallowed
 
 log = logging.getLogger(__name__)   # v111: no literal logger names
 
@@ -60,11 +61,18 @@ class DbEventListener:
         self._backoff = backoff
         self._delay = backoff[0]
         self._connected_before = False
+        self._connected = False
 
         self._pending: dict[str, float] = {}
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+
+    @property
+    def connected(self) -> bool:
+        """True while LISTEN is active: from ``_on_listening`` to the next lost
+        connection or ``stop()``. Read by v218's snapshot listener."""
+        return self._connected
 
     # -- the two halves of a tick ----------------------------------------
 
@@ -115,18 +123,34 @@ class DbEventListener:
                 self._listen(self._channels, self._on_event, self._stop,
                              poll=self._debounce, dsn=self._dsn,
                              on_listening=self._on_listening)
+                self._mark_down()
                 return                      # stop() was called
             except Exception:
+                self._mark_down()
                 log.warning("event listener lost its database connection; "
                             "reconnecting in %.1fs", self._delay, exc_info=True)
             if self._stop.wait(self._delay):
                 return
             self._delay = min(self._delay * 2, self._backoff[1])
 
+    def _mark_down(self) -> None:
+        self._connected = False
+        try:
+            self._on_disconnected()
+        except Exception as exc:
+            swallowed(log, "ops.db_listener.disconnect_hook", exc,
+                      "event listener disconnect hook failed",
+                      level=logging.ERROR, exc_info=True)
+
+    def _on_disconnected(self) -> None:
+        """Hook: the LISTEN connection is gone (lost, never made, or stopped).
+        A no-op here; v218's SnapshotListener bypasses the snapshot on it."""
+
     def _on_listening(self) -> None:
         """LISTEN is active. After a reconnect, whatever was NOTIFYed while the
         connection was down is gone for good -- so tell every client to
         refetch (spec: recovery is a resync, never a replay)."""
+        self._connected = True
         self._delay = self._backoff[0]
         if self._connected_before:
             try:

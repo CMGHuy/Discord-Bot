@@ -63,15 +63,32 @@ def _metric(params: list[str]) -> dict:
     return entry
 
 
+_DUR_METRICS = ("total", "db", "app")
+_SNAP_STATES = ("hit", "miss", "off")
+
+
+def _snap_desc(params: list[str]) -> str | None:
+    """The ``desc`` of a v218 ``snap`` entry when it is one of the three states."""
+    for param in params:
+        key, _, value = param.partition("=")
+        if key == "desc" and value.strip('"') in _SNAP_STATES:
+            return value.strip('"')
+    return None
+
+
 def parse_server_timing(header: str | None) -> dict[str, dict]:
-    """``{"total": {"dur"}, "db": {"dur", "statements"}}``; whatever is unreadable is left out."""
+    """``total``/``db``/``app`` durations (``db`` with its statements) and v218's
+    ``snap`` state; foreign entries (Cloudflare's ``cfExtPri``) and anything
+    unreadable are left out, so an older server simply lacks the new keys."""
     parsed: dict[str, dict] = {}
     for part in (header or "").split(","):
         bits = [bit.strip() for bit in part.split(";")]
-        if bits[0] in ("total", "db"):
+        if bits[0] in _DUR_METRICS:
             entry = _metric(bits[1:])
             if "dur" in entry:
                 parsed[bits[0]] = entry
+        elif bits[0] == "snap" and (state := _snap_desc(bits[1:])) is not None:
+            parsed["snap"] = {"desc": state}
     return parsed
 
 
@@ -83,11 +100,14 @@ def time_endpoints(client, headers: dict, paths: dict[str, str], *, runs: int = 
             started = time.perf_counter()
             response = client.get(path, headers=headers)
             elapsed_ms = (time.perf_counter() - started) * 1000
-            db = parse_server_timing(response.headers.get("Server-Timing")).get("db", {})
+            timing = parse_server_timing(response.headers.get("Server-Timing"))
+            db = timing.get("db", {})
             rows.append({"name": name, "path": path, "run": run,
                          "status": response.status_code, "ms": round(elapsed_ms, 1),
                          "bytes": len(response.get_data()),
-                         "db_ms": db.get("dur"), "statements": db.get("statements")})
+                         "db_ms": db.get("dur"), "statements": db.get("statements"),
+                         "app_ms": timing.get("app", {}).get("dur"),
+                         "snap": timing.get("snap", {}).get("desc")})
     return rows
 
 

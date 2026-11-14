@@ -10,10 +10,11 @@ import { AnalyticsPartials } from '../../../api/models';
 import { AnalyticsStore } from '../../../stores/analytics.store';
 import { PreferencesStore } from '../../../stores/preferences.store';
 import {
-  PartialsTab, funnelRows, givebackBins, kpiTiles, ladderRows, monthTrend, outcomeSegments,
+  PartialsTab, funnelRows, givebackBins, kpiTiles, ladderRows, monthTrend,
   rText, runnerWaterfall, splitRows, touchRows,
 } from './partials';
-import { PARTIALS_FIXTURE } from './partials.fixture';
+import { PARTIALS_FIXTURE, RUNNER_ENDINGS_EMPTY } from './partials.fixture';
+import { RunnerEndings } from './runner-endings';
 import { Hint } from '../../../ui/hint';
 import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
 
@@ -76,12 +77,6 @@ describe('partials helpers', () => {
       ['Filled', 100, 8], ['Hit TP1', 75, 6], ['Runner closed', 62.5, 5], ['Hit TP2', 12.5, 1]]);
   });
 
-  it('labels each outcome with its average runner R', () => {
-    const segments = outcomeSegments(PARTIALS_FIXTURE);
-    expect(segments[0]).toEqual({ label: 'TP2 +4.00R', count: 1, tone: 'pos' });
-    expect(segments.find((s) => s.label.startsWith('Open'))?.label).toBe('Open —');
-  });
-
   it('builds the waterfall from all-out to actual ExpR', () => {
     const [allOut, runner] = runnerWaterfall(PARTIALS_FIXTURE);
     expect(allOut).toEqual({ label: 'All-out at TP1', value: 2 });
@@ -121,16 +116,18 @@ describe('PartialsTab', () => {
     expect(el.querySelector('sb-line-chart')).toBeNull();            // ladder is a bar list
     expect(el.querySelectorAll('sb-stat-tile')).toHaveLength(5);
     expect(el.querySelector('.tile.hero')?.textContent).toContain('Runner beat all-out');
-    for (const selector of ['sb-share-bar', 'sb-waterfall', 'sb-histogram', 'sb-strip-plot', 'sb-segmented']) {
+    for (const selector of ['sb-runner-endings', 'sb-waterfall', 'sb-histogram', 'sb-strip-plot', 'sb-segmented']) {
       expect(el.querySelector(selector)).not.toBeNull();
     }
+    expect(el.querySelector('sb-share-bar')).toBeNull();
+    expect(el.textContent).not.toContain('Runner outcome mix');
     expect(el.querySelector('.footer')?.textContent).toContain('1 closed runners without a price path');
     expect(el.querySelector('.footer')?.textContent).toContain('not a gate');
   });
 
   it('dims thin breakdown rows and switches dimension in place', () => {
     const { fixture, el } = render(PARTIALS_FIXTURE);
-    expect(el.querySelectorAll('tr.thin')).toHaveLength(2);           // MACD and RSI, both N < 10
+    expect(el.querySelectorAll('.breakdown tr.thin')).toHaveLength(2);           // MACD and RSI, both N < 10
     (fixture.componentInstance as PartialsTab).dimension.set('month');
     fixture.detectChanges();
     const rows = [...el.querySelectorAll('.breakdown tbody tr')];
@@ -193,5 +190,45 @@ describe('rText', () => {
     expect(rText(0)).toBe('+0.00R');
     expect(rText(0.32)).toBe('+0.32R');
     expect(rText(null)).toBe('—');
+  });
+});
+
+describe('PartialsTab Runner endings (v219)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('hosts the section in a wide panel with the payload block and the tab threshold', () => {
+    const { fixture, el } = render(PARTIALS_FIXTURE);
+    const host = fixture.debugElement.query(By.directive(RunnerEndings)).componentInstance as RunnerEndings;
+    expect(host.block()).toBe(PARTIALS_FIXTURE.runner_endings);
+    expect(host.thinN()).toBe(10);
+    expect(el.querySelector('sb-runner-endings')?.closest('sb-panel')?.classList.contains('wide')).toBe(true);
+    expect(hintText(fixture, 'Runner endings definition')).toContain('R, before commissions and tax.');
+  });
+
+  it('keeps every half panel paired: Runner endings after the first pair, Giveback wide', () => {
+    const { el } = render(PARTIALS_FIXTURE);
+    const panels = [...el.querySelectorAll('.panels > sb-panel')];
+    const title = (p: Element) => p.querySelector('sb-panel-header')?.getAttribute('title')
+      ?? p.querySelector('sb-panel-header h2, sb-panel-header h3')?.textContent?.trim();
+    const wide = panels.map((p) => p.classList.contains('wide'));
+    expect(wide).toEqual([false, false, true, false, false, true, true, true]);
+    expect(panels[2].querySelector('sb-runner-endings')).not.toBeNull();
+    expect(panels[5].querySelector('sb-histogram')).not.toBeNull();
+    expect(title(panels[1])).toContain('Does the runner pay?');
+  });
+
+  it('says how many closed runners the Giveback strip left out', () => {
+    const { fixture } = render(PARTIALS_FIXTURE);
+    const texts = fixture.debugElement.queryAll(By.directive(Hint))
+      .map((d) => d.componentInstance as Hint).filter((h) => h.label() === 'Giveback definition').map((h) => h.text());
+    expect(texts.some((t) => t.includes('2 closed runners left out'))).toBe(true);
+  });
+
+  it('renders all-open runners as measured zeros, not an error or the empty state', () => {
+    const { el } = render({ ...PARTIALS_FIXTURE, runner_endings: RUNNER_ENDINGS_EMPTY });
+    expect(el.querySelector('sb-panel-error')).toBeNull();
+    expect(el.querySelector('sb-empty-state')).toBeNull();
+    expect([...el.querySelectorAll('sb-runner-endings .card-share')].map((c) => c.textContent?.trim()))
+      .toEqual(['—', '—', '—', '—']);
   });
 });

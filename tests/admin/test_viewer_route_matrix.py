@@ -91,6 +91,8 @@ def _offline(monkeypatch):
     monkeypatch.setattr("swingbot.admin.watchlist_rows.is_us_market_active", lambda: False)
     monkeypatch.setattr("swingbot.core.marketdata.backtest_cache.ensure_cached_background",
                         lambda t: None)
+    # v227: /feed-posts reads the side engine, which the suite does not run.
+    monkeypatch.setattr("swingbot.admin.api_v1.feed_posts._latest", lambda: 0)
 
 
 @pytest.fixture

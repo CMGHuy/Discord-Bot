@@ -118,3 +118,35 @@ def test_snapshot_id_is_parsed_before_the_exit_status_is_acted_on(src):
     tail = src[act:act + 900]
     assert "3)" in tail and "WARNING" in tail      # exit 3: files vanished, snapshot exists
     assert "exit 1" in tail                        # anything else fails; cleanup forgets SNAP_ID
+
+# ---- v221: rollback fields fed to the manifest -------------------------------
+V221_INPUTS = (
+    "SELECT version_num FROM alembic_version",
+    'runuser -u deploy -- git show "$GIT_SHA:VERSION.json"',
+    'runuser -u deploy -- git show "$GIT_SHA:swingbot/config.py"',
+    'backup_manifest.py prev-sha backups/stable --exclude "$NAME"',
+    "runuser -u deploy -- git log --format='%H%x09%s' \"$PREV_SHA..$GIT_SHA\"",
+)
+
+
+def test_v221_inputs_are_gathered_before_the_build(src):
+    build = src.index("backup_manifest.py build")
+    for needle in V221_INPUTS:
+        assert src.index(needle) < build, needle
+    line = src[build:src.index(BS_N, build)]
+    for flag in ('--alembic-head "$ALEMBIC_HEAD"', '--version-json "$WORK/VERSION.json"',
+                 '--config-source "$WORK/config.py"', '--features-log "$WORK/features.tsv"'):
+        assert flag in line, flag
+
+
+def test_v221_inputs_come_before_the_restic_snapshot(src):
+    restic = src.index("flock logs/restic.lock restic backup")
+    for needle in V221_INPUTS:
+        assert src.index(needle) < restic, needle
+
+
+def test_v221_a_failed_feature_log_warns_instead_of_aborting(src):
+    assert ': > "$WORK/features.tsv"' in src
+    log = src.index("git log --format=")
+    assert "WARNING" in src[log:log + 300]
+    assert "alembic_version ORDER BY 1' </dev/null" in src

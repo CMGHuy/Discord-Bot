@@ -28,6 +28,8 @@ def test_the_deploy_waits_for_and_passes_the_db_image():
     step = deploy["steps"][0]
     assert "SWING_BOT_DB_IMAGE" in step["with"]["envs"]
     assert step["env"]["SWING_BOT_DB_IMAGE"] == "${{ needs.db-image.outputs.image }}"
+    assert "hold" in deploy["needs"]
+    assert step["name"] == "Deploy over SSH"   # the hold is a job of its own, not a step here
 
 
 def test_ghcr_retention_covers_the_rollback_window_for_both_images():
