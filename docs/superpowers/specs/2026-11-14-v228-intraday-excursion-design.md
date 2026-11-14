@@ -46,6 +46,21 @@ at or before `opened_at` and its last bar starts at or after `closed_at` minus
 one bar length. A frame that fails either side is skipped. `daily` covers when
 the existing date-level slice is non-empty (today's rule, unchanged).
 
+**Density rule.** First and last bars are not enough: a frame with a hole in
+the middle of the hold would under-measure silently. Inside the slice window,
+two consecutive bars on the same calendar date may be at most four bar lengths
+apart; a frame that breaks this is skipped like an uncovered one
+(`known-traps.md`: a stale or truncated `market_data` file is never used
+silently).
+
+**Time basis.** Journal `opened_at` and `closed_at` are naive UTC. The archive
+CSVs carry UTC offsets and `data_store.load_normalized` strips the zone with
+`tz_localize(None)`, so the index it returns is naive UTC, and each bar is
+stamped with its **start**. The plan's first task pins both facts with a test
+on real archive files for every provider that writes them (Yahoo and Alpaca);
+if either fails for a provider, the function converts that frame to naive UTC
+bar starts before comparing, and nothing is compared across bases.
+
 **Slice rule, intraday frames.** Bars whose start is at or after `opened_at`
 and at or before `closed_at`. The bar that contains the entry is dropped,
 because its high and low include price before the fill. The bar that contains
@@ -55,7 +70,8 @@ bar.
 **Anchors.** The entry price and the exit price are always points on the path:
 `mfe_r >= max(0, r at exit)` and `mae_r >= max(0, -r at exit)`. A trade that
 opens and closes inside one bar therefore gets a real answer from its own two
-prices, and an empty slice is not a failure.
+prices, and an empty slice is not a failure. Such an answer is a lower bound:
+`excursion_source` names the bars consulted, not the precision achieved.
 
 **Daily frame.** Exactly today's arithmetic, so a trade measured on daily bars
 keeps today's numbers and is labelled `daily`.
@@ -91,9 +107,14 @@ one, rewrite `mfe_r`, `mae_r`, `exit_efficiency`, `excursion_source`, `tags` and
 `auto_lesson` on that entry. `note` and every other field are left alone. An
 entry is never downgraded, and an unchanged entry is not written.
 
-It runs in the `refresher` container after the intraday archive refresh, over
-the last 7 days. The report (entries read, upgraded per source, skipped for no
-coverage) goes to the log as one line.
+It runs in the **bot** container at the end of the `market_data_refresh` loop
+(`swingbot/commands/scanning/loops.py`, after `refresh_all`), over the last 7
+days: that loop is what refreshes the archives, so the bars are on disk when
+the pass reads them. The `refresher` container never calls `data_refresh` and
+is not involved. A failure in the pass is logged and never fails the refresh.
+The report (entries read, upgraded per source, skipped for no file, skipped for
+no coverage, skipped for density) goes to the log as one line; a missing file
+and an uncovered trade are counted separately.
 
 ### 4. Existing rows
 
@@ -103,8 +124,12 @@ After it, no reader has to treat a missing source as anything.
 
 One operator script, `scripts/ops/backfill_excursions.py`, then calls
 `upgrade_excursions` over the full retained window (5-minute and 15-minute
-archives hold 60 days; hourly holds about two years). It checkpoints per ticker
-and a restart skips finished tickers. It runs on the VM through `/deploy`'s
+archives hold 60 days; hourly holds about two years, so older trades can reach
+`hourly` at best). It checkpoints per ticker and a restart skips finished
+tickers; a ticker interrupted halfway is simply redone, which is safe because
+each entry's upgrade is idempotent and never downgrades. The plan verifies that
+production's `MARKET_DATA_TIMEFRAMES` lists `15min` and `5min` before the
+backfill is scheduled. It runs on the VM through `/deploy`'s
 post-deploy step and is listed in the plan's production task with `mirror-prod`.
 
 ### 5. Readers
@@ -133,7 +158,8 @@ post-deploy step and is listed in the plan's production task with `mirror-prod`.
 
 ## Edge cases
 
-- **Extended-hours fills.** The 5-minute archive may hold regular hours only. A
+- **Extended-hours fills.** The archives are fetched without `prepost`, so they
+  hold regular hours only, while the plan manager can exit in extended hours. A
   trade opened or closed outside them still passes coverage by the
   one-bar-length tolerance only if a bar is adjacent; otherwise the next coarser
   frame is used. The anchors keep the answer bounded either way.
@@ -165,3 +191,14 @@ post-deploy step and is listed in the plan's production task with `mirror-prod`.
 - The scout's exit-harvester role reads the next autopsy on corrected figures.
 - The breakeven-trigger idea is closed on today's evidence (results doc,
   finding 2) and is not reopened by this spec.
+
+## Panel review
+
+- quant-engineer: the nightly pass was placed in the `refresher` container, which never refreshes the archives -- applied (moved to the end of the bot's `market_data_refresh` loop).
+- quant-engineer: bar-index time zone and start-versus-end stamping undefined against naive-UTC journal times -- applied (Time basis rule, pinned by a test on real files per provider).
+- quant-engineer: first/last-bar coverage passes a frame with an interior hole -- applied (Density rule).
+- quant-engineer: an anchors-only answer is a lower bound, source is not precision -- applied.
+- quant-engineer: archives are regular-hours only while exits can be extended-hours -- applied (edge case reworded).
+- quant-engineer: `MARKET_DATA_TIMEFRAMES` on production and 60-day retention limit the backfill -- applied.
+- quant-engineer: a missing file must not be counted as no coverage -- applied (separate report counts).
+- quant-engineer: per-ticker checkpoint versus per-entry upgrade needs its idempotence argument -- applied.
