@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 import pandas as pd
 
 from swingbot import config
-from swingbot.core.market.session import nyse_calendar
+from swingbot.core.market.session import US_MARKET_TZ, is_nyse_regular_session, nyse_calendar
 from swingbot.core.marketdata import data, yf_safe
 from swingbot.core.marketdata.providers import router
 
@@ -125,26 +125,28 @@ def history_with_fallback(
     return history_rows(symbol, frame, source_symbol=proxy, **window) if frame is not None else []
 
 
-def latest_benchmark_prices(symbols: Sequence[str]) -> dict[str, float]:
-    """Fetch fresh positive quotes for the Today card."""
-    prices = data.get_current_price_batch(
-        list(symbols), allow_stale=False, asker=router.current_asker(),
+def latest_benchmark_prices(symbols: Sequence[str]) -> dict:
+    """Fetch fresh positive quotes without discarding their source timestamps."""
+    quotes = data.get_quote_batch(
+        list(symbols), fresh_only=True, asker=router.current_asker(),
     ) or {}
-    return {
-        symbol: float(price)
-        for symbol, price in prices.items()
-        if _valid_price(price)
-    }
+    return {symbol: quote for symbol, quote in quotes.items()
+            if _valid_price(quote.price) and quote.trade_at is not None}
 
 
 def intraday_row(
     symbol: str, prev: dict | None, price: float | None, session: date, now: datetime,
+    *, observed_at: datetime | None,
 ) -> dict | None:
     """Use the previous raw close even on ex-dividend mornings.
 
     The post-close final bar replaces this provisional price return.
     """
-    if not _valid_price(price):
+    if not _valid_price(price) or observed_at is None or observed_at.utcoffset() is None:
+        return None
+    if observed_at > now or observed_at.astimezone(US_MARKET_TZ).date() != session:
+        return None
+    if not is_nyse_regular_session(observed_at):
         return None
     if not prev or not prev["final"] or prev["source_symbol"] != symbol:
         return None
@@ -155,5 +157,5 @@ def intraday_row(
         return None
     return _bar(
         symbol, session, close=float(price), adj_close=None, day_pct=float(price) / float(prev_close) - 1,
-        source_symbol=symbol, final=False, now=now,
+        source_symbol=symbol, final=False, now=observed_at,
     )

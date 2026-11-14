@@ -1,6 +1,8 @@
 """v208 V208-6: the benchmarks refresher step -- once-a-day full refresh, 5-minute intraday, never fails."""
 from datetime import date, datetime, timedelta, timezone
 
+from swingbot.core.marketdata.shared.kinds import QuoteDetail
+
 import pytest
 
 from swingbot.core.infra import swallowed as sw
@@ -64,7 +66,7 @@ def env(monkeypatch):
 
     def prices(symbols):
         state["prices"].append(tuple(symbols))
-        return {s: 101.0 for s in symbols}
+        return {s: QuoteDetail(s, 101.0, IN_SESSION - timedelta(minutes=2), None, None, None, "test") for s in symbols}
 
     monkeypatch.setattr(step, "benchmark_bars_repo", lambda: state["bars"])
     monkeypatch.setattr(step, "benchmark_refresh_repo", lambda: state["refresh"])
@@ -144,7 +146,7 @@ def test_in_session_today_is_upserted_not_final_at_most_every_five_minutes(env):
     env["bars"].rows = {(s, date(2026, 11, 3)): _bar(s, date(2026, 11, 3)) for s in SYMBOLS}
     step.benchmarks_step(_ctx(IN_SESSION, "regular"))
     today = {s: env["bars"].rows[(s, date(2026, 11, 4))] for s in SYMBOLS}
-    assert all(r["final"] is False and r["as_of"] == IN_SESSION for r in today.values())
+    assert all(r["final"] is False and r["as_of"] == IN_SESSION - timedelta(minutes=2) for r in today.values())
     assert today["SPY"]["day_pct"] == pytest.approx(0.01)
     assert env["history"] == []          # yesterday already refreshed
     step.benchmarks_step(_ctx(IN_SESSION + timedelta(seconds=60), "regular"))
@@ -219,3 +221,23 @@ class FakeEquity:
 def test_live_since_is_the_earliest_sample_of_any_source_as_an_ny_date(monkeypatch, live, backfill, expected):
     monkeypatch.setattr(step, "equity_samples_repo", lambda: FakeEquity(live, backfill))
     assert step.live_since() == expected
+
+
+def test_intraday_does_not_replace_a_newer_stored_mark(env):
+    env["refresh"].done = {s: date(2026, 11, 3) for s in SYMBOLS}
+    env["bars"].rows = {(s, date(2026, 11, 3)): _bar(s, date(2026, 11, 3)) for s in SYMBOLS}
+    current = {**_bar("SPY", date(2026, 11, 4), final=False), "as_of": IN_SESSION, "close": 105.0}
+    env["bars"].rows[("SPY", date(2026, 11, 4))] = current
+    step.benchmarks_step(_ctx(IN_SESSION, "regular"))
+    assert env["bars"].rows[("SPY", date(2026, 11, 4))] == current
+
+
+def test_intraday_accepts_quote_observed_during_the_fetch(env, monkeypatch):
+    env["refresh"].done = {s: date(2026, 11, 3) for s in SYMBOLS}
+    env["bars"].rows = {(s, date(2026, 11, 3)): _bar(s, date(2026, 11, 3)) for s in SYMBOLS}
+    observed = IN_SESSION + timedelta(seconds=10)
+    quote = QuoteDetail("SPY", 101.0, observed, None, None, None, "test")
+    monkeypatch.setattr(step.mb, "latest_benchmark_prices", lambda symbols: {"SPY": quote})
+    monkeypatch.setattr(step, "_now", lambda: IN_SESSION + timedelta(seconds=20), raising=False)
+    step.benchmarks_step(_ctx(IN_SESSION, "regular"))
+    assert env["bars"].rows[("SPY", date(2026, 11, 4))]["as_of"] == observed

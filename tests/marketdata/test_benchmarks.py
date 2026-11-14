@@ -137,7 +137,7 @@ PREV = {"symbol": "SPY", "session": NOV3, "close": 102.0, "adj_close": 100.5, "d
 
 
 def test_intraday_row_is_not_final_and_uses_the_raw_previous_close():
-    row = benchmarks.intraday_row("SPY", PREV, 103.02, NOV4, NOW)
+    row = benchmarks.intraday_row("SPY", PREV, 103.02, NOV4, NOW, observed_at=datetime(2026, 11, 4, 15, 0, tzinfo=timezone.utc))
     assert row["day_pct"] == pytest.approx(0.01)
     assert (row["final"], row["close"], row["adj_close"], row["source_symbol"]) == (False, 103.02, None, "SPY")
     assert row["session"] == NOV4
@@ -152,21 +152,32 @@ def test_intraday_row_is_not_final_and_uses_the_raw_previous_close():
     ({**PREV, "session": NOV2}, 103.0),
 ])
 def test_intraday_row_is_skipped_rather_than_computed_from_nothing(prev, price):
-    assert benchmarks.intraday_row("SPY", prev, price, NOV4, NOW) is None
+    assert benchmarks.intraday_row("SPY", prev, price, NOV4, NOW, observed_at=datetime(2026, 11, 4, 15, 0, tzinfo=timezone.utc)) is None
 
 
-def test_latest_prices_never_take_a_stale_price(monkeypatch):
+
+
+def test_latest_prices_preserve_provider_trade_timestamps(monkeypatch):
+    from swingbot.core.marketdata.shared.kinds import QuoteDetail
+
+    observed = datetime(2026, 11, 4, 15, 0, tzinfo=timezone.utc)
+    quote = QuoteDetail("SPY", 680.5, observed, None, None, observed, "test")
+    missing_time = QuoteDetail("QQQ", 600, None, None, None, None, "test")
     seen = {}
 
-    def batch(tickers, *, allow_stale=True, asker=Asker.SCAN):
-        seen.update(tickers=tickers, allow_stale=allow_stale, asker=asker)
-        return {"SPY": 680.5, "^DJI": 0.0, "QQQ": None}
+    def batch(tickers, *, fresh_only=False, asker=None):
+        seen.update(tickers=tickers, fresh_only=fresh_only, asker=asker)
+        return {"SPY": quote, "QQQ": missing_time}
 
-    monkeypatch.setattr(benchmarks.data, "get_current_price_batch", batch)
+    monkeypatch.setattr(benchmarks.data, "get_quote_batch", batch)
     with router.asker_scope(Asker.ADMIN_REFRESH):
-        assert benchmarks.latest_benchmark_prices(["SPY", "QQQ", "^DJI"]) == {"SPY": 680.5}
-    assert seen == {
-        "tickers": ["SPY", "QQQ", "^DJI"],
-        "allow_stale": False,
-        "asker": Asker.ADMIN_REFRESH,
-    }
+        assert benchmarks.latest_benchmark_prices(["SPY", "QQQ"]) == {"SPY": quote}
+    assert seen == {"tickers": ["SPY", "QQQ"], "fresh_only": True, "asker": Asker.ADMIN_REFRESH}
+
+
+def test_intraday_row_rejects_future_or_out_of_session_quote_timestamps():
+    session_now = datetime(2026, 11, 4, 16, 0, tzinfo=timezone.utc)
+    future = datetime(2026, 11, 4, 16, 1, tzinfo=timezone.utc)
+    premarket = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
+    assert benchmarks.intraday_row("SPY", PREV, 103.02, NOV4, session_now, observed_at=future) is None
+    assert benchmarks.intraday_row("SPY", PREV, 103.02, NOV4, session_now, observed_at=premarket) is None

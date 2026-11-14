@@ -11,7 +11,7 @@ The two process-memory throttles only space out retries.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from swingbot.core.db.repositories.benchmark_bars import benchmark_bars_repo, benchmark_refresh_repo
@@ -100,6 +100,20 @@ def _refresh_symbol(symbol: str, since: date, sessions: list[date], last: date,
         benchmark_refresh_repo().mark_full_refresh(symbol, last)
 
 
+def _new_intraday_rows(previous: dict, current: dict, prices: dict, today: date, now: datetime) -> list[dict]:
+    rows = []
+    for symbol, quote in prices.items():
+        row = mb.intraday_row(symbol, previous.get(symbol), quote.price, today, now, observed_at=quote.trade_at)
+        old = current.get(symbol)
+        if row is not None and (old is None or (not old["final"] and old["as_of"] < row["as_of"])):
+            rows.append(row)
+    return rows
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _intraday(now: datetime) -> None:
     global _last_intraday
     if _last_intraday is not None and (now - _last_intraday).total_seconds() < INTRADAY_EVERY_S:
@@ -111,13 +125,11 @@ def _intraday(now: datetime) -> None:
     last = last_completed_session(now)
     symbols = mb.BENCHMARK_SYMBOLS
     repo = benchmark_bars_repo()
-    previous = {row["symbol"]: row for row in repo.list_range(symbols, last, last)}
+    stored = repo.list_range(symbols, last, today)
+    previous = {row["symbol"]: row for row in stored if row["session"] == last}
+    current = {row["symbol"]: row for row in stored if row["session"] == today}
     prices = mb.latest_benchmark_prices(symbols)
-    rows = []
-    for symbol in symbols:
-        row = mb.intraday_row(symbol, previous.get(symbol), prices.get(symbol), today, now)
-        if row is not None:
-            rows.append(row)
+    rows = _new_intraday_rows(previous, current, prices, today, max(now, _now()))
     if rows:
         repo.upsert_bars(rows)
 
