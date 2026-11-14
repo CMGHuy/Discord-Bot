@@ -185,14 +185,14 @@ def test_one_failed_history_fetch_leaves_other_symbols_and_intraday_running(env,
         return fetch_history(symbol, *args, **kwargs)
 
     monkeypatch.setattr(step.mb, "history_with_fallback", history)
-    before = sw.snapshot().get("ops.refresher.benchmarks", {}).get("count", 0)
+    before = sw.snapshot().get("ops.refresher.benchmarks.symbol", {}).get("count", 0)
     ctx = _ctx(IN_SESSION, "regular")
     step.benchmarks_step(ctx)
 
     previous = date(2026, 11, 3)
     today = date(2026, 11, 4)
     assert ctx.report.error is None
-    assert sw.snapshot()["ops.refresher.benchmarks"]["count"] == before + 1
+    assert sw.snapshot()["ops.refresher.benchmarks.symbol"]["count"] == before + 1
     assert attempts == list(SYMBOLS)
     assert env["refresh"].done == {s: previous for s in SYMBOLS if s != "SPY"}
     assert env["bars"].rows[("QQQ", today)]["final"] is False

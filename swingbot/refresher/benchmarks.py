@@ -75,9 +75,9 @@ def _full_refresh(now: datetime, since: date) -> None:
         if not _full_due(symbol, last, now):
             continue
         try:
-            _refresh_symbol(symbol, since, sessions, last, now)
+            _refresh_benchmark(symbol, since, sessions, last, now)
         except Exception as exc:  # noqa: BLE001 - keep refreshing the other benchmarks
-            swallowed(log, "ops.refresher.benchmarks", exc,
+            swallowed(log, "ops.refresher.benchmarks.symbol", exc,
                       "benchmarks step failed for %s: %s", symbol, exc, level=logging.WARNING)
 
 
@@ -89,7 +89,7 @@ def _full_due(symbol: str, last: date, now: datetime) -> bool:
     return tried is None or (now - tried).total_seconds() >= FULL_RETRY_S
 
 
-def _refresh_symbol(symbol: str, since: date, sessions: list[date], last: date,
+def _refresh_benchmark(symbol: str, since: date, sessions: list[date], last: date,
                     now: datetime) -> None:
     _last_try[symbol] = now
     rows = mb.history_with_fallback(symbol, since - _FETCH_LEAD, sessions=sessions,
