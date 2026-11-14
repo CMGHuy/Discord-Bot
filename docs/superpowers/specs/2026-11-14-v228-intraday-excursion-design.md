@@ -104,13 +104,31 @@ than `5min` (or absent), load the frames through
 `swingbot/core/marketdata/data_store.load_normalized`, call
 `compute_excursion`, and when the result's source is **finer** than the stored
 one, rewrite `mfe_r`, `mae_r`, `exit_efficiency`, `excursion_source`, `tags` and
-`auto_lesson` on that entry. `note` and every other field are left alone. An
-entry is never downgraded, and an unchanged entry is not written.
+`auto_lesson` on that entry. An entry is never downgraded, and an unchanged
+entry is not written.
 
-It runs in the **bot** container at the end of the `market_data_refresh` loop
+**Write path.** The pass writes through `JournalRepository.patch` (the atomic
+JSONB merge `set_note` already uses), never `JournalStore.add` or
+`build_entry`: `add` upserts the whole record and `build_entry` writes
+`"note": ""`, which would wipe the partner's notes. The patch carries only the
+six fields above and is **conditional on the stored source rank**: the `UPDATE`
+matches only while the row's `excursion_source` is still coarser than the new
+one. The bot's pass and the backfill script can reach the same entry at the
+same time; with the condition in the statement, the finer write wins whichever
+lands first and a coarser one becomes a no-op. A read-then-write check is not
+enough and is not used.
+
+It runs in the **bot** container from the `market_data_refresh` loop
 (`swingbot/commands/scanning/loops.py`, after `refresh_all`), over the last 7
 days: that loop is what refreshes the archives, so the bars are on disk when
-the pass reads them. The `refresher` container never calls `data_refresh` and
+the pass reads them. The loop wakes every `MARKET_DATA_REFRESH_MINUTES` and its
+docstring records the 2026-08-24 gateway-starvation incident, so the pass is
+fenced three ways: it runs **at most once per UTC date** (a module-level stamp;
+a restart may run it again, which is harmless), it runs through
+`asyncio.to_thread` so the event loop is never blocked, and it stops at a
+60-second budget, leaving the rest for the next day. Entries that cannot reach
+a finer source (no file, extended-hours fills) are therefore re-read once a day
+for seven days, not on every tick. The `refresher` container never calls `data_refresh` and
 is not involved. A failure in the pass is logged and never fails the refresh.
 The report (entries read, upgraded per source, skipped for no file, skipped for
 no coverage, skipped for density) goes to the log as one line; a missing file
@@ -119,8 +137,13 @@ and an uncovered trade are counted separately.
 ### 4. Existing rows
 
 One Alembic data revision stamps `excursion_source = "daily"` on every journal
-entry that has `mfe_r` and no source, with `drop_doc_field` as its downgrade.
-After it, no reader has to treat a missing source as anything.
+entry that has `mfe_r` and no source. After it, no reader has to treat a
+missing source as anything. Its downgrade is a **no-op**: stripping the field
+would also strip `5min` and `hourly` sources written later, and a re-upgrade
+would then label intraday numbers `daily`; older code keeps unknown doc fields
+(`test_unknown_field_round_trip.py`), so leaving it is safe. The revision
+declares `ROLLBACK_SAFE` (v220) saying so, and notes the one loss: older code
+re-journaling a trade upserts the entry without the field.
 
 One operator script, `scripts/ops/backfill_excursions.py`, then calls
 `upgrade_excursions` over the full retained window (5-minute and 15-minute
@@ -129,8 +152,12 @@ archives hold 60 days; hourly holds about two years, so older trades can reach
 tickers; a ticker interrupted halfway is simply redone, which is safe because
 each entry's upgrade is idempotent and never downgrades. The plan verifies that
 production's `MARKET_DATA_TIMEFRAMES` lists `15min` and `5min` before the
-backfill is scheduled. It runs on the VM through `/deploy`'s
-post-deploy step and is listed in the plan's production task with `mirror-prod`.
+backfill is scheduled. `/deploy` has no post-deploy step, so the
+plan's production task spells the run out under `mirror-prod`: the PITR-drill
+check required before a data revision on production (`schema-evolution.md`),
+the deploy, the `MARKET_DATA_TIMEFRAMES` check, the script run detached on the
+VM with its checkpoint on a mounted volume, the report line read back, and the
+mirror recorded in the repo.
 
 ### 5. Readers
 
@@ -143,10 +170,14 @@ post-deploy step and is listed in the plan's production task with `mirror-prod`.
   is `daily` and the trade was held under two days. Phone, tablet and desktop
   are checked together per `docs/claude/ui-design.md`; the marker is text plus a
   tooltip, wraps under the figure at 390 px and adds no column.
-- **`scripts/ops/export_book_rows.sh`** appends `excursion_source` as column 39;
-  `tests/scout/test_export_script.py` is updated to pin it.
+- **`scripts/ops/export_book_rows.sh`** appends `excursion_source` as column 39
+  in **both** branches of the `UNION` (`NULL::text` in the plan branch), which
+  keeps the positional `ORDER BY`; `tests/scout/test_export_script.py` is
+  updated to pin it.
 - **`scripts/reports/book_autopsy.py`** builds MFE- and MAE-derived cells only
-  from rows with an intraday source, and prints how many rows that dropped.
+  from rows with an intraday source, and prints how many rows that dropped. A
+  CSV without the column (exported before this change) stops the run with a
+  message naming the fix, rather than dropping every MFE row quietly.
 
 ## What does not change
 
@@ -202,3 +233,10 @@ post-deploy step and is listed in the plan's production task with `mirror-prod`.
 - quant-engineer: `MARKET_DATA_TIMEFRAMES` on production and 60-day retention limit the backfill -- applied.
 - quant-engineer: a missing file must not be counted as no coverage -- applied (separate report counts).
 - quant-engineer: per-ticker checkpoint versus per-entry upgrade needs its idempotence argument -- applied.
+- staff-engineer: never-downgrade was a read then a write, so the bot pass and the backfill could downgrade each other -- applied (conditional patch on source rank).
+- staff-engineer: the refresh loop is not nightly and has a starvation history; no thread, budget or once-a-day fence -- applied (once per UTC date, `asyncio.to_thread`, 60-second budget).
+- staff-engineer: writing through `add`/`build_entry` would wipe notes -- applied (`JournalRepository.patch` only).
+- staff-engineer: `drop_doc_field` downgrade strips later intraday sources -- applied (no-op downgrade).
+- staff-engineer: revision needs `ROLLBACK_SAFE` -- applied.
+- staff-engineer: `/deploy` has no post-deploy step; production run and PITR check unspecified -- applied.
+- staff-engineer: export column must be in both UNION branches; autopsy must fail loudly on an old CSV -- applied.
