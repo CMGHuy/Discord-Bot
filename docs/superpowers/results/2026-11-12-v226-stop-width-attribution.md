@@ -1,8 +1,8 @@
 # v226 Stop-width attribution: result
 
 **Run:** 2026-11-14, TRAIN confluence replay 2020-01-06..2023-12-29 (signal date) under the live stop settings, with the live book (closed production trades, read from the local replica) printed beside it and never gating. Read-only; VALIDATION never read.
-**Spec:** `docs/superpowers/specs/2026-11-12-v226-stop-width-attribution-design.md`
-**Plan:** `docs/superpowers/plans/2026-11-12-v226-stop-width-attribution_0-index.md`
+**Spec:** `docs/superpowers/specs/implemented/2026-11-12-v226-stop-width-attribution-design.md`
+**Plan:** `docs/superpowers/plans/implemented/2026-11-12-v226-stop-width-attribution_0-index.md`
 
 **Verdict: NO CANDIDATE.** Closes "tight stops in ATR terms" as measured; recorded in `docs/claude/backtest-methodology.md` § Closed pre-registrations.
 
