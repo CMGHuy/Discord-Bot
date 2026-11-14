@@ -146,9 +146,9 @@ declares `ROLLBACK_SAFE` (v220) saying so, and notes the one loss: older code
 re-journaling a trade upserts the entry without the field.
 
 One operator script, `scripts/ops/backfill_excursions.py`, then calls
-`upgrade_excursions` over the full retained window (5-minute and 15-minute
-archives hold 60 days; hourly holds about two years, so older trades can reach
-`hourly` at best). It checkpoints per ticker and a restart skips finished
+`upgrade_excursions` over the whole book. The VM's 5-minute and 15-minute
+archives are merge-only and start on 2026-06-23 (checked 2026-11-14), which is
+before the first live trade, so every entry with bars can reach `5min`. It checkpoints per ticker and a restart skips finished
 tickers; a ticker interrupted halfway is simply redone, which is safe because
 each entry's upgrade is idempotent and never downgrades. The plan verifies that
 production's `MARKET_DATA_TIMEFRAMES` lists `15min` and `5min` before the
@@ -260,3 +260,4 @@ mirror recorded in the repo.
 - ux-designer: the execution tab has no per-trade MFE/MAE figure; excluded count unplaced -- applied (caption on the Exit efficiency panel, no marker).
 - ux-designer: the Discord trade-view chart shows the same figures unmarked -- applied (suffix).
 - ux-designer: "daily estimate" wording unclear -- applied (`est. (daily bars)`; explanation says overstated, which is the measured direction, not understated).
+- quant-engineer (v229 review, carried here): the sub-hourly archive is merge-only and unpruned, not 60 days -- applied (backfill covers the whole book).
