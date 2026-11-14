@@ -140,13 +140,13 @@ def test_a_non_usd_account_and_a_non_usd_ticker_reach_the_response(frozen, logge
     assert body["mixed_tickers"] == ["SAP.DE"]
 
 
-def test_mixed_tickers_skip_unknown_codes_and_old_closed_trades(monkeypatch):
+def test_mixed_tickers_include_unknown_codes_but_skip_old_closed_trades(monkeypatch):
     monkeypatch.setattr(benchmark_api.fx, "quote_currency_code",
                         lambda t, **_kw: {"BMW.DE": "EUR", "VOD.L": "GBp"}.get(t))
     trades = [{"ticker": "BMW.DE", "status": "win", "closed_at": "2026-09-01T15:00:00+00:00"},
               {"ticker": "VOD.L", "status": "loss", "closed_at": "2026-10-14T15:00:00+00:00"},
               {"ticker": "XYZ", "status": "open"}]
-    assert benchmark_api._mixed_tickers(trades, date(2026, 10, 12)) == ["VOD.L"]
+    assert benchmark_api._mixed_tickers(trades, date(2026, 10, 12)) == ["VOD.L", "XYZ"]
 
 
 def test_a_viewer_can_read_the_benchmark(frozen, viewer_client):

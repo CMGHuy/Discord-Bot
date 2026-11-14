@@ -1,5 +1,5 @@
 """v208 V208-10b: stats, vs, capture, daily rows, Today card, status, the response."""
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from itertools import count
 
 import pytest
@@ -49,7 +49,8 @@ def _book(skip=(), jump_at=None, notional=None):
 
 def _bar(symbol, day, pct, final=True):
     return {"symbol": symbol, "session": day, "close": None, "adj_close": None, "day_pct": pct,
-            "source_symbol": symbol, "final": final, "as_of": OPEN_FRI}
+            "source_symbol": symbol, "final": final,
+            "as_of": OPEN_FRI if day == FRI else datetime(day.year, day.month, day.day, 20, tzinfo=UTC)}
 
 
 def _bars(fri=True, final_fri=False):
@@ -202,7 +203,7 @@ def test_no_live_book_is_an_empty_response_not_zeros():
     assert body["range"] == {"from": None, "to": None, "live_since": None, "sessions_n": 0,
                              "clamped": False, "is_all": True}
     assert body["stats"]["bot_account"]["total_pct"] == {"value": None, "n": 0, "reason": None}
-    assert body["daily"] == [] and body["today"] == {"session": None, "final": False, "lines": {}}
+    assert body["daily"] == [] and body["today"] == {"session": None, "final": False, "as_of": None, "lines": {}}
 
 
 def test_banner_inputs_pass_through_and_capture_is_checked():
@@ -282,4 +283,137 @@ def test_last_closed_session_uses_the_official_half_day_close(hour, minute, want
 @pytest.mark.parametrize('refresher_on,want', [(False, 'stale'), (True, 'ok')])
 def test_provisional_only_benchmark_status_keeps_no_final_session(refresher_on, want):
     assert bv.benchmarks_status([_bar('SPY', FRI, 0.01, False)], THU, refresher_on) == (want, None)
-    assert bv.benchmarks_status([_bar('SPY', THU, 0.01)], None, refresher_on) == ('ok', THU)
+    assert bv.benchmarks_status([_bar('SPY', THU, 0.01)], None, refresher_on) == (('ok' if refresher_on else 'stale'), None)
+
+
+def test_spanning_daily_row_compounds_index_over_the_same_sessions():
+    body = _body(_inputs(rows=_book(skip={40})))
+    row = _day(body, 41)
+    expected = (1 + _idx(40)) * (1 + _idx(41)) - 1
+    assert row["span"] == 2
+    assert row["lines"]["SPY"] == pytest.approx(bv.pct(expected))
+
+
+def test_base_balance_break_excludes_deployed_return_from_stats_and_daily():
+    body = _body(_inputs(rows=_book(jump_at=30, notional=3000)))
+    assert _day(body, 30)["lines"]["bot_deployed"] is None
+    assert body["stats"]["bot_deployed"]["total_pct"]["n"] == 69
+
+
+def test_today_hides_returns_across_a_base_balance_change_even_outside_chart_range():
+    rows = [_row(THU, 10000), _row(FRI, 10600, hh=10, mm=0, realized=10500, notional=5000)]
+    body = _body(_inputs(rows=rows, sessions=[THU, FRI]), start=FRI)
+    assert body["today"]["lines"]["bot_account"]["pct"] is None
+    assert body["today"]["lines"]["bot_deployed"]["pct"] is None
+
+
+def test_today_as_of_is_oldest_displayed_source_not_request_time():
+    rows = [_row(THU, 10000), _row(FRI, 10100, hh=9, mm=50)]
+    bars = _bars()
+    stale = datetime(2026, 11, 6, 14, 40, tzinfo=UTC)
+    next(b for b in bars if b["symbol"] == "SPY" and b["session"] == FRI)["as_of"] = stale
+    body = _body(_inputs(rows=rows, bars=bars, sessions=[THU, FRI]))
+    assert body["today"]["as_of"] == stale.isoformat()
+
+
+def test_today_is_unchanged_when_future_account_samples_are_added():
+    rows = [_row(THU, 10000), _row(FRI, 10100, hh=9, mm=50)]
+    future = _row(FRI, 12000, hh=15, mm=0, realized=12000)
+    before = _body(_inputs(rows=rows, sessions=[THU, FRI]))["today"]
+    after = _body(_inputs(rows=rows + [future], sessions=[THU, FRI]))["today"]
+    assert after == before
+
+
+def test_pre_session_card_is_not_final_when_a_prior_index_bar_is_missing():
+    bars = [b for b in _bars(fri=False) if not (b["symbol"] == "QQQ" and b["session"] == THU)]
+    today = _body(_inputs(now=PRE_FRI, bars=bars))["today"]
+    assert today["session"] == THU.isoformat()
+    assert today["final"] is False
+
+
+def test_today_withholds_bot_returns_when_the_immediately_prior_session_is_missing():
+    days = [SESS[-3], SESS[-2], THU, FRI]
+    rows = [_row(days[0], 10000, notional=5000), _row(FRI, 10100, hh=10, mm=0, notional=5000)]
+    today = _body(_inputs(rows=rows, sessions=days))["today"]
+    assert today["lines"]["bot_account"]["pct"] is None
+    assert today["lines"]["bot_deployed"]["pct"] is None
+
+
+def test_today_excludes_a_bar_not_yet_available_at_request_time():
+    bars = _bars()
+    future = next(b for b in bars if b["symbol"] == "SPY" and b["session"] == FRI)
+    future["as_of"] = datetime(2026, 11, 6, 16, 0, tzinfo=UTC)
+    without = [bar for bar in bars if bar is not future]
+    assert _body(_inputs(bars=bars))["today"] == _body(_inputs(bars=without))["today"]
+
+
+def test_incomplete_account_sample_is_missing_not_a_fabricated_close():
+    rows = _book(notional=3000)
+    rows[40]["skipped_n"] = 1
+    body = _body(_inputs(rows=rows))
+    assert _day(body, 40)["missing"] is True
+    assert _day(body, 40)["lines"]["bot_account"] is None
+    assert _day(body, 40)["open_n"] is None
+    assert _day(body, 41)["span"] == 2
+
+
+def test_incomplete_today_sample_does_not_produce_bot_returns():
+    rows = [_row(THU, 10000, notional=5000), _row(FRI, 10100, hh=10, mm=0, notional=5000)]
+    rows[-1]["skipped_n"] = 1
+    today = _body(_inputs(rows=rows, sessions=[THU, FRI]))["today"]
+    assert today["lines"]["bot_account"]["pct"] is None
+    assert today["lines"]["bot_deployed"]["pct"] is None
+
+
+def test_status_requires_each_index_to_reach_the_latest_closed_session():
+    bars = [b for b in _bars(fri=False) if not (b['symbol'] == 'QQQ' and b['session'] == THU)]
+    status, last = bv.benchmarks_status(bars, THU, refresher_on=False)
+    assert status == 'stale' and last == SESS[-2]
+
+
+def test_incomplete_intraday_point_marks_the_session_unavailable():
+    earlier = _row(THU, 10000, hh=10, mm=0, notional=9000)
+    earlier['skipped_n'] = 1
+    rows = [_row(SESS[-2], 10000, notional=5000), earlier, _row(THU, 10000, notional=5000)]
+    body = _body(_inputs(rows=rows, sessions=[SESS[-2], THU]))
+    exposure = next(item for item in body['exposure'] if item['date'] == THU.isoformat())
+    assert exposure['pct'] is None
+    assert _day(body, 70)['missing'] is True
+
+
+def test_missing_session_has_no_open_count_but_a_valid_zero_remains_zero():
+    rows = _book(skip={40})
+    rows[41]['open_n'] = 0
+    body = _body(_inputs(rows=rows))
+    assert _day(body, 40)['open_n'] is None
+    assert _day(body, 42)['open_n'] == 0
+    exposure = {item['date']: item for item in body['exposure']}
+    assert exposure[SESS[40].isoformat()]['open_n'] is None
+
+
+def test_premarket_request_excludes_historical_bars_recorded_after_its_cutoff():
+    bars = _bars(fri=False)
+    for bar in bars:
+        bar['as_of'] = PRE_FRI - timedelta(hours=1)
+    future = next(b for b in bars if b['symbol'] == 'QQQ' and b['session'] == THU)
+    future['as_of'] = PRE_FRI + timedelta(minutes=1)
+    without = [bar for bar in bars if bar is not future]
+    assert _body(_inputs(bars=bars, now=PRE_FRI)) == _body(_inputs(bars=without, now=PRE_FRI))
+
+
+def test_deployed_return_after_a_gap_is_withheld_without_a_complete_peak():
+    body = _body(_inputs(rows=_book(skip={40}, notional=5000)))
+    assert _day(body, 41)['span'] == 2
+    assert _day(body, 41)['lines']['bot_deployed'] is None
+    assert body['stats']['bot_deployed']['total_pct']['n'] == 68
+
+
+@pytest.mark.parametrize('session,final', [(THU, True), (FRI, False)])
+def test_request_excludes_bars_persisted_after_its_cutoff(session, final):
+    bars = _bars()
+    target = next(b for b in bars if b['symbol'] == 'SPY' and b['session'] == session)
+    target['final'] = final
+    target['as_of'] = OPEN_FRI - timedelta(minutes=1)
+    target['updated_at'] = OPEN_FRI + timedelta(seconds=1)
+    without = [bar for bar in bars if bar is not target]
+    assert _body(_inputs(bars=bars)) == _body(_inputs(bars=without))

@@ -52,7 +52,7 @@ def _mixed_tickers(trades: list[dict], since: date) -> list[str]:
                if trade.get("status") == "open"
                or (trade.get("closed_at") or "")[:10] >= since.isoformat()}
     return sorted(ticker for ticker in tickers
-                  if fx.quote_currency_code(ticker, fetch=False) not in (None, "USD"))
+                  if fx.quote_currency_code(ticker, fetch=False) != "USD")
 
 
 def _load_inputs(now: datetime, start: date | None = None) -> BenchmarkInputs:

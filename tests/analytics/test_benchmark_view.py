@@ -154,7 +154,7 @@ def test_exposure_rows_are_percentages_and_missing_is_none():
     _, _, exposure = _series(_inputs())
     assert [e["date"] for e in exposure] == ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"]
     assert exposure[0] == {"date": "2026-11-02", "pct": 50.0, "open_n": 1, "approx": False}
-    assert exposure[2] == {"date": "2026-11-04", "pct": None, "open_n": 0, "approx": False}
+    assert exposure[2] == {"date": "2026-11-04", "pct": None, "open_n": None, "approx": False}
 
 
 def test_no_live_book_is_empty_points_never_zeros():

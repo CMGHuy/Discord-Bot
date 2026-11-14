@@ -66,6 +66,7 @@ class BenchmarkBarRepository(Repository):
     def _bar(self, row) -> dict:
         bar = {**self._record(row), **{key: row._mapping[key] for key in BAR_KEYS}}
         bar["as_of"] = _as_utc(bar["as_of"])
+        bar["updated_at"] = _as_utc(row._mapping["updated_at"])
         return bar
 
     def upsert_bars(self, rows: list[dict], conn=None) -> int:

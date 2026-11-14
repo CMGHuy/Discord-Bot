@@ -143,12 +143,20 @@ def _trim_first_span(days: list[AlignedDay]) -> list[AlignedDay]:
     return days
 
 
+def _complete_session_rows(rows: list[dict], sessions: Sequence[date]) -> list[dict]:
+    """A session with partially priced points cannot supply complete returns or exposure."""
+    points = bs.rows_by_session(rows, sessions)
+    incomplete = {day for day, group in points.items() if any(row.get('skipped_n', 0) for row in group)}
+    return [row for row in rows if row['at'].astimezone(US_MARKET_TZ).date() not in incomplete]
+
+
 def build_frame(inputs: BenchmarkInputs, rng: RangeSpec) -> Frame:
     today = _today(inputs.now)
     live_since = rng.live_since
     upto = [day for day in inputs.sessions if live_since <= day <= today] if live_since is not None else []
-    closes = bs.bot_session_closes(inputs.rows, upto)
-    by_day = bs.rows_by_session(inputs.rows, upto)
+    rows = _complete_session_rows(inputs.rows, upto)
+    closes = bs.bot_session_closes(rows, upto)
+    by_day = bs.rows_by_session(rows, upto)
     deployed = bs.deployed_returns(by_day, inputs.legs, upto)
     exposure = bs.exposure_by_session(by_day)
     indexed = index_pct(inputs.bars)
@@ -156,7 +164,7 @@ def build_frame(inputs: BenchmarkInputs, rng: RangeSpec) -> Frame:
         return Frame(rng, [], None, closes, deployed, exposure, indexed)
 
     through = [day for day in upto if day <= rng.sessions[-1]]
-    breaks = bs.base_balance_breaks(inputs.rows, inputs.legs, through)
+    breaks = bs.base_balance_breaks(rows, inputs.legs, through)
     in_range = set(rng.sessions)
     days = [day for day in bs.align(through, closes, indexed, breaks) if day.session in in_range]
     base_close = closes.get(rng.base) if rng.base is not None else None
@@ -164,7 +172,7 @@ def build_frame(inputs: BenchmarkInputs, rng: RangeSpec) -> Frame:
 
 
 def deployed_counts(day: AlignedDay, dep: Deployed | None) -> bool:
-    return not day.missing and day.bot_ret is not None and dep is not None and dep.ret is not None
+    return day.span == 1 and not day.missing and not day.base_break and day.bot_ret is not None and dep is not None and dep.ret is not None
 
 
 def _point(
@@ -247,7 +255,7 @@ def _exposure_rows(frame: Frame) -> list[dict]:
         exposure = frame.exposure.get(day.session, Exposure(None, 0, False))
         rows.append({
             "date": day.session.isoformat(), "pct": pct(exposure.pct),
-            "open_n": exposure.open_n, "approx": exposure.approx,
+            "open_n": None if day.missing else exposure.open_n, "approx": exposure.approx,
         })
     return rows
 
@@ -382,13 +390,14 @@ def _daily_row(frame: Frame, day: AlignedDay, capture: str) -> dict:
         'bot_account': pct(day.bot_ret) if not day.base_break else None,
         'bot_deployed': pct(dep.ret) if deployed_counts(day, dep) else None,
     }
-    lines.update({sym: pct(frame.pct[sym].get(day.session, (None, False))[0]) for sym in BENCHMARK_SYMBOLS})
+    lines.update({sym: pct(frame.pct[sym].get(day.session, (None, False))[0] if day.missing
+                           else day.index_ret.get(sym)) for sym in BENCHMARK_SYMBOLS})
     beat = None
     if day.one_session and day.index_ret.get(capture) is not None:
         beat = day.bot_ret > day.index_ret[capture]
     return {
         'date': day.session.isoformat(), 'lines': lines, 'exposure_pct': pct(exposure.pct),
-        'open_n': exposure.open_n, 'beat': beat, 'span': day.span, 'missing': day.missing,
+        'open_n': None if day.missing else exposure.open_n, 'beat': beat, 'span': day.span, 'missing': day.missing,
     }
 
 
@@ -403,30 +412,54 @@ def _card_session(inputs: BenchmarkInputs, state: str, completed: list[date]) ->
     return completed[-1] if completed else None
 
 
-def _card_account_return(frame: Frame, session: date) -> float | None:
+def _card_account_return(frame: Frame, session: date, prior: date | None) -> float | None:
     close = frame.closes.get(session)
-    previous = max((day for day in frame.closes if day < session), default=None)
-    prior_close = frame.closes.get(previous)
+    prior_close = frame.closes.get(prior)
     if close is None or prior_close in (None, 0.0):
         return None
     return close / prior_close - 1
 
 
-def build_today(inputs: BenchmarkInputs, frame: Frame, state: str, completed: list[date]) -> dict:
-    session = _card_session(inputs, state, completed)
-    if session is None:
-        return {'session': None, 'final': False, 'lines': {}}
-    final = session in completed
+def _card_as_of(inputs: BenchmarkInputs, session: date, lines: dict, bars: dict) -> str | None:
+    """Oldest timestamp among the values displayed, or unknown if any lacks one."""
+    times = []
+    if any(lines[key]['pct'] is not None for key in ('bot_account', 'bot_deployed')):
+        points = bs.rows_by_session(inputs.rows, [session]).get(session, [])
+        if not points:
+            return None
+        times.append(points[-1]['at'])
+    for symbol in BENCHMARK_SYMBOLS:
+        if lines[symbol]['pct'] is not None:
+            stamp = bars[symbol].get('as_of')
+            if stamp is None or stamp > inputs.now:
+                return None
+            times.append(stamp)
+    return min(times).isoformat() if times else None
+
+
+def _card_lines(inputs: BenchmarkInputs, frame: Frame, session: date, final: bool) -> tuple[dict, dict]:
+    prior = max((day for day in inputs.sessions if day < session), default=None)
+    breaks = bs.base_balance_breaks(inputs.rows, inputs.legs, [day for day in inputs.sessions if day <= session])
+    comparable = prior in frame.closes and session not in breaks
     dep = frame.deployed.get(session)
     lines = {
-        'bot_account': {'pct': pct(_card_account_return(frame, session)), 'final': final},
-        'bot_deployed': {'pct': pct(dep.ret) if dep is not None else None, 'final': final},
+        'bot_account': {'pct': pct(_card_account_return(frame, session, prior)) if comparable else None, 'final': final},
+        'bot_deployed': {'pct': pct(dep.ret) if comparable and dep is not None else None, 'final': final},
     }
     bars = {bar['symbol']: bar for bar in inputs.bars if bar['session'] == session}
     for symbol in BENCHMARK_SYMBOLS:
         bar = bars.get(symbol)
         lines[symbol] = {'pct': pct(bar['day_pct']), 'final': bar['final']} if bar else {'pct': None, 'final': False}
-    return {'session': session.isoformat(), 'final': final, 'lines': lines}
+    return lines, bars
+
+
+def build_today(inputs: BenchmarkInputs, frame: Frame, state: str, completed: list[date]) -> dict:
+    session = _card_session(inputs, state, completed)
+    if session is None:
+        return {'session': None, 'final': False, 'as_of': None, 'lines': {}}
+    final = session in completed and _final_today(inputs.bars, session)
+    lines, bars = _card_lines(inputs, frame, session, final)
+    return {'session': session.isoformat(), 'final': final, 'as_of': _card_as_of(inputs, session, lines, bars), 'lines': lines}
 
 
 def last_closed_session(sessions: Sequence[date], now: datetime) -> date | None:
@@ -437,7 +470,10 @@ def last_closed_session(sessions: Sequence[date], now: datetime) -> date | None:
 def benchmarks_status(bars: list[dict], last_closed: date | None, refresher_on: bool) -> tuple[str, date | None]:
     if not bars:
         return 'empty', None
-    last = max((bar['session'] for bar in bars if bar['final']), default=None)
+    latest = {symbol: max((bar['session'] for bar in bars
+                           if bar['symbol'] == symbol and bar['final']), default=None)
+              for symbol in BENCHMARK_SYMBOLS}
+    last = min(latest.values()) if all(latest.values()) else None
     behind = last is None or (last_closed is not None and last < last_closed)
     return ('stale' if not refresher_on and behind else 'ok'), last
 
@@ -451,10 +487,20 @@ def _range(rng: RangeSpec) -> dict:
     }
 
 
+def _available_inputs(inputs: BenchmarkInputs) -> BenchmarkInputs:
+    """Ignore marks and account samples recorded after the request time."""
+    rows = [row for row in inputs.rows if row['at'] <= inputs.now]
+    bars = [bar for bar in inputs.bars
+            if bar.get('as_of') is not None and bar['as_of'] <= inputs.now
+            and (bar.get('updated_at') is None or bar['updated_at'] <= inputs.now)]
+    return replace(inputs, rows=rows, bars=bars)
+
+
 def build_benchmark(inputs: BenchmarkInputs, *, start: date | None, end: date | None, capture: str) -> dict:
     """Assemble the complete benchmark response; paging belongs to the route."""
     if capture not in BENCHMARK_SYMBOLS:
         raise ValueError(f"capture must be one of {', '.join(BENCHMARK_SYMBOLS)}")
+    inputs = _available_inputs(inputs)
     state = view_session_state(inputs.now)
     completed = completed_sessions(inputs, state)
     rng = clamp_range(completed, live_since_of(inputs.rows), start, end)

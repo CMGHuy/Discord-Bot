@@ -31,6 +31,15 @@ def test_upsert_then_list_range_returns_every_key_nulls_included(bars, db_conn):
     assert rows[0]["as_of"] == AS_OF and rows[0]["as_of"].utcoffset() == timedelta(0)
 
 
+def test_list_range_exposes_the_database_update_time(bars, db_conn):
+    before = datetime.now(timezone.utc) - timedelta(seconds=1)
+    bars.upsert_bars([_bar("SPY", TUE, close=580.0)], conn=db_conn)
+    (row,) = bars.list_range(["SPY"], TUE, TUE, conn=db_conn)
+    after = datetime.now(timezone.utc) + timedelta(seconds=1)
+    assert before <= row["updated_at"] <= after
+    assert row["updated_at"].utcoffset() == timedelta(0)
+
+
 def test_a_proxy_day_overwrites_a_level_day_and_clears_its_close(bars, db_conn):
     bars.upsert_bars([_bar("^IXIC", WED, close=18500.0, pct=0.01, final=False)], conn=db_conn)
     bars.upsert_bars([_bar("^IXIC", WED, pct=0.009, source="ONEQ")], conn=db_conn)
