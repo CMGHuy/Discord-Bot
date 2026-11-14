@@ -197,7 +197,8 @@ mirror recorded in the repo.
     and `CalendarTrade` in `api/models.ts`, and the three contract tests that
     pin those shapes are updated (`tests/analytics/test_pnl_calendar.py`,
     `tests/admin/test_api_v1_calendar.py`, `_ENTRY_SHAPE` in
-    `tests/admin/test_api_journal.py`).
+    `tests/admin/test_api_journal.py`). The older MFE/MAE drawer in
+    `calendar/calendar.ts` shows the same figures and takes the same marker.
   - *Analytics execution tab*: it shows no per-trade figure, so no marker. The
     Exit efficiency panel's caption states the exclusion in plain text, "n of N
     trades; M short holds on daily bars excluded", visible on a phone. The
@@ -252,7 +253,7 @@ mirror recorded in the repo.
   empty and `None` frames.
 - `upgrade_excursions`: upgrades on a finer source, never downgrades, leaves
   `note` alone, idempotent on a second run, tags and lesson re-derived.
-- The data revision: upgrade stamps only rows with `mfe_r`, downgrade restores.
+- The data revision: upgrade stamps only rows with `mfe_r`; downgrade leaves stamped rows unchanged.
 - Backfill script: checkpoint written per ticker, restart skips.
 - Exit-quality aggregates: the exclusion rule and its count; empty book.
 - Frontend: marker shown and hidden by source and holding time, at 390, 768 and
@@ -294,3 +295,4 @@ own directory joined to one suite in the same commit; the limit is not raised.
 - ux-designer: "daily estimate" wording unclear -- applied (`est. (daily bars)`; explanation says overstated, which is the measured direction, not understated).
 - quant-engineer (v229 review, carried here): the sub-hourly archive is merge-only and unpruned, not 60 days -- applied (backfill covers the whole book).
 - plan brief (code check, 2026-11-14): journal times are aware UTC, not naive; `Repository.patch` has no condition; the pass must join trades by id; the calendar card reads `pnl_calendar.ROW_KEYS`; `build_entry` takes one frame; chart images are cached; the autopsy loader accepts older headers; the Alembic head is `v208_001`; the analytics suite is near its limit -- all applied above.
+- plan index (2026-11-14): Testing said the downgrade restores, against the no-op body -- applied (Testing corrected); the older calendar drawer was unnamed -- applied (marked like the card).
