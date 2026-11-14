@@ -13,6 +13,9 @@ from swingbot.admin.api_v1 import benchmark
 
 @pytest.fixture
 def endpoint(monkeypatch):
+    # Registering api_v1 on a bare Flask app before swingbot.admin.app has run api_v1.register()
+    # freezes the blueprint, and app.py's later access_hook import then fails.
+    from swingbot.admin import app as _admin_app  # noqa: F401
     app = Flask(__name__)
     app.register_blueprint(api_v1)
     app.register_error_handler(ApiError, lambda exc: (jsonify(error={"code": exc.code, "message": exc.message}), exc.status))
