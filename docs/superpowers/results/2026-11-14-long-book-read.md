@@ -94,7 +94,12 @@ a measured headroom from a different mechanism, not this read repeated.
 - **Entry session:** the `close` bucket cell is the largest unexplained
   difference in the book. A daily-bar screen cannot see it; it gets a
   deferred-entry counterfactual on the bot's own plans with forward confirmation.
-- **Bearish-FVG long source:** one avoid-mode idea screen. Prior evidence runs
-  against it (`screen-fvg_overhead_aged` SCREEN-FAIL at +0.37R, v128 `off`
-  ΔExpR -0.004R), and the live cell is about one standard error from zero.
+- **Bearish-FVG long source: already tested, no new screen.** The
+  `FVG (bearish)` long cell above (N=64, -0.188R) is the same live population
+  that motivated `screen-fvg_overhead_aged` (its `SOURCE`: live longs at an
+  older unfilled bearish FVG, N=68, -0.199R). That avoid-mode screen closed
+  SCREEN-FAIL on 2026-11-11 with the opposite sign (ΔExpR +0.37R, 0 of 9 years
+  negative), and v128 `off` moved ExpR by -0.004R. The live cell is about one
+  standard error from zero. A gap-mid variant would be a new idea name spent on
+  a motivation the screen has already answered; none is written.
 - **Noise stop-outs from clamped stops:** already v212 / v216, in flight.
