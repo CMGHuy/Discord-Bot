@@ -165,11 +165,25 @@ mirror recorded in the repo.
   point and a per-source count to its summary. Aggregates (median efficiency,
   the MFE/MAE scatter) use only entries whose source is intraday **or** whose
   `holding_days >= 2`; the excluded count is returned so the UI can say so.
-- **Admin SPA** (`trade-detail`, the calendar day card, the analytics execution
-  tab): the MFE/MAE figures show a small "daily estimate" marker when the source
-  is `daily` and the trade was held under two days. Phone, tablet and desktop
-  are checked together per `docs/claude/ui-design.md`; the marker is text plus a
-  tooltip, wraps under the figure at 390 px and adds no column.
+- **Admin SPA.** One rule everywhere: a figure is marked when its source is
+  `daily` and the trade was held under two days, the same threshold the
+  aggregates use. The visible text carries the meaning, `est. (daily bars)`,
+  so nothing depends on hover; the one-line explanation ("held under 2 days,
+  intraday bars unavailable, the range may be overstated") sits in a
+  tap-reachable, keyboard-focusable element with an `aria-label`.
+  - *Trade detail* (`stores/trade-detail.store.ts`): the `excursions` rows gain
+    an optional `estimate` flag; MFE, MAE **and** Exit efficiency carry the
+    marker, since efficiency is derived from MFE.
+  - *Calendar day card* (`calendar/day/day-trade-card.ts`): the marker goes
+    inside the existing `MFE · MAE` text line and wraps with it; the layout
+    audit checks the card at 390 px for no sideways scroll.
+  - *Analytics execution tab*: it shows no per-trade figure, so no marker. The
+    Exit efficiency panel's caption states the exclusion in plain text, "n of N
+    trades; M short holds on daily bars excluded", visible on a phone.
+  - Checked at phone, tablet and desktop together per `docs/claude/ui-design.md`.
+- **Discord trade-view chart** (`swingbot/core/scanning/lifecycle_embeds.py`):
+  the MFE and MAE annotations take a `(daily est.)` suffix under the same rule,
+  so the embed and the admin screen read the same.
 - **`scripts/ops/export_book_rows.sh`** appends `excursion_source` as column 39
   in **both** branches of the `UNION` (`NULL::text` in the plan branch), which
   keeps the positional `ORDER BY`; `tests/scout/test_export_script.py` is
@@ -240,3 +254,9 @@ mirror recorded in the repo.
 - staff-engineer: revision needs `ROLLBACK_SAFE` -- applied.
 - staff-engineer: `/deploy` has no post-deploy step; production run and PITR check unspecified -- applied.
 - staff-engineer: export column must be in both UNION branches; autopsy must fail loudly on an old CSV -- applied.
+- ux-designer: a hover tooltip is unreachable on touch -- applied (visible text carries the meaning; explanation is tap- and keyboard-reachable).
+- ux-designer: day card renders MFE and MAE as one inline line -- applied (marker inside the line, 390 px audit).
+- ux-designer: trade-detail excursion rows have no slot for a marker; efficiency unaddressed -- applied (`estimate` flag, all three rows).
+- ux-designer: the execution tab has no per-trade MFE/MAE figure; excluded count unplaced -- applied (caption on the Exit efficiency panel, no marker).
+- ux-designer: the Discord trade-view chart shows the same figures unmarked -- applied (suffix).
+- ux-designer: "daily estimate" wording unclear -- applied (`est. (daily bars)`; explanation says overstated, which is the measured direction, not understated).
