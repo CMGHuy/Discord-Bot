@@ -81,6 +81,14 @@ still open at the end of the fifth session after entry is marked to that bar's
 close. A skipped arm-B plan scores 0R. No runner, no TP2: the live scale-out is
 not reproduced, and that is disclosed in every output.
 
+**Frictions.** Every arm's R is net, through `net_r`
+(`swingbot/core/analytics/expectancy_attribution.py`): `SLIPPAGE_BPS` on both
+fills plus `commission_r()`, the constants of `swingbot/core/edge/frictions.py`.
+Arms A and B pay **twice** the entry slippage, because their fill is a market
+order in the last half hour (the convention `range_breakdown_stop` used for a
+worse fill). Zero frictions are refused. The gross figures are printed beside
+the net ones and gate nothing.
+
 **Statistic.** Per eligible plan, `d_A = R_A - R_C` and `d_B = R_B - R_C`. The
 estimate is the mean per plan (ExpR per alert, skipped plans included at 0R).
 Intervals come from the repo's `week_cluster_bootstrap`
@@ -108,6 +116,34 @@ correlation are printed for information and gate nothing.
 ExpR, both deltas with bounds, the calibration lines, per-week deltas, the
 arm-B skip count with the control result of the skipped plans, and the bearish
 disclosure.
+
+**Tradeability record.** A deferred fill is a different trade from the plan's,
+so each pair also records what a follow-on would need to judge it. All of it is
+printed as disclosure and gates nothing:
+
+- **Where the shifted levels land.** The deferred fill against the plan's entry
+  in R; whether the shifted stop sits above the low of the day so far (inside
+  the range already traded); `d_A` split by fill above or below the plan's
+  entry. If arm A wins only where the stop moved up, that is a different
+  strategy and the results doc says so.
+- **Overnight exposure.** Per arm, the first overnight gap in R and the count
+  of gap-through-stop fills. Arm A holds its first night almost at once; the
+  control had most of a session first.
+- **The 15:30 bar.** Its volume and range, and its open against the session's
+  last 5-minute close, so a market-on-close fill can be compared later.
+- **Was the plan still live at 15:30.** Price against the plan's entry, and
+  whether the plan had already expired under its own rule.
+- **Arm B's judgement.** The low of the day against the stop distance, and the
+  15:30 price against the entry. The skip rule is a mechanical wick touch; a
+  trader would judge "the level held" by a close or a reclaim. A close-based
+  skip is a new idea, not a variant to add here.
+- **Event days.** A flag for earnings after the close on the entry date
+  (`swingbot/core/market/events.py`), for monthly OPEX and for FOMC days; the
+  arms are printed with and without flagged plans.
+- **Entry-bar stop-outs.** The count of live trades stopped inside their entry
+  bar. The control cannot see these (it starts at the next bar), which flatters
+  the control and so biases `d_A` downward on exactly the noise stops the
+  hypothesis is about.
 
 ### 2. The pair log
 
@@ -161,6 +197,11 @@ The ledger row is scored with the other ideas through `ledger_qvalues`, because
 the session cell was picked from many slices.
 
 - A `PASS` earns a spec for a deferred-entry mode. It ships nothing by itself.
+  **Binding on that follow-on (partner, 2026-11-14):** this spec is
+  `Edge: none (integrity)` only because it changes nothing live. A follow-on
+  entry-mode spec carries `Edge: expectancy`, and its `Screen:` status needs the
+  partner's explicit approval before the spec is written; this measurement is
+  not a way around the idea screen.
 - `NO-LIFT` or `UNCALIBRATED` closes the question in
   `docs/claude/backtest-methodology.md` § Closed pre-registrations. A different
   deferral time, a different skip rule or a different race is a new idea, not a
@@ -210,9 +251,10 @@ the session cell was picked from many slices.
 - Whether a `PASS` could ever be confirmed out of sample beyond the forward
   read, given the funnel replays daily bars; the follow-on spec would have to
   name its gate.
-- For the partner's real orders: a deferred entry means placing the order near
-  the close, which changes the day's routine. Out of scope here, in scope for
-  any follow-on.
+- For the partner's real orders: a deferred entry means being at the screen at
+  15:30 or using a market-on-close or limit-on-close order, and the alert
+  channel would need a message for it. Out of scope here; the tradeability
+  record above exists so a follow-on can answer it.
 
 ## Panel review
 
@@ -223,3 +265,11 @@ the session cell was picked from many slices.
 - quant-researcher: calibration thresholds untied to the effect; exploratory read could contaminate the forward rule -- applied (path-class agreement at 80%; forward rule frozen; `UNCALIBRATED` exploratory read stops the study).
 - quant-researcher: ledger row should go through `ledger_qvalues` -- applied.
 - quant-researcher: thresholds must be unchangeable after the first weekly count -- applied.
+- quant-researcher: `none (integrity)` could read as an escape from the screen -- applied by the partner's decision (header kept, follow-on bound to `Edge: expectancy` and explicit screen approval).
+- veteran-trader (BLOCKING): frictionless fills behind a claimed lift -- applied (net R on all arms, double entry slippage on the deferred arms, zero refused).
+- veteran-trader: distance-preserving levels drop the structure -- applied (shifted-level record and split).
+- veteran-trader: overnight gap exposure unreported -- applied.
+- veteran-trader: arm B's skip is a wick touch, not a trader's "held" -- applied (recorded; a close-based skip named as a new idea).
+- veteran-trader: earnings after the close, OPEX and FOMC on the entry date -- applied (flags, with and without).
+- veteran-trader: capture the 15:30 bar, a close-fill proxy and plan validity now -- applied.
+- veteran-trader: entry-bar exclusion flatters the control -- applied (count printed, direction of bias stated).
