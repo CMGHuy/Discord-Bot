@@ -18,10 +18,14 @@ import argparse
 import dataclasses
 import json
 import math
+import os
+import subprocess
 import sys
 import warnings
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -34,7 +38,7 @@ from fetch_backtest_data import add_data_source_arg, apply_data_source, load_cac
 from swingbot import config
 from swingbot.core.market import market_context
 from swingbot.core.backtesting.backtest import ALL_STRATEGIES, _uses_live_constructor, run_backtest
-from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, run_scenario_backtest
+from swingbot.core.backtesting.backtest_scenarios import CONFLUENCE_GATES, _aggregate, run_scenario_backtest
 from swingbot.core.backtesting.blocked_recorder import require_train_window, write_gate_rows
 from swingbot.core.market.strategy_types import LEGACY_HORIZONS
 from swingbot.core.marketdata.universe import data_quality_issues, liquidity_reason
@@ -99,6 +103,192 @@ def _scenario_progress(trades_jsonl):
         print(f"  replay {done}/{total} tickers ({pct:.1f}%)", flush=True)
 
     return on_ticker_done
+
+
+#: v226: the three settings that decide every replayed stop; the run sidecar
+#: records them so the results doc can show the replay ran today's live stops.
+STOP_SETTING_NAMES = ("CLAMP_STOP_TO_HARD_CAP", "MIN_STOP_DISTANCE_PCT", "MAX_STOP_LOSS_PCT")
+
+#: v226: the run sidecar's fields, in order.
+RUN_SIDECAR_KEYS = ("git_head", "window", "watchlist", "membership_asof", "command", "stop_settings")
+
+
+def stop_settings() -> dict:
+    """The three stop settings as the replay reads them (config is
+    hot-reloaded, so read at call time). Nothing else from .env."""
+    return {name: getattr(config, name) for name in STOP_SETTING_NAMES}
+
+
+def _run_sidecar_path(trades_jsonl) -> Path:
+    return Path(str(trades_jsonl) + ".run.json")
+
+
+def _git_head() -> str | None:
+    """The repository HEAD the replay ran at; None when git is unavailable."""
+    try:
+        done = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(ROOT), capture_output=True,
+                              text=True, check=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.strip() or None
+
+
+def _membership_asof(membership: dict | None, today: str) -> str:
+    """The as-of date of the ticker universe: for a point-in-time map the
+    latest span boundary it knows, else `today` (the day the watchlist was read)."""
+    bounds = [str(bound) for spans in (membership or {}).values()
+              for span in spans for bound in span if bound is not None]
+    return max(bounds) if bounds else today
+
+
+def run_sidecar(*, date_from: str, date_to: str, tickers: list[str], universe: str | None,
+                membership: dict | None, argv: list[str], today: str) -> dict:
+    """v226: what ran -- HEAD, signal window, universe, membership as-of,
+    command line and the stop settings (keys: RUN_SIDECAR_KEYS, in order)."""
+    return {
+        "git_head": _git_head(),
+        "window": {"from": date_from, "to": date_to},
+        "watchlist": {"universe": universe or "watchlist", "tickers": sorted(tickers)},
+        "membership_asof": _membership_asof(membership, today),
+        "command": list(argv),
+        "stop_settings": stop_settings(),
+    }
+
+
+def write_run_sidecar(trades_jsonl, sidecar: dict) -> Path:
+    """<trades_jsonl>.run.json, beside the store's <trades_jsonl>.provenance.json."""
+    path = _run_sidecar_path(trades_jsonl)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(sidecar, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+#: v226: the sidecar fields a restart must match. membership_asof is left out:
+#: for a watchlist run it is the day the run started, and a run may cross midnight.
+RESUME_KEYS = tuple(key for key in RUN_SIDECAR_KEYS if key != "membership_asof")
+
+_NOT_TRIGGERED = SimpleNamespace(outcome="not_triggered", runner_outcome=None, r_total=0.0)
+
+
+def _utc_today() -> str:
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def _done_path(trades_jsonl) -> Path:
+    return Path(str(trades_jsonl) + ".done.jsonl")
+
+
+def _jsonl_lines(path: Path) -> list[tuple[str, dict]]:
+    """(raw line, parsed) per complete line; stops at a half-written tail."""
+    if not path.exists():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            out.append((line, json.loads(line)))
+        except json.JSONDecodeError:
+            break
+    return out
+
+
+def _read_run_sidecar(trades_jsonl) -> dict | None:
+    try:
+        return json.loads(_run_sidecar_path(trades_jsonl).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _same_run(old: dict | None, new: dict) -> bool:
+    return old is not None and all(old.get(key) == new[key] for key in RESUME_KEYS)
+
+
+def _rewrite_lines(path: Path, lines: list[str]) -> None:
+    path.write_text("".join(line + "\n" for line in lines), encoding="utf-8")
+
+
+def _resume_checkpoint(trades_jsonl, sidecar: dict) -> dict[str, dict]:
+    """{ticker: done entry} that a previous run of the SAME replay finished.
+    No done-list: a fresh start (rows emptied, sidecar written). A done-list
+    from another run, or without its sidecar: refused (exit 2). Otherwise the
+    rows and the done-list are cut back to their complete, done lines."""
+    target, done_file = Path(trades_jsonl), _done_path(trades_jsonl)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not done_file.exists():
+        _rewrite_lines(target, [])
+        write_run_sidecar(trades_jsonl, sidecar)
+        return {}
+    if not _same_run(_read_run_sidecar(trades_jsonl), sidecar):
+        print(f"refused: {done_file} belongs to a different run than {_run_sidecar_path(trades_jsonl)} "
+              "describes; delete the done-list to start over", file=sys.stderr)
+        raise SystemExit(2)
+    entries = _jsonl_lines(done_file)
+    done = {entry["ticker"]: entry for _, entry in entries}
+    _rewrite_lines(done_file, [line for line, _ in entries])
+    _rewrite_lines(target, [line for line, row in _jsonl_lines(target) if row.get("ticker") in done])
+    print(f"resuming {trades_jsonl}: {len(done)} ticker(s) already done", flush=True)
+    return done
+
+
+def _append_synced(path: Path, lines: list[str]) -> None:
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("".join(line + "\n" for line in lines))
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _checkpoint_writer(trades_jsonl):
+    """on_ticker_result for run_scenario_backtest: the ticker's rows reach
+    disk first, then its done-list line (with its per-horizon not_triggered
+    counts), each flushed and fsynced."""
+    target, done_file = Path(trades_jsonl), _done_path(trades_jsonl)
+
+    def on_ticker_result(ticker: str, exits: dict, rows: list) -> None:
+        _append_synced(target, [json.dumps(row, default=_jsonable) for row in rows])
+        not_triggered = {hk: sum(1 for result in results if result.outcome == "not_triggered")
+                         for hk, results in exits.items()}
+        _append_synced(done_file, [json.dumps({"ticker": ticker, "rows": len(rows),
+                                               "not_triggered": not_triggered})])
+
+    return on_ticker_result
+
+
+def _stats_from_checkpoint(trades_jsonl, horizons: list[str]) -> dict:
+    """pooled/by_horizon rebuilt from the persisted rows (the closed exits, in
+    the replay's per-horizon ticker order) plus the done-list's not_triggered
+    counts: equal to run_scenario_backtest's own table."""
+    by_hz = {hk: [] for hk in horizons}
+    for _, row in _jsonl_lines(Path(trades_jsonl)):
+        by_hz[row["horizon_key"]].append(SimpleNamespace(
+            outcome=row["outcome"], runner_outcome=row["runner_outcome"], r_total=row["r_total"]))
+    for _, entry in _jsonl_lines(_done_path(trades_jsonl)):
+        for hk, count in entry["not_triggered"].items():
+            by_hz[hk].extend([_NOT_TRIGGERED] * count)
+    every = [result for results in by_hz.values() for result in results]
+    return {"pooled": _aggregate(every),
+            "by_horizon": {hk: _aggregate(results) for hk, results in by_hz.items()}}
+
+
+def _checkpointed_stats(frames, date_from, date_to, *, scale_out, universe, membership,
+                        trades_jsonl) -> dict:
+    """v226: the --trades-jsonl replay, one ticker at a time onto disk. The
+    as-of map is built on the FULL frame set even on a restart: it is
+    cross-sectional (rs_pctile ranks across tickers)."""
+    sidecar = run_sidecar(date_from=date_from, date_to=date_to, tickers=list(frames),
+                          universe=universe, membership=membership, argv=sys.argv[1:],
+                          today=_utc_today())
+    done = _resume_checkpoint(trades_jsonl, sidecar)
+    asof_map = _build_asof_map(list(frames), frames, universe)
+    remaining = {ticker: df for ticker, df in frames.items() if ticker not in done}
+    run_scenario_backtest(
+        remaining, date_from, date_to, gates=CONFLUENCE_GATES, scale_out=scale_out,
+        horizons=list(LEGACY_HORIZONS), membership=membership, asof_map=asof_map,
+        spy_df=_market_frame(), collect_rows=True,
+        on_ticker_done=_scenario_progress(trades_jsonl),
+        on_ticker_result=_checkpoint_writer(trades_jsonl))
+    stats = _stats_from_checkpoint(trades_jsonl, list(LEGACY_HORIZONS))
+    _progress_path(trades_jsonl).unlink(missing_ok=True)
+    print(f"Wrote {len(_jsonl_lines(Path(trades_jsonl)))} trade rows to {trades_jsonl}", flush=True)
+    return stats
 
 
 def _context_symbols(symbols) -> list:
@@ -266,23 +456,21 @@ def _scenario_stats(frames, date_from, date_to, *, scale_out, universe, membersh
                     record_blocked=None) -> dict:
     """run_scenario_mode's replay call. v146 I3: every scenario run builds
     the as-of map, so entry_context carries rs_pctile / regime2_state (it
-    feeds stamp_entry_context only -- the table cannot move). With
-    --trades-jsonl it also ships SPY to the workers, collects one row per
-    closed exit, writes them and deletes the progress file. v147's
-    --record-blocked rides the same call (gate rows written by _write_blocked)."""
+    feeds stamp_entry_context only -- the table cannot move). v226: with
+    --trades-jsonl the replay is checkpointed per ticker (_checkpointed_stats).
+    v147's --record-blocked rides the plain call (gate rows written by
+    _write_blocked); it is refused together with --trades-jsonl."""
+    if trades_jsonl:
+        return _checkpointed_stats(frames, date_from, date_to, scale_out=scale_out,
+                                   universe=universe, membership=membership,
+                                   trades_jsonl=trades_jsonl)
     stats = run_scenario_backtest(
         frames, date_from, date_to, gates=CONFLUENCE_GATES, scale_out=scale_out,
         horizons=list(LEGACY_HORIZONS), membership=membership,
         asof_map=_build_asof_map(list(frames), frames, universe),
-        spy_df=_market_frame() if trades_jsonl else None,
-        collect_rows=bool(trades_jsonl), on_ticker_done=_scenario_progress(trades_jsonl),
+        spy_df=None, collect_rows=False, on_ticker_done=None,
         record_blocked=bool(record_blocked))
     _write_blocked(stats, record_blocked)
-    if trades_jsonl:
-        rows = stats.pop("rows")
-        write_scenario_trades_jsonl(rows, trades_jsonl)
-        _progress_path(trades_jsonl).unlink(missing_ok=True)
-        print(f"Wrote {len(rows)} trade rows to {trades_jsonl}", flush=True)
     return stats
 
 
