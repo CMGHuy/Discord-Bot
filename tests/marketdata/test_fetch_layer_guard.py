@@ -16,6 +16,7 @@ ALLOWED = frozenset({
     "swingbot/core/marketdata/daily_delta.py",     # D4 window and full fetch on the yfinance basis
     "swingbot/core/market/events.py",              # earnings provider functions behind layer.get
     "swingbot/core/marketdata/backtest_cache.py",  # research cache: backtests are out of scope (spec D3)
+    "swingbot/core/marketdata/benchmarks.py",      # v208 benchmark index daily bars: refresher-only, never a watchlist ticker
     "swingbot/core/marketdata/export_data.py",     # research export: out of scope (spec D3)
 })
 

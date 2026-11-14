@@ -11,7 +11,7 @@ from swingbot.core.db import schema
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 PROMOTED = ("at", "realized_balance", "unrealized_pnl", "equity", "open_n", "skipped_n",
-            "source", "kind", "backfill_run")
+            "source", "kind", "backfill_run", "open_notional", "open_notional_approx")
 
 
 def test_the_table_is_registered_with_its_promoted_columns_and_reasons():
@@ -19,9 +19,10 @@ def test_the_table_is_registered_with_its_promoted_columns_and_reasons():
     assert schema.promoted_for("equity_samples") == PROMOTED
     assert set(schema.PROMOTION_REASONS["equity_samples"]) == set(PROMOTED)
     assert schema.contract_violations(table) == []
-    for column in PROMOTED[:-1]:
+    for column in PROMOTED[:8]:
         assert table.c[column].nullable is False, column
     assert table.c.backfill_run.nullable is True
+    assert table.c.open_notional.nullable is True and table.c.open_notional_approx.nullable is True
 
 
 def test_money_is_double_precision_and_at_is_timestamptz():
