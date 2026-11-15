@@ -1,0 +1,13 @@
+{
+  "source": "yfinance daily (auto_adjust=True), fetch_backtest_data.py --shock-index",
+  "fetched_at": "2026-11-13T11:18:41+00:00",
+  "end": "2026-11-04",
+  "spy_first": "1993-01-29",
+  "spy_rows": 8500,
+  "vix_first": "1990-01-02",
+  "vix_rows": 9279,
+  "vix_dropped_non_session_dates": [
+    "2026-05-25",
+    "2026-09-07"
+  ]
+}
