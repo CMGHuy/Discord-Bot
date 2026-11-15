@@ -58,6 +58,7 @@ import yfinance as yf
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from swingbot.core.db.repositories.equity_samples import equity_samples_repo  # noqa: E402
+from swingbot.core.marketdata.ticker_utils import ALIASES  # noqa: E402
 from swingbot.core.market.session import US_MARKET_TZ, nyse_calendar  # noqa: E402
 from swingbot.core.tracking import equity  # noqa: E402
 from swingbot.core.tracking.performance import expand_trade_legs  # noqa: E402
@@ -297,8 +298,10 @@ def new_run_id() -> str:
 def fetch_raw_bars(ticker: str, start: date, end: date) -> pd.DataFrame:
     """Daily bars (auto_adjust=False), start..end inclusive (yfinance's `end` is exclusive).
     auto_adjust=False skips dividend adjustment only; prices stay split-adjusted
-    while fills are raw, so `_fill_off_bar` flags a fill far outside its day's bar."""
-    frame = yf.download(ticker, start=start.isoformat(), end=(end + timedelta(days=1)).isoformat(),
+    while fills are raw, so `_fill_off_bar` flags a fill far outside its day's bar.
+    Spot metals (XAUUSD/XAGUSD) have no Yahoo bars: they are fetched as GC=F/SI=F, the
+    same alias the watchlist uses, and a fill off that future's range stays unpriced."""
+    frame = yf.download(ALIASES.get(ticker.upper(), ticker), start=start.isoformat(), end=(end + timedelta(days=1)).isoformat(),
                         interval="1d", auto_adjust=False, progress=False)
     if frame is None or frame.empty:
         return pd.DataFrame(columns=list(_OHLC))

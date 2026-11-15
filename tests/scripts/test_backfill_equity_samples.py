@@ -308,6 +308,20 @@ def test_fetch_raw_bars_asks_yfinance_for_unadjusted_daily_bars(monkeypatch):
     assert list(frame.columns) == ["Open", "High", "Low", "Close"]
 
 
+@pytest.mark.parametrize("ticker, yahoo", [("XAUUSD", "GC=F"), ("XAGUSD", "SI=F"),
+                                           ("SI=F", "SI=F"), ("AAPL", "AAPL")])
+def test_fetch_raw_bars_asks_yahoo_for_the_future_behind_a_spot_metal(monkeypatch, ticker, yahoo):
+    seen = []
+
+    def fake_download(symbol, **kwargs):
+        seen.append(symbol)
+        return pd.DataFrame()
+
+    monkeypatch.setattr(bes.yf, "download", fake_download)
+    assert bes.fetch_raw_bars(ticker, MON, WED).empty
+    assert seen == [yahoo]
+
+
 def test_recompute_realized_rewrites_only_the_realized_columns_of_live_rows(
         monkeypatch, repo, account, tmp_path):
     at = datetime(2026, 10, 8, 15, 0, tzinfo=timezone.utc)
