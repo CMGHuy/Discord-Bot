@@ -24,7 +24,7 @@ from swingbot.core import presentation as ui
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.scanning import telemetry
 
-from . import notices, runstate
+from . import loop_guard, notices, runstate
 
 log = logging.getLogger(__name__)
 
@@ -226,3 +226,6 @@ async def check_provider_health(row: dict | None = None) -> str | None:
         swallowed(log, "ops.provider_health", exc, "provider health check failed",
                   level=logging.ERROR, exc_info=True)
         return None
+
+
+loop_guard.restart_on_error(scan_watchdog, "scan_watchdog")
