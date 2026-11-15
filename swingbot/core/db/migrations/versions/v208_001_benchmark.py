@@ -26,8 +26,8 @@ def _standard():
 
 
 def upgrade() -> None:
-    op.add_column("equity_samples", sa.Column("open_notional", sa.Float(53)))
-    op.add_column("equity_samples", sa.Column("open_notional_approx", sa.Boolean))
+    op.add_column("equity_samples", sa.Column("open_notional", sa.Float(53), nullable=True))
+    op.add_column("equity_samples", sa.Column("open_notional_approx", sa.Boolean, nullable=True))
     op.create_table("benchmark_bars",
         sa.Column("symbol", sa.Text, primary_key=True),
         sa.Column("session", sa.Date, primary_key=True),
