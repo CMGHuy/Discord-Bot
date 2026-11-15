@@ -375,5 +375,9 @@ async def on_command_error(ctx, error):
         await ctx.send("🚫 You don't have permission to run that command.")
         return
 
-    log.exception("Unhandled command error in '%s': %s", ctx.message.content, error)
+    # A dispatched event has no active exception, so log.exception() here
+    # recorded "NoneType: None"; hand the error (the command's own exception
+    # for a CommandInvokeError) to the logger explicitly.
+    cause = getattr(error, "original", error)
+    log.error("Unhandled command error in '%s': %s", ctx.message.content, error, exc_info=cause)
     await ctx.send(f"💥 Something went wrong: `{error}`\nIf this keeps happening, check the bot logs.")
