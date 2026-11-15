@@ -180,3 +180,11 @@ data/short_interest_queue.json
 
 # v211 screen checkpoints (per-ticker pickles, deleted once the record is committed)
 data/screen_checkpoints/
+
+# v222 / backfill scratch output in the bind-mounted data/ (evidence copy lives in docs/superpowers/results/v222/)
+data/v222/
+data/v222-fetch.log
+data/backfill_equity_samples/
+
+# v212 full row dump, 105 MB: over GitHub's 100 MB push limit
+docs/superpowers/results/v212/v212-rows-train-rows.json
