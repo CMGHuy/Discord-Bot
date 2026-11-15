@@ -120,6 +120,43 @@ def test_refresh_symbols_survives_a_failing_source(monkeypatch):
     assert si.refresh_symbols() == ["XOM"]
 
 
+def test_open_short_tickers_reads_bearish_plans_and_open_trades(monkeypatch):
+    """Exercises the real imports: the trade-log import once pointed at a module
+    that does not exist, so this source raised on every refresh in production."""
+    from types import SimpleNamespace
+    from swingbot.core.planning import plan_store
+    from swingbot.core.tracking import performance
+    plans = [SimpleNamespace(ticker="TSLA", direction="bearish"),
+             SimpleNamespace(ticker="AAPL", direction="bullish")]
+    trades = [{"ticker": "RIVN", "direction": "bearish"},
+              {"ticker": "MSFT", "direction": "bullish"}]
+    calls = {}
+
+    class _Plans:
+        def open_plans(self):
+            return plans
+
+    class _Trades:
+        def get_trades(self, **kwargs):
+            calls.update(kwargs)
+            return trades
+
+    monkeypatch.setattr(plan_store, "PlanStore", _Plans)
+    monkeypatch.setattr(performance, "TradeLog", _Trades)
+    assert si._open_short_tickers() == ["TSLA", "RIVN"]
+    assert calls == {"status": "open", "limit": None}
+
+
+def test_open_short_tickers_empty_book(monkeypatch):
+    from swingbot.core.planning import plan_store
+    from swingbot.core.tracking import performance
+    monkeypatch.setattr(plan_store, "PlanStore",
+                        lambda: type("P", (), {"open_plans": lambda self: []})())
+    monkeypatch.setattr(performance, "TradeLog",
+                        lambda: type("T", (), {"get_trades": lambda self, **k: []})())
+    assert si._open_short_tickers() == []
+
+
 def _info_entry(fetched_at=NOW):
     from swingbot.core.marketdata.shared.kinds import Entry
     return Entry({k: INFO.get(k) for k in si.INFO_KEYS}, fetched_at, "yfinance", "fetched")

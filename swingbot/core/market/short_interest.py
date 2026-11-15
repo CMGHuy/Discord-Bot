@@ -201,7 +201,7 @@ def _short_universe(today: dt.date) -> list[str]:
 
 def _open_short_tickers() -> list[str]:
     from swingbot.core.planning.plan_store import PlanStore
-    from swingbot.core.tracking.trade_log import TradeLog
+    from swingbot.core.tracking.performance import TradeLog
     rows = list(PlanStore().open_plans()) + list(TradeLog().get_trades(status="open", limit=None))
     return [t for t in (_bearish_ticker(r) for r in rows) if t]
 
