@@ -450,6 +450,35 @@ v92.
 2. **Plan 2 — ladder and additive gate** (Parts B and C). It starts after
    Plan 1's null lands, because the ladder's rung 1 uses it.
 
+## Found while briefing Plan 1 (2026-11-16)
+
+The code brief found five things Part A did not name. The rulings:
+
+- **`screen-v2` joins `stats.INSTRUMENTS`**, or `validate_ledger_row`
+  rejects every new row.
+- **A ledger row has fixed fields.** A `screen2-` row names its v1 row in
+  its hypothesis text and in its results doc, not in a new column.
+- **The guardrail hook refuses the re-screen today.**
+  `.claude/hooks/guardrails.py` (`_rule_screen_rerun`) denies a real run of
+  any idea that has a `screen-<idea>` row and whitelists the script's
+  options. Plan 1 extends it narrowly: `--rescreen-v1` is allowed for
+  exactly the twelve names in A5, each only while its `screen2-<name>` row
+  is absent; every other re-run stays denied. The change ships with tests
+  in `tests/hooks/test_guardrails.py` and its `.codex/hooks.json` mirror.
+  This implements partner decision 2 and widens nothing else.
+- **One multiple-comparison family.** `screen2-` rows and every later
+  `screen-v2` row report q over all ledger rows, as `publish` computes it.
+  `diagnostics.screen_family_q`'s per-instrument text ("across the
+  `screen-v1` family") is updated to match, with its pinned tests.
+- **Descriptive blocks that read the null draw** (forward-drift excess,
+  restricted, shock and level blocks) are computed from each null bar on
+  its own ticker's frame. A block that cannot be computed that way is
+  omitted and its results doc says so. None of them gates.
+
+None of the twelve re-screen ideas uses a level entry or the trail race, so
+the batch exercises the next-open path only; the level-entry v2 path is
+still built and tested, for new ideas.
+
 ## Left to the builder
 
 - The intraday range model for `gbm` bars and the exact rebuild of
