@@ -305,8 +305,11 @@ git push origin main
 ...which runs the full pipeline and publishes a new tag as normal.
 
 Note the retention policy (`.github/workflows/registry-retention.yml`)
-prunes builds older than 14 days, keeping the 10 most recent plus `latest`.
-Rolling back further than that means rebuilding from the tag instead.
+prunes builds older than 45 days every Sunday, keeping the 10 most recent plus
+`latest` and every `stable-*` tag. Rolling back further than that means
+rebuilding from the tag instead. (It never actually ran before 2026-11-16: it
+targeted the owner as an organization and failed every week; a manual dispatch
+is a dry run by default.)
 
 Separately, the `cleanup` job in `.github/workflows/deploy.yml` runs
 `docker image prune -af` on the Hetzner box itself **before** every deploy

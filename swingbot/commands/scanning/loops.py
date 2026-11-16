@@ -22,6 +22,7 @@ from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.scanning import outlook_session
 from swingbot.core.tracking import live_loss_watch as loss_watch
+from . import loop_guard
 from . import book_status, cooldown, equity_recorder, monitor_liveness, notices, ops_watch, outlook, presence, recap, runstate
 from .alerts import _send_alerts, send_then_short
 
@@ -332,20 +333,6 @@ async def _session_scan_tick():
     await presence._refresh_presence()
 
 
-@session_scan.error
-async def _session_scan_error(exc: Exception):
-    """
-    Last-resort safety net -- _session_scan_tick()'s own try/except above
-    should catch everything and let the loop keep ticking on schedule, but
-    if something still manages to escape (e.g. an exception raised by
-    discord.py's own task-loop machinery, outside our function body), this
-    logs it AND explicitly restarts the loop rather than letting
-    discord.ext.tasks quietly stop calling session_scan forever.
-    """
-    log.exception("session_scan loop raised past its own try/except -- restarting the loop: %s", exc)
-    if not session_scan.is_running():
-        session_scan.restart()
-
 @tasks.loop(minutes=15)
 async def heartbeat():
     """
@@ -536,12 +523,6 @@ async def config_watcher():
         log.info("Triggered scan complete — %d alert(s) posted%s.", len(alerts),
                   " (stopped early)" if progress.stopped else "")
 
-
-@config_watcher.error
-async def _config_watcher_error(exc: Exception):
-    log.exception("config_watcher loop escaped -- restarting: %s", exc)
-    if not config_watcher.is_running():
-        config_watcher.restart()
 
 async def _post_feed(plan_events) -> list:
     """Return only the plan-event deliveries that reached the Discord feed."""
@@ -803,12 +784,6 @@ async def _monitor_tick(rec: "monitor_liveness.TickRecord") -> None:
             log.warning("trade_monitor: failed to post close notifications: %s", exc, exc_info=True)
         await presence._refresh_presence()
 
-
-@trade_monitor.error
-async def _trade_monitor_error(exc: Exception):
-    log.exception("trade_monitor loop escaped -- restarting: %s", exc)
-    if not trade_monitor.is_running():
-        trade_monitor.restart()
 
 
 _recap_fired_date: dt.date | None = None   # process-local fast path; persisted below for restart safety
@@ -1388,6 +1363,21 @@ def _apply_scan_interval_change(changed: dict):
         log.info("Scan interval hot-reloaded to every %d minute(s) (takes effect next tick).", new_minutes)
     _apply_market_data_refresh_config(changed)
 
+
+# Every background loop logs its traceback and restarts when its body raises
+# past its own handling; without this a single DB hiccup in e.g. heartbeat or
+# a scheduled job ended that loop until the next container restart.
+for _loop_name, _loop in (
+        ("session_scan", session_scan), ("heartbeat", heartbeat),
+        ("config_watcher", config_watcher), ("trade_monitor", trade_monitor),
+        ("daily_recap", daily_recap), ("weekend_deep_scan", weekend_deep_scan_task),
+        ("next_session_scan", next_session_scan), ("next_session_wrapup", next_session_wrapup),
+        ("weekly_earnings_refresh", weekly_earnings_refresh),
+        ("daily_short_interest_refresh", daily_short_interest_refresh),
+        ("daily_reanchor", daily_reanchor), ("gate_counterfactual_resolve", gate_counterfactual_resolve),
+        ("override_verdict_check", override_verdict_check), ("market_data_refresh", market_data_refresh),
+        ("pitr_watch", pitr_watch_loop), ("tape_feed", tape_feed)):
+    loop_guard.restart_on_error(_loop, _loop_name)
 
 async def _post_bot_online(wl_size: int) -> None:
     """Startup notice (v110 §5): a SYSTEM embed, send guarded (§6.3)."""

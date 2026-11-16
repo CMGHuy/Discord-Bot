@@ -100,3 +100,31 @@ def test_backtest_command_failure_is_logged_shown_and_not_followed_by_a_tip(monk
     assert record.exc_info is not None and "AAPL" in record.getMessage()
     assert events[-1][1] == "⚠️ Could not fetch data for AAPL: yahoo down"
     assert not any((event[1] or "").startswith("Tip:") for event in events)
+
+
+class _ErrCtx(_Ctx):
+    class message:
+        content = "!ticker AAPL"
+    command = None
+
+
+def _command_invoke_error():
+    from discord.ext import commands
+    try:
+        raise RuntimeError("deep failure")
+    except RuntimeError as original:
+        return commands.CommandInvokeError(original)
+
+
+def test_unhandled_command_error_logs_the_original_traceback(caplog):
+    """on_command_error runs as a dispatched event with no active exception,
+    so log.exception() there recorded 'NoneType: None' instead of the crash."""
+    from swingbot import bot_core
+    ctx, error = _ErrCtx(), _command_invoke_error()
+    with caplog.at_level(logging.ERROR, logger=bot_core.log.name):
+        asyncio.run(bot_core.on_command_error(ctx, error))
+    [record] = [r for r in caplog.records if r.name == bot_core.log.name]
+    assert record.exc_info is not None
+    assert isinstance(record.exc_info[1], RuntimeError)
+    assert record.exc_info[2] is not None
+    assert ctx.sent and "Something went wrong" in ctx.sent[-1]

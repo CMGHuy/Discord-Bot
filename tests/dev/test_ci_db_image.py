@@ -33,14 +33,15 @@ def test_the_deploy_waits_for_and_passes_the_db_image():
 
 
 def test_ghcr_retention_covers_the_rollback_window_for_both_images():
-    step = _load("registry-retention.yml")["jobs"]["prune"]["steps"][0]
+    steps = _load("registry-retention.yml")["jobs"]["prune"]["steps"]
+    step = next(s for s in steps if "container-retention-policy" in s.get("uses", ""))
     cut = step["with"]["cut-off"]
     assert cut.endswith("d") and int(cut[:-1]) >= 30
     raw = step["with"]["image-names"].replace(",", chr(10))
     names = [n.strip() for n in raw.splitlines() if n.strip()]
     assert len(names) == 2
-    assert "${{ github.event.repository.name }}" in names
-    assert "${{ github.event.repository.name }}-db" in names
+    assert "${{ steps.names.outputs.bot }}" in names   # lowercased repo name
+    assert "${{ steps.names.outputs.db }}" in names
 
 
 def test_the_db_image_is_linked_to_the_repo_so_ghcr_can_prune_it():

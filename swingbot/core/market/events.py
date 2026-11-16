@@ -26,6 +26,7 @@ from swingbot.core.marketdata import yf_safe
 from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.shared import counters, layer
 from swingbot.core.marketdata.shared.kinds import PROVIDER_YF, Asker, DataKind
+from swingbot.core.marketdata.asset_class import classify
 from swingbot.core.marketdata.spot_metals import is_spot_metal
 from swingbot.core.marketdata.ticker_utils import candidate_symbols
 from swingbot.core.marketdata.universe import is_etf
@@ -53,9 +54,16 @@ _earnings_datetimes_cache: dict[str, tuple[list[dt.datetime], float]] = {}
 _NOT_CACHED = object()
 
 
+#: Asset classes with no earnings (asset_class.classify). Indices, futures, FX
+#: and crypto once reached Yahoo here and came back 404 on every refresh.
+_NO_EARNINGS_CLASSES = frozenset({"index", "future", "fx", "crypto", "spot_metal"})
+
+
 def _never_reports(ticker: str) -> bool:
-    """Funds and spot metals (v109) never report earnings: never gate, never fetch."""
-    return is_etf(ticker) or is_spot_metal(ticker)
+    """Funds, spot metals (v109), indices, futures, FX and crypto never report
+    earnings: never gate, never fetch."""
+    return (is_etf(ticker) or is_spot_metal(ticker)
+            or classify(ticker) in _NO_EARNINGS_CLASSES)
 
 
 def get_next_earnings_date(ticker: str, *, asker: Asker = Asker.BACKGROUND) -> dt.date | None:

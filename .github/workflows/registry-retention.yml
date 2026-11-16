@@ -9,7 +9,12 @@ name: Prune old container images
 on:
   schedule:
     - cron: "17 4 * * 0"   # Sundays, 04:17 UTC. Off-hour, off-peak, arbitrary.
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "List what would be deleted, delete nothing"
+        type: boolean
+        default: true
 
 jobs:
   prune:
@@ -35,6 +40,18 @@ jobs:
       # keep-n-most-recent applies AFTER the cut-off filter, so a burst of
       # deploys cannot push the live image out of the retained set inside a
       # single 14-day window.
+      # GHCR stores package names lowercase (deploy.yml lowercases the repo
+      # for the image path), and the action matches names case-sensitively:
+      # `Discord-Bot` matched 0/2 packages in the first dry run, 2026-11-16.
+      - name: Package names
+        id: names
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          NAME="$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]')"
+          echo "bot=$NAME" >> "$GITHUB_OUTPUT"
+          echo "db=$NAME-db" >> "$GITHUB_OUTPUT"
+
       - name: Delete image versions older than 45 days
         # Pinned past v3.0.0 on purpose: that version's token-format check only
         # accepted a classic PAT (ghp_) or OAuth token (gho_) and rejected the
@@ -44,15 +61,20 @@ jobs:
         # format migration (snok/container-retention-policy#132, #129).
         uses: snok/container-retention-policy@v3.1.0
         with:
-          account: ${{ github.repository_owner }}
+          # snok/container-retention-policy v3.1.0 README: "`account: user` to signify that it's for your personal account".
+          # The owner (CMGHuy) is a user: `account: <owner>` built
+          # /orgs/<owner>/packages/container/<name>, which 404s for a user, and
+          # the action panicked on the error body ("Failed to fetch packages:
+          # missing field `id`") on every run from 2026-08-16 to 2026-11-15.
+          account: user
           token: ${{ secrets.GITHUB_TOKEN }}
           # v116: rollback_to.sh pulls the tag that was live at the target
           # second, up to 30 days back, and that image may itself be older than
           # the target. 45 days covers the window plus that age; rollback_to.sh
           # still refuses a tag GHCR no longer has.
           image-names: |
-            ${{ github.event.repository.name }}
-            ${{ github.event.repository.name }}-db
+            ${{ steps.names.outputs.bot }}
+            ${{ steps.names.outputs.db }}
           cut-off: 45d
           keep-n-most-recent: 10
           # Never the moving tag, and never an untagged version that a
@@ -62,7 +84,8 @@ jobs:
           # snok/container-retention-policy v3.1.0 README: "Works the same way as the `image-names` parameter" (supports filtering with `*` and `!`, `!` meaning do not select matching names).
           # snok/container-retention-policy v3.1.0 README: not stated; v3.1.0 source (src/core/select_package_versions.rs) keeps a version when any of its tags matches a negative matcher.
           image-tags: "!latest,!stable-*"
-          dry-run: false
+          # A scheduled run deletes; a manual run is a dry run unless unticked.
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
 
       # Deleting a version does not always reclaim what you expect (a layer
       # shared with a retained image stays), so the summary is worth reading

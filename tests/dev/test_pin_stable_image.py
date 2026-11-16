@@ -73,7 +73,8 @@ def test_retag_is_registry_side_for_both_images():
 
 
 def _retention_step():
-    return _load(RETENTION)["jobs"]["prune"]["steps"][0]
+    steps = _load(RETENTION)["jobs"]["prune"]["steps"]
+    return next(s for s in steps if "container-retention-policy" in s.get("uses", ""))
 
 
 def test_retention_never_prunes_latest_or_stable_tags():
@@ -84,3 +85,27 @@ def test_retention_never_prunes_latest_or_stable_tags():
 def test_retention_exclusion_quotes_the_action_readme():
     text = RETENTION.read_text(encoding="utf-8")
     assert "snok/container-retention-policy v3.1.0 README:" in text
+
+
+def test_retention_targets_the_personal_account_endpoints():
+    # The repo owner is a user, not an org. `account: <owner>` made the action
+    # fetch /orgs/<owner>/packages/container/<name>, which 404s for a user, so
+    # every run panicked ("missing field `id`") and nothing was ever pruned.
+    assert _retention_step()["with"]["account"] == "user"
+
+
+def test_retention_manual_run_defaults_to_dry_run_and_schedule_deletes():
+    wf = _load(RETENTION)
+    dispatch = _on(wf)["workflow_dispatch"]["inputs"]["dry_run"]
+    assert dispatch["type"] == "boolean" and dispatch["default"] is True
+    dry = _retention_step()["with"]["dry-run"]
+    assert "github.event_name == 'workflow_dispatch'" in dry
+    assert "inputs.dry_run" in dry and dry.rstrip("} ").endswith("'false'")
+
+
+def test_retention_names_the_packages_in_lowercase():
+    # GHCR package names are lowercase; `Discord-Bot` matched 0/2 packages.
+    steps = _load(RETENTION)["jobs"]["prune"]["steps"]
+    names = next(s for s in steps if s.get("id") == "names")
+    assert "tr '[:upper:]' '[:lower:]'" in names["run"]
+    assert steps.index(names) < steps.index(_retention_step())

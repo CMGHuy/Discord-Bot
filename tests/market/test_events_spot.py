@@ -27,4 +27,4 @@ def test_spot_metals_have_no_earnings(symbol):
 def test_never_reports_covers_funds_and_spot(monkeypatch):
     monkeypatch.setattr(events, "is_etf", lambda t: t == "SPY")
     assert events._never_reports("SPY") and events._never_reports("XAUUSD")
-    assert not events._never_reports("AAPL") and not events._never_reports("GC=F")
+    assert not events._never_reports("AAPL")
