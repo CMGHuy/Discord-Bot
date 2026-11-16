@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-13 21:52:19 UTC",
+  "generated_at": "2026-11-16 17:47:44 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.43.0",
-    "bot": "2.18.7"
+    "ui": "1.44.0",
+    "bot": "2.19.0"
   },
   "releases": [
     {
@@ -2650,6 +2650,20 @@
       "versions": {
         "ui": "1.43.0",
         "bot": "2.18.7"
+      },
+      "changed": [
+        "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-16",
+      "last_seen": "2026-11-16",
+      "commit": "18118ed6",
+      "subject": "release(ui,bot): ui 1.44.0, bot 2.19.0 -- Benchmark tab: bot account vs SPY, QQQ, Nasdaq, Dow (v208)",
+      "versions": {
+        "ui": "1.44.0",
+        "bot": "2.19.0"
       },
       "changed": [
         "ui",
