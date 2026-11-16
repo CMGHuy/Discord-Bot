@@ -4,7 +4,7 @@
 
 **Bump:** ui patch, bot patch
 **Edge:** none (integrity)
-**Spec:** [v206 — Admin under load](../specs/2026-11-05-v206-admin-under-load-design.md) § Plan 3 — v205 Layer 2, ETag/304 and Server-Timing (P3-c, P3-d); § Error handling, § Testing, § Rollout and rollback, § Results "Plan 2 after". L2 authority: [v205 — Admin read performance](../specs/2026-11-04-v205-admin-read-performance-design.md) § Layer 2 — a cross-request snapshot (L2-a..d), § Error handling, § Testing.
+**Spec:** [v206 — Admin under load](../specs/2026-11-05-v206-admin-under-load-design.md) § Plan 3 — v205 Layer 2, ETag/304 and Server-Timing (P3-c, P3-d); § Error handling, § Testing, § Rollout and rollback, § Results "Plan 2 after". L2 authority: [v205 — Admin read performance](../specs/implemented/2026-11-04-v205-admin-read-performance-design.md) § Layer 2 — a cross-request snapshot (L2-a..d), § Error handling, § Testing.
 
 ## Goal
 

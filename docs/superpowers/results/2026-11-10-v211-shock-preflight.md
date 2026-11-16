@@ -1,6 +1,6 @@
 # v211 shock-short screens — outcome-blind preflight
 
-**Spec:** `docs/superpowers/specs/2026-11-05-v209-market-shock-detector-design.md` § Track 2 → Printed alongside each verdict
+**Spec:** `docs/superpowers/specs/implemented/2026-11-05-v209-market-shock-detector-design.md` § Track 2 → Printed alongside each verdict
 **Plan:** `docs/superpowers/plans/2026-11-06-v211-shock-short-screens_0-index.md` (V211-13)
 **Run date:** 2026-11-10 (Berlin)
 **Definition commit:** fb6d5a62ce9a28b938ad76a1e0a28cd616b21721

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. Global Constraints, Review Focus, Parallelisation and the task ledger live in the index: [`2026-11-06-v211-shock-short-screens_0-index.md`](2026-11-06-v211-shock-short-screens_0-index.md) — every task here implicitly includes them.
 
-**Spec:** [v209 — Market-shock detector (shadow) and shock-conditioned short screens](../specs/2026-11-05-v209-market-shock-detector-design.md) (§ Track 2 → The shared daily inputs: the declared `CONTEXT_KIND = "level"` extension; § Printed alongside each verdict for what later parts hang on these seams)
+**Spec:** [v209 — Market-shock detector (shadow) and shock-conditioned short screens](../specs/implemented/2026-11-05-v209-market-shock-detector-design.md) (§ Track 2 → The shared daily inputs: the declared `CONTEXT_KIND = "level"` extension; § Printed alongside each verdict for what later parts hang on these seams)
 
 **Tasks:** V211-4 → V211-5 → V211-6, all in `.claude/worktrees/2026-11-06-v211-shock-short-screens` (created in V211-1). All three edit `scripts/backtest/screen_idea.py`, so they run in order.
 

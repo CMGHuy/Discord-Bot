@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Dispatch `task-implementer` at each task's `**Model:**` tier.
 
-**Spec:** [v209 — Market-shock detector (shadow) and shock-conditioned short screens](../specs/2026-11-05-v209-market-shock-detector-design.md), § Track 2 → "The shared daily inputs".
+**Spec:** [v209 — Market-shock detector (shadow) and shock-conditioned short screens](../specs/implemented/2026-11-05-v209-market-shock-detector-design.md), § Track 2 → "The shared daily inputs".
 **Index:** [`2026-11-06-v211-shock-short-screens_0-index.md`](2026-11-06-v211-shock-short-screens_0-index.md) — Goal, Global Constraints, Review Focus, Parallelisation and the task ledger live there and bind every task below.
 
 This part builds the two context files the ideas read and keeps them out of

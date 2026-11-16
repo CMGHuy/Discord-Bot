@@ -5,7 +5,7 @@
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 **Panel:** staff-engineer, senior-engineer, quant-engineer
-**Follows:** v205 (`docs/superpowers/specs/2026-11-04-v205-admin-read-performance-design.md`)
+**Follows:** v205 (`docs/superpowers/specs/implemented/2026-11-04-v205-admin-read-performance-design.md`)
 
 ## Why
 

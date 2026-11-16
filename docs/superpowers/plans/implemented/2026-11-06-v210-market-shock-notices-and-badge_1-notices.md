@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [v209 — Market-shock detector](../specs/2026-11-05-v209-market-shock-detector-design.md) (§ Units → *Discord notices*, *Admin*; § Track 1 tests → *Notice formatting*, *Frontend*)
+**Spec:** [v209 — Market-shock detector](../specs/implemented/2026-11-05-v209-market-shock-detector-design.md) (§ Units → *Discord notices*, *Admin*; § Track 1 tests → *Notice formatting*, *Frontend*)
 **Index:** [`_0-index.md`](2026-11-06-v210-market-shock-notices-and-badge_0-index.md) — Goal, Global Constraints, Review Focus, Parallelisation and the task ledger live there and bind every task below.
 **Brief:** `.superpowers/briefs/2026-11-05-v209-market-shock-detector.md` §3.8 (queue), §3.9–3.10 (tape), §4 (test patterns), D1.
 

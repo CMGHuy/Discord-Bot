@@ -5,7 +5,7 @@
 **Bump:** none of its own (rides v209's bot minor, released in V209-13)
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
-**Spec:** [v209 — Market-shock detector](../specs/2026-11-05-v209-market-shock-detector-design.md), § Amendment A1 and § Panel review (A1) (main @ 50a970cb)
+**Spec:** [v209 — Market-shock detector](../specs/implemented/2026-11-05-v209-market-shock-detector-design.md), § Amendment A1 and § Panel review (A1) (main @ 50a970cb)
 **Parent plan:** [`2026-11-05-v209-market-shock-detector_0-index.md`](2026-11-05-v209-market-shock-detector_0-index.md) — its Global Constraints still bind; this plan has its own ledger because the parent's 18 rows plus A1 would pass the 20-task cap.
 **Brief:** `.superpowers/briefs/2026-11-05-v209-market-shock-detector-a1.md`
 **Branch:** every task applies on the v209 worktree `.claude/worktrees/2026-11-05-v209-market-shock-detector` (branch `2026-11-05-v209-market-shock-detector`, HEAD a382234d when written). Paths marked "(v209 branch)" exist only there, never on `main`.

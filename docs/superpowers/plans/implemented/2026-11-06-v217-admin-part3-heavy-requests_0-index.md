@@ -4,7 +4,7 @@
 
 **Bump:** ui patch, bot patch
 **Edge:** none (integrity)
-**Spec:** [v206 — Admin under load](../specs/2026-11-05-v206-admin-under-load-design.md) (§ Plan 2 — v205 Part 3 plus one boot merge; § Error handling, § Testing, § Rollout and rollback). P3 authority: [v205 — Admin read performance](../specs/2026-11-04-v205-admin-read-performance-design.md) § Part 3 — fewer heavy requests per page (P3-a, P3-b), § Testing, § Rollout and rollback.
+**Spec:** [v206 — Admin under load](../specs/2026-11-05-v206-admin-under-load-design.md) (§ Plan 2 — v205 Part 3 plus one boot merge; § Error handling, § Testing, § Rollout and rollback). P3 authority: [v205 — Admin read performance](../specs/implemented/2026-11-04-v205-admin-read-performance-design.md) § Part 3 — fewer heavy requests per page (P3-a, P3-b), § Testing, § Rollout and rollback.
 
 ## Goal
 

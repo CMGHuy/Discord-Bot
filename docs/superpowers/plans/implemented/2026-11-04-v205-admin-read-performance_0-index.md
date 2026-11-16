@@ -5,7 +5,7 @@
 **Bump:** bot patch
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
-**Spec:** [Admin read performance](../specs/2026-11-04-v205-admin-read-performance-design.md), § "Layer 1 — remove the repeated work (plan v205)", "Error handling", "Testing", "Rollout and rollback". Layer 2 and Part 3 are later plans with their own numbers; nothing here builds them.
+**Spec:** [Admin read performance](../specs/implemented/2026-11-04-v205-admin-read-performance-design.md), § "Layer 1 — remove the repeated work (plan v205)", "Error handling", "Testing", "Rollout and rollback". Layer 2 and Part 3 are later plans with their own numbers; nothing here builds them.
 
 **Goal:**
 
@@ -105,7 +105,7 @@ At most 2 implementers at once (`CLAUDE.md`). Sequential edges and their reasons
 
 | ID | Title | Part | Model | Files | Cross-task contract |
 |---|---|---|---|---|---|
-| V205-1 | Read-only production timing script; baseline run | 1 | sonnet | Create `scripts/ops/admin_endpoint_timing.py`, `tests/scripts/test_admin_endpoint_timing.py`; modify `docs/superpowers/specs/2026-11-04-v205-admin-read-performance-design.md` (`## Results`: "Before v205 (script)" table) | See "Timing script" |
+| V205-1 | Read-only production timing script; baseline run | 1 | sonnet | Create `scripts/ops/admin_endpoint_timing.py`, `tests/scripts/test_admin_endpoint_timing.py`; modify `docs/superpowers/specs/implemented/2026-11-04-v205-admin-read-performance-design.md` (`## Results`: "Before v205 (script)" table) | See "Timing script" |
 | V205-2 | Engine hook in `get_engine`; admin SQL tally; `admin-perf` suite | 1 | sonnet | Modify `swingbot/core/db/engine.py`, `tests/suites.toml`; create `swingbot/admin/request_timing.py`, `tests/db/test_engine_hooks.py`, `tests/admin_perf/__init__.py`, `tests/admin_perf/conftest.py`, `tests/admin_perf/test_sql_tally.py` | See "Engine hook" and "Request timing" |
 | V205-3 | `Server-Timing` on every `/api/v1` response; slow-request log; `ADMIN_SLOW_REQUEST_MS` | 1 | sonnet | Modify `swingbot/admin/request_timing.py`, `swingbot/admin/app.py`, `swingbot/config.py`, `.env.example`; create `tests/admin_perf/test_server_timing.py`, `tests/test_config_v205_keys.py` | See "Request timing", "Config field" |
 | V205-4 | Golden book: seed, frozen clock, masking; golden endpoint test harness | 1 | opus | Create `tests/admin_perf/golden_book.py`, `tests/admin_perf/test_golden_endpoints.py`; modify `tests/admin_perf/conftest.py` | See "Golden book" |
@@ -124,7 +124,7 @@ At most 2 implementers at once (`CLAUDE.md`). Sequential edges and their reasons
 | V205-15 | `fx.fx_rate` reads the table; strictly-before rule replaces `_close_on_or_before`; FX tests updated | 4 | opus | Modify `swingbot/core/marketdata/fx.py`, `tests/marketdata/test_fx.py`, `tests/marketdata/test_fx_persisted.py`, `tests/admin_perf/money_reference.py`, `tests/admin_perf/golden_book.py`, `tests/admin_perf/conftest.py` (`golden_seed.set_fx` seeds `fx_daily_rates`, `fx_daily.reset_memo()` on teardown) (seed `fx_daily_rates` rows) | See "fx_rate after V205-15" |
 | V205-16 | `fx_convert` on Berlin days; major-code identity; Berlin-today callers; admin FX tests updated | 5 | opus | Modify `swingbot/core/marketdata/fx_convert.py`, `swingbot/admin/api_v1/dashboard.py` (line ~320), `swingbot/admin/api_v1/trades.py` (line ~1341), `swingbot/admin/api_v1/risk_read_model.py` (docstring), `swingbot/admin/api_v1/risk.py` (`_distribution_metrics` passes `fx_convert.fx_day(checked)`), `tests/admin/test_api_v1_money.py`, `tests/admin/test_api_v1_risk.py`, `tests/admin/test_risk_read_model.py`, `tests/admin/test_trades_golden_rows.py`, `tests/analytics/test_cancel_replay.py` (each only where an assertion moves), `tests/admin_perf/money_reference.py`, `tests/admin_perf/golden_book.py` (`CLOCK_MODULES` gains `fx_convert`); create `tests/admin_perf/test_fx_day.py` (suite `admin-perf`: market-data has ~5 tests of headroom left) | See "fx_convert after V205-16" |
 | V205-17 | Full suite | 5 | sonnet | Fix observed defects in the owning task's files only | `python <wt>/scripts/dev/testrun.py full`: `0 failed`, `0 xfailed`; `complexity_gate.py` clean; `plan_lint.py` clean |
-| V205-18 | Deploy, migrate, backfill, measure; spec `## Results` | 5 | sonnet | Modify `docs/superpowers/specs/2026-11-04-v205-admin-read-performance-design.md` (`## Results`: "After v205" table and verdict) | Uses V205-1's script and V205-14's script unchanged |
+| V205-18 | Deploy, migrate, backfill, measure; spec `## Results` | 5 | sonnet | Modify `docs/superpowers/specs/implemented/2026-11-04-v205-admin-read-performance-design.md` (`## Results`: "After v205" table and verdict) | Uses V205-1's script and V205-14's script unchanged |
 
 The ledger has 20 rows, the cap (V205-4 → 4b and V205-12 → 12b split for the size caps). No further split is possible: a task that outgrows 20 KB moves to a follow-up plan.
 

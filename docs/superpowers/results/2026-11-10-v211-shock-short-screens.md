@@ -1,6 +1,6 @@
 # v211 shock-conditioned short screens — summary
 
-**Spec:** `docs/superpowers/specs/2026-11-05-v209-market-shock-detector-design.md` § Track 2
+**Spec:** `docs/superpowers/specs/implemented/2026-11-05-v209-market-shock-detector-design.md` § Track 2
 **Plan:** `docs/superpowers/plans/2026-11-06-v211-shock-short-screens_0-index.md`
 **Pass rule (frozen, unchanged):** ΔExpR ≥ +0.10R after costs, lower 95 % week-cluster bound > 0, ≥ 7 of 9 years (2011–2019) positive, N ≥ 300 (`docs/claude/backtest-methodology.md` § Stage −2). One shot each.
 **Preflight (outcome-blind, committed before shot 1):** `results/2026-11-10-v211-shock-preflight.md`

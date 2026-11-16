@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [v209 — Market-shock detector](../specs/2026-11-05-v209-market-shock-detector-design.md), § Amendment A1 (Validation set, Acceptance), § Panel review (A1)
+**Spec:** [v209 — Market-shock detector](../specs/implemented/2026-11-05-v209-market-shock-detector-design.md), § Amendment A1 (Validation set, Acceptance), § Panel review (A1)
 **Index:** [`_0-index.md`](2026-11-05-v209-market-shock-detector-a1_0-index.md) — Global Constraints, Review Focus, Parallelisation and the task ledger apply to every task below.
 **Brief:** `.superpowers/briefs/2026-11-05-v209-market-shock-detector-a1.md`
 

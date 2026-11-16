@@ -5,7 +5,7 @@
 **Bump:** none (offline screen code and results docs only; no running bot, admin or Discord code changes — `document-conventions.md`: a spec that ships no running code bumps nothing)
 **Edge:** expectancy, measured none — both one-shot screens failed (2026-11-10 results docs); no live change shipped, as predicted.
 **Screen:** Stage −2 pre-registration — this plan spends the two one-shot screens the spec pre-registers in § Track 2 (frozen at the spec's commit); no `SCREEN-PASS` can precede them. The spec header's `exempt (integrity)` covers Track 1 (plans v209, v210) only.
-**Spec:** [v209 — Market-shock detector (shadow) and shock-conditioned short screens](../specs/2026-11-05-v209-market-shock-detector-design.md) (§ Track 2 — the shock-conditioned short screens; § What changes → Plans names this plan; § Rollback, § Non-goals; § Panel review and the plan-briefer reconciliation at the end)
+**Spec:** [v209 — Market-shock detector (shadow) and shock-conditioned short screens](../specs/implemented/2026-11-05-v209-market-shock-detector-design.md) (§ Track 2 — the shock-conditioned short screens; § What changes → Plans names this plan; § Rollback, § Non-goals; § Panel review and the plan-briefer reconciliation at the end)
 **Brief:** `.superpowers/briefs/2026-11-05-v209-market-shock-detector.md` (§1 "Track 2 -- screens", §2 "Track 2", §3.11–3.13, §4 Track 2 idea and runner tests, §5 rows for `screen/*`, D4–D7, traps T9–T15)
 **Worktree:** implement V211-1..V211-12 in `.claude/worktrees/2026-11-06-v211-shock-short-screens` (branch of the same name, created in V211-1's first step; `docs/claude/document-lifecycle.md`). V211-13..V211-16 run on `main` after V211-1..12 are merged and CI is green.
 

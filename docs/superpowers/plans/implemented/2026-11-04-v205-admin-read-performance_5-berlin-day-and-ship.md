@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [Admin read performance](../specs/2026-11-04-v205-admin-read-performance-design.md), § "L1-a" (One rule for "the day", What the table holds, Callers, Figures this moves), "Testing", "Rollout and rollback", "Results".
+**Spec:** [Admin read performance](../specs/implemented/2026-11-04-v205-admin-read-performance-design.md), § "L1-a" (One rule for "the day", What the table holds, Callers, Figures this moves), "Testing", "Rollout and rollback", "Results".
 **Index:** [`_0-index.md`](2026-11-04-v205-admin-read-performance_0-index.md) -- Goal, `## Global Constraints`, `## Parallelisation`, the task ledger and every cross-task contract live there. Every task below implicitly includes the Global Constraints.
 
 This part holds V205-16 (`fx_convert` keys every rate on the Berlin day, decides identity on major codes, and the live callers pass Berlin today), V205-17 (the plan's one full-suite run) and V205-18 (deploy, migrate, backfill, measure, record). V205-16 is the second and last task whose output moves on purpose; like V205-15 it edits `money_reference.EXPECTED_MONEY` by hand and never a golden.
@@ -457,7 +457,7 @@ Hand the controller: the pass/fail/xfail counts from Step 2, each Step 3 fix as 
 **Model:** sonnet — runs committed scripts on production in a fixed order and records what they print; every judgement is a threshold already set by the spec.
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-11-04-v205-admin-read-performance-design.md` (`## Results`: append `### After v205 (script)` and the verdict), on `main`.
+- Modify: `docs/superpowers/specs/implemented/2026-11-04-v205-admin-read-performance-design.md` (`## Results`: append `### After v205 (script)` and the verdict), on `main`.
 
 **Interfaces:**
 - Consumes: V205-1's `scripts/ops/admin_endpoint_timing.py` and V205-14's `scripts/ops/backfill_fx_daily_rates.py`, both **unchanged** and run from the deployed image; the `M` and `D` arguments recorded in the spec's `### Before v205 (script)` line; `docs/deploy/DEPLOY_HETZNER.md` § "v205: daily FX rates" (V205-14) and § "Rolling back".
@@ -577,7 +577,7 @@ On purpose (L1-a): converted money amounts now use the close before the exit's B
 Fill every `<...>` from the Step 3–5 outputs. "Met" means every one of the 16 rows is under 1500 ms; one row at or over it means "not met". The verdict is never rounded in either direction.
 
 ```bash
-git -C <main-tree> add docs/superpowers/specs/2026-11-04-v205-admin-read-performance-design.md
+git -C <main-tree> add docs/superpowers/specs/implemented/2026-11-04-v205-admin-read-performance-design.md
 git -C <main-tree> commit -m "docs(v205): after-deploy timings and Layer 1 verdict (V205-18)"
 ```
 

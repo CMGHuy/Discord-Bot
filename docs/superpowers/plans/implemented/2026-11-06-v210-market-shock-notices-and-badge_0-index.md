@@ -5,7 +5,7 @@
 **Bump:** bot patch, ui patch
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
-**Spec:** [v209 — Market-shock detector](../specs/2026-11-05-v209-market-shock-detector-design.md) (§ Units → *Discord notices*, *Admin*; § Track 1 tests → *Notice formatting*, *Frontend*; § What changes → *Plans* puts these two units in this plan, after plan v209)
+**Spec:** [v209 — Market-shock detector](../specs/implemented/2026-11-05-v209-market-shock-detector-design.md) (§ Units → *Discord notices*, *Admin*; § Track 1 tests → *Notice formatting*, *Frontend*; § What changes → *Plans* puts these two units in this plan, after plan v209)
 **Brief:** `.superpowers/briefs/2026-11-05-v209-market-shock-detector.md` (§3.8 queue, §3.9–3.10 tape, §4 test patterns, D1, D8)
 **Prerequisite:** plan v209 (the detector, its tables, `MarketShockRepository`, the `shock_scan.py` pass, the scan wiring and the `entry_context` stamp) **merged and released** before this plan's worktree is cut. Every `V209-*` id in this plan names a task of that merged plan; this plan only consumes its contracts.
 

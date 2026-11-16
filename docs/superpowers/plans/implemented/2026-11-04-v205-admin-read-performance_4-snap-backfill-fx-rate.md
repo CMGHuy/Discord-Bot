@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [Admin read performance](../specs/2026-11-04-v205-admin-read-performance-design.md), § "L1-a" (Snap, Backfill, Read, Figures this moves), "Error handling", "Testing", "Rollout and rollback".
+**Spec:** [Admin read performance](../specs/implemented/2026-11-04-v205-admin-read-performance-design.md), § "L1-a" (Snap, Backfill, Read, Figures this moves), "Error handling", "Testing", "Rollout and rollback".
 **Index:** [`_0-index.md`](2026-11-04-v205-admin-read-performance_0-index.md) -- Goal, `## Global Constraints`, `## Parallelisation`, the task ledger and every cross-task contract live there. Every task below implicitly includes the Global Constraints.
 
 This part holds V205-13 (the refresher writes the day's row from 08:00 Berlin), V205-14 (the one-off backfill of past days, its ops script and the deploy runbook step) and V205-15 (`fx.fx_rate` reads the table; the strictly-before rule replaces `_close_on_or_before`). V205-13 and V205-14 add rows nobody reads yet, so no output moves. V205-15 is the first task whose output moves on purpose: it updates `money_reference.EXPECTED_MONEY` by hand and never a golden.

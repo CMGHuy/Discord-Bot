@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [v209 — Market-shock detector](../specs/2026-11-05-v209-market-shock-detector-design.md)
+**Spec:** [v209 — Market-shock detector](../specs/implemented/2026-11-05-v209-market-shock-detector-design.md)
 **Index:** [`2026-11-05-v209-market-shock-detector_0-index.md`](2026-11-05-v209-market-shock-detector_0-index.md) — Goal, Global Constraints, Parallelisation and the task ledger live there; every task below implicitly carries the index's Global Constraints.
 
 This part builds V209-1..V209-4: the "Market Shock" config section and the
@@ -529,7 +529,7 @@ what ``measure`` and ``step`` return.
 A reading measures the watchlist at pass time (the live quote against the last
 completed session's close); it never looks at a later bar.
 
-Spec: docs/superpowers/specs/2026-11-05-v209-market-shock-detector-design.md
+Spec: docs/superpowers/specs/implemented/2026-11-05-v209-market-shock-detector-design.md
 """
 from __future__ import annotations
 

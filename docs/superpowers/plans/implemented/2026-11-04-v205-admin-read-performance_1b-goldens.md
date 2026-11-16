@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [Admin read performance](../specs/2026-11-04-v205-admin-read-performance-design.md), § "L1-d. Measurement stays in the product", "Testing".
+**Spec:** [Admin read performance](../specs/implemented/2026-11-04-v205-admin-read-performance-design.md), § "L1-d. Measurement stays in the product", "Testing".
 **Index:** [`_0-index.md`](2026-11-04-v205-admin-read-performance_0-index.md) -- Goal, `## Global Constraints`, `## Parallelisation`, the task ledger and every cross-task contract.
 
 V205-4b is the second half of V205-4 (split at 20 KB). It runs directly after V205-4 (part 1) and before V205-5 (part 2): V205-5's budgets and every refactor from V205-7 on are measured against the goldens it freezes.

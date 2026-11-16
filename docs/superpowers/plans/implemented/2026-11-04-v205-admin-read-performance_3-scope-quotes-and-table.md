@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [Admin read performance](../specs/2026-11-04-v205-admin-read-performance-design.md), § "L1-c. Load each store once per request: opt-in, read routes only", "L1-b. Quote codes in one query, short negative memo", "L1-a. One FX rate per currency pair per day" (table, read memo), "Error handling", "Testing".
+**Spec:** [Admin read performance](../specs/implemented/2026-11-04-v205-admin-read-performance-design.md), § "L1-c. Load each store once per request: opt-in, read routes only", "L1-b. Quote codes in one query, short negative memo", "L1-a. One FX rate per currency pair per day" (table, read memo), "Error handling", "Testing".
 **Index:** [`_0-index.md`](2026-11-04-v205-admin-read-performance_0-index.md) -- Goal, `## Global Constraints`, `## Parallelisation`, the task ledger and every cross-task contract live there. Every task below implicitly includes the Global Constraints.
 
 Tasks in this part: V205-9 (`@read_scope` on the six GET views; the memo goes live in the admin), V205-10 (L1-b: one quote-code query per conversion call, a 5-minute negative memo), V205-11 (revision `v205_001`: the `fx_daily_rates` table and its repository), V205-12 (`fx_daily`: the "last positive close strictly before D" rule and the version-keyed table memo). V205-9 and V205-10 are pure refactors: the V205-4 goldens pass **unchanged**. V205-11 and V205-12 are additive: nothing reads the table until V205-15 (part 4), so no output moves in this part.

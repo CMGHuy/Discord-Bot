@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [v206 — Admin under load](../specs/2026-11-05-v206-admin-under-load-design.md) § Plan 2, § Error handling, § Testing, § Rollout and rollback; P3 authority [v205 — Admin read performance](../specs/2026-11-04-v205-admin-read-performance-design.md) § Part 3 (P3-a, P3-b), § Testing, § Rollout and rollback.
+**Spec:** [v206 — Admin under load](../specs/2026-11-05-v206-admin-under-load-design.md) § Plan 2, § Error handling, § Testing, § Rollout and rollback; P3 authority [v205 — Admin read performance](../specs/implemented/2026-11-04-v205-admin-read-performance-design.md) § Part 3 (P3-a, P3-b), § Testing, § Rollout and rollback.
 **Index:** [`2026-11-06-v217-admin-part3-heavy-requests_0-index.md`](2026-11-06-v217-admin-part3-heavy-requests_0-index.md). Goal, architecture, `## Global Constraints`, `## Parallelisation` and the task ledger live there; every task below implicitly includes the Global Constraints.
 
 All paths are relative to the worktree `.claude/worktrees/2026-11-06-v217-admin-part3-heavy-requests` (branch of the same name), written `<wt>` where a command needs the absolute path; `<main>` is the main checkout `E:/Documents/Private/Projects/Discord-Bot`. Never edit the main tree from V217-4 or V217-5. Commit inside the worktree only. V217-6 is the one task that merges into `main`.

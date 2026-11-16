@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [Admin read performance](../specs/2026-11-04-v205-admin-read-performance-design.md), § "L1-c. Load each store once per request: opt-in, read routes only", "L1-d. Measurement stays in the product", "Testing".
+**Spec:** [Admin read performance](../specs/implemented/2026-11-04-v205-admin-read-performance-design.md), § "L1-c. Load each store once per request: opt-in, read routes only", "L1-d. Measurement stays in the product", "Testing".
 **Index:** [`_0-index.md`](2026-11-04-v205-admin-read-performance_0-index.md) -- Goal, `## Global Constraints`, `## Parallelisation`, the task ledger and every cross-task contract live there. Every task below implicitly includes the Global Constraints.
 
 Tasks in this part: V205-5 (per-endpoint statement and `list_all` budgets on the golden book), V205-6 (the core `contextvars` read memo), V205-7 (`TradeLog._all`, `PlanStore._all` and `account._sum_realized_pnl` read through it), V205-8 (the nested-write audit, proven by a deep-frozen memo over all eight endpoints). Nothing in this part switches the memo on in production: no route carries `@read_scope` until V205-9 (part 3), so V205-7 and V205-8 must pass the V205-4 goldens and the V205-5 budgets **unchanged**.

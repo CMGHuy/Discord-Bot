@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Dispatch `task-implementer` at each task's `**Model:**` tier and escalate per `docs/claude/model-routing.md`.
 
-**Spec:** [v209 — Market-shock detector (shadow) and shock-conditioned short screens](../specs/2026-11-05-v209-market-shock-detector-design.md) — § Track 2 (opening paragraph: one shot each, frozen at the spec's commit), § Printed alongside each verdict (the outcome-blind preflight), § What the screens can and cannot say, § Follow-on pre-registrations, § Track 1 → `MARKET_SHOCK_MODE` binding note (partner, 2026-11-06).
+**Spec:** [v209 — Market-shock detector (shadow) and shock-conditioned short screens](../specs/implemented/2026-11-05-v209-market-shock-detector-design.md) — § Track 2 (opening paragraph: one shot each, frozen at the spec's commit), § Printed alongside each verdict (the outcome-blind preflight), § What the screens can and cannot say, § Follow-on pre-registrations, § Track 1 → `MARKET_SHOCK_MODE` binding note (partner, 2026-11-06).
 **Index:** [2026-11-06-v211-shock-short-screens_0-index.md](2026-11-06-v211-shock-short-screens_0-index.md) — Goal, Global Constraints, Review Focus, Parallelisation and the task ledger live there and bind every task below.
 **Where:** every task in this part runs **on `main` in the main checkout** (`E:/Documents/Private/Projects/Discord-Bot`), never in the v211 worktree: the cache (`data/backtest_cache_ext/`, gitignored) lives only in the main tree, and the records belong on `main` (index § Global Constraints: *Shots run only on `main`*).
 
@@ -140,7 +140,7 @@ Create `docs/superpowers/results/<run-date>-v211-shock-preflight.md` from this s
   ```markdown
   # v211 shock-short screens — outcome-blind preflight
 
-  **Spec:** `docs/superpowers/specs/2026-11-05-v209-market-shock-detector-design.md` § Track 2 → Printed alongside each verdict
+  **Spec:** `docs/superpowers/specs/implemented/2026-11-05-v209-market-shock-detector-design.md` § Track 2 → Printed alongside each verdict
   **Plan:** `docs/superpowers/plans/2026-11-06-v211-shock-short-screens_0-index.md` (V211-13)
   **Definition commit:** <hash from Step 2>
   **Context pins:** `results/2026-10-18-v174-context-hashes.json`: `BREADTH_ATR1` <first 12 of its SHA>, `^VIX` <first 12 of its SHA> (commit <hash of Step 6's commit>)
@@ -333,7 +333,7 @@ Create `docs/superpowers/results/<date>-v211-shock-short-screens.md` (`<date>` =
   ```markdown
   # v211 shock-conditioned short screens — summary
 
-  **Spec:** `docs/superpowers/specs/2026-11-05-v209-market-shock-detector-design.md` § Track 2
+  **Spec:** `docs/superpowers/specs/implemented/2026-11-05-v209-market-shock-detector-design.md` § Track 2
   **Plan:** `docs/superpowers/plans/2026-11-06-v211-shock-short-screens_0-index.md`
   **Pass rule (frozen, unchanged):** ΔExpR ≥ +0.10R after costs, lower 95 % week-cluster bound > 0, ≥ 7 of 9 years (2011–2019) positive, N ≥ 300 (`docs/claude/backtest-methodology.md` § Stage −2). One shot each.
   **Preflight (outcome-blind, committed before shot 1):** `results/<run-date>-v211-shock-preflight.md`
@@ -403,7 +403,7 @@ Add `AGENTS.md` to the `git add` only if Step 1 found the mirrored table. Expect
 
 **Files:**
 - Move (by `/close-out`): `docs/superpowers/plans/2026-11-06-v211-shock-short-screens_{0-index,1-data,2-runner-level-kind,3-ideas,4-readouts,5-shots-closeout}.md` → `docs/superpowers/plans/implemented/`
-- Move (by `/close-out`, only when plans v209 **and** v210 are already closed): `docs/superpowers/specs/2026-11-05-v209-market-shock-detector-design.md` → `docs/superpowers/specs/implemented/`; otherwise it stays in `specs/`
+- Move (by `/close-out`, only when plans v209 **and** v210 are already closed): `docs/superpowers/specs/implemented/2026-11-05-v209-market-shock-detector-design.md` → `docs/superpowers/specs/implemented/`; otherwise it stays in `specs/`
 - Modify (only if both shots failed): the index's `**Edge:**` line (close-out Step 5)
 - Not modified: `VERSION.json`, `swingbot/admin/version_history.json` (`Bump: none`)
 

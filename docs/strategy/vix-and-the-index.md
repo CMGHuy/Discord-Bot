@@ -70,7 +70,7 @@ elevated, > 30 fear.
 | Use | Where |
 |---|---|
 | `^VIX` on the market tape (with `^GSPC`, `^NDX`, `^DJI`) | `swingbot/core/marketdata/shared/tape.py` (`TAPE_FIXED`) |
-| Intraday VIX day change speeds SHOCK entry; VIX off its session high gates RECOVERY | v209 market-shock detector (`docs/superpowers/specs/2026-11-05-v209-market-shock-detector-design.md`) |
+| Intraday VIX day change speeds SHOCK entry; VIX off its session high gates RECOVERY | v209 market-shock detector (`docs/superpowers/specs/implemented/2026-11-05-v209-market-shock-detector-design.md`) |
 | `^VIX` daily 2009–2019 as a screen context symbol | v209 plan |
 
 **Not used yet:** daily VIX level regimes, the VIX ÷ VIX3M curve, VVIX, VXN,

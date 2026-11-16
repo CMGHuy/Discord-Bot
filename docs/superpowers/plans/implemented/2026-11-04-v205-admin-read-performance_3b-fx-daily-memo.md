@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [Admin read performance](../specs/2026-11-04-v205-admin-read-performance-design.md), § "L1-a" (Read), "Error handling", "Testing".
+**Spec:** [Admin read performance](../specs/implemented/2026-11-04-v205-admin-read-performance-design.md), § "L1-a" (Read), "Error handling", "Testing".
 **Index:** [`_0-index.md`](2026-11-04-v205-admin-read-performance_0-index.md) -- Goal, `## Global Constraints`, `## Parallelisation`, the task ledger and every cross-task contract live there. Every task below implicitly includes the Global Constraints.
 
 This part holds one task, V205-12b, split from V205-12 (part 3) for the 20 KB task cap; part 3 sits too close to its 1500-line cap to hold it. V205-12b runs directly after V205-12, which creates the module it extends. Nothing reads the memo until V205-15, so no output moves.

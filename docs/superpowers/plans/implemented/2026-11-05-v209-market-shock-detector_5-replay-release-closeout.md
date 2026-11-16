@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [v209 — Market-shock detector](../specs/2026-11-05-v209-market-shock-detector-design.md) (main @ ea65d908; the replay target is 15:00 UTC, not 14:36)
+**Spec:** [v209 — Market-shock detector](../specs/implemented/2026-11-05-v209-market-shock-detector-design.md) (main @ ea65d908; the replay target is 15:00 UTC, not 14:36)
 **Index:** [`_0-index.md`](2026-11-05-v209-market-shock-detector_0-index.md) — Global Constraints, Review Focus, Parallelisation and the task ledger apply to every task below.
 **Brief:** `.superpowers/briefs/2026-11-05-v209-market-shock-detector.md` (§6 replay feasibility, D8 rollback, T7 tape flags)
 
@@ -606,7 +606,7 @@ Nothing is left to commit. Step 3 committed the doc; Step 5 committed the releas
   - `docs/superpowers/plans/2026-11-05-v209-market-shock-detector_5-replay-release-closeout.md`
 - **Not touched:**
   - `..._4-notices-and-admin.md`, which belongs to the follow-on notice/badge plan.
-  - The spec `docs/superpowers/specs/2026-11-05-v209-market-shock-detector-design.md`. It stays in `specs/`: Track 2's plan and the follow-on still build from it, and Track 2's plan closes it.
+  - The spec `docs/superpowers/specs/implemented/2026-11-05-v209-market-shock-detector-design.md`. It stays in `specs/`: Track 2's plan and the follow-on still build from it, and Track 2's plan closes it.
   - `VERSION.json` and `swingbot/admin/version_history.json`.
 
 **Interfaces:**
@@ -681,7 +681,7 @@ git status --short     # ten renames (plus the index header edit, if Step 5 amen
 
 ```bash
 ls docs/superpowers/plans/implemented/ | grep -c "2026-11-05-v209-market-shock-detector_"   # 6
-ls docs/superpowers/specs/2026-11-05-v209-market-shock-detector-design.md                     # still there
+ls docs/superpowers/specs/implemented/2026-11-05-v209-market-shock-detector-design.md                     # still there
 ls docs/superpowers/plans/2026-11-05-v209-market-shock-detector_4-notices-and-admin.md        # still there
 git diff HEAD --stat -- VERSION.json swingbot/admin/version_history.json                       # empty
 ```

@@ -5,7 +5,7 @@
 **Bump:** bot minor
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
-**Spec:** [v209 — Market-shock detector](../specs/2026-11-05-v209-market-shock-detector-design.md) (main @ 437dd4d5; the spec's closing *Plan-briefer reconciliation* paragraph overrides earlier spec text; § What changes → *Plans* puts Track 1 in this plan and Track 2 in a separate one)
+**Spec:** [v209 — Market-shock detector](../specs/implemented/2026-11-05-v209-market-shock-detector-design.md) (main @ 437dd4d5; the spec's closing *Plan-briefer reconciliation* paragraph overrides earlier spec text; § What changes → *Plans* puts Track 1 in this plan and Track 2 in a separate one)
 **Amended:** A1 (2026-11-10), [A1 index](2026-11-05-v209-market-shock-detector-a1_0-index.md): entry rule re-registered (`depth_frac`, sustained breadth; `SHOCK_SECTORS_FRAC` removed), validation set and one-shot acceptance. Its ledger (V209-A1-1..A1-4) runs before V209-13; superseded text below is marked, not rewritten.
 **Brief:** `.superpowers/briefs/2026-11-05-v209-market-shock-detector.md` (code context for every part; §5 D1–D8 and §7 T1–T18 are the traps; the Track 2 sections of the brief are not used by this plan)
 

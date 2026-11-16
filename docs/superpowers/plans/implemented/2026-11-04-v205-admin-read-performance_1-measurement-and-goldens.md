@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [Admin read performance](../specs/2026-11-04-v205-admin-read-performance-design.md), § "L1-d. Measurement stays in the product", "Testing", "Rollout and rollback".
+**Spec:** [Admin read performance](../specs/implemented/2026-11-04-v205-admin-read-performance-design.md), § "L1-d. Measurement stays in the product", "Testing", "Rollout and rollback".
 **Index:** [`_0-index.md`](2026-11-04-v205-admin-read-performance_0-index.md) -- Goal, `## Global Constraints`, `## Parallelisation`, the task ledger and every cross-task contract live there. Every task below implicitly includes the Global Constraints.
 
 Tasks in this part: V205-1 (timing script and the production baseline), V205-2 (engine hook, SQL tally, suite `admin-perf`), V205-3 (`Server-Timing`, slow log, `ADMIN_SLOW_REQUEST_MS`), V205-4 (the golden book, frozen clock and endpoint fixtures). V205-4 passed 20 KB as first drafted and was split: V205-4b (money references, the recorder, the frozen goldens) sits in [`_1b-goldens.md`](2026-11-04-v205-admin-read-performance_1b-goldens.md) so neither file passes 1500 lines.
@@ -18,7 +18,7 @@ Tasks in this part: V205-1 (timing script and the production baseline), V205-2 (
 **Files:**
 - Create: `scripts/ops/admin_endpoint_timing.py`
 - Create: `tests/scripts/test_admin_endpoint_timing.py` (suite `scripts`, `tests/scripts/`)
-- Modify: `docs/superpowers/specs/2026-11-04-v205-admin-read-performance-design.md` (`## Results`: add `### Before v205 (script)`)
+- Modify: `docs/superpowers/specs/implemented/2026-11-04-v205-admin-read-performance-design.md` (`## Results`: add `### Before v205 (script)`)
 
 **Interfaces:**
 - Consumes: nothing from other tasks. The `Server-Timing` format it parses is fixed by the index ("Request timing"); V205-3 produces it. Before V205-3 ships the header is absent and the db columns print `-`.
@@ -345,7 +345,7 @@ inside the `admin` container (image `sha-<12>` from `docker compose images admin
 ```
 
 ```bash
-git -C <wt> add docs/superpowers/specs/2026-11-04-v205-admin-read-performance-design.md
+git -C <wt> add docs/superpowers/specs/implemented/2026-11-04-v205-admin-read-performance-design.md
 git -C <wt> commit -m "docs(v205): baseline admin endpoint timings before Layer 1 (V205-1)"
 ```
 

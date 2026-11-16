@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Spec:** [v206 — Admin under load](../specs/2026-11-05-v206-admin-under-load-design.md) § Plan 3; L2 authority [v205 — Admin read performance](../specs/2026-11-04-v205-admin-read-performance-design.md) § Layer 2 (L2-c, L2-b callers).
+**Spec:** [v206 — Admin under load](../specs/2026-11-05-v206-admin-under-load-design.md) § Plan 3; L2 authority [v205 — Admin read performance](../specs/implemented/2026-11-04-v205-admin-read-performance-design.md) § Layer 2 (L2-c, L2-b callers).
 **Index:** [`2026-11-06-v218-admin-snapshot-etag_0-index.md`](2026-11-06-v218-admin-snapshot-etag_0-index.md) — Goal, Architecture, `## Global Constraints`, `## Parallelisation`, the task ledger and the Handoff decisions. Every task below implicitly includes the index's Global Constraints.
 
 **Worktree:** every task runs in `.claude/worktrees/2026-11-06-v218-admin-snapshot-etag` (branch of the same name). Paths below are relative to that worktree root.
