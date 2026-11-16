@@ -494,6 +494,54 @@ after a rollback check
 `SELECT count(*) FROM manual_close_notify WHERE delivered_at IS NULL AND doc::text LIKE '%market_shock%'`
 and, if it is not `0`, ask before deleting those rows.
 
+### v208: benchmark bars and open_notional
+
+Revision `v208_001` adds `equity_samples.open_notional` / `open_notional_approx`
+and the tables `benchmark_bars` (one row per index per NYSE session) and
+`benchmark_refresh` (per-symbol "last full refresh" date) for the Analytics
+Benchmark tab.
+
+- **Bars fill by themselves.** The refresher's `benchmarks` step writes SPY,
+  QQQ, ^IXIC and ^DJI after the first cycle past `alembic upgrade head`: a full
+  adjusted-history rewrite since the first equity sample once per session
+  day, and today's row every 5 minutes in session. Until the revision is
+  applied it logs `benchmarks step failed` once per cycle and recovers. With
+  `ADMIN_REFRESHER=off` the tab says "Benchmarks not updating -- refresher is
+  off"; nothing else is needed.
+- **Live samples carry `open_notional` from the deploy on** (the recorder
+  writes it, `open_notional_approx = FALSE`).
+- **History is filled once** by the backfill, in this order:
+  1. dry run on the local replica (`/replicate-prod-db`, `alembic upgrade head`,
+     `python scripts/data/backfill_equity_samples.py --open-notional`);
+  2. dry run on production:
+     `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python scripts/data/backfill_equity_samples.py --open-notional"`;
+  3. PITR check: the newest `VERDICT ... PASS` in `logs/pitr_verify.log` is at most
+     31 days old, and `scripts/ops/rollback_to.sh '<now UTC>' --dry-run` resolves;
+  4. apply: the same command with `--apply`. It prints `open_notional: filled <n> rows ...`,
+     touches only `open_notional`/`open_notional_approx`, and marks every row
+     it fills `open_notional_approx = TRUE` (priced from daily closes). A re-run
+     prints `would fill 0 rows`. Spot metals (XAUUSD/XAGUSD) are priced off the
+     GC=F/SI=F bars.
+- **Rollback of the backfill only** (recorder rows keep their values):
+
+      docker compose exec -T db psql -U swingbot -d swingbot -c "UPDATE equity_samples SET open_notional = NULL, open_notional_approx = NULL WHERE open_notional_approx IS TRUE"
+
+- **Rollback of v208:** (1) redeploy the previous image (see Rolling back); the
+  old code never reads the new columns or tables. (2) Only to remove them,
+  `docker compose exec -T bot alembic downgrade <the revision v208_001 revises>`
+  (check `alembic history` first: it also rolls back every later revision).
+  A bad backfill that the SQL above cannot undo: `scripts/ops/rollback_to.sh`
+  to the second before the apply.
+
+Run record: 2026-11-16 -- replica dry run skipped (production dry run gated
+directly; first dry run before the spot-metal fix 767 of 1558 unpriced, after it
+136); production dry run 1422 (131 backfill, 1291 live, 136 unpriced = 9.6%,
+over the plan's 5% gate, accepted by the partner); PITR verdict 2026-11-01 PASS;
+applied 1422 rows at about 2026-11-16 10:50 UTC (T0 10:48:23); equity-column
+fingerprint unchanged (1706 rows, md5 6d8dab22...); re-run `would fill 0 rows`;
+bars 2026-07-06 to 2026-11-13, 0 proxy rows; API `ok`, 6 series, approx share
+62.8%; recorder check pending (applied pre-market, re-check on the next session).
+
 ## Accessing the admin UI
 
 The admin UI runs on port `1234` (or `$ADMIN_PORT`), published on
