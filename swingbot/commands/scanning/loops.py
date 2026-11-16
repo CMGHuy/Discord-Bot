@@ -1182,6 +1182,42 @@ async def override_verdict_check():
                   level=logging.ERROR, exc_info=True)
 
 
+#: v228: how far back the excursion upgrade pass looks, and how long it may run.
+#: An entry that cannot reach a finer source is re-read once a day for this many
+#: days, then left to the operator backfill (scripts/ops/backfill_excursions.py).
+EXCURSION_PASS_DAYS = 7
+EXCURSION_PASS_BUDGET_S = 60.0
+#: UTC date the pass last started on; a restart clears it (harmless: every
+#: upgrade is a conditional, idempotent patch).
+_EXCURSION_PASS_DATE: dt.date | None = None
+
+
+async def _run_excursion_pass(today: dt.date | None = None) -> None:
+    """Upgrade recent journal excursions to the finest archived bars.
+
+    Fenced three ways (spec v228 § 3): at most once per UTC date (stamped
+    before the work, so a failure or a budget hit is not retried every
+    wake), off the event loop through ``asyncio.to_thread``, and inside an
+    ``EXCURSION_PASS_BUDGET_S`` budget enforced by ``upgrade_excursions``.
+    Any exception is logged and swallowed: the pass never fails the refresh.
+    """
+    global _EXCURSION_PASS_DATE
+    today = today or dt.datetime.now(dt.timezone.utc).date()
+    if _EXCURSION_PASS_DATE == today:
+        return
+    _EXCURSION_PASS_DATE = today
+    since = dt.datetime.combine(today - dt.timedelta(days=EXCURSION_PASS_DAYS),
+                                dt.time(), tzinfo=dt.timezone.utc).isoformat()
+    try:
+        from swingbot.core.analytics.excursion_upgrade import upgrade_excursions
+        report = await asyncio.to_thread(upgrade_excursions, since,
+                                         budget_seconds=EXCURSION_PASS_BUDGET_S)
+    except Exception:
+        log.exception("market_data_refresh: excursion upgrade failed")
+        return
+    log.info("market_data_refresh: %s", report.line())
+
+
 @tasks.loop(minutes=config.MARKET_DATA_REFRESH_MINUTES)
 async def market_data_refresh():
     """
@@ -1206,6 +1242,10 @@ async def market_data_refresh():
 
     Failures are logged and counted, never raised: a rate-limited window or
     a single delisted symbol must not kill the loop.
+
+    After the sweep, once per UTC date, the v228 excursion upgrade pass
+    re-measures the last week's journal MFE/MAE on the finest archived bars
+    (``_run_excursion_pass``); it has its own budget and never fails the loop.
     """
     if not config.MARKET_DATA_AUTO_REFRESH:
         return
@@ -1264,6 +1304,10 @@ async def market_data_refresh():
         log.info("market_data_refresh: %d gap(s) queued for retry (~%.1fh): %s",
                  len(gaps), FAILED_RETRY_HOURS,
                  ", ".join(f"{s}/{tf} x{n}" for s, tf, n, _ in worst))
+
+    # v228: the archives this tick refreshed are on disk now; upgrade the
+    # last week's journal excursions from them (once per UTC date).
+    await _run_excursion_pass()
 
 
 @market_data_refresh.before_loop
