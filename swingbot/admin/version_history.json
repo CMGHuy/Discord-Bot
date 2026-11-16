@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-16 17:47:44 UTC",
+  "generated_at": "2026-11-16 18:21:55 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.44.0",
-    "bot": "2.19.0"
+    "bot": "2.19.1"
   },
   "releases": [
     {
@@ -2667,6 +2667,19 @@
       },
       "changed": [
         "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-16",
+      "last_seen": "2026-11-16",
+      "commit": "b53b73e6",
+      "subject": "release(bot): 2.19.1 -- loop restart, short-interest import, earnings exemption, error tracebacks, GHCR retention",
+      "versions": {
+        "ui": "1.44.0",
+        "bot": "2.19.1"
+      },
+      "changed": [
         "bot"
       ]
     }
