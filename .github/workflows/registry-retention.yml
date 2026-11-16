@@ -9,7 +9,12 @@ name: Prune old container images
 on:
   schedule:
     - cron: "17 4 * * 0"   # Sundays, 04:17 UTC. Off-hour, off-peak, arbitrary.
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "List what would be deleted, delete nothing"
+        type: boolean
+        default: true
 
 jobs:
   prune:
@@ -44,7 +49,12 @@ jobs:
         # format migration (snok/container-retention-policy#132, #129).
         uses: snok/container-retention-policy@v3.1.0
         with:
-          account: ${{ github.repository_owner }}
+          # snok/container-retention-policy v3.1.0 README: "`account: user` to signify that it's for your personal account".
+          # The owner (CMGHuy) is a user: `account: <owner>` built
+          # /orgs/<owner>/packages/container/<name>, which 404s for a user, and
+          # the action panicked on the error body ("Failed to fetch packages:
+          # missing field `id`") on every run from 2026-08-16 to 2026-11-15.
+          account: user
           token: ${{ secrets.GITHUB_TOKEN }}
           # v116: rollback_to.sh pulls the tag that was live at the target
           # second, up to 30 days back, and that image may itself be older than
@@ -62,7 +72,8 @@ jobs:
           # snok/container-retention-policy v3.1.0 README: "Works the same way as the `image-names` parameter" (supports filtering with `*` and `!`, `!` meaning do not select matching names).
           # snok/container-retention-policy v3.1.0 README: not stated; v3.1.0 source (src/core/select_package_versions.rs) keeps a version when any of its tags matches a negative matcher.
           image-tags: "!latest,!stable-*"
-          dry-run: false
+          # A scheduled run deletes; a manual run is a dry run unless unticked.
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
 
       # Deleting a version does not always reclaim what you expect (a layer
       # shared with a retained image stays), so the summary is worth reading

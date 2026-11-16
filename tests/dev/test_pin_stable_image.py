@@ -84,3 +84,19 @@ def test_retention_never_prunes_latest_or_stable_tags():
 def test_retention_exclusion_quotes_the_action_readme():
     text = RETENTION.read_text(encoding="utf-8")
     assert "snok/container-retention-policy v3.1.0 README:" in text
+
+
+def test_retention_targets_the_personal_account_endpoints():
+    # The repo owner is a user, not an org. `account: <owner>` made the action
+    # fetch /orgs/<owner>/packages/container/<name>, which 404s for a user, so
+    # every run panicked ("missing field `id`") and nothing was ever pruned.
+    assert _retention_step()["with"]["account"] == "user"
+
+
+def test_retention_manual_run_defaults_to_dry_run_and_schedule_deletes():
+    wf = _load(RETENTION)
+    dispatch = _on(wf)["workflow_dispatch"]["inputs"]["dry_run"]
+    assert dispatch["type"] == "boolean" and dispatch["default"] is True
+    dry = _retention_step()["with"]["dry-run"]
+    assert "github.event_name == 'workflow_dispatch'" in dry
+    assert "inputs.dry_run" in dry and dry.rstrip("} ").endswith("'false'")
