@@ -15,10 +15,17 @@ trades can each be profitable. Reading the process against the live book
 
 ### Finding 1: neither direction makes money, and no gate asks whether it does
 
-| Live book cell (autopsy 2026-11-16) | N | Win rate | ExpR |
-|---|---|---|---|
-| `direction=bearish` | 320 | 50.0% | −0.136 |
-| `direction=bullish` | 747 | 42.3% | −0.067 |
+Live closed trades, exits 2026-07-20 to 2026-11-16, read from the autopsy
+(not re-derived here). Net is the autopsy's modelled net (5 bps slippage a
+fill plus commission; live rows store gross R only). Total R is N × ExpR.
+
+| Cell | N | Win rate | Gross ExpR | Net ExpR | Net total R |
+|---|---|---|---|---|---|
+| `direction=bearish` | 320 | 50.0% | −0.069 | −0.136 | about −44R |
+| `direction=bullish` | 747 | 42.3% | +0.004 | −0.067 | about −50R |
+
+The window overlaps the 2026 holdout, so these rows are exploratory (v161
+boundary 5) and select nothing.
 
 Every acceptance gate judges a feature against the baseline it replaces.
 When the baseline is negative, a feature can pass every clause and leave the
@@ -136,6 +143,17 @@ machinery, as `acceptance_harvest.py` does.
 reproduces its recorded verdict, but **no new pre-registration names it**.
 `backtest-methodology.md` says so in a new `## Direction gate` section.
 
+**No closed knob returns as a direction slice.** A knob that sits in
+`backtest-methodology.md` § Closed pre-registrations, or that failed or was
+refused at any v72 stage, is closed under this gate in every scope. The
+funnel already prints per-direction ΔExpR for every past run
+(`arms/selection.py:_direction_disclosure`), so a narrower scope on an old
+knob would be a scope chosen after TRAIN was read. For a new knob the scope
+is frozen in the pre-registration **before** any per-direction number for
+that knob exists; `validate_component.py` refuses `--gate direction` when
+the stamp's `preregistration` id already has a ledger row under another gate
+(`refused:knob-already-judged`).
+
 **Scope.** The pre-registration freezes `direction_scope`: `bullish`,
 `bearish` or `both`. `measure_arms.py` writes it into the provenance stamp;
 `check_stamp` refuses an arm file without it under this gate
@@ -148,26 +166,43 @@ component rows whose `direction` is in scope. Rows with `direction = None`
 
 | # | Clause | Instrument | Threshold |
 |---|---|---|---|
-| 1 | `expectancy_gain` (objective) | paired week-cluster bootstrap ΔExpR | lower 95% bound > 0, one-sided p < 0.05 |
+| 1 | `expectancy_gain` (objective) | paired week-cluster bootstrap ΔExpR | lower bound of the two-sided 95% interval > 0 (one-sided α = 0.025) |
 | 2 | `win_rate_floor` | same bootstrap, Δ standardised win rate | lower 95% bound ≥ −2.0pp (`acceptance_harvest.WIN_RATE_FLOOR_PP`) |
 | 3 | `volume_floor` | scored-row count, baseline vs component | cut ≤ 25% (`VOLUME_MAX_CUT_PCT`) |
-| 4 | `book_total_gain` | paired change in the scored direction's **total** net R (sum, not mean) | point estimate > 0 |
+| 4 | `book_total_gain` (guard) | paired change in the scored direction's **total** net R (sum, not mean), same bootstrap | point estimate > 0; the interval is printed beside it |
 | 5 | `other_direction_identical` | out-of-scope rows, baseline vs component | same keys, same `outcome`, same `r_multiple`; `SKIPPED` when scope is `both` |
 | 6 | `mechanism` (subset components) | removed vs retained scored rows | removed ExpR ≤ 0 **and** removed ExpR < retained ExpR |
-| 7 | `not_luck` | `permutation_test.py`, n = 200, on ΔExpR | p < 0.05, validation stage only; a missing p is a FAIL |
+| 7 | `not_luck` | permutation on ΔExpR over scored rows, n = 1,000, seed 42 (null below) | p < 0.05, validation stage only; a missing p is a FAIL |
 
-- **Clause 4 is the promotion rule** (decision 3). A filter can raise mean
-  ExpR by cutting volume while the direction earns less in total; the sum
-  catches that. v230's `book_net_gain` is the same idea for added rows.
+- **Clause 4 is the promotion rule** (decision 3), and a guard rather than a
+  second test. For a pure subset it follows from clause 6. For a component
+  that changes rows it stops a change that lifts mean ExpR while the
+  direction earns less in total. v230's `book_net_gain` is the same idea for
+  added rows.
+- **Clauses 3 and 4 pull against each other on purpose.** In a losing
+  direction the filter most likely to pass clauses 1 and 4 removes many
+  rows; clause 3 caps the cut at 25%. A filter that needs to remove more
+  than a quarter of a direction is a decision to switch that direction off,
+  which decision 3 and the non-goals rule out. It is not a gate outcome.
 - **Clause 5 is the long-side guarantee.** A leak is a FAIL whose detail
-  lists the first ten differing keys. Displacement through the heat or
-  one-position rules counts as a leak here: a one-direction filter that
-  frees heat for the other direction has changed the other direction, and
-  must be registered with scope `both`.
-- **Scope `both`** scores clauses 1–4 once per direction and requires:
-  clause 1 PASS in at least one direction; in the other, ΔExpR point
-  estimate ≥ 0 and clauses 2–4 PASS. Clause 6 runs on the pooled scored
-  rows.
+  lists the first ten differing keys. On the standard arm path each
+  (ticker, horizon) is replayed independently, with no portfolio heat or
+  one-position rule, so the clause catches a code change that reaches the
+  other direction's plans, not displacement. Displacement through heat
+  exists only live and in the heat-aware replay; it is a known limit of
+  this clause, stated in every results doc, and Part B's live side is where
+  it would show.
+- **Clause 7's null is frozen here.** Subset component: remove the same
+  number of scored rows at random within each `(strategy, horizon_key)`
+  stratum; p is the share of draws whose ΔExpR is at least the observed
+  one. Component that changes rows: flip the sign of each week cluster's
+  paired R difference; same p. No other instrument is substituted, and
+  `scripts/backtest/permutation_test.py:arm_pair_permutation` (ΔWR, refuses
+  changed outcomes) is not used by this gate.
+- **Scope `both`** scores clause 1 **once, on the pooled scored rows**, so
+  the objective gets one test. Each direction must then separately show a
+  ΔExpR point estimate ≥ 0 and pass clauses 2–4. Clause 6 runs on the pooled
+  scored rows.
 - **No geometry lock.** v72's clause 3 existed because a win-rate objective
   can be passed by pulling targets nearer. With expectancy as the objective
   that trade no longer pays; a change that moves geometry on purpose belongs
@@ -180,9 +215,9 @@ component rows whose `direction` is in scope. Rows with `direction = None`
 | Stage | Rule under `--gate direction` |
 |---|---|
 | −1 reachability | as today, plus clause 5 evaluated on the pilot: a scope leak is refused before any shot |
-| 0 MDE | `mde_paired` with `delta_expectancy_r` on the **scored rows** at the scored N; refused, budget intact, when the TRAIN effect is below it |
+| 0 MDE | `mde_paired` with `delta_expectancy_r` on the **scored rows** at the scored N, `cluster="week"` and one-sided α = 0.025 (the test clause 1 really applies, not the module default of ticker clusters at 0.05); refused, budget intact, when the TRAIN effect is below it |
 | 1 selection | clauses 1–6 on fold-train; `plateau_report()` mandatory |
-| 2 walk-forward | `backtest_wf.gate` (the existing expectancy fold rule) on scored rows: ≥ 2 of 3 folds improving, no fold below `−GATE_MAX_DEGRADATION_R`, per-fold scored N ≥ 30 |
+| 2 walk-forward | `backtest_wf.gate` (the existing expectancy fold rule) on fold rows **rebuilt from scored rows only**: ≥ 2 of 3 folds improving, no fold below `−GATE_MAX_DEGRADATION_R`, per-fold scored N ≥ 30. Scope `both`: the rule runs on the pooled scored rows, and each direction needs N ≥ 30 in every fold |
 | 3 validation | one shot, all seven clauses |
 
 Stage 3 budget rules are unchanged: a component whose validation shot is
@@ -209,24 +244,59 @@ The file is committed, so the admin image carries it. Per direction:
 `replay_ok` is true when the pooled lower 95% bound > 0 **and** net ExpR > 0
 in ≥ 2 of 3 folds **and** every fold has N ≥ 30.
 
-**Live side.** Input: closed live trades from `journal_entries` joined to
-`trades` (the population `scripts/ops/export_book_rows.sh` exports), over
-the **trailing 180 days**, manual trades excluded, brought to the same net
-basis as replay. Per direction: N, win rate, net ExpR, week-cluster
-interval.
+**`replay_ok` can withhold a status, never support one.** The folds are
+in-sample, every promoted feature was selected on them, and each refresh
+after a promotion makes the replay book more flattering. The file records
+how many pre-registrations have passed Stage 3 on these folds since
+instrument v1's windows were set, and the panel prints that count.
 
-`live_ok` is true when N ≥ 100 **and** the lower 95% bound > 0. With
-N < 100 the live side reads `INSUFFICIENT` and is not ok.
+**Reproducible.** The file records, besides `git_head` and the arm file's
+provenance: `code_hash`, `r_basis`, universe, the data-cache snapshot date,
+bootstrap seed and resample count, fold years and every threshold used.
+`book_gate_report.py` refuses a dirty tree, and `--verify` recomputes the
+file from its arm file and fails on any difference. The run that produces
+the arm file checkpoints per fold × ticker; a restart skips finished units
+and the JSON is assembled only from the checkpoint files.
+
+**Live side.** Input: live trades from `journal_entries` joined to `trades`
+(the population `scripts/ops/export_book_rows.sh` exports), manual trades
+excluded. It is evaluated only at **completed month-ends**, never "now", so
+a page load is not another look at the hypothesis:
+
+- window: trades **entered** in the 180 days before the month-end and
+  closed by it. Trades entered in the window and still open are counted and
+  shown, not scored. (Selecting by close date would favour trades that
+  resolve fast.)
+- net R through the same function replay uses (Constraints).
+- per direction: N, win rate, net ExpR, week-cluster interval (week of
+  entry, as replay; fixed seed), and the **live MDE**: the ExpR that would
+  clear "lower bound > 0" with 80% power at this N and week-cluster design
+  effect.
+
+A month-end snapshot is ok when N ≥ 100 **and** the lower 95% bound > 0.
+With N < 100 it reads `INSUFFICIENT`. `live_ok` is true when the **last two
+completed month-ends** are both ok. Snapshots are recomputed from the
+journal on request and are deterministic; nothing is stored.
+
+On sample size: the autopsy window above is about 120 days and holds 320
+short and 747 long closed trades, so 180 days reaches N ≥ 100 per direction
+at the current alert rate. The printed live MDE tells the reader whether
+`PROVEN` is reachable at all at that N.
 
 **Status.**
 
-| `replay_ok` | `live_ok` | Status |
-|---|---|---|
-| true | true | `PROVEN` |
-| anything else | | `UNPROVEN`, with the failing side named |
+| `replay_ok` | `live_ok` | Status | Badge text |
+|---|---|---|---|
+| true | true | `PROVEN` | PROVEN |
+| any | false, a snapshot `INSUFFICIENT` | `UNPROVEN` | UNPROVEN · not enough live trades |
+| anything else | | `UNPROVEN` | UNPROVEN · with the failing side named |
 
 Both directions are expected to read `UNPROVEN` on the first run. That is
 the instrument reporting Finding 1, not a defect.
+
+The 2026 live book is holdout data (v161 boundary 5). The live side
+describes the book; no knob, scope or threshold is chosen from it, and a
+pre-registration never cites a live cell as its evidence.
 
 **Staleness.** The replay file is stale when the commit it was stamped at
 is older than the latest release that carries `Bump: bot` work touching
@@ -236,50 +306,97 @@ passed Stage 3 (a promoted feature changes the book).
 
 **Serving.** `GET /analytics/direction-books` (next to
 `GET /analytics/registry` in `swingbot/admin/api_v1/analytics.py`) returns
-the replay file's per-direction block, the live block computed on request
-from the journal, and the status. No table, no migration, no write path.
+the replay file's per-direction block, the live block (the last two
+month-end snapshots, their window bounds and as-of dates), the status and a
+`stale` flag. No table, no migration, no write path.
 
 **Panel.** "Direction books" in the Research workspace
-(`frontend/src/app/workspaces/research/`), above "Strategy registry". Two
-cards, LONG and SHORT:
+(`frontend/src/app/workspaces/research/`), as the first panel, above
+"Strategy registry" (the status of each direction is the context for the
+registry below it; the page's `h1` and disclaimer are unchanged). Two
+cards, LONG and SHORT. Each card is a labelled list, one label above its
+figures, so nothing depends on a fixed character width:
 
 ```
-┌ LONG ─────────────────────── UNPROVEN ┐
-│ Replay 2021–23   N 1,840   ExpR −0.02 │
-│                  95% [−0.07, +0.03]   │
-│                  folds  + − −         │
-│ Live 180 days    N 412     ExpR −0.07 │
-│                  95% [−0.20, +0.07]   │
-│ Fails: replay bound, live bound       │
-│ ▸ By market regime                    │
-│ Replay as of 2026-11-20 · a1b2c3d     │
-└───────────────────────────────────────┘
+LONG book                    [UNPROVEN · replay and live below zero]
+
+Replay, 2021–2023 (in-sample; can only withhold a status)
+  N 1,840 · net ExpR −0.020 R · 95% −0.070 to +0.030
+  2021 +   2022 −   2023 −
+
+Live, 180 days to 2026-10-31
+  N 412 (9 still open) · net ExpR −0.070 R · 95% −0.200 to +0.070
+  Detectable at this N: +0.150 R
+  Previous month-end: not ok
+
+▸ By market regime
+Replay as of 2026-11-10 · a1b2c3d · STALE: refresh after the last release
 ```
 
-(Numbers illustrative.) Designed for the three widths together
-(`docs/claude/ui-design.md`): cards side by side from tablet up, stacked on
-phone; the regime table is four rows by four columns (regime, N, win rate,
-ExpR) and fits a phone without horizontal scroll; "By market regime" is a
-disclosure with a 44px touch target; status is a text badge, never colour
-alone. Empty states: no replay file ("No replay book yet"), live
-`INSUFFICIENT` ("N 37 of 100 needed"). A one-line caption states that
-replay folds are in-sample and that only the live side is untouched
-evidence.
+(Numbers illustrative.) Rules, per `docs/claude/ui-design.md`:
+
+- **Layout by container, not viewport.** The two cards sit side by side
+  when the panel is at least 36rem wide and stack below that (`@container`),
+  so the rail and the docked live column cannot squeeze them. Inside a card
+  the figure row wraps. No horizontal scroll at 390, 768 or 1440; the layout
+  audit exits 0 at all three and the route is in `ROUTES`
+  (`layout-audit-lib.mjs`).
+- **Own async state.** The panel has its own `sb-async` and its own store
+  call, outside the ledger's wrapper. Loading skeleton; error with retry;
+  a failure or a missing replay file never blanks the registry or the
+  ledger, and theirs never hides this panel.
+- **Empty states say what to do:** no replay file ("No replay book yet. Run
+  `book_gate_report.py`."); live `INSUFFICIENT` ("N 37 of 100 needed");
+  a regime with no rows shows "none" in its row.
+- **Staleness is text.** A `STALE` chip beside the replay stamp with what
+  to do, using `sb-async`'s `staleAsOf` pattern. The live block carries its
+  own as-of date (the month-end).
+- **Status and folds are legible without colour.** The badge is text and
+  names the reason. Folds read "2021 +", never bare glyphs. The card has an
+  `aria-label` ("LONG book, UNPROVEN"); the disclosure is a button with
+  `aria-expanded`, keyboard reachable, 44px target.
+- **Numbers.** `.num` / `--font-num`; ExpR with three decimals through the
+  same `figure(x, 3)` the ledger uses, signed, unit "R"; intervals as "a to
+  b"; a null is "—". The panel caption reads "Figures in R, net of costs,
+  pre-tax", because the registry below shows gross.
+- **Regime table** inside the disclosure: a four-row `dl` grid (regime, N,
+  win rate, net ExpR), no pager; a thin cell carries the word "thin".
+- **The in-sample caption sits under the replay heading**, wraps and is
+  never truncated.
+
+Whether the word `PROVEN` overstates a bootstrap interval to a reader is a
+`financial-advisor` question, raised at pre-close-out.
 
 ### Part C — the regime split
 
-`ArmTrade` gains an optional `regime: str | None = None`, filled by
-`arm_trade_from_plan` from `plan.entry_context["regime2_state"]`
-(`asof_context.build_asof` already puts it there on replay; live trades
-carry it in `risk_features`). It is **not** part of `key` or `stratum`, so
-pairing and every existing statistic are unchanged, and old arm files load
-as before.
+`ArmTrade` gains an optional `regime: str | None = None`. It is **not** part
+of `key` or `stratum`, so pairing and every existing statistic are
+unchanged, and old arm files load as before (`ArmTrade(**row)`).
+
+**One labelling function for replay and live.** The label is
+`regime2.regime_series(spy_df)` (price only) read at the trade's **signal
+bar date**: the last completed daily bar at or before the signal. It is
+joined onto rows after they are built, by date:
+
+- replay: in `measure_arms.py`, after the engines return, from the SPY
+  frame the run already loads. The arm engines are not changed. (The arm
+  path calls `replay_scenarios` without an as-of map, so
+  `entry_context["regime2_state"]` is empty there; passing one in would
+  change engine signatures for a disclosure.)
+- live: the book gate labels each journal trade the same way from its
+  plan's creation date. It does **not** read the stored
+  `risk_features.regime2_state`, because live `classify` breaks near-ties
+  with breadth and replay has no breadth history. The live block reports
+  how many trades' stored label differs from the price-only one.
+
+A row whose date has no SPY bar is `unknown` and gets its own table row.
+`book_gate_report.py` refuses when more than 5% of a direction's rows are
+`unknown`.
 
 Labels are the four the bot already uses (`edge/regime2.py:REGIMES`):
 `bull_quiet`, `bull_volatile`, `bear_quiet`, `bear_volatile`. The partner
 spoke of up / down / sideways markets; the existing classifier is used
-instead of inventing a third trend state, so replay and live split the same
-way as the autopsy.
+instead of inventing a third trend state.
 
 One renderer, `regime_table(rows)`, prints per direction and regime: N, win
 rate, net ExpR, and `thin` beside any cell with N < 30. It is called by the
@@ -293,11 +410,18 @@ book gate, and by the panel. Every rendering carries the line
   rows, and both specs edit `validate_component.py`, `measure_arms.py` and
   `arms/provenance.py`. The plan is written after v230 is merged, from the
   code as it then stands.
-- **Net means the same thing everywhere.** Slippage and commission as
-  v230's net arms book them; shorts additionally pay
-  `frictions.borrow_r` (`BORROW_RATE_ANNUAL = 0.005`), longs never. The live
-  side uses the same cost settings (`scripts/reports/autopsy/rows.py:
-  friction_settings` shows where they are read today).
+- **Net means the same thing everywhere: one function.** Replay rows and
+  live journal rows reach net R through the same function, the one v230's
+  net arms use. Slippage and commission as it books them; shorts
+  additionally pay `frictions.borrow_r` (`BORROW_RATE_ANNUAL = 0.005`) over
+  the days held, longs never. Net R is computed where the plan and its exit
+  are known (the engine for replay, the journal row for live), so `ArmTrade`
+  needs no price or holding-day fields. Live rows store gross R
+  (`journal.py`, `metrics.r_multiple`), so the live side always applies the
+  function; `book-gate.json` and the endpoint record the basis of each
+  side. A parity test replays a fixed sample of closed live trades through
+  the function and pins the result. If v230 lands without borrow in its net
+  function, this spec adds it there, for shorts only.
 - **Long side unchanged.** No long plan, alert, replay row or v72 verdict
   changes. Pinned by a byte-identical test on a v72 run before and after.
 - **v72 reproducibility.** `acceptance.py`'s clauses and `VERSION` are not
@@ -317,14 +441,28 @@ book gate, and by the panel. Every rendering carries the line
   and names the key; empty scored population is refused, not passed.
 - A golden test: one small synthetic arm pair scored under `win_rate` and
   under `direction`, both verdicts pinned.
+- Direction gate, added by review: `refused:knob-already-judged`; clause 7's
+  two nulls on a seeded fixture; Stage 0 uses week clusters at α = 0.025;
+  Stage 2 fold rows built from scored rows only.
 - Book gate: `replay_ok` and `live_ok` truth tables at each boundary
-  (N = 29/30, N = 99/100, bound at 0); a direction with no rows; a fold
-  missing; manual trades excluded.
-- Regime: `ArmTrade` without `regime` loads; `regime` absent from `key`;
-  `regime_table` with an empty regime and with a thin cell.
-- Endpoint: shape, no replay file, live `INSUFFICIENT`, auth.
-- Frontend: both cards at phone, tablet and desktop widths; each empty
-  state; the disclosure toggles; the badge has text.
+  (N = 29/30, N = 99/100, bound at 0); one ok month-end is not `live_ok`;
+  window by entry date with an open trade counted and unscored; a direction
+  with no rows; a fold missing; manual trades excluded; `--verify` on an
+  altered file; a dirty tree refused; repeat calls give the same interval.
+- Net parity: the fixed sample of live trades through the shared net
+  function; a short pays borrow, a long does not.
+- Regime: an old-format arm file and the v68 golden fixture load and score
+  unchanged; `regime` absent from `key`; replay and live give the same
+  label for the same date; a tie-band date where the stored live label
+  differs is counted; `unknown` above 5% refused; `regime_table` with an
+  empty regime and with a thin cell.
+- Endpoint: shape, no replay file, live `INSUFFICIENT`, stale flag, auth.
+- Frontend, extending `research.spec.ts` (its store mocks gain a third
+  call): the two cards with **different** statuses; loading, error with
+  retry, no replay file, `INSUFFICIENT`, stale; a panel failure leaves the
+  registry and ledger rendered and the reverse; keyboard toggle and
+  `aria-expanded` on the disclosure; 44px target; fold labels carry years;
+  the layout audit at 390, 768 and 1440.
 - New tests join the existing backtesting and admin suites
   (`tests/suites.toml`); a suite past `max_tests` is split by feature.
 
@@ -340,9 +478,9 @@ dispatched to `backtest-runner`, checkpointed per ticker.
 - Whether clause helpers shared with `acceptance_harvest.py` are imported or
   lifted into a small common module.
 - The exact JSON shape of `book-gate.json` and the endpoint payload.
-- How the live side reaches net R (confirm whether `r_realized` is already
-  net; subtract only what is missing).
 - The Markdown layout of the results docs.
+- The formula behind the printed live MDE, provided it uses the week-cluster
+  design effect and 80% power.
 
 ## Claude's calls, for the partner to check
 
@@ -357,16 +495,92 @@ dispatched to `backtest-runner`, checkpointed per ticker.
 4. **Thresholds are borrowed, not invented:** −2.0pp win-rate floor (v92),
    25% volume cut (v72), week clusters and total-R clause (v230), the
    existing expectancy fold rule (`backtest_wf.gate`).
-5. **Live window: trailing 180 days, N ≥ 100.** The autopsy's whole book is
-   320 short and 747 long trades; 180 days keeps the reading on the bot as
-   it is now and still reaches N ≥ 100 per direction.
+5. **Live window: 180 days by entry date, N ≥ 100, read at month-ends, two
+   in a row for `PROVEN`.** The month-end rule came from review: a status
+   recomputed on every page load would cross the line by chance sooner or
+   later.
 6. **No status table.** In chat I said the status would live in Postgres. A
    committed replay file plus a live computation needs no schema change and
    cannot go out of step with the journal.
 7. **Four regime labels, not up / down / sideways**, to match the classifier
    and the autopsy.
-8. **Displacement counts as a scope leak** (clause 5).
+8. **Clause 5 cannot see heat displacement** on the standard arm path; it is
+   stated as a limit rather than built around.
 9. **Panel roles:** quant-researcher, quant-engineer, ux-designer.
+10. **No old knob comes back under this gate**, in any scope (from review).
+    This is stricter than "closed rows stay closed": a knob that merely
+    failed an early v72 stage is also out.
+11. **Regime labels are joined by date with the price-only classifier** on
+    both sides, so replay and live tables cannot disagree; the stored live
+    label is only compared, never used.
+
+## Panel review (2026-11-16)
+
+quant-researcher (1 blocking, 11 advisory):
+
+- BLOCKING: a closed or v72-judged knob could return as a one-direction
+  slice, scope picked after TRAIN -- applied: "No closed knob returns",
+  `refused:knob-already-judged`.
+- Scope `both` gave clause 1 two chances -- applied: clause 1 once on the
+  pooled scored rows.
+- Clause 7 named an instrument that does not exist for ΔExpR on filter
+  arms -- applied: both nulls frozen in Part A.
+- Clause 1's "p < 0.05" was redundant and Stage 0's MDE used another alpha
+  and cluster -- applied: one-sided 0.025, week clusters, both stages.
+- Clause 4 a point estimate presented as a rule -- applied: named a guard,
+  interval printed.
+- Clauses 3 and 4 pull against each other -- applied: stated as intended.
+- `live_ok` recomputed on every request -- applied: month-end snapshots,
+  two in a row.
+- No power statement for `live_ok` -- applied: live MDE printed; N basis
+  cited from the autopsy window. A trailing-180-day count from
+  `journal_entries` -- rejected: not derived in this spec; the first
+  book-gate run prints it.
+- Close-date window favours fast trades -- applied: window by entry date,
+  open trades counted.
+- Replay folds drift optimistic with each promotion -- applied: "can
+  withhold, never support", promotion count recorded.
+- Stage 2 population undefined per direction -- applied.
+- Finding 1 table without window, basis or total R -- applied.
+
+quant-engineer (3 blocking, 6 advisory):
+
+- BLOCKING: `regime2_state` is empty on the arm path -- applied: label
+  joined by date in `measure_arms.py`, engines untouched, `unknown` cap.
+- BLOCKING: live `classify` uses breadth, replay does not -- applied: both
+  sides use the price-only series; differences counted.
+- BLOCKING: live and replay net bases only asserted equal -- applied: one
+  net function, parity test, basis recorded.
+- New field and stale fixtures or hashes -- applied: old-format and golden
+  fixture tests; `code_hash` recorded.
+- Clause 5's displacement case cannot fire on the arm path -- applied:
+  text corrected, limit stated.
+- `book-gate.json` not reproducible from its stamp -- applied: recorded
+  fields, `--verify`, dirty tree refused.
+- Checkpoint unit unspecified -- applied: fold × ticker.
+- Live side non-deterministic -- applied: month-end as-of, fixed seed,
+  week of entry.
+- Label timing between replay and live -- applied: signal bar date on both
+  sides, same-date test.
+
+ux-designer (3 blocking, 7 advisory):
+
+- BLOCKING: fixed-width card would clip on a phone -- applied: labelled
+  list, container query, layout audit.
+- BLOCKING: panel inside the ledger's `sb-async` could be hidden by, or
+  blank, its neighbours -- applied: own async state and store call.
+- BLOCKING: fold glyphs and card unlabelled -- applied: year labels,
+  `aria-label`, `aria-expanded`.
+- Hand-built regime table -- applied: `dl` grid, "thin" as text, "none".
+- Number formatting -- applied.
+- Staleness had no display; mock date in the future -- applied.
+- `UNPROVEN` could not tell "no" from "not enough data"; caption placement
+  -- applied: badge text names the reason; caption under the replay
+  heading. The wording of `PROVEN` itself -- deferred to `financial-advisor`
+  at pre-close-out.
+- Thin frontend testing line -- applied.
+- Viewport breakpoint for side-by-side cards -- applied: 36rem container.
+- Panel placed above the registry -- applied: confirmed and stated.
 
 ## What follows
 
