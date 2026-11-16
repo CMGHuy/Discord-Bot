@@ -87,3 +87,20 @@ A slate row is a hypothesis. No gate moves: it never edits code, config, thresho
 ## Dropped
 
 None.
+
+## Panel review
+
+quant-researcher (2026-11-16), all ADVISORY, none BLOCKING. Both projected pooled changes re-derived and match (+0.013 R, +0.046 R).
+
+1. quant-researcher: rank 2 (Wednesday) rests on the post-era only (pre-era Wed -0.152 sits among Mon -0.153, Tue -0.117, Thu -0.180; post-era Wed -0.348 against +0.008..+0.226), q 0.063 passes only the 0.10 merge ceiling, it is the worst of five weekday cells and its mechanism is self-described speculation; not fit to route to /screen as written (autopsy.md:41,52,60,79,82; scout_merge.py:384) -- applied: recorded, not routed.
+2. quant-researcher: rank 2 does not freeze issue day versus fill day, and its +0.046 R projection assumes the cell is dropped while the order form defers to Thursday (unmeasured); nearest calendar precedent `turn_of_month` is SCREEN-FAIL (backtest-methodology.md:124-126,320) -- applied: recorded, not routed.
+3. quant-researcher: rank 1's "the two eras disagree" is wrong on net ExpR: both eras are negative (pre 17 trades -0.303, post 19 trades -0.600), only win rate flips (58.8% vs 5.3%); a 58.8% win rate with negative ExpR points to harvest/R-geometry, and 36 trades over 11 week-clusters is thin (autopsy.md:37) -- applied: recorded.
+4. quant-researcher: rank 1 targets Volume Profile, which has an OPEN sealed-thin pre-registration `v104-a-volume-profile-bullish` with one unspent 2026 holdout shot; this autopsy read a VP HVN cell inside that holdout (preregistration-ledger.jsonl:40; backtest-methodology.md:331) -- applied: recorded here; the v104-a retry must note the contamination.
+5. quant-researcher: the `2w` part of rank 1 cannot be expressed in the screen (fixed race shapes on PIT S&P 500 2010-2019, no bot horizon); the idea needs redefining and a control_condition before /screen (backtest-methodology.md:95-108,140-160) -- applied: recorded, not routed as written.
+6. quant-researcher: total R beside ExpR: rank 1 is about -16.6 R over 36 trades, rank 2 about -58.8 R over 242 trades (23% of the book's trades) (slate rows 1-2) -- applied: recorded.
+7. quant-researcher: rank 3 borders the closed v108 E re-arm (NO-LIFT), depends on the bot's own stop-outs which a screen event cannot carry, has a row id differing from its route id, and is a `volume` entry, not `harvest` (backtest-methodology.md:134-136,340; 2026-10-29-scout-slate.md:84) -- applied: recorded, not routed.
+8. quant-researcher: rank 4 is distinct from SCREEN-FAIL `gap_volume`, but its next-session stop-buy differs from both screen race shapes (next-open entry); the only stop-entry precedent `range_breakdown_stop` failed fill-depth check 5 (backtest-methodology.md:99-104,319,376) -- applied: recorded; entry form must be frozen before /screen.
+9. quant-researcher: rank 5's "missing from the strategy registry" is wrong: Support/Resistance already carries a tight-base clause; it borders `high52w` and `range_breakdown_close` SCREEN-FAIL and v105 NO-LIFT (docs/strategy-types/support-resistance.md:21; backtest-methodology.md:317,361,375) -- applied: recorded, not routed.
+10. quant-researcher: ranks 3-5 carry no autopsy evidence and repeat the 2026-10-16, 10-21 and 10-29 slates without restating the earlier panel's route conditions (2026-10-16-scout-slate.md:86-90; 2026-10-29-scout-slate.md:84-85) -- applied: recorded.
+11. quant-researcher: both autopsy rows rest on 11 and 15 week-clusters, so the bootstrap bounds are optimistic and should be read as thin (autopsy.md:8,29) -- applied: recorded.
+12. quant-researcher: fillability of a post-shakeout re-entry and of a stop-buy at the gap-day high is a veteran-trader question (slate row 3) -- applied: recorded, out of scope here.
