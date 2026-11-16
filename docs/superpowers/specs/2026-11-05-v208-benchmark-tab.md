@@ -312,10 +312,10 @@ retail trader feels.
 - Every stat tile shows its `N`.
 - The tab says in one line under the strip: "N sessions, paper book —
   beta/alpha are indicative, not evidence of edge."
-- **Multiple comparisons:** alpha is computable for 4 indexes × 2
-  currencies × 6 ranges. The **headline pair is fixed: SPY, USD, All**. It
+- **Multiple comparisons:** alpha is computable for 4 indexes × 6
+  ranges (USD only after the a131cd9f amendment). The **headline pair is fixed: SPY, USD, All**. It
   is the only alpha shown in bold. Every other alpha cell is plain and
-  carries "1 of 48 cells" in its tooltip.
+  carries "1 of 24 cells" in its tooltip.
 - Never present alpha as edge. It is not a pre-registered measurement and
   `Edge:` stays `none`.
 - Deployed-line stats show the **share of sessions in range built from
