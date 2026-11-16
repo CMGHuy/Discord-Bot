@@ -41,7 +41,6 @@
     "swingbot.core.analytics.insights:weekly_digest": 36,
     "swingbot.core.analytics.journal:_auto_lesson": 16,
     "swingbot.core.analytics.journal:tags_for": 27,
-    "swingbot.core.analytics.mfe_mae:compute_mfe_mae": 16,
     "swingbot.core.analytics.page_bodies:performance_body": 17,
     "swingbot.core.analytics.snapshots:build_snapshot": 20,
     "swingbot.core.backtesting.acceptance:intracluster_correlation": 18,
