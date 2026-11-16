@@ -73,7 +73,8 @@ def test_retag_is_registry_side_for_both_images():
 
 
 def _retention_step():
-    return _load(RETENTION)["jobs"]["prune"]["steps"][0]
+    steps = _load(RETENTION)["jobs"]["prune"]["steps"]
+    return next(s for s in steps if "container-retention-policy" in s.get("uses", ""))
 
 
 def test_retention_never_prunes_latest_or_stable_tags():
@@ -100,3 +101,11 @@ def test_retention_manual_run_defaults_to_dry_run_and_schedule_deletes():
     dry = _retention_step()["with"]["dry-run"]
     assert "github.event_name == 'workflow_dispatch'" in dry
     assert "inputs.dry_run" in dry and dry.rstrip("} ").endswith("'false'")
+
+
+def test_retention_names_the_packages_in_lowercase():
+    # GHCR package names are lowercase; `Discord-Bot` matched 0/2 packages.
+    steps = _load(RETENTION)["jobs"]["prune"]["steps"]
+    names = next(s for s in steps if s.get("id") == "names")
+    assert "tr '[:upper:]' '[:lower:]'" in names["run"]
+    assert steps.index(names) < steps.index(_retention_step())

@@ -40,6 +40,18 @@ jobs:
       # keep-n-most-recent applies AFTER the cut-off filter, so a burst of
       # deploys cannot push the live image out of the retained set inside a
       # single 14-day window.
+      # GHCR stores package names lowercase (deploy.yml lowercases the repo
+      # for the image path), and the action matches names case-sensitively:
+      # `Discord-Bot` matched 0/2 packages in the first dry run, 2026-11-16.
+      - name: Package names
+        id: names
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          NAME="$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]')"
+          echo "bot=$NAME" >> "$GITHUB_OUTPUT"
+          echo "db=$NAME-db" >> "$GITHUB_OUTPUT"
+
       - name: Delete image versions older than 45 days
         # Pinned past v3.0.0 on purpose: that version's token-format check only
         # accepted a classic PAT (ghp_) or OAuth token (gho_) and rejected the
@@ -61,8 +73,8 @@ jobs:
           # the target. 45 days covers the window plus that age; rollback_to.sh
           # still refuses a tag GHCR no longer has.
           image-names: |
-            ${{ github.event.repository.name }}
-            ${{ github.event.repository.name }}-db
+            ${{ steps.names.outputs.bot }}
+            ${{ steps.names.outputs.db }}
           cut-off: 45d
           keep-n-most-recent: 10
           # Never the moving tag, and never an untagged version that a
