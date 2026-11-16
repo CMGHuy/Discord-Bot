@@ -1,7 +1,12 @@
 from unittest.mock import patch
 
+import pandas as pd
+import pytest
+
 from tests.conftest import make_ohlcv
+from swingbot.core.analytics.excursion_frames import FrameSet
 from swingbot.core.analytics.journal import JournalStore, build_entry, journal_trade_close
+from swingbot.core.analytics.mfe_mae import INTRADAY_SOURCES
 
 
 def _entry(trade_id, strategy="Fibonacci", tags=None, outcome="win", closed_at="2026-03-10T10:00:00+00:00"):
@@ -73,16 +78,17 @@ def test_build_entry_rule1_loss_stopped_after_running():
     # produces mfe_r=1.0, mae_r=0.25, satisfying rule 1's condition.
     df = make_ohlcv([100, 104, 99], spread_pct=0.0, start="2026-03-02")
     t = _base_trade(status="loss", exit_price=96.0)
-    e = build_entry(t, df)
+    e = build_entry(t, {"daily": df})
     assert e["auto_lesson"] == ("Trade went 1.0R in favor before stopping out — exit management, "
                                 "not entry, cost this one.")
+    assert e["excursion_source"] == "daily"
     assert e["trade_id"] == "t1" and e["confidence_level"] == 5 and e["badge"] == "VALIDATED"
 
 
 def test_build_entry_rule2_win_clean_capture():
     df = make_ohlcv([100, 104], spread_pct=0.0, start="2026-03-02")
     t = _base_trade(status="win", exit_price=104.0, closed_at="2026-03-03T15:00:00+00:00")
-    e = build_entry(t, df)
+    e = build_entry(t, {"daily": df})
     assert e["auto_lesson"] == "Clean capture: banked 100% of the available move."
 
 
@@ -90,7 +96,7 @@ def test_build_entry_rule4_scratch_no_followthrough():
     df = make_ohlcv([100, 100], spread_pct=0.0, start="2026-03-02")
     t = _base_trade(status="closed", close_reason="scratch", exit_price=100.0,
                     closed_at="2026-03-03T15:00:00+00:00")
-    e = build_entry(t, df)
+    e = build_entry(t, {"daily": df})
     assert e["outcome"] == "scratch"
     assert e["auto_lesson"] == "No follow-through within the horizon — count it as rent, not error."
 
@@ -101,6 +107,7 @@ def test_build_entry_fallback_and_df_none_is_safe():
     assert e["mfe_r"] is None and e["mae_r"] is None and e["exit_efficiency"] is None
     assert e["auto_lesson"] == f"Outcome loss at {e['r_realized']:+.2f}R."
     assert e["note"] == "" and e["tags"] == []
+    assert e["excursion_source"] is None
 
 
 def _closed_trade():
@@ -112,20 +119,26 @@ def _closed_trade():
 
 def test_journal_trade_close_adds_entry():
     df = make_ohlcv([100, 108, 98, 104], spread_pct=0.0, start="2026-03-02")
-    with patch("swingbot.core.marketdata.data.get_daily_data", return_value=df):
+    with patch("swingbot.core.marketdata.data.get_daily_data", return_value=df), \
+            patch("swingbot.core.analytics.excursion_frames.load_frames",
+                  return_value=FrameSet({"daily": df}, INTRADAY_SOURCES, ())):
         journal_trade_close(_closed_trade())
     store = JournalStore()
     assert store.get("t1") is not None
+    assert store.get("t1")["excursion_source"] == "daily"
 
 
 def test_journal_trade_close_never_raises_on_fetch_failure():
-    with patch("swingbot.core.marketdata.data.get_daily_data", side_effect=ValueError("no data")):
+    with patch("swingbot.core.marketdata.data.get_daily_data", side_effect=ValueError("no data")), \
+            patch("swingbot.core.analytics.excursion_frames.load_frames",
+                  return_value=FrameSet({}, INTRADAY_SOURCES, ())):
         journal_trade_close(_closed_trade())  # must not raise
     store = JournalStore()
     # Entry still gets added -- just with df=None (all MFE/MAE fields None) --
     # a data-fetch failure degrades the entry, it does not skip it.
     assert store.get("t1") is not None
     assert store.get("t1")["mfe_r"] is None
+    assert store.get("t1")["excursion_source"] is None
 
 
 def test_set_note_false_for_missing_trade_id():
@@ -183,3 +196,62 @@ def test_backfill_dry_run_store_reports_without_writing():
     backfilled, skipped = backfill(trades, DryRunStore(real), lambda ticker: None)
     assert (backfilled, skipped) == (1, 1)
     assert real.get("new1") is None
+
+
+def _five_minute_day(day="2026-03-02"):
+    idx = pd.date_range(f"{day} 14:30", f"{day} 20:55", freq="5min")
+    return pd.DataFrame({"Open": 100.0, "High": 100.5, "Low": 99.5, "Close": 100.0,
+                         "Volume": 1000.0}, index=idx)
+
+
+def _same_day_loss():
+    return _base_trade(status="loss", exit_price=96.0,
+                       opened_at="2026-03-02T15:02:00+00:00", closed_at="2026-03-02T15:31:00+00:00")
+
+
+def test_build_entry_records_the_finest_source_and_derives_the_lesson_from_it():
+    daily = make_ohlcv([100, 104, 99], spread_pct=0.0, start="2026-03-02")
+    e = build_entry(_same_day_loss(), {"daily": daily, "5min": _five_minute_day()})
+    assert e["excursion_source"] == "5min"
+    assert (e["mfe_r"], e["mae_r"]) == (0.125, 1.0)
+    assert e["auto_lesson"] == "Entry was wrong from the first bar — review the trigger, not the exit."
+    assert list(e).index("excursion_source") == list(e).index("exit_efficiency") + 1
+
+
+def test_build_entry_with_an_empty_mapping_is_safe():
+    e = build_entry(_same_day_loss(), {})
+    assert e["mfe_r"] is None and e["excursion_source"] is None and e["note"] == ""
+
+
+def test_build_entry_rejects_a_bare_dataframe():
+    with pytest.raises(TypeError, match="frames mapping"):
+        build_entry(_same_day_loss(), make_ohlcv([100, 101], start="2026-03-02"))
+
+
+def test_journal_trade_close_records_the_archive_source():
+    t = dict(_same_day_loss(), id="t5")
+    fs = FrameSet({"5min": _five_minute_day(), "daily": make_ohlcv([100], start="2026-03-02")}, (), ())
+    with patch("swingbot.core.marketdata.data.get_daily_data", return_value=None), \
+            patch("swingbot.core.analytics.excursion_frames.load_frames", return_value=fs) as loader:
+        journal_trade_close(t)
+    assert loader.call_args.args == ("AAPL",) and "daily" in loader.call_args.kwargs
+    assert JournalStore().get("t5")["excursion_source"] == "5min"
+
+
+def test_journal_trade_close_falls_back_to_daily_when_the_archive_read_fails():
+    df = make_ohlcv([100, 108, 98, 104], spread_pct=0.0, start="2026-03-02")
+    with patch("swingbot.core.marketdata.data.get_daily_data", return_value=df), \
+            patch("swingbot.core.analytics.excursion_frames.load_frames", side_effect=OSError("disk")):
+        journal_trade_close(_closed_trade())
+    entry = JournalStore().get("t1")
+    assert entry["excursion_source"] == "daily" and entry["mfe_r"] == 2.0
+
+
+def test_backfill_hands_the_frames_mapping_to_build_entry():
+    store = JournalStore()
+    trade = {"id": "bf1", "ticker": "MSFT", "status": "loss", "direction": "bearish",
+             "entry": 50.0, "stop_loss": 52.0, "exit_price": 52.0,
+             "opened_at": "2026-03-02T15:00:00+00:00", "closed_at": "2026-03-03T15:00:00+00:00"}
+    daily = make_ohlcv([50.0, 51.0], spread_pct=1.0, start="2026-03-02")
+    assert backfill([trade], store, lambda ticker: {"daily": daily}) == (1, 0)
+    assert store.get("bf1")["excursion_source"] == "daily"

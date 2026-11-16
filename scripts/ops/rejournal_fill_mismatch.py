@@ -55,7 +55,7 @@ def find_mismatches(trades: list[dict], journal: dict[str, dict]) -> list[tuple[
 #: plan was told at issuance (confidence, risk_features, entry_context),
 #: which the journal freezes (v86, journal.py) -- stays as first written.
 EXIT_FIELDS = ("outcome", "r_realized", "mfe_r", "mae_r", "exit_efficiency",
-               "holding_days", "tags", "auto_lesson", "closed_at")
+               "excursion_source", "holding_days", "tags", "auto_lesson", "closed_at")
 
 
 def merge_entry(rebuilt: dict, old: dict) -> dict:
@@ -69,6 +69,7 @@ def changed_fields(old: dict, new: dict) -> list[str]:
 
 
 def main() -> None:
+    from swingbot.core.analytics.excursion_frames import load_frames
     from swingbot.core.analytics.journal import JournalStore, build_entry
     from swingbot.core.marketdata.data import get_daily_data
     from swingbot.core.tracking.performance import TradeLog
@@ -98,10 +99,11 @@ def main() -> None:
         except Exception as exc:   # MFE/MAE degrade to None, as on the live path
             print(f"  {t['ticker']}: bars unavailable ({exc}); MFE/MAE will be None")
             df = None
-        new = merge_entry(build_entry(t, df), old)
+        frames = load_frames(t["ticker"], daily=df).frames
+        new = merge_entry(build_entry(t, frames), old)
         diffs = ", ".join(f"{k}: {old.get(k)!r} -> {new.get(k)!r}"
                           for k in changed_fields(old, new) if k in
-                          ("r_realized", "outcome", "closed_at", "exit_efficiency"))
+                          ("r_realized", "outcome", "closed_at", "exit_efficiency", "excursion_source"))
         print(f"  {t['ticker']:<6} {t['id']}  {t.get('closed_at', '')[:10]}  {diffs}")
         print(f"         all changed: {', '.join(changed_fields(old, new))}")
         if args.apply:

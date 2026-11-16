@@ -16,6 +16,7 @@ def _trade(**over):
 
 def test_entry_carries_the_risk_features_verbatim():
     e = build_entry(_trade(), None)
+    assert e["excursion_source"] is None
     assert e["risk_features"]["regime2_state"] == "bear_volatile"
     assert e["risk_features"]["session_bucket"] == "close"
 

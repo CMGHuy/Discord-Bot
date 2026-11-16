@@ -21,7 +21,7 @@ from swingbot.core.tracking.performance import TradeLog
 BACKTEST_CACHE_DIR = os.path.join(config.DATA_DIR, "backtest_cache")
 
 
-def _fetch_with_cache_fallback(ticker: str):
+def _daily_with_cache_fallback(ticker: str):
     """Live fetch first; on any failure, fall back to the same cached CSV
     the backtest tooling already maintains at data/backtest_cache/{TICKER}.csv
     (columns Date,Open,High,Low,Close,Volume) so a backfill run doesn't
@@ -41,6 +41,14 @@ def _fetch_with_cache_fallback(ticker: str):
     return None
 
 
+def _fetch_with_cache_fallback(ticker: str) -> dict:
+    """v228: every frame build_entry can use -- the 5min/15min/hourly
+    archives under market_data/, then the daily bars (live fetch, else the
+    backtest cache)."""
+    from swingbot.core.analytics.excursion_frames import load_frames
+    return load_frames(ticker, daily=_daily_with_cache_fallback(ticker)).frames
+
+
 def backfill(trades: list[dict], store: JournalStore, fetch_fn) -> tuple[int, int]:
     """Core, testable logic: journal every closed trade in `trades` not
     already present in `store`. Returns (backfilled, skipped) where
@@ -48,7 +56,7 @@ def backfill(trades: list[dict], store: JournalStore, fetch_fn) -> tuple[int, in
     journaled -- both are legitimately "nothing to do here", just for
     different reasons, so this plan does not distinguish them in the
     return value (the CLI's printed summary can, if a future task wants
-    that granularity)."""
+    that granularity). `fetch_fn(ticker)` returns a frames mapping (or None)."""
     backfilled = skipped = 0
     for t in trades:
         if t.get("status") not in ("win", "loss", "closed"):
@@ -57,8 +65,7 @@ def backfill(trades: list[dict], store: JournalStore, fetch_fn) -> tuple[int, in
         if store.get(t.get("id")) is not None:
             skipped += 1
             continue
-        df = fetch_fn(t["ticker"])
-        entry = build_entry(t, df)
+        entry = build_entry(t, fetch_fn(t["ticker"]))
         store.add(entry)
         backfilled += 1
     return backfilled, skipped
