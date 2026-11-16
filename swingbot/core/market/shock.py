@@ -9,7 +9,7 @@ what ``measure`` and ``step`` return.
 A reading measures the watchlist at pass time (the live quote against the last
 completed session's close); it never looks at a later bar.
 
-Spec: docs/superpowers/specs/2026-11-05-v209-market-shock-detector-design.md
+Spec: docs/superpowers/specs/implemented/2026-11-05-v209-market-shock-detector-design.md
 """
 from __future__ import annotations
 

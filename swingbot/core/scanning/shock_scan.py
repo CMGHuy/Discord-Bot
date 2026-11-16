@@ -7,7 +7,7 @@ aware) does it measure, step and record a reading; every other pass only reads
 the stored label for the plan stamp. "Last" is the pass's live quote; prev_close
 and ATR14 come from completed daily bars only. A failure never fails the scan.
 
-Spec: docs/superpowers/specs/2026-11-05-v209-market-shock-detector-design.md
+Spec: docs/superpowers/specs/implemented/2026-11-05-v209-market-shock-detector-design.md
 """
 from __future__ import annotations
 
