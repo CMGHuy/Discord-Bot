@@ -443,6 +443,45 @@ layer 1; layer 2; table, statistics and renderer; the run itself
    matching) are descriptive and frozen here.
 10. **Panel roles:** quant-engineer, quant-researcher, veteran-trader.
 
+## Clarifications from the code brief (2026-11-16, Claude's calls)
+
+Found while gathering code for the plan; each resolves something the text
+above left open.
+
+1. **`R_exit_only` under v2 fills** reuses the v173 precedent,
+   `analytics/override_fidelity.py:engine_path` (`fill_bar_exit`, then
+   `walk_v2`), behind a small public from-fill function beside
+   `simulate_exit_v2`. The v1 function is `simulate_exit_from_fill` as
+   written.
+2. **The fill-day check.** The engine runs `_fill_bar_exit` for limit and
+   compression-short plans and not for market or `stop_entry` plans. Both
+   from-fill functions take `fill_bar_check: bool`. The parity tests pass
+   the engine's own setting per entry type; layer 1 always passes `False`,
+   because the fill day is exactly the day the daily walk does not see.
+3. **Raw bars** come from a defaulted `adjustment` parameter on the
+   provider's daily fetch (default unchanged, `Adjustment.ALL`), written to
+   a scratch store selected with `HISTORY_STORE_DIR` and read with
+   `history_store.load(ticker, "daily")`. This is the second and last
+   addition inside `swingbot/`; existing behaviour is byte-identical.
+4. **`issue_session` is new**, built on `session.nyse_calendar()`,
+   `US_MARKET_TZ` and `RTH_OPEN`. `override_fidelity.assign_session` maps a
+   pre-open time to the same day and is not reused.
+5. **Layer 2 counts depend on replay exit dates.** `scan_replay._alert`
+   uses each alert's simulated exit day to apply the one-open-trade rule to
+   later alerts in the same ticker. That use stays (it is the live rule);
+   the outcome fields are still dropped at the adapter, and the results doc
+   says that replay-only counts rest on replay holding periods.
+6. **Export.** The `reconcile` mode uses `psql -At` with `row_to_json`, so
+   the script stays free of write keywords and of a second `COPY`;
+   `tests/scout/test_export_script.py` gains per-mode cases and keeps its
+   read-only guards. The `rows` column list is untouched.
+7. **One-arm bootstrap:** `week_cluster_bootstrap` is called with an empty
+   baseline arm and a statistic over the drawn rows, whose items expose
+   `entry_date`.
+8. **Suite:** the new tests join `scout` (about 286 of 1,200).
+9. **Per-trade rows** are written under a git-ignored directory chosen in
+   the plan; the plan adds the ignore rule if none fits.
+
 ## What follows
 
 1. Specs for realism changes (for example a same-day exit model, entry at
