@@ -53,6 +53,19 @@ def test_a_passed_daily_frame_goes_last_and_wins_over_the_archive(tmp_path):
     assert fs.missing == ("5min", "15min", "hourly")
 
 
+def test_an_unreadable_daily_archive_is_reported_unreadable(tmp_path):
+    _write(tmp_path, "daily", "AAPL", text="Datetime,Close\nnot-a-date,1\n")
+    fs = load_frames("AAPL", daily_from_archive=True, base_dir=str(tmp_path))
+    assert "daily" not in fs.frames and "daily" in fs.unreadable
+    assert "daily" not in fs.missing
+
+
+def test_an_empty_passed_daily_frame_reads_the_archive_when_asked(tmp_path):
+    _write(tmp_path, "daily", "AAPL", _bars("1D", periods=2, start="2026-11-11"))
+    fs = load_frames("AAPL", daily=pd.DataFrame(), daily_from_archive=True, base_dir=str(tmp_path))
+    assert list(fs.frames) == ["daily"] and len(fs.frames["daily"]) == 2
+
+
 def test_an_empty_daily_frame_is_left_out_and_not_counted(tmp_path):
     fs = load_frames("AAPL", daily=pd.DataFrame(), base_dir=str(tmp_path))
     assert "daily" not in fs.frames and "daily" not in fs.missing
