@@ -21,7 +21,8 @@ _LOGIN = {"username": "admin", "password": "admin"}
 
 
 def _entry(trade_id, *, outcome="loss", tags=(), note="", lesson=None,
-           mfe_r=1.4, mae_r=0.2, exit_efficiency=0.31, closed_at="2026-08-12T15:00:00+00:00"):
+           mfe_r=1.4, mae_r=0.2, exit_efficiency=0.31, closed_at="2026-08-12T15:00:00+00:00",
+           excursion_source="daily"):
     """One journal.json record, as `build_entry` writes it."""
     return {
         "trade_id": trade_id, "ticker": "AAPL", "strategy": "RSI Divergence",
@@ -29,6 +30,7 @@ def _entry(trade_id, *, outcome="loss", tags=(), note="", lesson=None,
         "badge": "VALIDATED", "quality_score": 72, "outcome": outcome,
         "r_realized": -1.0, "mfe_r": mfe_r, "mae_r": mae_r,
         "exit_efficiency": exit_efficiency, "holding_days": 3.2,
+        "excursion_source": excursion_source,
         "tags": list(tags), "auto_lesson": lesson, "note": note,
         "opened_at": "2026-08-09T10:00:00+00:00", "closed_at": closed_at,
         "created_at": "2026-08-12T15:00:01+00:00",
@@ -75,6 +77,8 @@ _ENTRY_SHAPE = {
     "r_realized": NULLABLE_NUMBER, "mfe_r": NULLABLE_NUMBER,
     "mae_r": NULLABLE_NUMBER, "exit_efficiency": NULLABLE_NUMBER,
     "holding_days": NULLABLE_NUMBER, "tags": list,
+    # v228 -- "5min", "15min", "hourly" or "daily"; null when no bars covered it.
+    "excursion_source": (str, type(None)),
     "auto_lesson": (str, type(None)), "note": str,
     "opened_at": (str, type(None)), "closed_at": (str, type(None)),
     # Stamped by `JournalStore.add` on every write, so it means "when this
@@ -100,6 +104,22 @@ def test_journal_entry_carries_the_excursion_figures(seed, logged_in):
     assert body["entry"]["mfe_r"] == 1.4
     assert body["entry"]["mae_r"] == 0.2
     assert body["entry"]["exit_efficiency"] == 0.31
+
+
+def test_journal_entry_carries_its_excursion_source(seed, logged_in):
+    """The SPA marks a short hold measured on daily bars; it needs the source."""
+    seed(trades=[_trade("c" * 16)], entries=[_entry("c" * 16, excursion_source="5min")])
+    entry = logged_in.get("/api/v1/trades/" + "c" * 16 + "/journal").get_json()["entry"]
+    assert entry["excursion_source"] == "5min"
+
+
+def test_journal_entry_with_no_bars_has_a_null_source(seed, logged_in):
+    seed(trades=[_trade("d" * 16)],
+         entries=[_entry("d" * 16, mfe_r=None, mae_r=None, exit_efficiency=None,
+                         excursion_source=None)])
+    entry = logged_in.get("/api/v1/trades/" + "d" * 16 + "/journal").get_json()["entry"]
+    assert_shape(entry, _ENTRY_SHAPE, where="entry")
+    assert entry["excursion_source"] is None
 
 
 def test_journal_entry_carries_tags_and_the_auto_lesson(seed, logged_in):

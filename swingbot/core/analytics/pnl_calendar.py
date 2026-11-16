@@ -39,6 +39,9 @@ ROW_KEYS = (
     # v165 D1 -- read from the part, never re-derived (see `_detail_fields`).
     "entry_price", "exit_price", "stop_price", "tp1", "tp2", "shares",
     "held_hours", "return_pct", "exit_reason",
+    # v228 -- which bars measured the journal entry's MFE/MAE (None: unjournaled
+    # or no bars). The day card marks a daily-bar figure on a hold under 48h.
+    "excursion_source",
 )
 
 
@@ -227,6 +230,7 @@ def _row_for(part: dict, entry: dict, trade: dict) -> dict | None:
         "mfe_r": _float_or_none(entry.get("mfe_r")),
         "mae_r": _float_or_none(entry.get("mae_r")),
         "exit_efficiency": _float_or_none(entry.get("exit_efficiency")),
+        "excursion_source": entry.get("excursion_source") or None,
         "tags": list(entry.get("tags") or []),
         "auto_lesson": entry.get("auto_lesson") or None,
         "leg_index": part["leg_index"],

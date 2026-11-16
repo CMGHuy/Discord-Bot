@@ -226,9 +226,20 @@ def test_day_trade_shape_carries_the_journal_join(seed, logged_in):
         "stop_price": NULLABLE_NUMBER, "tp1": NULLABLE_NUMBER, "tp2": NULLABLE_NUMBER,
         "shares": NULLABLE_NUMBER, "held_hours": NULLABLE_NUMBER,
         "return_pct": NULLABLE_NUMBER, "exit_reason": str,
+        # v228 -- which bars measured the joined entry's MFE/MAE.
+        "excursion_source": NULLABLE_STR,
     }, where="trades[0]")
     assert body["trades"][0]["tags"] == ["clean-exit"]
     assert body["trades"][0]["auto_lesson"] == "Held to target."
+    assert body["trades"][0]["excursion_source"] is None   # _entry carries no source
+
+
+def test_day_trade_carries_the_entry_excursion_source(seed, logged_in):
+    entry = _entry("a" * 16)
+    entry["excursion_source"] = "daily"
+    seed(trades=[_trade("a" * 16)], entries=[entry])
+    body = logged_in.get("/api/v1/calendar/pnl/day?date=2026-08-03").get_json()
+    assert body["trades"][0]["excursion_source"] == "daily"
 
 
 def test_day_detail_summarises_its_existing_trade_rows(seed, logged_in):
