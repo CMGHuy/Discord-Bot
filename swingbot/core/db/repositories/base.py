@@ -95,16 +95,24 @@ class Repository:
         return self._record(row)
 
     def patch(self, key_value: Any, changes: dict, *,
-              conn: sa.Connection | None = None) -> dict | None:
-        """Patch named fields only, composing JSONB changes in the database."""
+              conn: sa.Connection | None = None,
+              where: sa.ColumnElement[bool] | None = None) -> dict | None:
+        """Patch named fields only, composing JSONB changes in the database.
+
+        ``where`` (v228) is ANDed into the UPDATE itself, so a guard on the
+        stored row ("only while its source is coarser") cannot race a
+        concurrent writer the way a read-then-write check would. None is
+        returned when no row matched: a missing key or a guard miss."""
         columns, document_patch = split_doc(changes, self.promoted)
         values: dict[str, Any] = {**columns, "updated_at": sa.func.clock_timestamp()}
         if document_patch:
             values["doc"] = self.table.c.doc.op("||")(
                 sa.cast(sa.literal(document_patch, type_=sa.JSON), JSONB)
             )
-        statement = (sa.update(self.table).where(self.key_col == key_value)
-                     .values(**values).returning(self.table))
+        statement = sa.update(self.table).where(self.key_col == key_value)
+        if where is not None:
+            statement = statement.where(where)
+        statement = statement.values(**values).returning(self.table)
         with self._tx(conn) as connection:
             row = connection.execute(statement).one_or_none()
         return None if row is None else self._record(row)

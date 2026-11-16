@@ -39,6 +39,17 @@ class JournalRepository(Repository):
                 journal_entries.c.closed_at, journal_entries.c.created_at)),
         )
 
+    def patch_if_coarser(self, trade_id: str, changes: dict, *,
+                         coarser: tuple[str | None, ...], conn=None) -> dict | None:
+        """v228: patch an entry only while its stored excursion_source is one
+        of ``coarser`` (None = missing or JSON null). The rank guard is part of
+        the UPDATE, so the bot's nightly pass and the backfill script cannot
+        downgrade each other; fields not in ``changes`` (the note above all)
+        are untouched. None when the row is missing or already as fine."""
+        allowed = ["" if source is None else source for source in coarser]
+        stored = sa.func.coalesce(journal_entries.c.doc["excursion_source"].astext, "")
+        return self.patch(trade_id, changes, conn=conn, where=stored.in_(allowed))
+
     def version(self, *, conn=None) -> tuple[int, str | None]:
         """(row count, newest updated_at) over journal_entries -- the twin of
         PlanRepository.version(); same commit-order caveat (V218-1)."""
