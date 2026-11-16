@@ -4,12 +4,22 @@ The histograms are winners-only: a losing trade's MAE includes the stop it
 hit, so it must not inform the distribution used to tune trade management.
 The scatter deliberately includes every outcome because that separation is its
 diagnostic value.  Callers supply entries; this module never loads a journal.
+
+v228: an entry's excursion is only trusted when it was measured on intraday
+bars or the trade was held two days or more. A short hold measured on daily
+bars takes the whole day's range, price before the fill and after the exit
+included, so it overstates MFE and MAE; callers filter aggregates through
+``is_trusted`` and report ``excursion_summary`` so the exclusion is visible.
+``is_daily_estimate`` is the same rule from the other side, for markers.
 """
 from __future__ import annotations
 
 from swingbot.core.analytics import metrics
+from swingbot.core.analytics.mfe_mae import INTRADAY_SOURCES
 
 _FIELDS = ("mfe_r", "mae_r", "exit_efficiency")
+#: Holds this long or longer are trusted even on daily bars.
+TRUSTED_MIN_HOLD_DAYS = 2.0
 
 
 def _wins(entries: list[dict]) -> list[dict]:
@@ -37,6 +47,45 @@ def _median(values: list[float]) -> float | None:
     values = sorted(values)
     middle = len(values) // 2
     return values[middle] if len(values) % 2 else (values[middle - 1] + values[middle]) / 2
+
+
+def _hold_days(entry: dict) -> float | None:
+    """The entry's holding_days as a float, or None when missing or unusable."""
+    try:
+        days = float(entry.get("holding_days"))
+    except (TypeError, ValueError):
+        return None
+    return days if days == days else None
+
+
+def is_trusted(entry: dict) -> bool:
+    """True when the entry's MFE/MAE may feed an aggregate: measured on
+    intraday bars, or held at least TRUSTED_MIN_HOLD_DAYS."""
+    if entry.get("excursion_source") in INTRADAY_SOURCES:
+        return True
+    days = _hold_days(entry)
+    return days is not None and days >= TRUSTED_MIN_HOLD_DAYS
+
+
+def is_daily_estimate(entry: dict) -> bool:
+    """True when the figures came from daily bars on a hold under two days
+    (or of unknown length): the range may be overstated."""
+    if entry.get("excursion_source") != "daily":
+        return False
+    days = _hold_days(entry)
+    return days is None or days < TRUSTED_MIN_HOLD_DAYS
+
+
+def excursion_summary(entries: list[dict]) -> dict:
+    """Per-source counts and how many entries the trust rule kept and dropped."""
+    sources: dict[str, int] = {}
+    for entry in entries:
+        name = entry.get("excursion_source") or "none"
+        sources[name] = sources.get(name, 0) + 1
+    return {"sources": sources,
+            "included": sum(1 for entry in entries if is_trusted(entry)),
+            "excluded": sum(1 for entry in entries if is_daily_estimate(entry)),
+            "total": len(entries)}
 
 
 def _distribution(entries: list[dict], field: str, bins: int) -> dict:
@@ -75,7 +124,8 @@ def mfe_mae_points(entries: list[dict]) -> list[dict]:
                        "r_realized": realized,
                        "outcome": str(entry.get("outcome") or "unknown").lower(),
                        "ticker": entry.get("ticker") or "",
-                       "strategy": entry.get("strategy") or ""})
+                       "strategy": entry.get("strategy") or "",
+                       "excursion_source": entry.get("excursion_source")})
     return points
 
 

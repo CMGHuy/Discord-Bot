@@ -444,3 +444,41 @@ def test_calibration_serves_an_empty_watch_from_a_pre_deploy_snapshot(seed, logg
 
     assert body["live_loss_watch"] == {"rows": [], "counts": {}}
     assert body["drift"] == [] and body["scope"] == "all-time"
+
+
+def _journal_entry(trade_id, *, source, hold, efficiency, mfe=2.0, mae=0.4):
+    return {"trade_id": trade_id, "ticker": "AAPL", "strategy": "RSI Divergence",
+            "horizon_key": "1m", "direction": "bullish", "outcome": "win",
+            "r_realized": 1.0, "mfe_r": mfe, "mae_r": mae,
+            "exit_efficiency": efficiency, "holding_days": hold,
+            "excursion_source": source, "tags": [], "auto_lesson": None, "note": "",
+            "opened_at": "2026-08-01T14:00:00+00:00",
+            "closed_at": "2026-08-04T15:00:00+00:00",
+            "created_at": "2026-08-04T15:00:01+00:00"}
+
+
+def test_exit_quality_aggregates_trusted_entries_and_reports_the_exclusion(seed, logged_in):
+    seed(trades=[_closed("a" * 16), _closed("b" * 16), _closed("c" * 16)])
+    seed_store("journal", [
+        _journal_entry("a" * 16, source="5min", hold=0.2, efficiency=0.9),
+        _journal_entry("b" * 16, source="daily", hold=0.3, efficiency=0.1),   # excluded
+        _journal_entry("c" * 16, source="daily", hold=3.0, efficiency=0.5),
+    ])
+    body = logged_in.get("/api/v1/analytics/exit-quality").get_json()
+
+    assert body["excursion"] == {"sources": {"5min": 1, "daily": 2},
+                                 "included": 2, "excluded": 1, "total": 3}
+    assert body["efficiency"]["n"] == 2
+    assert body["efficiency"]["median"] == pytest.approx(0.7)
+    assert body["mae"]["n"] == 2
+    assert sorted(p["excursion_source"] for p in body["scatter"]) == ["5min", "daily"]
+    # Coverage still describes every scoped entry, excluded ones included.
+    assert body["coverage"]["mfe_r"]["total"] == 3
+
+
+def test_exit_quality_on_an_empty_book_reports_an_empty_excursion_block(seed, logged_in):
+    seed()
+    body = logged_in.get("/api/v1/analytics/exit-quality").get_json()
+    assert body["excursion"] == {"sources": {}, "included": 0, "excluded": 0, "total": 0}
+    assert body["efficiency"] == {"bins": [], "n": 0, "median": None}
+    assert body["scatter"] == []
