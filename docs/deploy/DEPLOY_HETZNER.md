@@ -540,7 +540,7 @@ over the plan's 5% gate, accepted by the partner); PITR verdict 2026-11-01 PASS;
 applied 1422 rows at about 2026-11-16 10:50 UTC (T0 10:48:23); equity-column
 fingerprint unchanged (1706 rows, md5 6d8dab22...); re-run `would fill 0 rows`;
 bars 2026-07-06 to 2026-11-13, 0 proxy rows; API `ok`, 6 series, approx share
-62.8%; recorder check pending (applied pre-market, re-check on the next session).
+62.8%; recorder check ok (2026-11-16 17:40 UTC: 35 new live samples, all with open_notional and approx FALSE).
 
 ## Accessing the admin UI
 
