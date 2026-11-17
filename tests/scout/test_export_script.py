@@ -23,6 +23,7 @@ EXPECTED_COLUMNS = (
     "last_leg_reason", "outcome", "r_realized", "mfe_r", "mae_r", "exit_efficiency",
     "holding_days", "stop_width_atr", "atr_pct", "regime2_state", "session_bucket",
     "days_to_earnings", "rs_percentile", "plan_issued_at", "plan_issued_at_source",
+    "excursion_source",
 )
 
 # Word-bounded and case-sensitive: `updated_at` / `created_at` must not trip it,
@@ -252,3 +253,38 @@ def test_the_issued_columns_read_the_plan_doc(source, book_rows_db):
     assert got["unfilled-plan"] == ("2026-08-04T13:02:11+00:00", "discord")
     assert got["closed-plan"] == ("2026-10-15T14:31:07+00:00", None)
     assert got["open-plan"] == (None, None)
+
+
+def test_excursion_source_is_column_39_in_both_branches(source):
+    trade_aliases, plan_aliases = select_aliases(source)
+    assert len(trade_aliases) == len(plan_aliases) == 39
+    assert trade_aliases[38] == plan_aliases[38] == "excursion_source"
+    assert "j.doc->>'excursion_source' AS excursion_source" in source
+    assert "NULL::text AS excursion_source" in source
+
+
+def test_the_positional_order_by_is_unchanged(source):
+    assert "ORDER BY 1 DESC, 21, 8, 2, 3" in source
+    trade_aliases, _ = select_aliases(source)
+    assert [trade_aliases[i - 1] for i in (1, 21, 8, 2, 3)] == [
+        "row_kind", "closed_at", "plan_created_at", "trade_id", "plan_id"]
+
+
+def test_the_header_comment_counts_39_columns(source):
+    assert "rows: 39" in source
+    assert "rows: 38" not in source
+
+
+def test_the_excursion_column_reads_the_journal_doc(source, book_rows_db):
+    book_rows_db.execute(
+        "UPDATE journal_entries SET doc = ? WHERE trade_id = 'closed-trade'",
+        ('{"excursion_source": "5min", "mfe_r": 0.31}',))
+    cursor = book_rows_db.execute(_sqlite_query(source))
+    names = [column[0] for column in cursor.description]
+    kind, tid, pid, src = (names.index(n) for n in ("row_kind", "trade_id", "plan_id",
+                                                     "excursion_source"))
+    got = {(row[kind], row[tid] or row[pid]): row[src] for row in cursor.fetchall()}
+    assert got[("trade", "closed-trade")] == "5min"
+    assert got[("trade", "orphan-closed-trade")] is None          # doc '{}': no source yet
+    assert got[("plan", "unfilled-plan")] is None                 # plan rows are NULL
+    assert got[("plan", "open-plan")] is None
