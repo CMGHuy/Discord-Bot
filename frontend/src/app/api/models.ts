@@ -839,6 +839,11 @@ export interface JournalEntry {
   /** Share of the favourable move actually captured, 0–1. */
   exit_efficiency: number | null;
   holding_days: number | null;
+  /** v228 -- the bars the excursion was measured on: '5min', '15min',
+   *  'hourly' or 'daily'; null when no bars covered the trade. Absent on a
+   *  server older than v228. A 'daily' figure on a hold under two days is
+   *  an estimate (ui/excursion-estimate.ts). */
+  excursion_source?: string | null;
   tags: string[];
   auto_lesson: string | null;
   note: string;
@@ -928,6 +933,11 @@ export interface AnalyticsExitQuality extends Scoped {
   scatter: unknown[];
   coverage: Record<string, { non_null: number; total: number; pct: number }>;
   min_cell_n: number;
+  /** v228 -- how many scoped entries the trust rule kept (`included`:
+   *  intraday source or held two days or more) and dropped (`excluded`:
+   *  short holds measured on daily bars). `total` is every scoped entry;
+   *  the remainder carry no figures. Absent on a server older than v228. */
+  excursion?: { sources: Record<string, number>; included: number; excluded: number; total: number };
 }
 
 /** v142 — `GET /analytics/partials` (`swingbot/core/analytics/partials.py`).
@@ -2319,6 +2329,9 @@ export interface CalendarTrade {
   mfe_r: number | null;
   mae_r: number | null;
   exit_efficiency: number | null;
+  /** v228 -- see JournalEntry.excursion_source; null for an unjournaled
+   *  trade. With `held_hours` it decides the day card's estimate marker. */
+  excursion_source?: string | null;
   tags: string[];
   auto_lesson: string | null;
   /** A scaled-out position is one row per realized leg, each on the day
