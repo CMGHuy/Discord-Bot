@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# v229 weekly pair append (plan docs/superpowers/plans/2026-11-15-v229-deferred-entry-counterfactual_0-index.md,
+# v229 weekly pair append (plan docs/superpowers/plans/implemented/2026-11-15-v229-deferred-entry-counterfactual_0-index.md,
 # Task V229-11). Runs ON THE VM from the crontab line install_v229_cron.sh writes.
 #   1. The read-only book export, on the HOST (the bot container has no psql
 #      path), into data/v229/rows.csv (= /app/data/v229/rows.csv in the bot

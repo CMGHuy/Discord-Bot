@@ -223,7 +223,7 @@ Create `scripts/ops/v229_pairs_cron.sh` (LF line endings; `.gitattributes` alrea
 
 ```bash
 #!/usr/bin/env bash
-# v229 weekly pair append (plan docs/superpowers/plans/2026-11-15-v229-deferred-entry-counterfactual_0-index.md,
+# v229 weekly pair append (plan docs/superpowers/plans/implemented/2026-11-15-v229-deferred-entry-counterfactual_0-index.md,
 # Task V229-11). Runs ON THE VM from the crontab line install_v229_cron.sh writes.
 #   1. The read-only book export, on the HOST (the bot container has no psql
 #      path), into data/v229/rows.csv (= /app/data/v229/rows.csv in the bot
@@ -382,8 +382,8 @@ R = Path("E:/Documents/Private/Projects/Discord-Bot")
 sys.path.insert(0, str(R / "scripts" / "reports"))
 from deferred_entry import verdict  # noqa: E402
 
-SPEC = "docs/superpowers/specs/2026-11-14-v229-deferred-entry-counterfactual-design.md"
-PLAN = "docs/superpowers/plans/2026-11-15-v229-deferred-entry-counterfactual_0-index.md"
+SPEC = "docs/superpowers/specs/implemented/2026-11-14-v229-deferred-entry-counterfactual-design.md"
+PLAN = "docs/superpowers/plans/implemented/2026-11-15-v229-deferred-entry-counterfactual_0-index.md"
 CLI = "scripts/reports/deferred_entry_counterfactual.py"
 spec = (R / SPEC).read_text(encoding="utf-8")
 
@@ -465,7 +465,7 @@ R = Path("E:/Documents/Private/Projects/Discord-Bot")
 sys.path.insert(0, str(R / "scripts" / "reports"))
 from deferred_entry import verdict  # noqa: E402
 
-spec = (R / "docs/superpowers/specs/2026-11-14-v229-deferred-entry-counterfactual-design.md").read_text(encoding="utf-8")
+spec = (R / "docs/superpowers/specs/implemented/2026-11-14-v229-deferred-entry-counterfactual-design.md").read_text(encoding="utf-8")
 (doc,) = sorted((R / "docs/superpowers/results").glob("*-v229-preregistration.md"))
 text = doc.read_text(encoding="utf-8")
 quotes = re.findall(r"<!-- spec-quote-begin -->\n(.*?)\n<!-- spec-quote-end -->", text, re.S)
@@ -632,8 +632,8 @@ doc = root / "docs/superpowers/results" / f"{today}-v229-exploratory-read.md"
 cal = payload["calibration"]
 header = [
     "# v229 exploratory read — deferred entry on the live LONG book", "",
-    "**Spec:** `docs/superpowers/specs/2026-11-14-v229-deferred-entry-counterfactual-design.md`.",
-    "**Plan:** `docs/superpowers/plans/2026-11-15-v229-deferred-entry-counterfactual_0-index.md`, Task V229-13.",
+    "**Spec:** `docs/superpowers/specs/implemented/2026-11-14-v229-deferred-entry-counterfactual-design.md`.",
+    "**Plan:** `docs/superpowers/plans/implemented/2026-11-15-v229-deferred-entry-counterfactual_0-index.md`, Task V229-13.",
     f"**Pre-registration:** `{pre.relative_to(root).as_posix()}`; T0 `{payload['t0']}`; rule hash `{payload['rule_hash']}`.",
     f"**Host checkout:** `{host_sha}` (script SHA in the report body: `{payload['git_sha']}`); "
     f"archive last bar `{payload['archive_last_bar']}`.",
@@ -921,8 +921,8 @@ today = dt.datetime.now(dt.timezone.utc).date().isoformat()
 doc = root / "docs/superpowers/results" / f"{today}-v229-forward-verdict.md"
 header = [
     f"# v229 forward verdict — deferred entry on the live LONG book: {v['study']}", "",
-    "**Spec:** `docs/superpowers/specs/2026-11-14-v229-deferred-entry-counterfactual-design.md`.",
-    "**Plan:** `docs/superpowers/plans/2026-11-15-v229-deferred-entry-counterfactual_0-index.md`, Task V229-15.",
+    "**Spec:** `docs/superpowers/specs/implemented/2026-11-14-v229-deferred-entry-counterfactual-design.md`.",
+    "**Plan:** `docs/superpowers/plans/implemented/2026-11-15-v229-deferred-entry-counterfactual_0-index.md`, Task V229-15.",
     f"**Pre-registration:** `{pre.relative_to(root).as_posix()}`; T0 `{payload['t0']}`; rule hash `{payload['rule_hash']}`.",
     f"**Host checkout:** `{host_sha}` (script SHA in the report body: `{payload['git_sha']}`); "
     f"archive last bar `{payload['archive_last_bar']}`.",

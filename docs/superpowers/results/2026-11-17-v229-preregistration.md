@@ -1,7 +1,7 @@
 # v229 pre-registration — Deferred-entry counterfactual on the live LONG book
 
-**Spec:** `docs/superpowers/specs/2026-11-14-v229-deferred-entry-counterfactual-design.md`, last changed in `a9f73a62`.
-**Plan:** `docs/superpowers/plans/2026-11-15-v229-deferred-entry-counterfactual_0-index.md`.
+**Spec:** `docs/superpowers/specs/implemented/2026-11-14-v229-deferred-entry-counterfactual-design.md`, last changed in `a9f73a62`.
+**Plan:** `docs/superpowers/plans/implemented/2026-11-15-v229-deferred-entry-counterfactual_0-index.md`.
 **Code:** `main` at `a708c61e` (V229-1..V229-11 merged, CI green). No edit under `scripts/reports/deferred_entry/` or to the CLI until the verdict is recorded.
 **Driver:** `scripts/reports/deferred_entry_counterfactual.py` (modes `append`, `exploratory`, `verdict`); pair log `data/v229/pairs.jsonl` on the VM.
 **Committed before any compute.** This document's first commit is the freeze; its commit timestamp is `T0`, recorded below in a follow-up commit. No ledger row is written now: the one row `v229-deferred-entry` is appended when the study closes (plan Handoff 2).

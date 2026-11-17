@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V229-5" -A 400 <this file>`); never read the file whole.
 
-**Spec:** [2026-11-14-v229-deferred-entry-counterfactual-design.md](../specs/2026-11-14-v229-deferred-entry-counterfactual-design.md)
+**Spec:** [2026-11-14-v229-deferred-entry-counterfactual-design.md](../../specs/implemented/2026-11-14-v229-deferred-entry-counterfactual-design.md)
 **Index:** [2026-11-15-v229-deferred-entry-counterfactual_0-index.md](2026-11-15-v229-deferred-entry-counterfactual_0-index.md) — Goal, `## Global Constraints`, `## Parallelisation`, the task ledger, the shared PAIR shape and the `## Handoff` resolutions bind every task below.
 
 Part 1 of the ledger, second file: part 1 split at the 1500-line cap, never compressed. V229-1..V229-3 (time basis, simulator, arms) are in `2026-11-15-v229-deferred-entry-counterfactual_1-core.md`; the common test import pattern described there applies here too (put `scripts/reports` on `sys.path`, import `deferred_entry.<module>`).

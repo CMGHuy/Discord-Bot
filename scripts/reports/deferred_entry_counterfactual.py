@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """v229 deferred-entry counterfactual: do late-session entries beat early ones?
 
-Spec: docs/superpowers/specs/2026-11-14-v229-deferred-entry-counterfactual-design.md
+Spec: docs/superpowers/specs/implemented/2026-11-14-v229-deferred-entry-counterfactual-design.md
 
 Modes:
   append       log every eligible LONG plan not yet in the pair log; one count line (weekly cron)
