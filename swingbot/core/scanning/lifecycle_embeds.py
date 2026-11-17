@@ -24,6 +24,8 @@ from .execution_embeds import plan_levels_block, plan_result_block
 from .plan_table import banked_leg_pct_and_amount, partial_position_line, signed_money
 
 log = logging.getLogger(__name__)
+
+
 def _excursion_markers(trade: dict, df) -> dict | None:
     """MFE/MAE marker points for a trade's chart, read from its journal entry.
 
