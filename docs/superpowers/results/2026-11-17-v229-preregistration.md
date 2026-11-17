@@ -229,3 +229,11 @@ other ideas; the session cell was picked from many slices.
 - **Forward window** is the twelve complete ISO weeks (Monday to Sunday) after T0's ET date; the verdict opens the day after the fifth NYSE session following the window's last session.
 - **Not in the verdict population:** trades opened in the window and still open on the verdict date (the export joins closed journal entries only). Disclosed in the verdict doc.
 - **T0 is an input** (`--t0`, baked into the cron line): the script cannot read its own freeze commit on the VM.
+
+## Freeze
+
+**T0:** 2026-11-17T18:43:37+00:00
+**Forward window:** 2026-11-23 .. 2027-02-14 (entry dates, ET)
+**Verdict opens:** 2027-02-23
+
+T0 is the first commit of this document (`git log --diff-filter=A -1 --format=%cI -- docs/superpowers/results/2026-11-17-v229-preregistration.md` = `2026-11-17T19:43:37+01:00`), converted to UTC. Plans opened before T0's ET date are exploratory; the verdict is computed once, on or after the date above (Task V229-15).
