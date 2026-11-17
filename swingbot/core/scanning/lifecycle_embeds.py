@@ -24,6 +24,38 @@ from .execution_embeds import plan_levels_block, plan_result_block
 from .plan_table import banked_leg_pct_and_amount, partial_position_line, signed_money
 
 log = logging.getLogger(__name__)
+def _excursion_markers(trade: dict, df) -> dict | None:
+    """MFE/MAE marker points for a trade's chart, read from its journal entry.
+
+    The points come from the daily window between the entry and close dates
+    (unchanged since B33). v228: ``estimate`` is True when the entry's figures
+    were measured on daily bars for a hold under two days, so the chart can
+    say "(daily est.)" -- exit_quality.is_daily_estimate, the rule the admin
+    SPA and the exit-quality aggregates use. None when the trade has no entry,
+    no MFE, or no bars in the window. May raise; the caller logs and draws the
+    chart without markers.
+    """
+    from swingbot.core.analytics.exit_quality import is_daily_estimate
+    from swingbot.core.analytics.journal import JournalStore
+    entry = JournalStore().get(trade["id"])
+    if not entry or entry.get("mfe_r") is None:
+        return None
+    closed_key = trade.get("closed_at", trade["opened_at"])[:10]
+    window = df.loc[trade["opened_at"][:10]:closed_key]
+    if window.empty:
+        return None
+    is_bull = trade["direction"] == "bullish"
+    mfe_date = window["High"].idxmax() if is_bull else window["Low"].idxmin()
+    mae_date = window["Low"].idxmin() if is_bull else window["High"].idxmax()
+    mfe_price = float(window.loc[mfe_date, "High" if is_bull else "Low"])
+    mae_price = float(window.loc[mae_date, "Low" if is_bull else "High"])
+    return {
+        "mfe": (mfe_date, mfe_price), "mfe_r": entry.get("mfe_r"),
+        "mae": (mae_date, mae_price), "mae_r": entry.get("mae_r"),
+        "estimate": is_daily_estimate(entry),
+    }
+
+
 def regenerate_chart_for_trade(trade: dict) -> str | None:
     # A closed trade's chart never changes once closed (same OHLCV window,
     # same levels) -- if the deterministic file from a prior regen already
@@ -44,21 +76,7 @@ def regenerate_chart_for_trade(trade: dict) -> str | None:
 
         markers = None
         try:
-            from swingbot.core.analytics.journal import JournalStore
-            entry = JournalStore().get(trade["id"])
-            if entry and entry.get("mfe_r") is not None:
-                closed_key = trade.get("closed_at", trade["opened_at"])[:10]
-                window = df.loc[trade["opened_at"][:10]:closed_key]
-                if not window.empty:
-                    is_bull = trade["direction"] == "bullish"
-                    mfe_date = window["High"].idxmax() if is_bull else window["Low"].idxmin()
-                    mae_date = window["Low"].idxmin() if is_bull else window["High"].idxmax()
-                    mfe_price = float(window.loc[mfe_date, "High" if is_bull else "Low"])
-                    mae_price = float(window.loc[mae_date, "Low" if is_bull else "High"])
-                    markers = {
-                        "mfe": (mfe_date, mfe_price), "mfe_r": entry.get("mfe_r"),
-                        "mae": (mae_date, mae_price), "mae_r": entry.get("mae_r"),
-                    }
+            markers = _excursion_markers(trade, df)
         except Exception as _je:
             swallowed(log, "scan.regenerate_chart.markers", _je,
                       "Could not compute MFE/MAE markers for trade %s: %s", trade.get("id"), _je,
