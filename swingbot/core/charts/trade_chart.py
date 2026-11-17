@@ -204,6 +204,20 @@ def _draw_last_price_pill(ax, df, color=CURRENT_PRICE_COLOR):
 # already right and carried straight over.
 
 
+#: v228 -- appended to the MFE/MAE annotation when the figure was measured on
+#: daily bars for a hold under two days (exit_quality.is_daily_estimate).
+DAILY_ESTIMATE_SUFFIX = " (daily est.)"
+
+
+def _marker_label(key: str, arrow: str, r_val: float | None, estimate: bool) -> str:
+    """The text of one MFE/MAE annotation: arrow, name, optional R value and,
+    for a short hold measured on daily bars, the estimate suffix."""
+    label = f"{arrow} {key.upper()}"
+    if r_val is not None:
+        label += f" {r_val:+.1f}R"
+    return label + DAILY_ESTIMATE_SUFFIX if estimate else label
+
+
 def generate_trade_chart(
     ticker: str,
     df: pd.DataFrame,
@@ -1008,6 +1022,7 @@ def generate_trade_chart(
         # silently rather than raising -- an old trade re-viewed with a
         # short lookback_days can easily have its MFE/MAE bar scrolled
         # out of frame.
+        # v228: a truthy "estimate" key adds " (daily est.)" to both labels.
         if markers:
             for key, arrow, color in (("mfe", "▲", UP_COLOR), ("mae", "▼", DOWN_COLOR)):
                 point = markers.get(key)
@@ -1018,8 +1033,7 @@ def generate_trade_chart(
                     x_pos = recent.index.get_loc(m_date)
                 except KeyError:
                     continue
-                r_val = markers.get(f"{key}_r")
-                label = f"{arrow} {key.upper()}" + (f" {r_val:+.1f}R" if r_val is not None else "")
+                label = _marker_label(key, arrow, markers.get(f"{key}_r"), bool(markers.get("estimate")))
                 va = "bottom" if key == "mfe" else "top"
                 offset = 1 if key == "mfe" else -1
                 ax.annotate(

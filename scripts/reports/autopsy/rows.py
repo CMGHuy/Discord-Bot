@@ -21,6 +21,8 @@ from swingbot.core.edge.frictions import apply_frictions, commission_r
 from swingbot.core.market.session import US_MARKET_TZ
 
 ISSUED_COLUMNS = ("plan_issued_at", "plan_issued_at_source")
+#: v228: the bars that measured mfe_r / mae_r (``5min`` .. ``daily``); blank on plan rows.
+EXCURSION_COLUMN = "excursion_source"
 EXPORT_COLUMNS = (
     "row_kind", "trade_id", "plan_id", "ticker", "strategy", "horizon", "direction",
     "plan_created_at", "plan_first_status_at", "plan_status", "plan_status_reason",
@@ -28,10 +30,22 @@ EXPORT_COLUMNS = (
     "stop_loss", "take_profit", "target2", "closed_at", "exit_price", "close_reason",
     "last_leg_reason", "outcome", "r_realized", "mfe_r", "mae_r", "exit_efficiency",
     "holding_days", "stop_width_atr", "atr_pct", "regime2_state", "session_bucket",
-    "days_to_earnings", "rs_percentile", *ISSUED_COLUMNS,
+    "days_to_earnings", "rs_percentile", *ISSUED_COLUMNS, EXCURSION_COLUMN,
 )
+#: Exports written v200..v227: issue-time columns, no excursion source.
+PRE_EXCURSION_COLUMNS = EXPORT_COLUMNS[:-1]
 #: Exports written before v200: no issue-time columns; every hour reads as unknown.
-LEGACY_EXPORT_COLUMNS = EXPORT_COLUMNS[:-2]
+LEGACY_EXPORT_COLUMNS = PRE_EXCURSION_COLUMNS[:-2]
+#: v228: sources measured on intraday bars; equal to mfe_mae.INTRADAY_SOURCES (pinned by a test).
+INTRADAY_SOURCES = ("5min", "15min", "hourly")
+#: Accepted header shapes that carry no excursion source (refused unless waived).
+_NO_EXCURSION_SHAPES = (PRE_EXCURSION_COLUMNS, LEGACY_EXPORT_COLUMNS)
+
+
+class MissingExcursionColumn(ValueError):
+    """An export written before v228: its mfe_r / mae_r cannot be told daily from intraday."""
+
+
 REJECTION_COLUMNS = ("date", "reason", "count")
 
 #: Below this fraction of the entry the stop is no longer the planned risk
@@ -75,6 +89,7 @@ class BookRow:
     mfe_r: float | None = None
     mae_r: float | None = None
     exit_efficiency: float | None = None
+    excursion_source: str | None = None
     holding_days: float | None = None
     stop_width_atr: float | None = None
     atr_pct: float | None = None
@@ -198,6 +213,7 @@ def _journal_fields(raw: dict) -> dict:
     out["gross_r"] = _float(raw["r_realized"])
     out["regime2_state"] = _text(raw["regime2_state"])
     out["session_bucket"] = _text(raw["session_bucket"])
+    out["excursion_source"] = _text(raw.get(EXCURSION_COLUMN))
     return out
 
 
@@ -237,12 +253,27 @@ def friction_settings() -> dict:
             "min_risk_fraction": MIN_RISK_FRACTION}
 
 
+def _check_excursion_header(found, path: Path, allow_no_excursion: bool) -> None:
+    if allow_no_excursion or tuple(found or ()) not in _NO_EXCURSION_SHAPES:
+        return
+    raise MissingExcursionColumn(
+        f"{path}: export has no excursion_source column (written before v228), so its "
+        "mfe_r/mae_r cannot be told daily from intraday. Fix: re-export with "
+        "scripts/ops/export_book_rows.sh rows, or pass --no-excursion-cells to build "
+        "every other cell and leave the excursion cells out.")
+
+
 def load_rows(path: Path, *, frictions: dict | None = None,
-              input_fingerprints: dict | None = None) -> list[BookRow]:
-    """Every export row, using one explicit friction snapshot and exact input hash."""
+              input_fingerprints: dict | None = None,
+              allow_no_excursion: bool = False) -> list[BookRow]:
+    """Every export row, using one explicit friction snapshot and exact input hash.
+
+    A 38- or 36-column export raises MissingExcursionColumn unless
+    ``allow_no_excursion`` (the CLI's --no-excursion-cells)."""
     settings = frictions if frictions is not None else friction_settings()
     reader = csv.DictReader(StringIO(read_input(path, input_fingerprints), newline=""))
-    _check_header(reader.fieldnames, EXPORT_COLUMNS, str(path), accepted=(LEGACY_EXPORT_COLUMNS,))
+    _check_excursion_header(reader.fieldnames, path, allow_no_excursion)
+    _check_header(reader.fieldnames, EXPORT_COLUMNS, str(path), accepted=_NO_EXCURSION_SHAPES)
     return [_row(raw, settings) for raw in reader]
 
 

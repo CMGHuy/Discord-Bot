@@ -489,6 +489,7 @@ def analytics_exit_quality():
 
     Journal-derived blocks join on ``trade_id`` so the winners-only
     histograms describe the same population as the exit strip above them.
+    v228: efficiency, mae and scatter use trusted entries only (exit_quality.is_trusted); "excursion" carries the per-source and exclusion counts.
     """
 
     from swingbot.core.analytics import exit_quality as eq
@@ -510,14 +511,19 @@ def analytics_exit_quality():
     ][:2000]
     ids = {trade.get("id") for trade in scoped}
     entries = [entry for entry in JournalStore().entries(cohort=ALL) if entry.get("trade_id") in ids]
+    # v228: short holds measured on daily bars overstate MFE/MAE; the
+    # aggregates use trusted entries only and the excursion block says how
+    # many were left out. Coverage keeps describing every scoped entry.
+    trusted = [entry for entry in entries if eq.is_trusted(entry)]
     return jsonify({"exit_reasons": m.exit_reason_split(scoped),
                     "unmapped_reasons": m.unmapped_exit_reasons(scoped),
                     "hold_by_outcome": m.hold_by_outcome(scoped),
                     "hold_points": hold_points,
-                    "efficiency": eq.efficiency_histogram(entries),
-                    "mae": eq.mae_histogram(entries),
-                    "scatter": eq.mfe_mae_points(entries),
+                    "efficiency": eq.efficiency_histogram(trusted),
+                    "mae": eq.mae_histogram(trusted),
+                    "scatter": eq.mfe_mae_points(trusted),
                     "coverage": eq.coverage(entries),
+                    "excursion": eq.excursion_summary(entries),
                     "min_cell_n": MIN_CELL_N,
                     **echo(scope, len(scoped))})
 

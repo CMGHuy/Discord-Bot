@@ -25,6 +25,8 @@ import { fxMissingText } from '../analytics/scope-bar';
 import { PAPER_CAPTION, legsSampleNote } from './day/day-copy';
 import { legExplanation, legLabel } from '../trades/leg-label';
 import { LegName } from '../trades/leg-name';
+import { ExcursionEstimate } from '../../ui/excursion-estimate';
+import { rowIsEstimate } from './day/day-trade-card';
 
 /** Monday-first, matching `monthMatrix` and the API's weekday breakdown. */
 const WEEKDAY_HEADS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -36,7 +38,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Button, ControlRow, Drawer, LegName, Panel, Page, RouterLink, Select, StatStrip, StatTile, Async,
+    Button, ControlRow, Drawer, ExcursionEstimate, LegName, Panel, Page, RouterLink, Select, StatStrip, StatTile, Async,
     IncompleteNote, MarketValue, NgTemplateOutlet, PnlBasis, Spinner,
   ],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
@@ -366,6 +368,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
               {{ trade.outcome }} · {{ rLabel(trade.r_multiple) }}
               @if (trade.mfe_r !== null) { · MFE {{ rLabel(trade.mfe_r) }} }
               @if (trade.mae_r !== null) { · MAE {{ rLabel(trade.mae_r) }} }
+              @if (excursionEstimate(trade)) { <sb-excursion-est class="est-marker" /> }
             </p>
             @if (trade.auto_lesson; as lesson) {
               <p class="lesson">{{ lesson }}</p>
@@ -520,6 +523,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     .day-row .amount.pos { color: var(--pos); }
     .day-row .amount.neg { color: var(--neg); }
     .day-row .meta { margin: var(--space-4) 0 0; color: var(--text-secondary); font-size: var(--text-micro); }
+    .meta .est-marker { margin-left: var(--space-4); }
     .lesson { margin: var(--space-6) 0 0; font-size: var(--text-table); }
     .tags { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: var(--space-6) 0 0; }
     .tag {
@@ -564,6 +568,8 @@ export class Calendar {
   protected readonly today = localIsoDate(new Date());
   /** v194 B3 -- the one leg name (shared with Trades and the Dashboard). */
   protected readonly legLabel = legLabel;
+  /** v228 -- the day card's rule (day/day-trade-card.ts rowIsEstimate). */
+  protected readonly excursionEstimate = rowIsEstimate;
   /** v194 A4: the calendar counts each realised leg (`pnl_calendar` rows). */
   protected readonly legHelp = (trade: CalendarTrade): string => legExplanation(trade,
     'On this page win rate and N count each realised leg as its own trade; Analytics counts plans.');

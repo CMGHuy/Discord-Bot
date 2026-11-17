@@ -66,6 +66,10 @@ paths = ["tests/edge/"]
 description = "analytics, journal metrics and reports"
 paths = ["tests/analytics/"]
 
+[suites.excursion]
+description = "v228 intraday MFE/MAE: excursion core, frames loader, upgrade pass"
+paths = ["tests/excursion/"]
+
 [suites.storage]
 description = "Postgres stores, migrations, and the paper trade log"
 paths = ["tests/db/", "tests/tracking/"]

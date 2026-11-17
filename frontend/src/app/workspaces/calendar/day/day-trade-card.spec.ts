@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { CalendarTrade, SparkSeries } from '../../../api/models';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { R_TOOLTIP } from './day-copy';
-import { DayTradeCard, heldLabel, tradeLinkId } from './day-trade-card';
+import { DayTradeCard, heldLabel, rowIsEstimate, tradeLinkId } from './day-trade-card';
 import { LEG_HINT_TEXT, legLabel } from '../../trades/leg-label';
 
 const TRADE: CalendarTrade = {
@@ -62,6 +62,25 @@ describe('day-trade-card helpers', () => {
   it('links to the plan when there is one, else the trade', () => {
     expect(tradeLinkId(TRADE)).toBe('PLAN-9');
     expect(tradeLinkId({ ...TRADE, plan_id: null })).toBe('a'.repeat(16));
+  });
+
+  it.each([
+    ['daily', 5.5, true],
+    ['daily', 47.9, true],
+    ['daily', 48, false],
+    ['daily', 53.5, false],
+    ['daily', null, true],          // unknown hold on daily bars counts as short (V228-9)
+    ['5min', 5.5, false],
+    ['hourly', 30, false],
+    [null, 5.5, false],
+    [undefined, 5.5, false],        // a server older than v228 sends no field
+  ] as const)('rowIsEstimate: source %s held %s h -> %s', (source, hours, expected) => {
+    expect(rowIsEstimate({ ...TRADE, excursion_source: source, held_hours: hours })).toBe(expected);
+  });
+
+  it('never marks a row that shows no excursion figure', () => {
+    expect(rowIsEstimate({ ...TRADE, excursion_source: 'daily', held_hours: 3, mfe_r: null, mae_r: null }))
+      .toBe(false);
   });
 });
 
@@ -142,6 +161,31 @@ describe('DayTradeCard', () => {
     expect(text(el, '.prices')).toBe('Entry — · Exit — · Final stop — · TP1 — · TP2 —');
     expect(text(el, '.stats')).toBe('Held — · Shares — · MFE — · MAE —');
     expect(el.textContent).not.toContain('0.00');
+  });
+
+  it('puts the marker inside the MFE · MAE line for a short hold on daily bars', async () => {
+    const el = await render({ ...TRADE, excursion_source: 'daily', held_hours: 5.5 });
+    const marker = el.querySelector('.stats sb-excursion-est');
+    expect(marker).not.toBeNull();
+    expect(marker!.querySelector('.est')?.textContent?.trim()).toBe('est. (daily bars)');
+    // The line still reads in order; the marker follows MAE.
+    expect(text(el, '.stats')).toMatch(/^Held 5h 30m · Shares 10 · MFE \+2\.40R · MAE −0\.30R ?est\. \(daily bars\)/);
+    // Its explanation is a hint reachable by tap and keyboard.
+    expect(el.querySelector('.stats sb-excursion-est sb-hint button')?.getAttribute('aria-label'))
+      .toBe('About this estimate');
+  });
+
+  it('marks a daily row whose held time is unknown', async () => {
+    const el = await render({ ...TRADE, excursion_source: 'daily', held_hours: null });
+    expect(el.querySelector('.stats sb-excursion-est')).not.toBeNull();
+  });
+
+  it('leaves the line unmarked on intraday bars or a hold of two days or more', async () => {
+    const intraday = await render({ ...TRADE, excursion_source: '5min', held_hours: 5.5 });
+    expect(intraday.querySelector('sb-excursion-est')).toBeNull();
+    expect(text(intraday, '.stats')).toBe('Held 5h 30m · Shares 10 · MFE +2.40R · MAE −0.30R');
+    const long = await render({ ...TRADE, excursion_source: 'daily', held_hours: 53.5 });
+    expect(long.querySelector('sb-excursion-est')).toBeNull();
   });
 
   it('opens the trade, and the sparkline opens its chart', async () => {

@@ -12,6 +12,7 @@ from collections import Counter, defaultdict
 from swingbot.core.analytics.metrics import exit_reason_bucket
 
 from .cells import Tally
+from .rows import INTRADAY_SOURCES
 
 STOP_CUTS = frozenset({"exit_reason", "gap_through_stop", "near_stop_reversal"})
 STOP_REASONS = frozenset({"loss", "stop"})
@@ -94,12 +95,18 @@ def stop_extra(members: list, balance: float) -> dict:
 
 
 def giveback_summary(trades: list) -> dict:
-    """``mfe_r - gross_r`` over every trade that has both -- losers included."""
-    values = [r.mfe_r - r.gross_r for r in trades if r.mfe_r is not None and r.gross_r is not None]
-    if not values:
-        return {"n": 0, "mean": None, "median": None}
+    """``mfe_r - gross_r`` over every trade whose mfe_r was measured on intraday bars
+    -- losers included. ``dropped``: trades with both figures but a daily or missing
+    ``excursion_source`` (v228: a daily bar's range includes price before the fill
+    and after the exit, so its mfe_r overstates a short hold)."""
+    measured = [r for r in trades if r.mfe_r is not None and r.gross_r is not None]
+    kept = [r for r in measured if r.excursion_source in INTRADAY_SOURCES]
+    dropped = len(measured) - len(kept)
+    if not kept:
+        return {"n": 0, "mean": None, "median": None, "dropped": dropped}
+    values = [r.mfe_r - r.gross_r for r in kept]
     return {"n": len(values), "mean": _mean(values),
-            "median": round(statistics.median(values), 4)}
+            "median": round(statistics.median(values), 4), "dropped": dropped}
 
 
 def _per_day_label(n: int) -> str:

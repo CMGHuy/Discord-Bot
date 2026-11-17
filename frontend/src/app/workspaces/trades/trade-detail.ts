@@ -26,6 +26,7 @@ import { Chip, ChipTone, QualityChip } from '../../ui/chip';
 import { MINUS } from '../../ui/format';
 import { Hint } from '../../ui/hint';
 import { MetricChip } from '../../ui/metric-chip';
+import { ExcursionEstimate } from '../../ui/excursion-estimate';
 import { Page } from '../../ui/page';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Tab, TabBar } from '../../ui/layout';
@@ -136,6 +137,7 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
     Button,
     ConfirmDialog,
     MetricChip,
+    ExcursionEstimate,
     Chip,
     Hint,
     Async,
@@ -314,13 +316,18 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
               } @else if (store.excursions().length) {
                 <div class="excursions">
                   @for (figure of store.excursions(); track figure.label) {
-                    <sb-metric-chip
-                      [label]="figure.label"
-                      [value]="figure.value"
-                      [unit]="figure.unit"
-                      [decimals]="figure.decimals"
-                      tone="plain"
-                    />
+                    <div class="excursion">
+                      <sb-metric-chip
+                        [label]="figure.label"
+                        [value]="figure.value"
+                        [unit]="figure.unit"
+                        [decimals]="figure.decimals"
+                        tone="plain"
+                      />
+                      @if (figure.estimate) {
+                        <sb-excursion-est />
+                      }
+                    </div>
                   }
                 </div>
 
@@ -609,6 +616,15 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: var(--space-8);
       margin-bottom: var(--space-10);
+    }
+    /* v228: the chip and, under it, the est. (daily bars) marker. sb-metric-chip
+       has no marker slot, so the cell stacks them; min-width: 0 lets the
+       auto-fit grid cell shrink on a 390px phone instead of overflowing. */
+    .excursion {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      min-width: 0;
     }
     /* Not .tags — the header already owns that class, and reusing it here
        would silently restyle the horizon/strategy chips at the top. */

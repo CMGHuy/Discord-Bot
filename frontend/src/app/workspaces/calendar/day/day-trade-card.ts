@@ -6,6 +6,7 @@ import { ConnectionStore } from '../../../stores/connection.store';
 import { Chip, ChipTone } from '../../../ui/chip';
 import { ABSENT, held, money, num, pct, rMultiple } from '../../../ui/format';
 import { Hint } from '../../../ui/hint';
+import { ExcursionEstimate, isDailyEstimate } from '../../../ui/excursion-estimate';
 import { legExplanation, legLabel } from '../../trades/leg-label';
 import { LegName } from '../../trades/leg-name';
 import { R_TOOLTIP } from './day-copy';
@@ -24,6 +25,17 @@ export function tradeLinkId(trade: CalendarTrade): string {
   return trade.plan_id ?? trade.trade_id;
 }
 
+/** v228 -- whether this row's MFE/MAE came from daily bars on a hold under
+ *  two days (`held_hours < 48`), and so may be overstated. An unknown hold
+ *  on daily bars counts as short (the server's is_daily_estimate rule). A
+ *  row with no MFE and no MAE shows no figure, so it carries no marker. The
+ *  calendar drawer (calendar.ts) uses the same function. */
+export function rowIsEstimate(trade: CalendarTrade): boolean {
+  if (trade.mfe_r === null && trade.mae_r === null) return false;
+  const days = trade.held_hours === null ? null : trade.held_hours / 24;
+  return isDailyEstimate(trade.excursion_source, days);
+}
+
 const DIRECTIONS: Record<string, string> = { bullish: 'Long', bearish: 'Short' };
 
 function sign(value: number | null): 'pos' | 'neg' | null {
@@ -34,7 +46,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
 @Component({
   selector: 'sb-day-trade-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Chip, Hint, LegName, RouterLink, TradeSparkline],
+  imports: [Chip, ExcursionEstimate, Hint, LegName, RouterLink, TradeSparkline],
   template: `
     @let t = trade();
     <article class="card">
@@ -59,6 +71,9 @@ function sign(value: number | null): 'pos' | 'neg' | null {
       <p class="stats">
         Held {{ heldText() }} · Shares {{ sharesText() }} ·
         MFE {{ r(t.mfe_r) }} · MAE {{ r(t.mae_r) }}
+        @if (estimate()) {
+          <sb-excursion-est />
+        }
       </p>
       <footer>
         <sb-trade-sparkline [series]="series()" [tradeId]="linkId()" />
@@ -94,6 +109,9 @@ function sign(value: number | null): 'pos' | 'neg' | null {
       font-size: var(--text-micro);
       overflow-wrap: anywhere;
     }
+    /* v228: the marker rides in the MFE · MAE line and wraps with it on a
+       390px phone (the line already has overflow-wrap: anywhere). */
+    .stats sb-excursion-est { margin-left: var(--space-4); }
     footer {
       display: flex; flex-wrap: wrap; align-items: center;
       gap: var(--space-14); margin-top: var(--space-6);
@@ -147,6 +165,7 @@ export class DayTradeCard {
     const shares = this.trade().shares;
     return shares === null ? ABSENT : num(shares, Number.isInteger(shares) ? 0 : 2);
   });
+  protected readonly estimate = computed(() => rowIsEstimate(this.trade()));
 
   protected price(value: number | null): string {
     return num(value, 2);

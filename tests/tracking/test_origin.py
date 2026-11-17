@@ -71,3 +71,4 @@ def test_journal_entry_copies_origin():
     assert build_entry(trade, None)["origin"] == "next_session"
     trade.pop("origin")
     assert build_entry(trade, None)["origin"] is None
+    assert build_entry(trade, None)["excursion_source"] is None

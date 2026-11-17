@@ -12,7 +12,7 @@ from unittest.mock import patch
 import matplotlib.pyplot as plt
 
 from tests.conftest import assert_rendered, make_ohlcv
-from swingbot.core.charts.trade_chart import generate_trade_chart
+from swingbot.core.charts.trade_chart import _marker_label, generate_trade_chart
 import pytest
 
 # ~85% of suite runtime lives in nine files like this one; excluded from
@@ -238,10 +238,52 @@ def test_markers_render_without_error(tmp_path):
             f"MFE marker label ('MFE' + '+2.0R') not found -- marker was not actually "
             f"drawn: {all_texts}"
         )
+        # A markers dict without "estimate" (every caller before v228) draws
+        # no suffix: the label is exactly what it was.
+        assert not any("daily est." in txt for txt in all_texts), all_texts
         assert any("MAE" in txt and "-0.5R" in txt for txt in all_texts), (
             f"MAE marker label ('MAE' + '-0.5R') not found -- marker was not actually "
             f"drawn: {all_texts}"
         )
+    finally:
+        real_close(fig)
+
+
+def test_marker_label_suffixes_only_estimates():
+    assert _marker_label("mfe", "▲", 2.0, False) == "▲ MFE +2.0R"
+    assert _marker_label("mae", "▼", -0.5, False) == "▼ MAE -0.5R"
+    assert _marker_label("mfe", "▲", 1.24, True) == "▲ MFE +1.2R (daily est.)"
+    assert _marker_label("mae", "▼", None, False) == "▼ MAE"
+    assert _marker_label("mae", "▼", None, True) == "▼ MAE (daily est.)"
+
+
+def test_estimate_markers_render_the_daily_est_suffix(tmp_path):
+    """v228: a short hold measured on daily bars says so on the Discord
+    chart, the same rule the admin SPA marks with est. (daily bars)."""
+    df = _fixture_df()
+    markers = {
+        "mfe": (df.index[50], float(df["High"].iloc[50])), "mfe_r": 2.0,
+        "mae": (df.index[45], float(df["Low"].iloc[45])), "mae_r": 0.5,
+        "estimate": True,
+    }
+    captured_figs = []
+    real_close = plt.close
+
+    def _intercept_close(fig=None, *args, **kwargs):
+        if fig is not None:
+            captured_figs.append(fig)
+
+    with patch("swingbot.core.charts.trade_chart.plt.close", side_effect=_intercept_close):
+        generate_trade_chart(
+            "NVDA", df, 100.0, 95.0, 110.0, "bullish", "EMA Crossover", "4 Weeks", str(tmp_path),
+            filename="with_estimate_markers.png", target2=118.0, markers=markers,
+        )
+
+    fig = captured_figs[0]
+    try:
+        all_texts = [t.get_text() for ax in fig.axes for t in ax.texts]
+        assert "▲ MFE +2.0R (daily est.)" in all_texts, all_texts
+        assert "▼ MAE +0.5R (daily est.)" in all_texts, all_texts
     finally:
         real_close(fig)
 

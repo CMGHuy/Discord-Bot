@@ -70,6 +70,26 @@ def test_a_trade_with_no_journal_entry_still_joins():
     assert row["mfe_r"] is None
 
 
+def test_a_row_carries_the_journal_excursion_source():
+    entry = _entry("a" * 16)
+    entry["excursion_source"] = "5min"
+    rows = joined_rows([_trade("a" * 16)], [entry])
+    assert rows[0]["excursion_source"] == "5min"
+
+
+def test_an_unjournaled_or_unlabelled_row_has_no_excursion_source():
+    """No entry, or an entry written before v228 labelled it: None, never ''."""
+    assert joined_rows([_trade("b" * 16)], [])[0]["excursion_source"] is None
+    assert joined_rows([_trade("a" * 16)], [_entry("a" * 16)])[0]["excursion_source"] is None
+
+
+def test_every_leg_of_a_scaled_out_trade_carries_the_source():
+    entry = _entry("a" * 16)
+    entry["excursion_source"] = "daily"
+    rows = joined_rows([_scaled_trade("a" * 16)], [entry])
+    assert [r["excursion_source"] for r in rows] == ["daily", "daily"]
+
+
 def test_open_trades_and_trades_without_a_close_date_are_excluded():
     rows = joined_rows(
         [
@@ -382,7 +402,7 @@ _D1_KEYS = ("entry_price", "exit_price", "stop_price", "tp1", "tp2", "shares",
 
 
 def test_the_d1_keys_are_appended_after_leg_total_in_order():
-    assert ROW_KEYS[-10:] == ("leg_total", *_D1_KEYS)
+    assert ROW_KEYS[-11:] == ("leg_total", *_D1_KEYS, "excursion_source")
 
 
 def test_a_whole_trade_row_carries_every_d1_field():

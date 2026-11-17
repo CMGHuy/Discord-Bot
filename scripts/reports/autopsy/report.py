@@ -18,6 +18,9 @@ from .rows import closed_trades, friction_settings
 MD_MAX_LINES = 150
 AUTOPSY_SCHEMA = 2     # v200: cells carry defined_at; scout_merge reads this to apply the known-at-entry rule
 DEFAULT_BALANCE = 10_000.0
+EXCURSION_OMITTED_NOTE = ("excursion cells left out (--no-excursion-cells): the export has no "
+                          "excursion_source column, so give-back is not computed")
+_GIVEBACK_TITLE = "## Give-back (mfe_r minus gross R, intraday-measured trades)"
 REJECTION_LINES = 8
 BAR_CUT_NAMES = frozenset(name for name, _ in bars.bar_cuts())
 NOTES = (
@@ -112,10 +115,17 @@ def _with_hour_coverage(items: list[dict], coverage: dict) -> list[dict]:
     return items
 
 
+def _giveback(trades: list, excursion_cells: bool) -> dict:
+    if excursion_cells:
+        return exits.giveback_summary(trades)
+    return {"n": 0, "mean": None, "median": None, "dropped": len(trades), "omitted": True}
+
+
 def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resamples: int,
                  seed: int, balance: float, frictions: dict | None = None,
                  input_fingerprints: dict | None = None, invocation: dict | None = None,
-                 exclusions_path: Path | None = EXCLUSIONS_PATH) -> dict:
+                 exclusions_path: Path | None = EXCLUSIONS_PATH,
+                 excursion_cells: bool = True) -> dict:
     """The Autopsy JSON (index § Shared contracts) for one export."""
     inputs = dict(input_fingerprints or {})
     stall = load_exclusions(exclusions_path, input_fingerprints=inputs) if exclusions_path else []
@@ -136,10 +146,12 @@ def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resam
     coverage = {"trades": exits.hour_coverage(trades),
                 "plans": exits.hour_coverage(exits.issued_rows(rows))}
     header["alert_hour_coverage"] = coverage
+    if not excursion_cells:
+        header["notes"].append(EXCURSION_OMITTED_NOTE)
     return {"header": header,
             "cells": _with_hour_coverage([c.to_json() for c in cells], coverage["trades"]),
             "tallies": _with_hour_coverage([t.to_json() for t in tallies], coverage["plans"]),
-            "giveback": exits.giveback_summary(trades)}
+            "giveback": _giveback(trades, excursion_cells)}
 
 
 def _fmt(value, spec: str = ".3f") -> str:
@@ -264,8 +276,13 @@ def _thin_lines(cells: list) -> list[str]:
 
 
 def _giveback_lines(g: dict) -> list[str]:
-    return ["## Give-back (mfe_r minus gross R, every trade)", "",
-            f"- N {g['n']}; mean {_fmt(g['mean'])}; median {_fmt(g['median'])}", ""]
+    if g.get("omitted"):
+        body = "- left out (--no-excursion-cells): the export has no excursion_source column"
+    else:
+        dropped = g.get("dropped")
+        tail = "" if dropped is None else f"; dropped {dropped} (mfe_r from daily bars or no source)"
+        body = f"- N {g['n']}; mean {_fmt(g['mean'])}; median {_fmt(g['median'])}{tail}"
+    return [_GIVEBACK_TITLE, "", body, ""]
 
 
 def _tally_extra(t: dict) -> str:

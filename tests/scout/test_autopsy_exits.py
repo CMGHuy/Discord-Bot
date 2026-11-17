@@ -88,11 +88,34 @@ def test_stop_extra_without_inputs_is_none_not_zero():
         "mean_stop_atr": None, "dollar_loss_at_2pct": None, "mean_overshoot_r": None}
 
 
-def test_giveback_covers_losers_as_well_as_winners():
-    trades = [_row(mfe_r=2.0, gross_r=1.0), _row(mfe_r=1.5, gross_r=-1.0),
-              _row(mfe_r=None, gross_r=0.3)]
-    assert exits.giveback_summary(trades) == {"n": 2, "mean": 1.75, "median": 1.75}
-    assert exits.giveback_summary([]) == {"n": 0, "mean": None, "median": None}
+def test_giveback_covers_losers_as_well_as_winners_on_intraday_rows():
+    trades = [_row(mfe_r=2.0, gross_r=1.0, excursion_source="5min"),
+              _row(mfe_r=1.5, gross_r=-1.0, excursion_source="hourly"),
+              _row(mfe_r=None, gross_r=0.3, excursion_source="5min")]
+    assert exits.giveback_summary(trades) == {"n": 2, "mean": 1.75, "median": 1.75, "dropped": 0}
+
+
+def test_giveback_drops_daily_and_unsourced_rows_and_counts_them():
+    trades = [_row(mfe_r=0.31, gross_r=-1.0, excursion_source="15min"),
+              _row(mfe_r=1.24, gross_r=-1.0, excursion_source="daily"),
+              _row(mfe_r=1.67, gross_r=0.0, excursion_source=None),
+              _row(mfe_r=None, gross_r=-1.0, excursion_source="daily")]   # no mfe: not "dropped"
+    assert exits.giveback_summary(trades) == {"n": 1, "mean": 1.31, "median": 1.31, "dropped": 2}
+
+
+def test_giveback_with_every_row_dropped_has_no_figures():
+    trades = [_row(mfe_r=2.0, gross_r=1.0, excursion_source="daily")]
+    assert exits.giveback_summary(trades) == {"n": 0, "mean": None, "median": None, "dropped": 1}
+
+
+def test_giveback_of_an_empty_book():
+    assert exits.giveback_summary([]) == {"n": 0, "mean": None, "median": None, "dropped": 0}
+
+
+def test_intraday_sources_match_the_journal_core():
+    assert rows.INTRADAY_SOURCES == ("5min", "15min", "hourly")
+    from swingbot.core.analytics import mfe_mae
+    assert tuple(mfe_mae.INTRADAY_SOURCES) == rows.INTRADAY_SOURCES
 
 
 def _plans():

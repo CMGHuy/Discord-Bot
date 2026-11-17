@@ -1322,3 +1322,68 @@ describe('TradeDetail for a viewer (v207)', () => {
     expect(el.querySelector('[data-testid="note-readonly"]')!.textContent!.trim()).toBe('No note yet.');
   });
 });
+
+describe('TradeDetail — excursion estimates on the Journal tab (v228)', () => {
+  let backend: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor])),
+        provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
+        TradeDetailStore,
+        ChartStore,
+        { provide: EventStream, useValue: new FakeEventStream() },
+      ],
+    });
+    signInAs(role);
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  const JOURNAL = {
+    trade_id: ID, ticker: 'AAPL', strategy: 'RSI Divergence', horizon_key: '1m',
+    direction: 'bullish', tier: 'A', badge: 'VALIDATED', quality_score: 72,
+    outcome: 'loss', r_realized: -1.0, mfe_r: 1.4, mae_r: 0.2,
+    exit_efficiency: 0.31, holding_days: 0.3, tags: [], auto_lesson: null, note: '',
+    opened_at: null, closed_at: null, created_at: null,
+  };
+
+  function mountJournal(entry: object): HTMLElement {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.componentRef.setInput('tab', 'journal');
+    fixture.detectChanges();
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(DETAIL, 'CLOSED'));
+    // Set the journal half directly: the journal request's timing is the
+    // store spec's business; this block pins only what the template draws.
+    patchState(unprotected(TestBed.inject(TradeDetailStore)), {
+      journal: entry as never, journalAnswered: true, journalError: null,
+    });
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('puts the marker under MFE, MAE and Exit efficiency for a short daily hold', () => {
+    const el = mountJournal({ ...JOURNAL, excursion_source: 'daily' });
+    const cells = [...el.querySelectorAll('.excursions .excursion')];
+    expect(cells).toHaveLength(3);
+    for (const cell of cells) {
+      expect(cell.querySelector('sb-metric-chip')).not.toBeNull();
+      expect(cell.querySelector('sb-excursion-est .est')?.textContent?.trim()).toBe('est. (daily bars)');
+    }
+  });
+
+  it('draws no marker for figures measured on intraday bars', () => {
+    const el = mountJournal({ ...JOURNAL, excursion_source: '5min' });
+    expect(el.querySelectorAll('.excursions .excursion')).toHaveLength(3);
+    expect(el.querySelector('sb-excursion-est')).toBeNull();
+  });
+
+  it('draws no marker on a daily figure for a hold of two days or more', () => {
+    const el = mountJournal({ ...JOURNAL, excursion_source: 'daily', holding_days: 2.5 });
+    expect(el.querySelector('sb-excursion-est')).toBeNull();
+  });
+});

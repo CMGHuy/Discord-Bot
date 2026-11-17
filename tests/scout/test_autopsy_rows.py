@@ -50,7 +50,7 @@ TRADE = {
     "r_realized": "2.0", "mfe_r": "2.5", "mae_r": "-0.4", "exit_efficiency": "0.8",
     "holding_days": "6", "stop_width_atr": "1.5", "atr_pct": "2.4",
     "regime2_state": "bull_quiet", "session_bucket": "open",
-    "days_to_earnings": "12", "rs_percentile": "81",
+    "days_to_earnings": "12", "rs_percentile": "81", "excursion_source": "5min",
 }
 
 PLAN = {
@@ -111,10 +111,16 @@ def test_a_missing_close_reason_is_an_empty_string(tmp_path):
     assert row.close_reason == ""
 
 
-def test_export_columns_end_with_the_issued_columns():
-    assert len(rows.EXPORT_COLUMNS) == 38
-    assert rows.EXPORT_COLUMNS[-2:] == rows.ISSUED_COLUMNS == ("plan_issued_at", "plan_issued_at_source")
-    assert rows.LEGACY_EXPORT_COLUMNS == rows.EXPORT_COLUMNS[:-2]
+def test_export_columns_end_with_the_issued_then_the_excursion_column():
+    assert len(rows.EXPORT_COLUMNS) == 39
+    assert rows.EXCURSION_COLUMN == "excursion_source"
+    assert rows.EXPORT_COLUMNS[-1] == rows.EXCURSION_COLUMN
+    assert rows.EXPORT_COLUMNS[-3:-1] == rows.ISSUED_COLUMNS == ("plan_issued_at", "plan_issued_at_source")
+    assert rows.PRE_EXCURSION_COLUMNS == rows.EXPORT_COLUMNS[:-1]
+    assert len(rows.PRE_EXCURSION_COLUMNS) == 38
+    assert rows.LEGACY_EXPORT_COLUMNS == rows.EXPORT_COLUMNS[:-3]
+    assert len(rows.LEGACY_EXPORT_COLUMNS) == 36
+    assert rows.LEGACY_EXPORT_COLUMNS[-1] == "rs_percentile"
 
 
 def test_alert_hour_reads_a_real_issue_time_only():
@@ -151,11 +157,12 @@ def test_a_date_only_issued_at_is_unknown(tmp_path):
 
 
 def test_an_old_csv_without_the_issued_columns_loads_with_unknown_hours(tmp_path):
-    path = _write_csv(tmp_path, [TRADE, PLAN], columns=EXPECTED_COLUMNS[:-2])
-    trade, plan = rows.load_rows(path)
+    path = _write_csv(tmp_path, [TRADE, PLAN], columns=rows.LEGACY_EXPORT_COLUMNS)
+    trade, plan = rows.load_rows(path, allow_no_excursion=True)
     assert (trade.plan_hour, trade.hour_source) == (None, "unknown")
     assert (plan.plan_hour, plan.hour_source) == (None, "unknown")
     assert trade.gross_r == 2.0 and trade.entry_date == "2026-03-03"
+    assert trade.excursion_source is None
 
 
 def test_open_and_close_keep_their_utc_timestamps(tmp_path):
@@ -217,8 +224,9 @@ def test_a_trade_without_realised_r_is_not_a_closed_trade(tmp_path):
 
 def test_a_wrong_header_is_still_refused_naming_the_gap(tmp_path):
     for columns in ([c for c in EXPECTED_COLUMNS if c != "rs_percentile"],
-                    [c for c in EXPECTED_COLUMNS[:-2] if c != "rs_percentile"],
-                    list(EXPECTED_COLUMNS[:-1])):
+                    [c for c in EXPECTED_COLUMNS[:-3] if c != "rs_percentile"],
+                    list(EXPECTED_COLUMNS[:-2]),                       # 37: half the issued pair
+                    [*EXPECTED_COLUMNS[:-3], "excursion_source"]):     # 37: no issued pair
         path = _write_csv(tmp_path, [TRADE], columns=columns)
         with pytest.raises(ValueError, match="missing"):
             rows.load_rows(path)
@@ -260,3 +268,62 @@ def test_nonfinite_csv_numbers_are_missing_not_trade_or_bucket_inputs(tmp_path, 
     assert row.atr_pct is None
     assert row.expiry_bars is None
     assert rows.closed_trades([row]) == []
+
+
+def test_every_book_row_has_no_excursion_source_by_default():
+    assert BookRow().excursion_source is None
+
+
+def test_a_trade_row_carries_its_excursion_source(tmp_path):
+    [row] = rows.load_rows(_write_csv(tmp_path, [TRADE]))
+    assert row.excursion_source == "5min"
+
+
+@pytest.mark.parametrize("value", ["daily", "hourly", "15min"])
+def test_every_source_name_passes_through_verbatim(tmp_path, value):
+    [row] = rows.load_rows(_write_csv(tmp_path, [dict(TRADE, excursion_source=value)]))
+    assert row.excursion_source == value
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_a_blank_excursion_source_is_none(tmp_path, value):
+    [row] = rows.load_rows(_write_csv(tmp_path, [dict(TRADE, excursion_source=value)]))
+    assert row.excursion_source is None
+
+
+def test_a_plan_row_has_no_excursion_source(tmp_path):
+    _, plan = rows.load_rows(_write_csv(tmp_path, [TRADE, PLAN]))
+    assert plan.excursion_source is None
+
+
+@pytest.mark.parametrize("shape", ["PRE_EXCURSION_COLUMNS", "LEGACY_EXPORT_COLUMNS"])
+def test_an_export_without_the_excursion_column_is_refused_naming_the_fix(tmp_path, shape):
+    path = _write_csv(tmp_path, [TRADE], columns=getattr(rows, shape))
+    with pytest.raises(rows.MissingExcursionColumn) as err:
+        rows.load_rows(path)
+    text = str(err.value)
+    assert "excursion_source" in text
+    assert "scripts/ops/export_book_rows.sh" in text
+    assert "--no-excursion-cells" in text
+    assert str(path) in text
+    assert isinstance(err.value, ValueError)
+
+
+def test_a_38_column_export_loads_when_excursion_cells_are_waived(tmp_path):
+    path = _write_csv(tmp_path, [TRADE], columns=rows.PRE_EXCURSION_COLUMNS)
+    [row] = rows.load_rows(path, allow_no_excursion=True)
+    assert row.excursion_source is None
+    assert (row.plan_hour, row.hour_source) == (9, "live")
+
+
+def test_the_waiver_still_reads_a_current_export(tmp_path):
+    [row] = rows.load_rows(_write_csv(tmp_path, [TRADE]), allow_no_excursion=True)
+    assert row.excursion_source == "5min"
+
+
+def test_the_waiver_never_accepts_a_wrong_header(tmp_path):
+    columns = [c for c in EXPECTED_COLUMNS[:-1] if c != "rs_percentile"]
+    path = _write_csv(tmp_path, [TRADE], columns=columns)
+    with pytest.raises(ValueError, match="rs_percentile") as err:
+        rows.load_rows(path, allow_no_excursion=True)
+    assert not isinstance(err.value, rows.MissingExcursionColumn)

@@ -14,6 +14,7 @@ import { routeRequest } from '../routing/route-request';
 import {
   AnalyticsStrategies, CalendarRow, GateKey, GatePart, GateRow, JournalEntry, TradeDetail,
 } from '../api/models';
+import { isDailyEstimate } from '../ui/excursion-estimate';
 import { StrategyRow } from './analytics.store';
 import { LiveValuesStore, overlayQuote } from './live-values.store';
 
@@ -515,13 +516,17 @@ export const TradeDetailStore = signalStore(
      *  endpoint answers, and empty when it answers "no entry" — an open
      *  position has no excursions to report and must not show three dashes
      *  implying it does. */
-    excursions: computed<{ label: string; value: number | null; unit: string; decimals: number }[]>(
+    excursions: computed<{ label: string; value: number | null; unit: string; decimals: number; estimate: boolean }[]>(
       () => {
         const entry = journal();
         if (!entry) return [];
+        // v228: a short hold measured on daily bars is an estimate. All three
+        // rows carry it -- efficiency is realized R over MFE, so it inherits
+        // MFE's overstatement.
+        const estimate = isDailyEstimate(entry.excursion_source, entry.holding_days);
         return [
-          { label: 'MFE', value: entry.mfe_r, unit: 'R', decimals: 2 },
-          { label: 'MAE', value: entry.mae_r, unit: 'R', decimals: 2 },
+          { label: 'MFE', value: entry.mfe_r, unit: 'R', decimals: 2, estimate },
+          { label: 'MAE', value: entry.mae_r, unit: 'R', decimals: 2, estimate },
           {
             // Stored 0-1; shown as a percentage, because "captured 31% of the
             // favourable move" is the sentence a reader is trying to form.
@@ -529,6 +534,7 @@ export const TradeDetailStore = signalStore(
             value: entry.exit_efficiency === null ? null : entry.exit_efficiency * 100,
             unit: '%',
             decimals: 0,
+            estimate,
           },
         ];
       }),

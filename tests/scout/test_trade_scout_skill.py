@@ -106,3 +106,17 @@ def test_scout_agent_states_the_direction_field():
     section = " ".join(_section(body, "## Evidence rule").split())
     assert "`direction: exploit | avoid`" in section
     assert "not known at entry" in section
+
+
+def test_autopsy_step_names_the_excursion_refusal_and_its_waiver():
+    _, body = _parsed(SKILL)
+    step = body[body.index("## Step 1"):body.index("## Step 2")]
+    for phrase in ("excursion_source", "--no-excursion-cells", "exits with code 2",
+                   "intraday-measured"):
+        assert phrase in step, phrase
+
+
+def test_exit_harvester_reads_giveback_on_intraday_rows_only():
+    text = (ROOT / ".claude" / "skills" / "exit-harvester" / "SKILL.md").read_text(encoding="utf-8")
+    assert "across all intraday-measured trades" in text
+    assert "across all trades in the autopsy" not in text

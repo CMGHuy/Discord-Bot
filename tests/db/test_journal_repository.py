@@ -59,3 +59,60 @@ def test_filters_are_and_combined_and_upserts_replace(repo, db_conn):
         strategy="RSI", outcome="loss", conn=db_conn)] == ["T2"]
     assert repo.count(conn=db_conn) == 2
     assert repo.get("T1", conn=db_conn)["lesson"] == "second"
+
+
+FINER_THAN_5MIN = ("15min", "hourly", "daily", None)   # coarser_sources("5min") in V228-2
+FINER_THAN_HOURLY = ("daily", None)                     # coarser_sources("hourly")
+
+
+def test_patch_if_coarser_upgrades_a_daily_row_and_keeps_the_note(repo, db_conn):
+    repo.upsert(_entry("T1", excursion_source="daily", mfe_r=1.24, note="partner note"), conn=db_conn)
+    out = repo.patch_if_coarser("T1", {"mfe_r": 0.31, "excursion_source": "5min"},
+                                coarser=FINER_THAN_5MIN, conn=db_conn)
+    assert (out["excursion_source"], out["mfe_r"], out["note"]) == ("5min", 0.31, "partner note")
+    assert out["tags"] == ["clean-entry"] and out["lesson"] == "held to TP1"
+
+
+def test_a_coarser_write_after_a_finer_one_is_a_no_op(repo, db_conn):
+    repo.upsert(_entry("T1", excursion_source="daily", mfe_r=1.24), conn=db_conn)
+    assert repo.patch_if_coarser("T1", {"mfe_r": 0.31, "excursion_source": "5min"},
+                                 coarser=FINER_THAN_5MIN, conn=db_conn) is not None
+    assert repo.patch_if_coarser("T1", {"mfe_r": 0.5, "excursion_source": "hourly"},
+                                 coarser=FINER_THAN_HOURLY, conn=db_conn) is None
+    row = repo.get("T1", conn=db_conn)
+    assert (row["excursion_source"], row["mfe_r"]) == ("5min", 0.31)
+
+
+@pytest.mark.parametrize("stored", [{}, {"excursion_source": None}])
+def test_a_missing_or_null_source_counts_as_none(repo, db_conn, stored):
+    repo.upsert(_entry("T1", **stored), conn=db_conn)
+    out = repo.patch_if_coarser("T1", {"excursion_source": "daily", "mfe_r": 1.0},
+                                coarser=(None,), conn=db_conn)
+    assert out["excursion_source"] == "daily"
+
+
+def test_an_equal_source_is_not_rewritten(repo, db_conn):
+    repo.upsert(_entry("T1", excursion_source="hourly", mfe_r=0.9), conn=db_conn)
+    assert repo.patch_if_coarser("T1", {"excursion_source": "hourly", "mfe_r": 0.1},
+                                 coarser=FINER_THAN_HOURLY, conn=db_conn) is None
+    assert repo.get("T1", conn=db_conn)["mfe_r"] == 0.9
+
+
+def test_a_missing_row_and_an_empty_coarser_set_never_match(repo, db_conn):
+    assert repo.patch_if_coarser("nope", {"excursion_source": "5min"},
+                                 coarser=FINER_THAN_5MIN, conn=db_conn) is None
+    repo.upsert(_entry("T1", excursion_source="daily"), conn=db_conn)
+    assert repo.patch_if_coarser("T1", {"excursion_source": "5min"},
+                                 coarser=(), conn=db_conn) is None
+
+
+def test_patch_if_coarser_never_reads_before_writing(repo, db_conn, monkeypatch):
+    repo.upsert(_entry("T1", excursion_source="daily"), conn=db_conn)
+
+    def no_read(*args, **kwargs):
+        raise AssertionError("patch_if_coarser must not read-then-write")
+
+    monkeypatch.setattr(repo, "get", no_read)
+    monkeypatch.setattr(repo, "get_for_update", no_read)
+    assert repo.patch_if_coarser("T1", {"excursion_source": "5min"},
+                                 coarser=FINER_THAN_5MIN, conn=db_conn) is not None

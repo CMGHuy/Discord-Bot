@@ -7,10 +7,13 @@ a lesson, they only render what's already here."""
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from datetime import datetime, timezone
 
+import pandas as pd
+
 from swingbot.core.analytics import metrics
-from swingbot.core.analytics.mfe_mae import compute_mfe_mae
+from swingbot.core.analytics.mfe_mae import compute_excursion
 
 log = logging.getLogger(__name__)
 
@@ -150,12 +153,14 @@ def tags_for(trade: dict, m: dict | None) -> list[str]:
     return tags
 
 
-def build_entry(trade: dict, df) -> dict:
-    """Assemble one auto-populated journal entry for a just-closed trade.
-    `df` is the ticker's cached daily bars (or None -- every MFE/MAE field
-    degrades to None rather than raising when it's unavailable, per the
-    Global Constraint on graceful degradation)."""
-    m = compute_mfe_mae(trade, df) if df is not None else None
+def build_entry(trade: dict, frames: Mapping[str, pd.DataFrame | None] | None) -> dict:
+    """One journal entry. `frames` is the {timeframe: bars} mapping from
+    excursion_frames.load_frames (v228); the excursion comes from the finest
+    frame that covers the trade and `excursion_source` names it. No frames
+    degrades every MFE/MAE field to None rather than raising."""
+    if isinstance(frames, pd.DataFrame):
+        raise TypeError("build_entry takes a frames mapping (v228); wrap a daily frame as {'daily': df}")
+    m = compute_excursion(trade, frames) if frames else None
     mfe_r = m["mfe_r"] if m else None
     mae_r = m["mae_r"] if m else None
     exit_efficiency = m["exit_efficiency"] if m else None
@@ -176,6 +181,7 @@ def build_entry(trade: dict, df) -> dict:
         "mfe_r": mfe_r,
         "mae_r": mae_r,
         "exit_efficiency": exit_efficiency,
+        "excursion_source": m["excursion_source"] if m else None,
         # v86: copied, not re-derived. The registry may be regenerated after
         # this trade was stamped; §6's verification must read what the plan
         # was TOLD at issuance, so the journal freezes it alongside the outcome.
@@ -199,17 +205,29 @@ def journal_trade_close(trade: dict) -> None:
     not un-close a trade or crash the caller's own save -- this is pure
     bookkeeping layered on top of a close that has already happened and
     already been persisted by the time this runs.
+
+    v228: the excursion is measured on the finest archived frame that covers
+    the trade; at close the sub-hourly archives are usually a day stale, so
+    most entries start as `daily` and excursion_upgrade raises them later.
     """
-    df = None
+    daily = None
     try:
         from swingbot.core.marketdata.data import get_daily_data
-        df = get_daily_data(trade["ticker"])
+        daily = get_daily_data(trade["ticker"])
     except Exception:
         log.warning("journal_trade_close: bars fetch failed for %s -- journaling without MFE/MAE",
                     trade.get("ticker"), exc_info=True)
 
     try:
-        entry = build_entry(trade, df)
+        from swingbot.core.analytics.excursion_frames import load_frames
+        frames = load_frames(trade.get("ticker") or "", daily=daily).frames
+    except Exception:
+        log.warning("journal_trade_close: archive read failed for %s -- daily bars only",
+                    trade.get("ticker"), exc_info=True)
+        frames = {"daily": daily} if daily is not None else None
+
+    try:
+        entry = build_entry(trade, frames)
         JournalStore().add(entry)
     except Exception:
         log.warning("journal_trade_close: failed to journal trade %s", trade.get("id"), exc_info=True)
