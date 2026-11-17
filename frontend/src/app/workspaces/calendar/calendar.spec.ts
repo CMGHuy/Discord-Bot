@@ -447,6 +447,29 @@ describe('Calendar day drawer', () => {
     expect(row?.querySelector('.tags')).toBeNull();
   });
 
+  it('marks the drawer MFE · MAE line for a short hold on daily bars (v228)', async () => {
+    const fixture = seed();
+    await openDay(fixture, [{ ...TRADE, excursion_source: 'daily', held_hours: 5.5 }]);
+
+    const row = el(fixture).querySelector('.day-row');
+    const marker = row?.querySelector('p.meta sb-excursion-est');
+    expect(marker).not.toBeNull();
+    expect(marker!.querySelector('.est')?.textContent?.trim()).toBe('est. (daily bars)');
+  });
+
+  it('leaves the drawer unmarked for intraday bars, long holds and unjournaled rows (v228)', async () => {
+    const fixture = seed();
+    await openDay(fixture, [
+      { ...TRADE, excursion_source: '5min', held_hours: 5.5 },
+      { ...TRADE, trade_id: 'b'.repeat(16), excursion_source: 'daily', held_hours: 53.5 },
+      { ...TRADE, trade_id: 'c'.repeat(16), excursion_source: null, held_hours: 5.5,
+        mfe_r: null, mae_r: null, exit_efficiency: null },
+    ]);
+
+    expect(el(fixture).querySelectorAll('.day-row')).toHaveLength(3);
+    expect(el(fixture).querySelector('sb-excursion-est')).toBeNull();
+  });
+
   it('says so when a day comes back with nothing under the current filter', async () => {
     const fixture = seed();
     await openDay(fixture, []);
