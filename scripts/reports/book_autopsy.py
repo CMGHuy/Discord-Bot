@@ -22,7 +22,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / "scripts" / "reports")]
 
 from autopsy.exclusions import EXCLUSIONS_PATH  # noqa: E402
 from autopsy.report import DEFAULT_BALANCE, build_report, render_markdown  # noqa: E402
-from autopsy.rows import friction_settings, load_rejections, load_rows  # noqa: E402
+from autopsy.rows import MissingExcursionColumn, friction_settings, load_rejections, load_rows  # noqa: E402
 from swingbot.core.backtesting.instrument.stats import (  # noqa: E402
     WEEK_BOOTSTRAP_RESAMPLES, WEEK_BOOTSTRAP_SEED)
 
@@ -59,6 +59,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--exclusions", type=Path, default=EXCLUSIONS_PATH,
                    help="committed trade-id exclusion file (the August 2026 stall)")
     p.add_argument("--no-exclusions", action="store_true", help="apply no exclusion")
+    p.add_argument("--no-excursion-cells", action="store_true",
+                   help="accept an export without excursion_source (pre-v228) and leave the "
+                        "MFE/MAE-derived cells out")
     return p
 
 
@@ -70,13 +73,28 @@ def _record_filter(report: dict, entry_type: str | None) -> None:
                                      "rejection tallies carry no entry type and are unfiltered")
 
 
+def _load(args, frictions: dict, inputs: dict) -> list:
+    return filter_entry_type(load_rows(args.rows, frictions=frictions, input_fingerprints=inputs,
+                                       allow_no_excursion=args.no_excursion_cells),
+                             args.entry_type)
+
+
+def _giveback_line(g: dict) -> str:
+    if g.get("omitted"):
+        return "give-back: excursion cells left out (--no-excursion-cells)"
+    return f"give-back N {g['n']}, dropped {g['dropped']} (no intraday excursion source)"
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     args = _parser().parse_args(argv)
     frictions = friction_settings()
     inputs = {}
-    loaded = filter_entry_type(load_rows(args.rows, frictions=frictions, input_fingerprints=inputs),
-                               args.entry_type)
+    try:
+        loaded = _load(args, frictions, inputs)
+    except MissingExcursionColumn as exc:
+        print(f"book_autopsy: {exc}", file=sys.stderr)
+        return 2
     rejections = load_rejections(args.rejections, input_fingerprints=inputs)
     invocation = {"command": [sys.executable, str(Path(__file__).resolve()), *argv],
                   "options": {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}}
@@ -84,7 +102,8 @@ def main(argv: list[str] | None = None) -> int:
                           bars_dir=args.bars_dir, n_resamples=args.resamples,
                           seed=args.seed, balance=args.balance, frictions=frictions,
                           input_fingerprints=inputs, invocation=invocation,
-                          exclusions_path=None if args.no_exclusions else args.exclusions)
+                          exclusions_path=None if args.no_exclusions else args.exclusions,
+                          excursion_cells=not args.no_excursion_cells)
     _record_filter(report, args.entry_type)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     stem = _output_stem(args.date, args.entry_type)
@@ -95,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     h = report["header"]
     print(f"wrote {json_path}\nwrote {md_path}")
     print(f"N {h['n']}, bar-covered {h['bar_covered_n']}, cells tested {h['cells_tested']}")
+    print(_giveback_line(report["giveback"]))
     for stall in h["stall_exclusions"]:
         print(f"stall exclusion {stall['key']}: N {stall['n']}")
     return 0

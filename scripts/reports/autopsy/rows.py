@@ -36,6 +36,14 @@ EXPORT_COLUMNS = (
 PRE_EXCURSION_COLUMNS = EXPORT_COLUMNS[:-1]
 #: Exports written before v200: no issue-time columns; every hour reads as unknown.
 LEGACY_EXPORT_COLUMNS = PRE_EXCURSION_COLUMNS[:-2]
+#: v228: sources measured on intraday bars; equal to mfe_mae.INTRADAY_SOURCES (pinned by a test).
+INTRADAY_SOURCES = ("5min", "15min", "hourly")
+#: Accepted header shapes that carry no excursion source (refused unless waived).
+_NO_EXCURSION_SHAPES = (PRE_EXCURSION_COLUMNS, LEGACY_EXPORT_COLUMNS)
+
+
+class MissingExcursionColumn(ValueError):
+    """An export written before v228: its mfe_r / mae_r cannot be told daily from intraday."""
 REJECTION_COLUMNS = ("date", "reason", "count")
 
 #: Below this fraction of the entry the stop is no longer the planned risk
@@ -243,12 +251,27 @@ def friction_settings() -> dict:
             "min_risk_fraction": MIN_RISK_FRACTION}
 
 
+def _check_excursion_header(found, path: Path, allow_no_excursion: bool) -> None:
+    if allow_no_excursion or tuple(found or ()) not in _NO_EXCURSION_SHAPES:
+        return
+    raise MissingExcursionColumn(
+        f"{path}: export has no excursion_source column (written before v228), so its "
+        "mfe_r/mae_r cannot be told daily from intraday. Fix: re-export with "
+        "scripts/ops/export_book_rows.sh rows, or pass --no-excursion-cells to build "
+        "every other cell and leave the excursion cells out.")
+
+
 def load_rows(path: Path, *, frictions: dict | None = None,
-              input_fingerprints: dict | None = None) -> list[BookRow]:
-    """Every export row, using one explicit friction snapshot and exact input hash."""
+              input_fingerprints: dict | None = None,
+              allow_no_excursion: bool = False) -> list[BookRow]:
+    """Every export row, using one explicit friction snapshot and exact input hash.
+
+    A 38- or 36-column export raises MissingExcursionColumn unless
+    ``allow_no_excursion`` (the CLI's --no-excursion-cells)."""
     settings = frictions if frictions is not None else friction_settings()
     reader = csv.DictReader(StringIO(read_input(path, input_fingerprints), newline=""))
-    _check_header(reader.fieldnames, EXPORT_COLUMNS, str(path), accepted=(PRE_EXCURSION_COLUMNS, LEGACY_EXPORT_COLUMNS))
+    _check_excursion_header(reader.fieldnames, path, allow_no_excursion)
+    _check_header(reader.fieldnames, EXPORT_COLUMNS, str(path), accepted=_NO_EXCURSION_SHAPES)
     return [_row(raw, settings) for raw in reader]
 
 

@@ -158,7 +158,7 @@ def test_a_date_only_issued_at_is_unknown(tmp_path):
 
 def test_an_old_csv_without_the_issued_columns_loads_with_unknown_hours(tmp_path):
     path = _write_csv(tmp_path, [TRADE, PLAN], columns=rows.LEGACY_EXPORT_COLUMNS)
-    trade, plan = rows.load_rows(path)
+    trade, plan = rows.load_rows(path, allow_no_excursion=True)
     assert (trade.plan_hour, trade.hour_source) == (None, "unknown")
     assert (plan.plan_hour, plan.hour_source) == (None, "unknown")
     assert trade.gross_r == 2.0 and trade.entry_date == "2026-03-03"
@@ -296,9 +296,34 @@ def test_a_plan_row_has_no_excursion_source(tmp_path):
     assert plan.excursion_source is None
 
 
-def test_a_38_column_export_still_loads_until_the_refusal_lands(tmp_path):
-    """V228-15 keeps the v200 shape loading; V228-16 turns it into a refusal."""
+@pytest.mark.parametrize("shape", ["PRE_EXCURSION_COLUMNS", "LEGACY_EXPORT_COLUMNS"])
+def test_an_export_without_the_excursion_column_is_refused_naming_the_fix(tmp_path, shape):
+    path = _write_csv(tmp_path, [TRADE], columns=getattr(rows, shape))
+    with pytest.raises(rows.MissingExcursionColumn) as err:
+        rows.load_rows(path)
+    text = str(err.value)
+    assert "excursion_source" in text
+    assert "scripts/ops/export_book_rows.sh" in text
+    assert "--no-excursion-cells" in text
+    assert str(path) in text
+    assert isinstance(err.value, ValueError)
+
+
+def test_a_38_column_export_loads_when_excursion_cells_are_waived(tmp_path):
     path = _write_csv(tmp_path, [TRADE], columns=rows.PRE_EXCURSION_COLUMNS)
-    [row] = rows.load_rows(path)
+    [row] = rows.load_rows(path, allow_no_excursion=True)
     assert row.excursion_source is None
     assert (row.plan_hour, row.hour_source) == (9, "live")
+
+
+def test_the_waiver_still_reads_a_current_export(tmp_path):
+    [row] = rows.load_rows(_write_csv(tmp_path, [TRADE]), allow_no_excursion=True)
+    assert row.excursion_source == "5min"
+
+
+def test_the_waiver_never_accepts_a_wrong_header(tmp_path):
+    columns = [c for c in EXPECTED_COLUMNS[:-1] if c != "rs_percentile"]
+    path = _write_csv(tmp_path, [TRADE], columns=columns)
+    with pytest.raises(ValueError, match="rs_percentile") as err:
+        rows.load_rows(path, allow_no_excursion=True)
+    assert not isinstance(err.value, rows.MissingExcursionColumn)

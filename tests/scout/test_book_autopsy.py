@@ -51,7 +51,7 @@ def _trade(i: int, ticker: str) -> dict:
         "exit_price": "103" if win else "98", "close_reason": "tp1_runner_tp2" if win else "loss",
         "outcome": "win" if win else "loss", "r_realized": "1.5" if win else "-1.0",
         "mfe_r": "2.0" if win else "0.3", "holding_days": "3", "stop_width_atr": "1.0",
-        "atr_pct": "2.0", "regime2_state": "bull_quiet"}
+        "atr_pct": "2.0", "regime2_state": "bull_quiet", "excursion_source": "5min"}
 
 
 EXPIRED_PLAN = {
@@ -320,3 +320,69 @@ def test_the_report_is_schema_2_and_every_cell_carries_its_cut_tag(tmp_path):
         assert cell["defined_at"] == tags[cell["cut"]], cell["id"]
     assert set(data) == {"header", "cells", "tallies", "giveback"}
     assert len(report.render_markdown(data).splitlines()) <= report.MD_MAX_LINES
+
+
+def _write_rows(path: Path, records: list[dict], columns) -> Path:
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(columns))
+        writer.writeheader()
+        for record in records:
+            writer.writerow({c: record.get(c, "") for c in columns})
+    return path
+
+
+def test_giveback_counts_rows_without_an_intraday_source_as_dropped(tmp_path):
+    rows_csv, rej_csv, bars_dir = _files(tmp_path)
+    records = [dict(_trade(i, "AAA"), excursion_source="daily" if i < 10 else "5min")
+               for i in range(48)]
+    _write_rows(rows_csv, records, rows.EXPORT_COLUMNS)
+    data = report.build_report(rows.load_rows(rows_csv), rows.load_rejections(rej_csv),
+                               bars_dir=bars_dir, n_resamples=200, seed=42, balance=10_000.0)
+    assert (data["giveback"]["n"], data["giveback"]["dropped"]) == (38, 10)
+    md = report.render_markdown(data)
+    assert "## Give-back (mfe_r minus gross R, intraday-measured trades)" in md
+    assert "; dropped 10 (mfe_r from daily bars or no source)" in md
+
+
+def test_the_cli_refuses_an_export_without_the_excursion_column(tmp_path, capsys):
+    rows_csv, rej_csv, bars_dir = _files(tmp_path)
+    _write_rows(rows_csv, [_trade(i, "AAA") for i in range(4)], rows.PRE_EXCURSION_COLUMNS)
+    out = tmp_path / "results"
+    code = script.main([str(rows_csv), str(rej_csv), "--bars-dir", str(bars_dir),
+                        "--out-dir", str(out), "--date", "2026-11-20", *FAST])
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "excursion_source" in err and "--no-excursion-cells" in err
+    assert not out.exists()
+
+
+def test_the_cli_waiver_builds_every_other_cell_and_says_so(tmp_path, capsys):
+    rows_csv, rej_csv, bars_dir = _files(tmp_path)
+    _write_rows(rows_csv, [_trade(i, ("AAA", "BBB")[i % 2]) for i in range(48)],
+                rows.LEGACY_EXPORT_COLUMNS)
+    out = tmp_path / "results"
+    code = script.main([str(rows_csv), str(rej_csv), "--bars-dir", str(bars_dir),
+                        "--out-dir", str(out), "--date", "2026-11-20", *FAST,
+                        "--no-excursion-cells"])
+    printed = capsys.readouterr().out
+    assert code == 0
+    assert "excursion cells left out (--no-excursion-cells)" in printed
+    data = json.loads((out / "2026-11-20-book-autopsy.json").read_text(encoding="utf-8"))
+    assert data["giveback"] == {"n": 0, "mean": None, "median": None, "dropped": 48, "omitted": True}
+    assert report.EXCURSION_OMITTED_NOTE in data["header"]["notes"]
+    assert data["header"]["n"] == 48 and data["cells"]
+    md = (out / "2026-11-20-book-autopsy.md").read_text(encoding="utf-8")
+    assert "- left out (--no-excursion-cells): the export has no excursion_source column" in md
+
+
+def test_the_cli_prints_the_giveback_drop_count(tmp_path, capsys):
+    rows_csv, rej_csv, bars_dir = _files(tmp_path)
+    code = script.main([str(rows_csv), str(rej_csv), "--bars-dir", str(bars_dir),
+                        "--out-dir", str(tmp_path / "results"), "--date", "2026-11-20", *FAST])
+    assert code == 0
+    assert "give-back N 48, dropped 0 (no intraday excursion source)" in capsys.readouterr().out
+
+
+def test_an_older_report_without_a_drop_count_still_renders():
+    g = {"n": 3, "mean": 1.0, "median": 1.0}
+    assert report._giveback_lines(g)[2] == "- N 3; mean 1.000; median 1.000"
