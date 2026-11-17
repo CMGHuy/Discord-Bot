@@ -332,6 +332,11 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # _rule_screen_rerun globs results docs (*-screen-<idea>.md) for a screened
     # idea, so a results doc is a hook input (v155).
     ("docs/superpowers/results/", ("tests/hooks/test_guardrails.py",)),
+    # v229: the deferred-entry pair log (VM-side, appended by the weekly cron)
+    # and the real 5-minute archive slice that pins the time basis.
+    ("data/v229/", ("tests/scripts/test_deferred_entry_pairlog.py",
+                    "tests/scripts/test_deferred_entry_counterfactual.py")),
+    ("tests/fixtures/v229/", ("tests/scripts/test_deferred_entry_bars.py",)),
     # The v162 Alpaca history store (data/market_data/, NOT the root
     # market_data/ live cache): history_store reads it, training_data selects
     # it. Gitignored, so this fires only when a path is named explicitly.
