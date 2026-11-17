@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import os
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -27,7 +29,7 @@ for _path in (str(ROOT), str(HERE)):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from deferred_entry import arms, bars, pairlog, verdict  # noqa: E402
+from deferred_entry import analysis, arms, bars, pairlog, report, verdict  # noqa: E402
 from deferred_entry import pairs as pairs_mod  # noqa: E402
 from swingbot.core.backtesting.instrument import stats  # noqa: E402
 
@@ -103,6 +105,75 @@ def append_new(scanned, log_path) -> tuple[int, dict]:
         logged[pair["trade_id"]] = pair
         added += 1
     return added, logged
+
+
+OUTPUT_NAMES = {"exploratory": "exploratory", "verdict": "forward-verdict"}
+
+
+def _context(scanned, t0, phase: str) -> dict:
+    """Funnel, close-bucket context and bearish disclosure pairs for one read."""
+    longs = [(row, reason) for row, _, reason in scanned if row.get("direction") == "bullish"]
+    funnel = Counter(reason for row, reason in longs if row_phase(row, t0) in (phase, None))
+    close_r = [float(row["r_realized"]) for row, reason in longs
+               if reason == "close_bucket" and row_phase(row, t0) == phase and row.get("r_realized")]
+    bearish = [build_pair_for(row, frame) for row, frame, reason in scanned
+               if reason == "eligible" and row.get("direction") == "bearish" and row_phase(row, t0) == phase]
+    return {"funnel": dict(funnel), "bearish": bearish,
+            "close_bucket": {"n": len(close_r), "exp_r": sum(close_r) / len(close_r) if close_r else None}}
+
+
+def _outputs(out_dir, mode: str) -> tuple[Path, Path]:
+    stem = Path(out_dir) / OUTPUT_NAMES[mode]
+    md, js = stem.with_suffix(".md"), stem.with_suffix(".json")
+    if js.exists():
+        raise verdict.VerdictRefused(f"{js} already exists: this read runs once")
+    return md, js
+
+
+def _write(paths: tuple[Path, Path], payload: dict) -> None:
+    md, js = paths
+    md.parent.mkdir(parents=True, exist_ok=True)
+    md.write_text(report.render_markdown(payload), encoding="utf-8")
+    js.write_text(json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+
+
+def _payload(phase: str, sel: list[dict], ctx: dict, run: dict) -> dict:
+    return report.build_payload(phase=phase, t0=run["t0"].isoformat(), pairs=sel, bearish=ctx["bearish"],
+                                funnel=ctx["funnel"], close_bucket=ctx["close_bucket"],
+                                archive_last_bar=run["archive_last_bar"], git_sha=run["git_sha"])
+
+
+def run_exploratory(args, scanned, logged: dict, run: dict) -> int:
+    paths = _outputs(args.out_dir, "exploratory")
+    sel = select(logged.values(), run["t0"], "exploratory")
+    if not sel:
+        raise verdict.VerdictRefused("no exploratory pairs: check --rows, --bars-dir and --t0")
+    verdict.assert_one_rule(sel)
+    payload = _payload("exploratory", sel, _context(scanned, run["t0"], "exploratory"), run)
+    payload["verdict"] = verdict.exploratory_close(payload["calibration"], len(sel))
+    _write(paths, payload)
+    cal = payload["calibration"]
+    word = "CALIBRATED" if cal["calibrated"] else "UNCALIBRATED"
+    print(f"v229 exploratory: n={len(sel)}, agreement {cal['agreement']}, {word}")
+    return 0
+
+
+def run_verdict(args, scanned, logged: dict, run: dict) -> int:
+    paths = _outputs(args.out_dir, "verdict")
+    verdict.guard(today=run["today"], t0=run["t0"], ledger_rows=stats.load_ledger(args.ledger),
+                  pairs=list(logged.values()))
+    sel = select(logged.values(), run["t0"], "forward")
+    payload = _payload("forward", sel, _context(scanned, run["t0"], "forward"), run)
+    payload["verdict"] = verdict.study_verdict(deltas=payload["deltas"], calibration=payload["calibration"],
+                                               n_pairs=len(sel), weeks=analysis.week_count(sel))
+    _write(paths, payload)
+    ledger = payload["verdict"]["ledger"]
+    print(f"v229 verdict: {payload['verdict']['study']} (ledger {ledger['verdict']}, n={ledger['n']}, "
+          f"p={ledger['p']})")
+    return 0
+
+
+MODES.update(exploratory=run_exploratory, verdict=run_verdict)
 
 
 def _run(args) -> int:
