@@ -250,7 +250,7 @@ def test_a_failing_pass_is_logged_never_raised_and_not_retried_that_day(monkeypa
 
     monkeypatch.setattr("swingbot.core.analytics.excursion_upgrade.upgrade_excursions", boom)
     day = dt.date(2026, 11, 14)
-    with patch.object(loops.log, "exception") as exception:
+    with patch.object(loops.log, "error") as exception:
         _run(loops._run_excursion_pass(day))
         _run(loops._run_excursion_pass(day))
     assert len(calls) == 1
@@ -263,7 +263,7 @@ def test_a_failing_pass_never_fails_the_refresh(monkeypatch):
 
     monkeypatch.setattr("swingbot.core.analytics.excursion_upgrade.upgrade_excursions", boom)
     _enable_refresh(monkeypatch)
-    with patch.object(loops.log, "exception") as exception:
+    with patch.object(loops.log, "error") as exception:
         _run(scanning_mod.market_data_refresh.coro())   # must not raise
     assert "excursion upgrade failed" in str(exception.call_args)
 
