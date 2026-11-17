@@ -1212,8 +1212,10 @@ async def _run_excursion_pass(today: dt.date | None = None) -> None:
         from swingbot.core.analytics.excursion_upgrade import upgrade_excursions
         report = await asyncio.to_thread(upgrade_excursions, since,
                                          budget_seconds=EXCURSION_PASS_BUDGET_S)
-    except Exception:
-        log.exception("market_data_refresh: excursion upgrade failed")
+    except Exception as exc:
+        swallowed(log, "ops.excursion_upgrade", exc,
+                  "market_data_refresh: excursion upgrade failed",
+                  level=logging.ERROR, exc_info=True)
         return
     log.info("market_data_refresh: %s", report.line())
 

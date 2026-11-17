@@ -14,6 +14,7 @@ import pandas as pd
 
 from swingbot.core.analytics import metrics
 from swingbot.core.analytics.mfe_mae import compute_excursion
+from swingbot.core.infra.swallowed import swallowed
 
 log = logging.getLogger(__name__)
 
@@ -221,9 +222,10 @@ def journal_trade_close(trade: dict) -> None:
     try:
         from swingbot.core.analytics.excursion_frames import load_frames
         frames = load_frames(trade.get("ticker") or "", daily=daily).frames
-    except Exception:
-        log.warning("journal_trade_close: archive read failed for %s -- daily bars only",
-                    trade.get("ticker"), exc_info=True)
+    except Exception as exc:
+        swallowed(log, "ops.journal_excursion_frames", exc,
+                  "journal_trade_close: archive read failed for %s -- daily bars only",
+                  trade.get("ticker"), exc_info=True)
         frames = {"daily": daily} if daily is not None else None
 
     try:
