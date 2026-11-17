@@ -27,14 +27,16 @@ from __future__ import annotations
 import hashlib
 import json
 import zlib
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Callable, Mapping
 
 import numpy as np
 import pandas as pd
 
 from swingbot.core.backtesting.screen import indicators
 from swingbot.core.backtesting.screen.context import CONTEXT_ONLY_STEMS
+from swingbot.core.backtesting.screen.ideas import Idea
 
 PLACEBO_SEED = 42
 GBM_TICKERS = 200
@@ -261,3 +263,155 @@ def shuffled_universe(out_dir, source_dir, calendar, *, seed: int = PLACEBO_SEED
             frames[ticker + suffix] = shuffle_frame(df, perm)
     return write_universe(out_dir, frames, kind="shuffled",
                           meta={"seed": seed, "copies": copies, "source_sha256": hashes})
+
+
+PLACEBO_CAP = 10
+PLANT_ATR = 0.5
+PLANT_SPACING = 12 * PLACEBO_CAP     # bars between planted events on one ticker
+PLANTED_FILE = "planted_events.json"
+TOLERANCE_R = 0.02
+FINGERPRINT_BARS = 5
+_PLACES = 10
+
+
+@dataclass(frozen=True)
+class PlaceboTrigger:
+    name: str
+    scope: str
+    events: Callable[[pd.DataFrame, pd.DataFrame], pd.Series]   # (ticker frame, index frame)
+
+
+def _high20(df, index):
+    return df["Close"] > indicators.rolling_max(df["High"], 20).shift(1)
+
+
+def _rsi2_dip(df, index):
+    close = df["Close"]
+    return (close > indicators.sma(close, 200)) & (indicators.rsi(close, 2) < 10)
+
+
+def _gap_up(df, index):
+    return df["Open"] >= df["Close"].shift(1) + 0.5 * indicators.atr(df).shift(1)
+
+
+def _sweep20(df, index):
+    low20 = indicators.rolling_min(df["Low"], 20).shift(1)
+    return (df["Low"] < low20) & (df["Close"] > low20)
+
+
+def _market_down(df, index):
+    ret = index["Close"].pct_change(fill_method=None)
+    flag = ret < -1.5 * ret.rolling(20, min_periods=20).std().shift(1)
+    return flag.reindex(df.index, fill_value=False)
+
+
+def _month_turn(df, index):
+    if df.empty:
+        return pd.Series(False, index=df.index, dtype=bool)
+    month = df.index.year * 12 + df.index.month
+    return pd.Series(np.r_[month[1:] != month[:-1], True], index=df.index)
+
+
+TRIGGERS: dict[str, PlaceboTrigger] = {t.name: t for t in (
+    PlaceboTrigger("p_high20", "ticker", _high20),
+    PlaceboTrigger("p_rsi2_dip", "ticker", _rsi2_dip),
+    PlaceboTrigger("p_gap_up", "ticker", _gap_up),
+    PlaceboTrigger("p_sweep20", "ticker", _sweep20),
+    PlaceboTrigger("p_market_down", "market", _market_down),
+    PlaceboTrigger("p_month_turn", "market", _month_turn))}
+
+
+def placebo_idea(trigger: PlaceboTrigger, index_frame: pd.DataFrame) -> Idea:
+    """The trigger as an unregistered Idea: long, fixed race, next open, cap 10."""
+    def events(df):
+        flags = trigger.events(df, index_frame).reindex(df.index, fill_value=False)
+        return flags.fillna(False).astype(bool)
+
+    return Idea(name=trigger.name, events=events, time_cap_bars=PLACEBO_CAP,
+                params={"placebo": trigger.name, "cap": PLACEBO_CAP},
+                summary=f"v230 placebo trigger {trigger.name}", source="spec v230 A1",
+                scope=trigger.scope)
+
+
+def plant_drift(df, events, atr, *, cap: int = PLACEBO_CAP,
+                atr_mult: float = PLANT_ATR) -> pd.DataFrame:
+    """+atr_mult x ATR14[t] spread over bars t+1..t+cap, persisting after."""
+    n = len(df)
+    add_close, add_open = np.zeros(n), np.zeros(n)
+    atr_v = np.asarray(atr, dtype=float)
+    for t in np.flatnonzero(np.asarray(events, dtype=bool)):
+        if t + 1 >= n or not np.isfinite(atr_v[t]):
+            continue
+        steps = np.arange(1, n - t)
+        add_close[t + 1:] += atr_mult * atr_v[t] * np.minimum(steps, cap) / cap
+        add_open[t + 1:] += atr_mult * atr_v[t] * np.minimum(steps - 1, cap) / cap
+    out = df.copy()
+    for col, add in (("Open", add_open), ("High", add_close), ("Low", add_open),
+                     ("Close", add_close)):
+        out[col] = df[col].to_numpy(dtype=float) + add
+    return out
+
+
+def _spaced(pos: np.ndarray, spacing: int) -> list[int]:
+    kept: list[int] = []
+    for p in pos:
+        if not kept or p - kept[-1] >= spacing:
+            kept.append(int(p))
+    return kept
+
+
+def plant_universe(base_dir, out_dir) -> Path:
+    """The base universe with drift planted after spaced p_high20 events."""
+    base = Path(base_dir)
+    manifest = json.loads((base / MANIFEST_FILE).read_text(encoding="utf-8"))
+    index = read_frame(base / f"{INDEX_TICKER}.csv")
+    frames, planted = {}, {}
+    for ticker in manifest["tickers"]:
+        df = read_frame(base / f"{ticker}.csv")
+        atr = indicators.atr(df)
+        fired = TRIGGERS["p_high20"].events(df, index).to_numpy(dtype=bool)
+        ok = fired & np.isfinite(atr.to_numpy()) & (np.arange(len(df)) + 1 < len(df))
+        pos = _spaced(np.flatnonzero(ok), PLANT_SPACING)
+        flags = np.zeros(len(df), dtype=bool)
+        flags[pos] = True
+        frames[ticker] = plant_drift(df, flags, atr)
+        planted[ticker] = [d.strftime("%Y-%m-%d") for d in df.index[pos]]
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / MANIFEST_FILE).unlink(missing_ok=True)
+    _publish_manifest(out / PLANTED_FILE, planted)
+    return write_universe(out, frames, kind="planted",
+                         meta={"seed": manifest["seed"], "base": manifest["kind"],
+                               "plant_atr": PLANT_ATR, "cap": PLACEBO_CAP,
+                               "spacing": PLANT_SPACING})
+
+
+def _fingerprint(df: pd.DataFrame) -> tuple:
+    return tuple(np.round(df["Close"].to_numpy(dtype=float)[:FINGERPRINT_BARS], 6))
+
+
+def planted_trigger(universe_dir) -> PlaceboTrigger:
+    """Fires on the planted dates, on the planted universe and its base alike."""
+    root = Path(universe_dir)
+    planted = json.loads((root / PLANTED_FILE).read_text(encoding="utf-8"))
+    lookup: dict[tuple, pd.DatetimeIndex] = {}
+    for ticker, days in planted.items():
+        key = _fingerprint(read_frame(root / f"{ticker}.csv"))
+        if key in lookup:
+            raise ValueError(f"{ticker}: first closes collide with another ticker")
+        lookup[key] = pd.DatetimeIndex(days)
+
+    def events(df, index):
+        days = lookup.get(_fingerprint(df))
+        flags = np.zeros(len(df), bool) if days is None else df.index.isin(days)
+        return pd.Series(flags, index=df.index)
+
+    return PlaceboTrigger("p_high20_planted", "ticker", events)
+
+
+def planted_value(base_rows, planted_rows) -> float | None:
+    """Mean event-arm R gain on events booked in both universes."""
+    base = {(r["ticker"], str(r["entry_date"])[:10]): r["r_event"] for r in base_rows}
+    gains = [r["r_event"] - base[key] for r in planted_rows
+             if (key := (r["ticker"], str(r["entry_date"])[:10])) in base]
+    return float(np.mean(gains)) if gains else None
