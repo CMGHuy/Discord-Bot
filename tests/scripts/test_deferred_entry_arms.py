@@ -134,3 +134,18 @@ def test_unknown_direction_and_zero_risk_are_refused():
         _price(five_min(DAYS), direction="long")
     with pytest.raises(ValueError, match="risk"):
         _price(five_min(DAYS), stop=100.0)
+
+
+def test_frictions_stamp_carries_the_three_cost_inputs(monkeypatch):
+    monkeypatch.setattr(config, "SLIPPAGE_BPS", 7.5, raising=False)
+    stamp = arms.frictions_stamp()
+    assert set(stamp) == {"slippage_bps", "commission_r", "be_fraction"}
+    assert stamp["slippage_bps"] == 7.5
+    assert stamp["commission_r"] == float(arms.commission_r())
+    assert stamp["be_fraction"] == 0.5
+
+
+def test_a_changed_breakeven_fraction_is_refused(monkeypatch):
+    monkeypatch.setattr(arms, "BREAKEVEN_TRIGGER_FRACTION", 0.6)
+    with pytest.raises(arms.FrictionsError, match="be_fraction"):
+        arms.assert_frictions()
