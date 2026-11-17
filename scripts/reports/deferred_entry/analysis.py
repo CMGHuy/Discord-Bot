@@ -8,9 +8,11 @@ to TP1 only and cannot reproduce the live scale-out's R.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from types import SimpleNamespace
 
 import numpy as np
+import pandas as pd
 
 from swingbot.core.backtesting.instrument.stats import (
     WEEK_BOOTSTRAP_RESAMPLES,
@@ -24,6 +26,8 @@ CALIBRATION_MIN = 0.80
 CLASSES = ("loss", "scratch", "win")
 _SIM_CLASS = {"win": "win", "loss": "loss", "scratch": "scratch"}
 _LIVE_EXACT = {"win": "win", "scratch": "scratch", "loss": "loss", "stop": "loss"}
+_SPLITS = (("fill_above", "fill_above_entry", True), ("fill_below", "fill_above_entry", False),
+           ("with_events", "event_day", True), ("without_events", "event_day", False))
 
 
 def live_class(reason) -> str | None:
@@ -99,3 +103,67 @@ def delta_stats(pairs, arm: str, *, n_resamples: int = WEEK_BOOTSTRAP_RESAMPLES,
 def delta_over_taken(pairs, arm: str) -> dict:
     taken = [p for p in pairs if p["arms"][arm]["taken"]]
     return {"n": len(taken), "mean": _mean(_deltas(taken, arm))}
+
+
+def _live_r(pair: dict) -> float | None:
+    value = pair["live"].get("r_realized")
+    return None if value is None else float(value)
+
+
+def _spearman(xs: list[float], ys: list[float]) -> float | None:
+    """Pearson on average ranks; None under 3 points or with a constant side."""
+    if len(xs) < 3:
+        return None
+    rx = pd.Series(xs, dtype=float).rank().to_numpy()
+    ry = pd.Series(ys, dtype=float).rank().to_numpy()
+    if rx.std() == 0 or ry.std() == 0:
+        return None
+    return float(np.corrcoef(rx, ry)[0, 1])
+
+
+def _information(pairs: list[dict]) -> dict:
+    both = [(arm_r(p, "C"), _live_r(p)) for p in pairs if _live_r(p) is not None]
+    return {"mean_r_c": _mean(arm_r(p, "C") for p in pairs),
+            "mean_live_r": _mean(live for _, live in both),
+            "spearman": _spearman([sim for sim, _ in both], [live for _, live in both])}
+
+
+def calibration(pairs) -> dict:
+    """3x3 path-class table of simulated control (outer) against live (inner)."""
+    pairs = list(pairs)
+    table = {sim: {live: 0 for live in CLASSES} for sim in CLASSES}
+    excluded = 0
+    for pair in pairs:
+        sim, live = sim_class(pair["arms"]["C"]["outcome"]), live_class(pair["live"].get("reason"))
+        if sim is None or live is None:
+            excluded += 1
+            continue
+        table[sim][live] += 1
+    n = sum(sum(row.values()) for row in table.values())
+    agreement = sum(table[c][c] for c in CLASSES) / n if n else None
+    return {"table": table, "n": n, "agreement": agreement,
+            "calibrated": agreement is not None and agreement >= CALIBRATION_MIN,
+            "excluded": excluded, **_information(pairs)}
+
+
+def _cell(group: list[dict]) -> dict:
+    return {"n": len(group), "d_a": _mean(_deltas(group, "A")), "d_b": _mean(_deltas(group, "B"))}
+
+
+def weekly_deltas(pairs) -> list[dict]:
+    by_week: dict[str, list[dict]] = defaultdict(list)
+    for pair in pairs:
+        by_week[iso_week_key(pair["entry_date"])].append(pair)
+    return [{"week": week, **_cell(group)} for week, group in sorted(by_week.items())]
+
+
+def split_deltas(pairs) -> dict:
+    """d_A and d_B by fill side of the plan's entry and by event day (None in neither)."""
+    pairs = list(pairs)
+    return {name: _cell([p for p in pairs if p["tradeability"].get(key) is value])
+            for name, key, value in _SPLITS}
+
+
+def skip_summary(pairs) -> dict:
+    skipped = [p for p in pairs if not p["arms"]["B"]["taken"]]
+    return {"skipped": len(skipped), "control_r_of_skipped": _mean(arm_r(p, "C") for p in skipped)}
