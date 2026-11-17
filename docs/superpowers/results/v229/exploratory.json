@@ -1,0 +1,311 @@
+{
+  "archive_last_bar": "2026-11-17T18:05:00+00:00",
+  "arms": {
+    "A": {
+      "exp_r": -0.2788191399551803,
+      "exp_r_gross": -0.18076978182639053,
+      "n": 392,
+      "taken": 392,
+      "total_r": -109.29710286243068,
+      "win_rate": 0.32653061224489793,
+      "wins": 128
+    },
+    "B": {
+      "exp_r": -0.17805181557351987,
+      "exp_r_gross": -0.11018860349897734,
+      "n": 392,
+      "taken": 275,
+      "total_r": -69.79631170481976,
+      "win_rate": 0.3418181818181818,
+      "wins": 94
+    },
+    "C": {
+      "exp_r": -0.11479965699269672,
+      "exp_r_gross": -0.042881014033935225,
+      "n": 392,
+      "taken": 392,
+      "total_r": -45.00146554113709,
+      "win_rate": 0.3622448979591837,
+      "wins": 142
+    }
+  },
+  "b_over_taken": {
+    "mean": -0.49638431864546645,
+    "n": 275
+  },
+  "bearish": {
+    "arms": {
+      "A": {
+        "exp_r": -0.26027276983634895,
+        "exp_r_gross": -0.1696558421287884,
+        "n": 106,
+        "taken": 106,
+        "total_r": -27.588913602652966,
+        "win_rate": 0.4716981132075472,
+        "wins": 50
+      },
+      "B": {
+        "exp_r": -0.1419360390182834,
+        "exp_r_gross": -0.0807687370647145,
+        "n": 106,
+        "taken": 72,
+        "total_r": -15.04522013593803,
+        "win_rate": 0.5,
+        "wins": 36
+      },
+      "C": {
+        "exp_r": -0.10447991123827632,
+        "exp_r_gross": -0.03796078419086509,
+        "n": 106,
+        "taken": 106,
+        "total_r": -11.074870591257287,
+        "win_rate": 0.42452830188679247,
+        "wins": 45
+      }
+    },
+    "d_a": -0.15579285859807251,
+    "d_b": -0.03745612778000701,
+    "n": 106
+  },
+  "buckets": {
+    "midday": 224,
+    "open": 168
+  },
+  "calibration": {
+    "agreement": 0.88,
+    "calibrated": true,
+    "excluded": 92,
+    "mean_live_r": 0.009879062461818392,
+    "mean_r_c": -0.11479965699269672,
+    "n": 300,
+    "spearman": 0.7526827974072817,
+    "table": {
+      "loss": {
+        "loss": 145,
+        "scratch": 3,
+        "win": 2
+      },
+      "scratch": {
+        "loss": 11,
+        "scratch": 45,
+        "win": 10
+      },
+      "win": {
+        "loss": 5,
+        "scratch": 5,
+        "win": 74
+      }
+    }
+  },
+  "close_bucket": {
+    "exp_r": -0.13929319431455908,
+    "n": 24
+  },
+  "deltas": {
+    "A": {
+      "arm": "A",
+      "lower": -0.4000417655240107,
+      "mean": -0.16401948296248364,
+      "n": 392,
+      "p": 0.9047,
+      "weeks": 16
+    },
+    "B": {
+      "arm": "B",
+      "lower": -0.2968587759155027,
+      "mean": -0.06325215858082314,
+      "n": 392,
+      "p": 0.6975,
+      "weeks": 16
+    }
+  },
+  "disclosures": [
+    "Single leg to TP1: no runner, no TP2; the live scale-out is not reproduced.",
+    "The control starts at the first bar at or after opened_at, so a stop-out inside the entry bar is missed: this flatters the control and biases d_A downward on exactly the noise stops tested.",
+    "The live path class comes from the export's last leg only: a TP1 partial whose runner leg is labelled scratch classes as scratch.",
+    "Trades still open at the read date are not in the export and are absent from the population.",
+    "All R is net of frictions; arms A and B pay twice the entry slippage (a market order in the last half hour). Gross R is printed beside and gates nothing.",
+    "Arm B's skip is a mechanical wick touch, not a trader's judgement that the level held."
+  ],
+  "frozen": {
+    "be_fraction": 0.5,
+    "calibration_min": 0.8,
+    "defer_et": "15:30",
+    "deferred_entry_bps_mult": 2,
+    "floor_r": 0.1,
+    "hold_sessions": 5,
+    "lower_pct": 2.5,
+    "min_pairs": 300,
+    "min_weeks": 10,
+    "resamples": 10000,
+    "seed": 42,
+    "window_weeks": 12
+  },
+  "funnel": {
+    "close_bucket": 24,
+    "eligible": 392,
+    "entry_type_unknown": 124,
+    "no_coverage": 10,
+    "not_market": 52,
+    "not_trade": 112,
+    "outside_session": 129,
+    "pending": 43
+  },
+  "git_sha": "5dd375ca454250f6aab5c1f86616dec43e0b40b8",
+  "phase": "exploratory",
+  "rule_hash": "8bbaaa9781535813",
+  "skips": {
+    "control_r_of_skipped": -0.9547935167847912,
+    "skipped": 117
+  },
+  "splits": {
+    "fill_above": {
+      "d_a": -0.6549913471531708,
+      "d_b": -0.6413235455583515,
+      "n": 211
+    },
+    "fill_below": {
+      "d_a": 0.40832893330400793,
+      "d_b": 0.6106321654648039,
+      "n": 181
+    },
+    "with_events": {
+      "d_a": -0.21397488591830657,
+      "d_b": -0.31851597676321075,
+      "n": 47
+    },
+    "without_events": {
+      "d_a": -0.15721396429893675,
+      "d_b": -0.0284770876980051,
+      "n": 345
+    }
+  },
+  "study": "v229-deferred-entry",
+  "t0": "2026-11-17T18:43:37+00:00",
+  "tradeability": {
+    "bar_1530_median": {
+      "open_vs_last_close_r": 0.06437774325490193,
+      "range_r": 0.23570834273991856,
+      "volume": 131882.5
+    },
+    "count_earnings_after_close": 5,
+    "count_entry_bar_stopout": 1,
+    "count_event_day": 47,
+    "count_fomc": 27,
+    "count_monthly_opex": 15,
+    "count_plan_expired": 0,
+    "count_shifted_stop_above_day_low": 240,
+    "first_gap_r": {
+      "A": 0.051547385014547815,
+      "B": 0.028882386643348388,
+      "C": -0.0735106713145739
+    },
+    "gap_through_stop": {
+      "A": 83,
+      "B": 55,
+      "C": 35
+    },
+    "mean_day_low_vs_stop_r": -0.6774012868972137,
+    "mean_fill_vs_entry_r": 0.15307854735662854,
+    "mean_price_1530_vs_entry_r": 0.1542707498421604
+  },
+  "verdict": null,
+  "weekly": [
+    {
+      "d_a": -0.6427737612438572,
+      "d_b": -0.5410219846511662,
+      "n": 52,
+      "week": "2026-W31"
+    },
+    {
+      "d_a": -0.09283336936260358,
+      "d_b": -0.05694940786086384,
+      "n": 38,
+      "week": "2026-W32"
+    },
+    {
+      "d_a": -0.16572520611455296,
+      "d_b": -0.1959901946385129,
+      "n": 17,
+      "week": "2026-W33"
+    },
+    {
+      "d_a": -0.07177819369319809,
+      "d_b": 0.15490044736910197,
+      "n": 10,
+      "week": "2026-W34"
+    },
+    {
+      "d_a": -0.4634319748671182,
+      "d_b": -0.800486493097746,
+      "n": 5,
+      "week": "2026-W35"
+    },
+    {
+      "d_a": -0.27734776947957956,
+      "d_b": -0.27734776947957956,
+      "n": 11,
+      "week": "2026-W36"
+    },
+    {
+      "d_a": -0.022261204676502055,
+      "d_b": 0.25066318290042416,
+      "n": 4,
+      "week": "2026-W37"
+    },
+    {
+      "d_a": 0.4860942541111913,
+      "d_b": 0.21836669259889627,
+      "n": 14,
+      "week": "2026-W38"
+    },
+    {
+      "d_a": -0.04511431459885541,
+      "d_b": -0.04511431459885541,
+      "n": 7,
+      "week": "2026-W39"
+    },
+    {
+      "d_a": 0.3709699578618979,
+      "d_b": -0.03199442673080278,
+      "n": 28,
+      "week": "2026-W40"
+    },
+    {
+      "d_a": 0.3558321965092524,
+      "d_b": 0.3469097142855857,
+      "n": 21,
+      "week": "2026-W41"
+    },
+    {
+      "d_a": -0.6571951653695307,
+      "d_b": -0.4483956401367196,
+      "n": 50,
+      "week": "2026-W42"
+    },
+    {
+      "d_a": -0.05836428637691268,
+      "d_b": 0.4699161627040155,
+      "n": 25,
+      "week": "2026-W43"
+    },
+    {
+      "d_a": -0.16269936541384786,
+      "d_b": 0.21597216330289165,
+      "n": 45,
+      "week": "2026-W44"
+    },
+    {
+      "d_a": 0.21000863437577627,
+      "d_b": 0.31722856796892,
+      "n": 58,
+      "week": "2026-W45"
+    },
+    {
+      "d_a": -1.891558761014624,
+      "d_b": -1.891558761014624,
+      "n": 7,
+      "week": "2026-W46"
+    }
+  ]
+}
