@@ -198,3 +198,7 @@ precedent; the partner or `/panel` may overrule any of them.
 
 - Trades opened in the forward window but still **open** at the verdict date are not in the export (it joins closed journal entries), so they are absent from the verdict population and cannot be counted. With 54% of longs closing the same day and the verdict five sessions past the window, the gap is small but non-zero; the verdict doc discloses it as a limitation. A fix would edit `export_book_rows.sh`, which this plan does not touch.
 - Item 9's single-leg export limitation could understate the `win` class in calibration; V229-13 prints the excluded and `scratch` counts so the partner can judge before the forward read starts.
+
+## Status (2026-11-17)
+
+V229-1..V229-14 done and pushed (code merged `845fdf07`, CI fix `a708c61e`, freeze and T0 in the pre-registration doc, calibrated exploratory read `c19c55a0`, weekly cron installed on the VM). **Resume at V229-15, not before 2027-02-23** (`**Verdict opens:**` in `docs/superpowers/results/2026-11-17-v229-preregistration.md`). Until then nothing in the forward rule or `scripts/reports/deferred_entry/` changes. `/close-out` runs after V229-15 (its row and the cron removal are part of it); the worktree `.claude/worktrees/2026-11-15-v229-deferred-entry-counterfactual` stays until then.
