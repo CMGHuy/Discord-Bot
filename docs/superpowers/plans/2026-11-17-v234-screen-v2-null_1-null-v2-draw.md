@@ -1,25 +1,25 @@
-# v230 Plan 1, Part 3 — the v2 null: panel, cross-section and the draws
+# v234, Part 1 — the v2 null: panel, cross-section and the draws
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V230-7" -A 400 <this file>`).
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V234-2" -A 400 <this file>`).
 
 **Spec:** [2026-11-16-v230-screen-v2-ladder-additive-gate-design.md](../specs/2026-11-16-v230-screen-v2-ladder-additive-gate-design.md) (A2 stages 1–2, market scope, refusals, checkpoint manifest; Constraints: no-lookahead truncation test, golden draws)
-**Index:** [2026-11-16-v230-screen-v2-rescreen_0-index.md](2026-11-16-v230-screen-v2-rescreen_0-index.md) — Goal, Architecture, `## Global Constraints`, `## Parallelisation` and the task ledger live there; every task below obeys them.
-**Tasks:** V230-6..V230-8
+**Index:** [2026-11-17-v234-screen-v2-null_0-index.md](2026-11-17-v234-screen-v2-null_0-index.md) — Goal, Architecture, `## Global Constraints`, `## Parallelisation` and the task ledger live there; every task below obeys them.
+**Tasks:** V234-1..V234-3
 
 What this part builds: the new module `swingbot/core/backtesting/screen/null_v2.py`
-up to its draw pass. V230-6 adds stage 1 (one `TickerPanel` per ticker), the
+up to its draw pass. V234-1 adds stage 1 (one `TickerPanel` per ticker), the
 dates × tickers `CrossSection` with per-date ATR% terciles, and the stage
-checkpoints that refuse a v1 checkpoint. V230-7 adds the ticker-scope draw
+checkpoints that refuse a v1 checkpoint. V234-2 adds the ticker-scope draw
 (pool = other tickers on the same date, same trend state, same ATR% tercile),
 the `SCOPE_MISMATCH` / `NULL_STARVED` refusal, and the golden test pinning one
-v1 draw and one v2 draw. V230-8 adds the market-scope draw (same ticker,
+v1 draw and one v2 draw. V234-3 adds the market-scope draw (same ticker,
 trailing 252 sessions, embargo of `CAP` bars around raw events).
 
 **Runs only if V230-5 recorded `BIAS`** (index `## Handoff`). Every test here
 uses synthetic panels or `helpers.random_walk` frames; nothing reads the real
-cache (Global Constraints: no real idea under v2 before V230-13).
+cache (Global Constraints: no real idea under v2 before V234-8).
 
-Shared private helpers created in V230-7 and reused by V230-8 and V230-9 (same
+Shared private helpers created in V234-2 and reused by V234-3 and V234-4 (same
 file): `_v2_name(idea) -> str`, `_records(event_ticker, event_pos, day,
 null_tickers, null_pos, fills=None) -> list[tuple]`, `_table(records) ->
 pd.DataFrame`, `_events_by_row(xs, booked) -> dict[int, list[tuple[int, int]]]`
@@ -27,9 +27,9 @@ and the accumulator `class _Tally` (`records`, `dropped`, `add(rows)`,
 `mark_date(day, starved: bool)` (dates kept as sets, so a date seen on several
 tickers counts once), `count_slots(m)`, `count_unfilled(m)`, `result() -> DrawResult`).
 
-# Phase 3 — the v2 null, stages 1 and 2
+# Phase 1 — the v2 null, stages 1 and 2
 
-### Task V230-6: v2 panel, cross-section and stage checkpoints
+### Task V234-1: v2 panel, cross-section and stage checkpoints
 
 **Model:** opus — the no-lookahead boundary of the whole v2 null (only race completeness may read the frame's end) and the checkpoint layout every later stage resumes from.
 
@@ -39,7 +39,7 @@ tickers counts once), `count_slots(m)`, `count_unfilled(m)`, `result() -> DrawRe
 
 **Interfaces:**
 - Consumes: existing `null.eligible_mask`, `null.trend_state`. `ctx` is `screen_idea.ticker_context`'s dict (`raw`, `member`, `warm`, `atr`, `trend`, optional `condition`); the module never imports the script.
-- Produces: `NULL_VERSION = "v2"`; `STAGES = ("panel", "draw", "race")`; `STAGE_MANIFEST = "manifest.json"`; `@dataclass(frozen=True, eq=False) TickerPanel(ticker, dates: np.ndarray, eligible, trend, atr_pct, event, control: np.ndarray | None = None, level_bars: np.ndarray | None = None)` (`level_bars` shape (n, 4): Open, High, Low, ATR14[t-1], NaN ATR on row 0); `ticker_panel(ticker, df, ctx, *, cap, control=None, keep_bars=False) -> TickerPanel` (V230-11 passes `control=ctx.get("control_condition")` in avoid mode, `keep_bars=True` for level entries); `@dataclass(frozen=True, eq=False) CrossSection(dates: pd.DatetimeIndex, tickers: tuple[str, ...], eligible, trend, tercile, event, control, pos)` (arrays shape (dates, tickers); `tercile` int8, -1 where ATR% is not finite or the date has no eligible ticker; `pos` int32 own-frame position, -1 absent; `control` None when no panel carries one); `atr_terciles(atr_pct_row, eligible_row) -> np.ndarray`; `cross_section(panels: Mapping[str, TickerPanel]) -> CrossSection`; `class StageCheckpoint(directory)` (`load(key)`, `save(key, obj)`, `done() -> set[str]`; no-op when `directory` is None); `open_stage(root, stage, manifest, out=print) -> StageCheckpoint`; `resumable_map(keys, fn, *, checkpoint, out=print, label="") -> dict`.
+- Produces: `NULL_VERSION = "v2"`; `STAGES = ("panel", "draw", "race")`; `STAGE_MANIFEST = "manifest.json"`; `@dataclass(frozen=True, eq=False) TickerPanel(ticker, dates: np.ndarray, eligible, trend, atr_pct, event, control: np.ndarray | None = None, level_bars: np.ndarray | None = None)` (`level_bars` shape (n, 4): Open, High, Low, ATR14[t-1], NaN ATR on row 0); `ticker_panel(ticker, df, ctx, *, cap, control=None, keep_bars=False) -> TickerPanel` (V234-6 passes `control=ctx.get("control_condition")` in avoid mode, `keep_bars=True` for level entries); `@dataclass(frozen=True, eq=False) CrossSection(dates: pd.DatetimeIndex, tickers: tuple[str, ...], eligible, trend, tercile, event, control, pos)` (arrays shape (dates, tickers); `tercile` int8, -1 where ATR% is not finite or the date has no eligible ticker; `pos` int32 own-frame position, -1 absent; `control` None when no panel carries one); `atr_terciles(atr_pct_row, eligible_row) -> np.ndarray`; `cross_section(panels: Mapping[str, TickerPanel]) -> CrossSection`; `class StageCheckpoint(directory)` (`load(key)`, `save(key, obj)`, `done() -> set[str]`; no-op when `directory` is None); `open_stage(root, stage, manifest, out=print) -> StageCheckpoint`; `resumable_map(keys, fn, *, checkpoint, out=print, label="") -> dict`.
 
 **Tercile rule (builder call):** cut points are the 1/3 and 2/3 quantiles of
 the date's **eligible** ATR%; every finite ATR% gets `(v > q1) + (v > q2)`.
@@ -493,7 +493,7 @@ git add swingbot/core/backtesting/screen/null_v2.py tests/backtesting/screen/tes
 git commit -m "feat(v230): v2 null stage 1 -- ticker panels, cross-section, stage checkpoints"
 ```
 
-### Task V230-7: v2 ticker-scope draw, refusals and the golden draws
+### Task V234-2: v2 ticker-scope draw, refusals and the golden draws
 
 **Model:** opus — the pool definition that replaces v1's same-month draw, its seed and consumption order, and the golden pins every later null change is judged against.
 
@@ -504,8 +504,8 @@ git commit -m "feat(v230): v2 null stage 1 -- ticker panels, cross-section, stag
 - Create: `tests/backtesting/screen/golden/null_draws.json` (written once by the golden module's `--write`)
 
 **Interfaces:**
-- Consumes: V230-6 `TickerPanel`, `CrossSection`, `cross_section`, `ticker_panel`; existing `null.K`, `null.MIN_CANDIDATES`, `null.null_seed`, `null.draw_groups`.
-- Produces: `DRAW_COLUMNS = ("event_ticker", "event_pos", "event_date", "null_ticker", "null_pos", "fill")` (`event_pos` / `null_pos` are positions in each ticker's own frame; `fill` NaN on next-open draws); `date_seed(idea, day) -> list`; `ticker_pool(xs, row, col, *, require_control=False) -> np.ndarray` (column indices; `ValueError` when control is required and `xs.control` is None); `@dataclass(frozen=True) DrawResult(table, dropped: Counter, event_dates, starved_dates, slots, unfilled)` (`dropped` counts dropped events **per event ticker**, so V230-11 sets each `V2Ticker.counters["dropped_no_match"]` from it); `draw_ticker_scope(xs, booked, *, idea: str, k=null.K) -> DrawResult` (`booked`: event ticker → its kept event positions; an unknown ticker is a `ValueError`); `SCOPE_MISMATCH`, `NULL_STARVED`, `STARVED_SHARE = 0.5`; `class NullRefusal(ValueError)` (`.code`; `str(exc)` is `"<code>: <detail>"`, which V230-12 prints after `refused: `); `check_starvation(result, scope) -> None`. Private, reused by V230-8/9: `_v2_name`, `_records`, `_table`, `_events_by_row`, `_Tally` (see the part header).
+- Consumes: V234-1 `TickerPanel`, `CrossSection`, `cross_section`, `ticker_panel`; existing `null.K`, `null.MIN_CANDIDATES`, `null.null_seed`, `null.draw_groups`.
+- Produces: `DRAW_COLUMNS = ("event_ticker", "event_pos", "event_date", "null_ticker", "null_pos", "fill")` (`event_pos` / `null_pos` are positions in each ticker's own frame; `fill` NaN on next-open draws); `date_seed(idea, day) -> list`; `ticker_pool(xs, row, col, *, require_control=False) -> np.ndarray` (column indices; `ValueError` when control is required and `xs.control` is None); `@dataclass(frozen=True) DrawResult(table, dropped: Counter, event_dates, starved_dates, slots, unfilled)` (`dropped` counts dropped events **per event ticker**, so V234-6 sets each `V2Ticker.counters["dropped_no_match"]` from it); `draw_ticker_scope(xs, booked, *, idea: str, k=null.K) -> DrawResult` (`booked`: event ticker → its kept event positions; an unknown ticker is a `ValueError`); `SCOPE_MISMATCH`, `NULL_STARVED`, `STARVED_SHARE = 0.5`; `class NullRefusal(ValueError)` (`.code`; `str(exc)` is `"<code>: <detail>"`, which V234-7 prints after `refused: `); `check_starvation(result, scope) -> None`. Private, reused by V234-3/9: `_v2_name`, `_records`, `_table`, `_events_by_row`, `_Tally` (see the part header).
 
 An event whose pool is under the floor consumes nothing from the date's
 generator (as v1); a date is starved when any of its events was dropped;
@@ -833,11 +833,11 @@ Create `tests/backtesting/screen/test_null_golden.py`:
 
 ```python
 """v230: golden draws -- one v1 draw (null.draw_groups, next-open) and one
-v2 draw (null_v2.draw_ticker_scope), captured once at V230-7 and compared
+v2 draw (null_v2.draw_ticker_scope), captured once at V234-2 and compared
 exactly. Never regenerate the file to make this pass: a changed draw is a
 changed null, and v1 is frozen.
 
-    python tests/backtesting/screen/test_null_golden.py --write   # V230-7 only
+    python tests/backtesting/screen/test_null_golden.py --write   # V234-2 only
 
 Inputs are integer draws and exact divisions, the same bits on every OS.
 k = 3 / 4 keeps every pool larger than the draw, so the generator is pinned."""
@@ -926,7 +926,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write", action="store_true")
     if not parser.parse_args(argv).write:
-        parser.error("pass --write to capture the golden draws (V230-7 only)")
+        parser.error("pass --write to capture the golden draws (V234-2 only)")
     GOLDEN_PATH.parent.mkdir(parents=True, exist_ok=True)
     GOLDEN_PATH.write_text(json.dumps(capture(), indent=1) + "\n",
                            encoding="utf-8", newline="\n")
@@ -956,7 +956,7 @@ git add swingbot/core/backtesting/screen/null_v2.py tests/backtesting/screen/tes
 git commit -m "feat(v230): v2 ticker-scope draw, starvation refusals, golden v1/v2 draws"
 ```
 
-### Task V230-8: v2 market-scope draw
+### Task V234-3: v2 market-scope draw
 
 **Model:** opus — the trailing pool and its embargo decide whether a market-wide trigger's null can see the future; the edge is subtle (events after *t*).
 
@@ -965,8 +965,8 @@ git commit -m "feat(v230): v2 ticker-scope draw, starvation refusals, golden v1/
 - Test: `tests/backtesting/screen/test_null_v2_market.py` (create)
 
 **Interfaces:**
-- Consumes: V230-6 `TickerPanel`; V230-7 `DrawResult`, `check_starvation`, `NullRefusal`, `NULL_STARVED`, `_v2_name`, `_records`, `_Tally` (`mark_date`, `count_slots`, `add`, `dropped`, `result()`); existing `null.K`, `null.MIN_CANDIDATES`, `null.null_seed`.
-- Produces: `TRAILING_DAYS = 252`; `market_pool(panel, pos, *, cap) -> np.ndarray` (own-frame positions); `draw_market_scope(panels: Mapping[str, TickerPanel], booked: Mapping[str, array], *, idea: str, cap: int, k=null.K) -> DrawResult` (`null_ticker == event_ticker`; `fill` NaN; `event_dates` / `starved_dates` count distinct dates across tickers; `dropped` per event ticker). V230-9's `draw` dispatches `idea.scope == "market"` here and then calls `check_starvation(result, "market")`.
+- Consumes: V234-1 `TickerPanel`; V234-2 `DrawResult`, `check_starvation`, `NullRefusal`, `NULL_STARVED`, `_v2_name`, `_records`, `_Tally` (`mark_date`, `count_slots`, `add`, `dropped`, `result()`); existing `null.K`, `null.MIN_CANDIDATES`, `null.null_seed`.
+- Produces: `TRAILING_DAYS = 252`; `market_pool(panel, pos, *, cap) -> np.ndarray` (own-frame positions); `draw_market_scope(panels: Mapping[str, TickerPanel], booked: Mapping[str, array], *, idea: str, cap: int, k=null.K) -> DrawResult` (`null_ticker == event_ticker`; `fill` NaN; `event_dates` / `starved_dates` count distinct dates across tickers; `dropped` per event ticker). V234-4's `draw` dispatches `idea.scope == "market"` here and then calls `check_starvation(result, "market")`.
 
 **Pool (spec A2, index Global Constraints):** for an event at own position
 `pos`, the positions `p` in `[pos - 252, pos)` that are eligible, share the

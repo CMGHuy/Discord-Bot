@@ -1,23 +1,23 @@
-# v230 Plan 1, Part 4 — the v2 null: level and avoid draws, the race pass and the orchestration
+# v234, Part 2 — the v2 null: level and avoid draws, the race pass and the orchestration
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V230-10" -A 400 <this file>`).
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V234-5" -A 400 <this file>`).
 
 **Spec:** [2026-11-16-v230-screen-v2-ladder-additive-gate-design.md](../specs/2026-11-16-v230-screen-v2-ladder-additive-gate-design.md) (A2: level-entry and avoid-control paths, stage 3 race pass, one frame resident, checkpoint manifest with `null_version`, `SCOPE` and stage; Found while briefing: descriptive blocks computed per null bar on its own frame)
-**Index:** [2026-11-16-v230-screen-v2-rescreen_0-index.md](2026-11-16-v230-screen-v2-rescreen_0-index.md) — Goal, Architecture, `## Global Constraints`, `## Parallelisation` and the task ledger live there; every task below obeys them.
-**Tasks:** V230-9..V230-11
+**Index:** [2026-11-17-v234-screen-v2-null_0-index.md](2026-11-17-v234-screen-v2-null_0-index.md) — Goal, Architecture, `## Global Constraints`, `## Parallelisation` and the task ledger live there; every task below obeys them.
+**Tasks:** V234-4..V234-6
 
-What this part builds: V230-9 finishes stage 2 of `null_v2.py` (the
+What this part builds: V234-4 finishes stage 2 of `null_v2.py` (the
 level-entry draw on the null ticker's own bars and ATR14, the avoid control
-draw, and the `draw` dispatcher that ends in `check_starvation`). V230-10 adds
+draw, and the `draw` dispatcher that ends in `check_starvation`). V234-5 adds
 stage 3 (`race_pass`, one null ticker's frame resident at a time, per-ticker
-checkpoints) and `scatter` back to events. V230-11 adds
+checkpoints) and `scatter` back to events. V234-6 adds
 `screen/screen_v2.py`: `run_v2` runs the three stages with staged checkpoints
-and returns one `V2Ticker` per event ticker for V230-12's `TickerScreen`
+and returns one `V2Ticker` per event ticker for V234-7's `TickerScreen`
 adapter.
 
 **Runs only if V230-5 recorded `BIAS`** (index `## Handoff`). Every test here
 uses synthetic panels or `helpers.random_walk` frames; nothing reads the real
-cache (Global Constraints: no real idea under v2 before V230-13).
+cache (Global Constraints: no real idea under v2 before V234-8).
 
 **Contracts this part adds beyond the ledger rows** (Parts 5–6 rely on them):
 
@@ -28,7 +28,7 @@ cache (Global Constraints: no real idea under v2 before V230-13).
   (table.null_pos < 0).sum()`. An event with no filled slot keeps its rows
   and is counted in `dropped` (v1: `group.size == 0` drops the event).
   Next-open, market and control tables never hold such rows.
-- **`race_pass`** keeps every input column (V230-11 adds an `arm` column) and
+- **`race_pass`** keeps every input column (V234-6 adds an `arm` column) and
   the input row order; rows with `null_pos < 0` are not raced
   (`r = gross_r = NaN`, `outcome = "unfilled"`, `fwd_<h> = NaN`). A ticker's
   rows are all level (`fill` finite) or all next-open (`fill` NaN); a mix is a
@@ -52,9 +52,9 @@ cache (Global Constraints: no real idea under v2 before V230-13).
   None; `avoid_control` holds the control rows (same keys as `events`) for
   avoid ideas only, else None.
 
-# Phase 4 — the v2 null, stage 2 paths and stage 3
+# Phase 2 — the v2 null, stage 2 paths and stage 3
 
-### Task V230-9: v2 level-entry and avoid-control draws, and the dispatcher
+### Task V234-4: v2 level-entry and avoid-control draws, and the dispatcher
 
 **Model:** opus — the level path reproduces v1's fill and replacement-stream semantics on another ticker's bars, and the dispatcher is the one place the refusal fires before any race.
 
@@ -63,7 +63,7 @@ cache (Global Constraints: no real idea under v2 before V230-13).
 - Test: `tests/backtesting/screen/test_null_v2_level.py` (create)
 
 **Interfaces:**
-- Consumes: V230-1 `Idea.scope`; V230-6 `TickerPanel.level_bars`, `cross_section`; V230-7 `ticker_pool`, `date_seed`, `DrawResult`, `draw_ticker_scope`, `check_starvation`, `NullRefusal`, `SCOPE_MISMATCH`, `NULL_STARVED`, `_v2_name`, `_records`, `_events_by_row`, `_Tally`; V230-8 `draw_market_scope`; existing `null.K`, `null.MIN_CANDIDATES`, `null.null_seed`, `null.child_seed`, `null._null_fills` (test only).
+- Consumes: V230-1 `Idea.scope`; V234-1 `TickerPanel.level_bars`, `cross_section`; V234-2 `ticker_pool`, `date_seed`, `DrawResult`, `draw_ticker_scope`, `check_starvation`, `NullRefusal`, `SCOPE_MISMATCH`, `NULL_STARVED`, `_v2_name`, `_records`, `_events_by_row`, `_Tally`; V234-3 `draw_market_scope`; existing `null.K`, `null.MIN_CANDIDATES`, `null.null_seed`, `null.child_seed`, `null._null_fills` (test only).
 - Produces: `level_fill(bar_row, depth, direction) -> float`; `draw_ticker_level(xs, panels, booked, depths: Mapping[str, array], *, idea: str, direction: str, k=null.K) -> DrawResult`; `draw_control(xs, booked, *, idea: str, k=null.K) -> DrawResult`; `draw(xs, panels, booked, *, idea: Idea, depths=None) -> DrawResult` (`xs` may be None for a market-scope idea). Unfilled level slots are rows with `null_ticker = ""`, `null_pos = -1` (part header).
 
 **Level rules (spec A2, v1 `null._draw_level`):** per date, the main
@@ -469,7 +469,7 @@ git add swingbot/core/backtesting/screen/null_v2.py tests/backtesting/screen/tes
 git commit -m "feat(v230): v2 level-entry and avoid-control draws and the stage-2 dispatcher"
 ```
 
-### Task V230-10: v2 race pass and scatter
+### Task V234-5: v2 race pass and scatter
 
 **Model:** opus — stage 3 must race each null bar on its own ticker's frame and ATR14 with the idea's exact race (shape, direction, costs, level factor) while holding one frame at a time and resuming per ticker.
 
@@ -478,7 +478,7 @@ git commit -m "feat(v230): v2 level-entry and avoid-control draws and the stage-
 - Test: `tests/backtesting/screen/test_null_v2_race.py` (create)
 
 **Interfaces:**
-- Consumes: V230-6 `StageCheckpoint`, `open_stage`, `resumable_map`; V230-7 `DRAW_COLUMNS`, `_table` (test fixtures); V230-9's blank level rows (`null_pos = -1`); existing `race.race_for`, `race.LEVEL_SLIPPAGE_FACTOR`, `forward.forward_atr`, `forward.HORIZONS`.
+- Consumes: V234-1 `StageCheckpoint`, `open_stage`, `resumable_map`; V234-2 `DRAW_COLUMNS`, `_table` (test fixtures); V234-4's blank level rows (`null_pos = -1`); existing `race.race_for`, `race.LEVEL_SLIPPAGE_FACTOR`, `forward.forward_atr`, `forward.HORIZONS`.
 - Produces: `UNFILLED = "unfilled"`; `race_pass(table, load, *, shape, cap, direction, costs, level_factor=race.LEVEL_SLIPPAGE_FACTOR, horizons=forward.HORIZONS, checkpoint=None, out=print) -> pd.DataFrame` (`table` has a unique index; `load(ticker) -> tuple[pd.DataFrame, pd.Series] | None`, the frame and its ATR14; output = every input column in input order plus `r`, `gross_r`, `outcome`, `fwd_<h>`, rows in input order); `@dataclass(frozen=True) EventNull(mean_r, mean_gross_r, outcomes: Counter, fwd: dict[int, float], timeout_r: tuple, slots: int, unfilled: int)`; `scatter(raced) -> dict[tuple[str, int], EventNull]` (horizons read from the `fwd_<h>` columns).
 
 **Race rules (spec A2 stage 3, v1 `null.matched_null` tail):** rows with
@@ -828,16 +828,16 @@ git add swingbot/core/backtesting/screen/null_v2.py tests/backtesting/screen/tes
 git commit -m "feat(v230): v2 null stage 3 -- race pass per null ticker and scatter to events"
 ```
 
-### Task V230-11: v2 orchestration with staged checkpoints
+### Task V234-6: v2 orchestration with staged checkpoints
 
-**Model:** opus — wires the three stages into one resumable run and decides which v1 per-ticker fields survive a cross-ticker null; V230-12's adapter and every v2 verdict read its output.
+**Model:** opus — wires the three stages into one resumable run and decides which v1 per-ticker fields survive a cross-ticker null; V234-7's adapter and every v2 verdict read its output.
 
 **Files:**
 - Create: `swingbot/core/backtesting/screen/screen_v2.py`
 - Test: `tests/backtesting/screen/test_screen_v2.py` (create)
 
 **Interfaces:**
-- Consumes: V230-1 `Idea.scope`; V230-6 `ticker_panel`, `cross_section`, `open_stage`, `resumable_map`; V230-7 `NullRefusal`, `draw_ticker_scope` (test); V230-9 `draw`, `draw_control`; V230-10 `race_pass`, `scatter`, `EventNull`; existing `race.run_book`, `race.level_fills`, `forward.forward_atr`, `indicators.atr`.
+- Consumes: V230-1 `Idea.scope`; V234-1 `ticker_panel`, `cross_section`, `open_stage`, `resumable_map`; V234-2 `NullRefusal`, `draw_ticker_scope` (test); V234-4 `draw`, `draw_control`; V234-5 `race_pass`, `scatter`, `EventNull`; existing `race.run_book`, `race.level_fills`, `forward.forward_atr`, `indicators.atr`.
 - Produces: `@dataclass(frozen=True) V2Inputs(load, context, extras)`; `@dataclass V2Ticker(ticker, counters, events, null_outcomes, excess, extras, null_timeout_r, null_slots, null_unfilled, depths, avoid_control)`; event row keys `ticker, entry_date, exit_date, r_event, r_null, outcome, cost_event, cost_null` (`cost_* = gross_r - r`, the mean over filled slots for the null); `run_v2(idea, names, inputs, *, costs, checkpoint_dir=None, manifest=None, out=print, event_tickers=None) -> list[V2Ticker]` (sorted by ticker, event tickers that loaded only). Counters, stage keys, `extras` context and kept-event rule: part header.
 
 **Run (spec A2, index Decisions):** `names` is the whole cached universe (the
