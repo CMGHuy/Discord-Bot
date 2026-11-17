@@ -52,6 +52,7 @@ import { MetricChip } from '../../ui/metric-chip';
 import { PaginationComponent } from '../../ui/pagination';
 import { Page } from '../../ui/page';
 import { riskUnits } from '../../ui/risk-units';
+import { ExcursionEstimate } from '../../ui/excursion-estimate';
 import { PanelError } from '../../ui/panel-error';
 import { PanelGrid } from '../../ui/panel-grid';
 import { PanelHeader } from '../../ui/panel-header';
@@ -191,6 +192,7 @@ interface ContractRow {
     Panel,
     PaginationComponent,
     Page,
+    ExcursionEstimate,
     PanelError,
     PanelGrid,
     PanelHeader,
@@ -678,6 +680,9 @@ interface ContractRow {
       <sb-panel-header title="Sample panel" [n]="128" hint="Definition text for this metric." [tableable]="true" total="42 rows" />
       <sb-panel-error message="Request timed out" />
       <sb-share-bar label="Win / loss" [segments]="shareBarSegments" />
+    </sb-panel>
+    <sb-panel heading="Excursion estimate marker (v228)">
+      <sb-excursion-est />
     </sb-panel>
     <sb-panel heading="Chart tooltip (static demo state)">
       <div class="tooltip-demo">
