@@ -135,3 +135,89 @@ def test_week_count_counts_distinct_iso_weeks():
     pairs = [_pair("t-1", "2026-11-02", 0, 0, 0), _pair("t-2", "2026-11-06", 0, 0, 0),
              _pair("t-3", "2026-11-09", 0, 0, 0)]
     assert analysis.week_count(pairs) == 2 and analysis.week_count([]) == 0
+
+
+def _calibration_book(agree, disagree):
+    pairs = [_pair(f"a-{i}", WEEKS[0], -1.0, 0.0, 0.0) for i in range(agree)]          # loss / loss
+    pairs += [_pair(f"d-{i}", WEEKS[0], -1.0, 0.0, 0.0, live_reason="tp1_partial") for i in range(disagree)]
+    return pairs
+
+
+def test_calibration_at_exactly_80_percent_is_calibrated():
+    out = analysis.calibration(_calibration_book(8, 2))
+    assert out["table"]["loss"] == {"loss": 8, "scratch": 0, "win": 2}     # outer = simulated
+    assert out["table"]["win"] == {"loss": 0, "scratch": 0, "win": 0}
+    assert out["n"] == 10 and out["agreement"] == pytest.approx(0.8) and out["calibrated"] is True
+
+
+def test_calibration_below_80_percent_is_not_calibrated():
+    out = analysis.calibration(_calibration_book(7, 3))
+    assert out["agreement"] == pytest.approx(0.7) and out["calibrated"] is False
+
+
+def test_unclassifiable_pairs_are_excluded_and_counted():
+    pairs = [_pair("t-1", WEEKS[0], 0.3, 0.0, 0.0, c_outcome="timeout"),
+             _pair("t-2", WEEKS[0], -1.0, 0.0, 0.0, live_reason="manual"),
+             _pair("t-3", WEEKS[0], 1.9, 0.0, 0.0, c_outcome="win", live_reason="tp1_runner_be"),
+             _pair("t-4", WEEKS[0], -0.02, 0.0, 0.0, c_outcome="scratch", live_reason="scratch")]
+    out = analysis.calibration(pairs)
+    assert out["excluded"] == 2 and out["n"] == 2 and out["agreement"] == pytest.approx(1.0)
+    assert out["table"]["win"]["win"] == 1 and out["table"]["scratch"]["scratch"] == 1
+
+
+def test_calibration_on_no_pairs_is_uncalibrated_with_no_agreement():
+    out = analysis.calibration([])
+    assert out["n"] == 0 and out["agreement"] is None and out["calibrated"] is False
+    assert out["excluded"] == 0
+    assert out["mean_r_c"] is None and out["mean_live_r"] is None and out["spearman"] is None
+
+
+def test_calibration_prints_means_and_rank_correlation_for_information():
+    pairs = [_pair(f"t-{i}", WEEKS[0], r, 0.0, 0.0, live_r=r * 2) for i, r in enumerate((-1.0, 0.0, 1.0, 2.0))]
+    pairs.append(_pair("t-x", WEEKS[0], 5.0, 0.0, 0.0, live_r=None))
+    out = analysis.calibration(pairs)
+    assert out["mean_r_c"] == pytest.approx(7.0 / 5)          # every pair
+    assert out["mean_live_r"] == pytest.approx(1.0)           # (-2 + 0 + 2 + 4) / 4, live R present
+    assert out["spearman"] == pytest.approx(1.0)
+
+
+def test_spearman_needs_three_points_and_variation():
+    two = [_pair(f"t-{i}", WEEKS[0], float(i), 0.0, 0.0, live_r=float(i)) for i in range(2)]
+    flat = [_pair(f"t-{i}", WEEKS[0], float(i), 0.0, 0.0, live_r=1.0) for i in range(4)]
+    assert analysis.calibration(two)["spearman"] is None
+    assert analysis.calibration(flat)["spearman"] is None
+
+
+def test_spearman_does_not_import_scipy(monkeypatch):
+    monkeypatch.setitem(sys.modules, "scipy", None)            # any scipy import now raises
+    pairs = [_pair(f"t-{i}", WEEKS[0], r, 0.0, 0.0, live_r=-r) for i, r in enumerate((0.0, 1.0, 2.0))]
+    assert analysis.calibration(pairs)["spearman"] == pytest.approx(-1.0)
+
+
+def test_weekly_deltas_are_sorted_by_week():
+    pairs = [_pair("t-1", WEEKS[1], -1.0, 1.0, 0.0), _pair("t-2", WEEKS[0], 0.0, 1.0, -1.0),
+             _pair("t-3", WEEKS[1], -1.0, -1.0, 0.0, b_taken=False)]
+    assert analysis.weekly_deltas(pairs) == [
+        {"week": "2026-W45", "n": 1, "d_a": pytest.approx(1.0), "d_b": pytest.approx(-1.0)},
+        {"week": "2026-W46", "n": 2, "d_a": pytest.approx(1.0), "d_b": pytest.approx(1.0)},
+    ]
+    assert analysis.weekly_deltas([]) == []
+
+
+def test_split_deltas_by_fill_side_and_event_day():
+    pairs = [_pair("t-1", WEEKS[0], -1.0, 1.0, 1.0, above=True),
+             _pair("t-2", WEEKS[0], 0.0, -1.0, -1.0, above=False, event=True),
+             _pair("t-3", WEEKS[0], 0.0, 0.0, 0.0, above=None)]
+    out = analysis.split_deltas(pairs)
+    assert out["fill_above"] == {"n": 1, "d_a": pytest.approx(2.0), "d_b": pytest.approx(2.0)}
+    assert out["fill_below"]["n"] == 1 and out["fill_below"]["d_a"] == pytest.approx(-1.0)
+    assert out["with_events"]["n"] == 1 and out["without_events"]["n"] == 2
+    assert analysis.split_deltas([])["fill_above"] == {"n": 0, "d_a": None, "d_b": None}
+
+
+def test_skip_summary_reports_the_control_result_of_skipped_plans():
+    pairs = [_pair("t-1", WEEKS[0], -1.0, 0.0, 0.0, b_taken=False),
+             _pair("t-2", WEEKS[0], 0.0, 0.0, 0.0, b_taken=False),
+             _pair("t-3", WEEKS[0], 2.0, 0.0, 1.0)]
+    assert analysis.skip_summary(pairs) == {"skipped": 2, "control_r_of_skipped": pytest.approx(-0.5)}
+    assert analysis.skip_summary([]) == {"skipped": 0, "control_r_of_skipped": None}
