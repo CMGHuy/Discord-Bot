@@ -21,12 +21,6 @@ DEFAULT_BALANCE = 10_000.0
 EXCURSION_OMITTED_NOTE = ("excursion cells left out (--no-excursion-cells): the export has no "
                           "excursion_source column, so give-back is not computed")
 _GIVEBACK_TITLE = "## Give-back (mfe_r minus gross R, intraday-measured trades)"
-
-
-def _giveback(trades: list, excursion_cells: bool) -> dict:
-    if excursion_cells:
-        return exits.giveback_summary(trades)
-    return {"n": 0, "mean": None, "median": None, "dropped": len(trades), "omitted": True}
 REJECTION_LINES = 8
 BAR_CUT_NAMES = frozenset(name for name, _ in bars.bar_cuts())
 NOTES = (
@@ -119,6 +113,12 @@ def _with_hour_coverage(items: list[dict], coverage: dict) -> list[dict]:
         if item["cut"].startswith("alert_hour"):
             item["hour_coverage"] = dict(coverage)
     return items
+
+
+def _giveback(trades: list, excursion_cells: bool) -> dict:
+    if excursion_cells:
+        return exits.giveback_summary(trades)
+    return {"n": 0, "mean": None, "median": None, "dropped": len(trades), "omitted": True}
 
 
 def build_report(rows: list, rejections: list, *, bars_dir: Path | None, n_resamples: int,

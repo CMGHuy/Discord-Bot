@@ -44,6 +44,8 @@ _NO_EXCURSION_SHAPES = (PRE_EXCURSION_COLUMNS, LEGACY_EXPORT_COLUMNS)
 
 class MissingExcursionColumn(ValueError):
     """An export written before v228: its mfe_r / mae_r cannot be told daily from intraday."""
+
+
 REJECTION_COLUMNS = ("date", "reason", "count")
 
 #: Below this fraction of the entry the stop is no longer the planned risk
