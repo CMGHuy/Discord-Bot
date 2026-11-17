@@ -138,3 +138,82 @@ def test_end_to_end_on_real_modules_logs_one_flat_pair(tmp_path, monkeypatch, ca
     assert pair["rule_hash"] == verdict.rule_hash() and set(pair["arms"]) == {"C", "A", "B"}
     assert pair["entry_date"] == "2026-11-02" and pair["bucket"] == "open"
     json.dumps(pair, allow_nan=False)
+
+
+def test_exploratory_writes_both_outputs_once(tmp_path, fake_book, capsys):
+    fake_book.rows = [_row("t-1", "2026-11-02", "eligible"), _row("t-2", "2026-11-10", "eligible"),
+                      _row("t-3", "2026-11-03", "eligible", direction="bearish"),
+                      _row("t-4", "2026-11-04", "close_bucket", r="0.5"), _row("t-5", "2026-11-24", "eligible")]
+    assert _run(tmp_path, "exploratory") == 0
+    assert "v229 exploratory: n=2" in capsys.readouterr().out
+    payload = json.loads((tmp_path / "out" / "exploratory.json").read_text(encoding="utf-8"))
+    assert payload["phase"] == "exploratory" and payload["arms"]["C"]["n"] == 2 and payload["verdict"] is None
+    assert payload["bearish"]["n"] == 1 and payload["close_bucket"] == {"n": 1, "exp_r": 0.5}
+    assert payload["funnel"] == {"eligible": 2, "close_bucket": 1} and payload["git_sha"] == "abc1234"
+    assert "EXPLORATORY" in (tmp_path / "out" / "exploratory.md").read_text(encoding="utf-8")
+    assert "t-3" not in pairlog.read_pairs(tmp_path / "pairs.jsonl")      # bearish never logged
+    assert _run(tmp_path, "exploratory") == 2                              # the read runs once
+    assert "once" in capsys.readouterr().err
+
+
+def test_an_uncalibrated_exploratory_read_carries_the_inconclusive_close(tmp_path, fake_book, monkeypatch):
+    fake_book.rows = [_row("t-1", "2026-11-02", "eligible")]
+    hand_built = cli.pairs_mod.build_pair
+
+    def disagreeing(row, frame, **kw):
+        pair = hand_built(row, frame, **kw)
+        pair["live"]["reason"] = "tp1_partial"                             # simulated loss, live TP1
+        return pair
+
+    monkeypatch.setattr(cli.pairs_mod, "build_pair", disagreeing)
+    assert _run(tmp_path, "exploratory") == 0
+    payload = json.loads((tmp_path / "out" / "exploratory.json").read_text(encoding="utf-8"))
+    assert payload["verdict"]["ledger"] == {"verdict": "INCONCLUSIVE", "n": 1, "exp_r": None, "p": None}
+    assert "UNCALIBRATED" in (tmp_path / "out" / "exploratory.md").read_text(encoding="utf-8")
+
+
+def test_exploratory_with_no_exploratory_pairs_is_refused(tmp_path, fake_book, capsys):
+    fake_book.rows = [_row("t-1", "2026-11-24", "eligible")]
+    assert _run(tmp_path, "exploratory") == 2
+    assert "no exploratory pairs" in capsys.readouterr().err
+    assert not (tmp_path / "out" / "exploratory.json").exists()
+
+
+def test_the_verdict_is_refused_before_its_open_date(tmp_path, fake_book, capsys):
+    fake_book.rows = [_row("t-1", "2026-11-24", "eligible")]
+    assert _run(tmp_path, "verdict", "--today", "2027-02-22") == 2
+    assert "2027-02-23" in capsys.readouterr().err
+    assert not (tmp_path / "out" / "forward-verdict.json").exists()
+
+
+def test_the_verdict_is_written_once_on_its_open_date(tmp_path, fake_book, capsys):
+    fake_book.rows = [_row("t-1", "2026-11-24", "eligible"), _row("t-2", "2026-12-01", "eligible"),
+                      _row("t-0", "2026-11-02", "eligible")]                # exploratory: not in the verdict
+    assert _run(tmp_path, "verdict", "--today", "2027-02-23") == 0
+    payload = json.loads((tmp_path / "out" / "forward-verdict.json").read_text(encoding="utf-8"))
+    assert payload["phase"] == "forward" and payload["verdict"]["study"] == "UNDERPOWERED"
+    assert payload["verdict"]["ledger"]["verdict"] == "NO-LIFT" and payload["verdict"]["ledger"]["n"] == 2
+    assert "VERDICT: UNDERPOWERED" in (tmp_path / "out" / "forward-verdict.md").read_text(encoding="utf-8")
+    assert "v229 verdict: UNDERPOWERED (ledger NO-LIFT, n=2" in capsys.readouterr().out
+    assert _run(tmp_path, "verdict", "--today", "2027-02-23") == 2                # computed once
+
+
+def test_the_verdict_is_refused_once_the_ledger_holds_the_row(tmp_path, fake_book, capsys):
+    (tmp_path / "ledger.jsonl").write_text(json.dumps({
+        "id": verdict.LEDGER_ID, "date": "2027-02-23", "hypothesis": "h", "instrument": "v1", "n": 400,
+        "exp_r": 0.1, "p": 0.2, "verdict": "NO-LIFT", "record": "docs/x.md"}) + "\n", encoding="utf-8")
+    assert _run(tmp_path, "verdict", "--today", "2027-03-01") == 2
+    assert "already" in capsys.readouterr().err
+
+
+def test_the_verdict_refuses_a_log_written_under_another_rule(tmp_path, fake_book, capsys):
+    stale = {**_pair("t-9", "2026-11-25"), "rule_hash": "ffffffffffffffff"}
+    pairlog.append_pair(tmp_path / "pairs.jsonl", stale)
+    fake_book.rows = [_row("t-1", "2026-11-24", "eligible")]
+    assert _run(tmp_path, "verdict", "--today", "2027-02-23") == 2
+    assert "another rule" in capsys.readouterr().err
+
+
+def test_every_mode_is_offered():
+    args = cli.build_parser().parse_args(["--mode", "verdict", "--rows", "r.csv", "--t0", T0])
+    assert args.mode == "verdict" and set(cli.MODES) == {"exploratory", "verdict"}
