@@ -16,6 +16,9 @@ from swingbot.core.backtesting.screen import context as pit
 
 CONTEXT = ("UUP",)
 CAP = 10
+#: v230: fires for every member on the same date; the v2 null draws from this
+#: ticker's trailing sessions (spec v230 A2).
+SCOPE = "market"
 RACE = "fixed"
 PARAMS = {"series": "UUP", "lookback": 5, "window": 252, "z": -2.0, "side": "long"}
 SUMMARY = "UUP 5-day return z <= -2.0 vs its trailing 252 values"
