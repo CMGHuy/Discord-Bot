@@ -237,3 +237,13 @@ other ideas; the session cell was picked from many slices.
 **Verdict opens:** 2027-02-23
 
 T0 is the first commit of this document (`git log --diff-filter=A -1 --format=%cI -- docs/superpowers/results/2026-11-17-v229-preregistration.md` = `2026-11-17T19:43:37+01:00`), converted to UTC. Plans opened before T0's ET date are exploratory; the verdict is computed once, on or after the date above (Task V229-15).
+
+## Weekly cron
+
+Installed 2026-11-17T19:11:06Z on the VM root crontab by `scripts/ops/install_v229_cron.sh` (plan V229-14), marker `# v229 deferred-entry pairs`:
+
+```
+15 8 * * 6 /bin/bash /opt/swing-bot/scripts/ops/v229_pairs_cron.sh 2026-11-17T18:43:37+00:00
+```
+
+First count (runner run by hand at install): `v229 pairs: appended 0, total 392, forward 0`. From this count on, the window, the thresholds and the floor are locked. The log is `/opt/swing-bot/logs/v229-pairs.log`; Task V229-15 removes the entry after the verdict.
