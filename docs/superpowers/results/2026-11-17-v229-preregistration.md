@@ -247,3 +247,20 @@ Installed 2026-11-17T19:11:06Z on the VM root crontab by `scripts/ops/install_v2
 ```
 
 First count (runner run by hand at install): `v229 pairs: appended 0, total 392, forward 0`. From this count on, the window, the thresholds and the floor are locked. The log is `/opt/swing-bot/logs/v229-pairs.log`; Task V229-15 removes the entry after the verdict.
+
+## Amendment 1 (2026-11-17, before the forward window opens on 2026-11-23)
+
+Pre-close-out panel (quant-researcher, veteran-trader, quant-engineer) raised one BLOCKING finding: a pair's net R depends on the slippage bps, the commission and the break-even fraction, none of which `FROZEN` or the pair row carried, so a `.env` change during the window would have mixed costs silently. Fixed in commits `fca8e27a` and `734fe182`: every new pair row now carries a `frictions` stamp, the append refuses when the current stamp differs from the log's, the verdict and exploratory modes refuse a mixed log, and `FROZEN["be_fraction"]` is asserted equal to the strategy constant. **No rule value, no pair value and no hash changed**: the rule hash is still `8bbaaa9781535813` (read from the VM image after the deploy). The 392 exploratory pairs carry no stamp and are ignored by the check.
+
+Frictions in force at T0 and read from the VM image after the deploy: `slippage_bps` 5.0, `commission_r` 0.02, `be_fraction` 0.5. The verdict reads the stamp from the log; any other value is a refusal, not a re-pricing.
+
+## Verdict-day instructions (carried into Task V229-15)
+
+From the panel's advisories; none changes the rule.
+
+- **Run once.** One `verdict` run with T0 `2026-11-17T18:43:37+00:00`, no `--today` override, no second `--out-dir`. The ledger row `v229-deferred-entry` is appended in the repo at the close, then deployed.
+- **Power, restated.** The spec assumed about 800 forward LONG pairs. The exploratory weekly rate (about 31 to 44 a week) points to roughly 370 to 530 over twelve weeks, so the verdict may land on `UNDERPOWERED` (300 pairs) and the detectable lift is nearer 0.4R than 0.2R. A `NO-LIFT` is therefore not evidence of "no effect of 0.2R or more".
+- **Print beside the verdict:** the forward exclusion share next to the calibration agreement (exploratory: 92 of 392 excluded); the funnel for entry dates from T0's ET date to the Sunday before the window (phase `after`, in neither read); the `UNDERPOWERED`-over-`UNCALIBRATED` precedence in one sentence; plans still open at the verdict date (the export joins closed trades only) counted separately.
+- **Calibration covers arm C only.** Arms A and B start at 15:30 and meet far more session-open gap fills (exploratory: control 35, A 83, B 55); the verdict doc says so.
+- **Not a statement about resting orders.** Only market-entry plans are in the population (exploratory: 52 `not_market`, 124 `entry_type_unknown` excluded); half days have no deferral. A follow-on resting-order mode needs its own spec, original structural stop, expiry and fill rule, and a `SCREEN-PASS` row first. The exploratory `fill_above` / `fill_below` split is a post-hoc cell and never becomes a forward sub-cell.
+- **In flight until 2027-02-23.** No other plan tests a deferred-entry or session-time filter on the live LONG book before the verdict is recorded.
