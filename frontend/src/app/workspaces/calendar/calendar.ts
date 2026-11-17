@@ -522,8 +522,8 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     .day-row .amount { margin-left: auto; font-family: var(--font-mono); }
     .day-row .amount.pos { color: var(--pos); }
     .day-row .amount.neg { color: var(--neg); }
-    .meta .est-marker { margin-left: var(--space-4); }
     .day-row .meta { margin: var(--space-4) 0 0; color: var(--text-secondary); font-size: var(--text-micro); }
+    .meta .est-marker { margin-left: var(--space-4); }
     .lesson { margin: var(--space-6) 0 0; font-size: var(--text-table); }
     .tags { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: var(--space-6) 0 0; }
     .tag {
@@ -568,9 +568,9 @@ export class Calendar {
   protected readonly today = localIsoDate(new Date());
   /** v194 B3 -- the one leg name (shared with Trades and the Dashboard). */
   protected readonly legLabel = legLabel;
-  /** v194 A4: the calendar counts each realised leg (`pnl_calendar` rows). */
   /** v228 -- the day card's rule (day/day-trade-card.ts rowIsEstimate). */
   protected readonly excursionEstimate = rowIsEstimate;
+  /** v194 A4: the calendar counts each realised leg (`pnl_calendar` rows). */
   protected readonly legHelp = (trade: CalendarTrade): string => legExplanation(trade,
     'On this page win rate and N count each realised leg as its own trade; Analytics counts plans.');
 
