@@ -21,7 +21,7 @@ outside the US session and premarket. On yes, from the main tree:
 
 - `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && bash -s -- rows" < scripts/ops/export_book_rows.sh > <scratchpad>/rows.csv`, then the same with `rejections` into `<scratchpad>/rejections.csv`. Raw CSVs stay in the scratchpad, never committed.
 - Fetch bars for the book's tickers into a scratch cache: `BACKTEST_CACHE_DIR=<scratchpad>/autopsy_bars python scripts/data/fetch_backtest_data.py --tickers <list> --start <first plan date minus at least 550 calendar days> --end today`. The fetcher requires 260 daily bars, so include this warm-up history even for a young book. Never into `data/backtest_cache/`.
-- `python scripts/reports/book_autopsy.py <scratchpad>/rows.csv <scratchpad>/rejections.csv --bars-dir <scratchpad>/autopsy_bars`.
+- `python scripts/reports/book_autopsy.py <scratchpad>/rows.csv <scratchpad>/rejections.csv --bars-dir <scratchpad>/autopsy_bars`. Give-back is built from intraday-measured trades only (`excursion_source` 5min, 15min or hourly; v228) and the run prints how many it dropped. An export without the `excursion_source` column (38 or 36 columns, pre-v228) exits with code 2: re-export, or pass `--no-excursion-cells` to build every other cell without give-back.
 
 ## Step 2 — Dispatch the roles serially
 

@@ -24,7 +24,7 @@ already measured leaves R on the table.
 
 ## Checklist
 
-- Give-back (`mfe_r` minus realised R) across all trades in the autopsy, never winners only; check trail or scale-out headroom against `scripts/reports/runner_headroom.py` before claiming it.
+- Give-back (`mfe_r` minus realised R) across all intraday-measured trades in the autopsy (v228: rows on daily bars are dropped and counted), never winners only; check trail or scale-out headroom against `scripts/reports/runner_headroom.py` before claiming it.
 - `exit_reason` and `near_tp_close` cells: the near-TP stall and timeout closes `check_near_tp_timeout` writes (`swingbot/core/tracking/performance.py`).
 - `near_stop_reversal` cells beside the trades a wider stop would still have lost; read both, never the reversals alone.
 - `gap_through_stop` cells: losses beyond the stop and the gap behind them.
