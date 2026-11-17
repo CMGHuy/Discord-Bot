@@ -69,6 +69,15 @@ def assert_one_rule(pairs) -> None:
     if other:
         raise VerdictRefused(f"pair log carries rows written under another rule ({other}); "
                              f"the frozen rule is {rule_hash()}")
+    assert_same_frictions(pairs)
+
+
+def assert_same_frictions(pairs, stamp=None) -> None:
+    """Refuse a log whose stamped rows (plus ``stamp``) carry more than one cost setting."""
+    stamps = [p.get("frictions") for p in pairs] + [stamp]
+    distinct = {json.dumps(s, sort_keys=True) for s in stamps if s is not None}
+    if len(distinct) > 1:
+        raise VerdictRefused(f"pair log mixes cost settings (frictions): {sorted(distinct)}")
 
 
 def guard(*, today: dt.date, t0, ledger_rows, pairs) -> None:

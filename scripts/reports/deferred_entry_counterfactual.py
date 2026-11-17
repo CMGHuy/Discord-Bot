@@ -96,6 +96,7 @@ def build_pair_for(row: dict, frame) -> dict:
 def append_new(scanned, log_path) -> tuple[int, dict]:
     logged = pairlog.read_pairs(log_path)
     known = set(logged)
+    verdict.assert_same_frictions(list(logged.values()), arms.frictions_stamp())
     added = 0
     for row, frame, reason in scanned:
         if reason != "eligible" or row.get("direction") != "bullish" or row.get("trade_id") in known:
