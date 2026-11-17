@@ -105,6 +105,7 @@ KNOWN_CSV_GLOBS = {
     "scripts/reports/audit_quality_score.py": "reads backtest_cache.CACHE_DIR (data/backtest_cache by default)",
     "scripts/reports/parity_sizing.py": "reads backtest_cache.CACHE_DIR (data/backtest_cache by default)",
     "scripts/reports/runner_headroom.py": "reads backtest_cache.CACHE_DIR (data/backtest_cache by default)",
+    "scripts/reports/deferred_entry/bars.py": "globs market_data/5min (per-ticker intraday archive), never a daily cache dir (v229)",
 }
 _GLOB = re.compile(r"""r?glob\(\s*["']\*\.csv["']\s*\)""")
 
