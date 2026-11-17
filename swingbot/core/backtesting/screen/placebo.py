@@ -251,12 +251,12 @@ def _full_sources(source_dir, calendar) -> tuple[dict, dict]:
 
 def shuffled_universe(out_dir, source_dir, calendar, *, seed: int = PLACEBO_SEED,
                       copies: int = 1) -> Path:
-    """The real bars, whole days permuted alike across tickers; copy c >= 1 is <T>_c<c>."""
+    """The real bars, whole days permuted alike across tickers; copy c >= 1 is <T>_C<c>."""
     sources, hashes = _full_sources(source_dir, calendar)
     frames = {}
     for c in range(copies):
         perm = day_permutation(len(calendar), seed if c == 0 else [seed, c])
-        suffix = "" if c == 0 else f"_c{c}"
+        suffix = "" if c == 0 else f"_C{c}"
         for ticker, df in sources.items():
             frames[ticker + suffix] = shuffle_frame(df, perm)
     return write_universe(out_dir, frames, kind="shuffled",

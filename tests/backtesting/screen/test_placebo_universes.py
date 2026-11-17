@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from scripts.backtest import screen_idea
 from swingbot.core.backtesting.screen import indicators, placebo
 from tests.backtesting.screen.helpers import random_walk
 
@@ -199,9 +200,9 @@ def test_shuffled_copies_add_suffixed_tickers(tmp_path):
     src = _source(tmp_path)
     out = placebo.shuffled_universe(tmp_path / "u", src, CAL, copies=2)
     manifest = json.loads((out / "universe.json").read_text(encoding="utf-8"))
-    assert manifest["tickers"] == ["AAA", "AAA_c1", "BBB", "BBB_c1", "CCC", "CCC_c1"]
+    assert manifest["tickers"] == ["AAA", "AAA_C1", "BBB", "BBB_C1", "CCC", "CCC_C1"]
     assert manifest["copies"] == 2
-    assert (out / "AAA.csv").read_bytes() != (out / "AAA_c1.csv").read_bytes()
+    assert (out / "AAA.csv").read_bytes() != (out / "AAA_C1.csv").read_bytes()
 
 
 def test_shuffled_universe_refuses_a_cache_without_full_tickers(tmp_path):
@@ -255,3 +256,17 @@ def test_write_universe_refuses_empty_data(tmp_path, frames):
     with pytest.raises(ValueError, match="empty"):
         placebo.write_universe(tmp_path / "u", frames, kind="test", meta={})
     assert not (tmp_path / "u" / "universe.json").exists()
+
+
+def test_shuffled_copies_round_trip_through_screen_universe_reader(tmp_path):
+    src = _source(tmp_path)
+    out = placebo.shuffled_universe(tmp_path / "u", src, CAL, copies=3)
+    universe = screen_idea.load_universe(
+        out, out / "membership.csv", CAL[0].strftime("%Y-%m-%d"),
+        CAL[-1].strftime("%Y-%m-%d"))
+    ticker_stems = {path.stem for path in out.glob("*.csv")}
+    ticker_stems -= {"SPY", "membership"}
+    # Exact names detect case mismatches even on a case-insensitive filesystem.
+    assert set(universe.members) == ticker_stems
+    assert universe.cached == universe.members
+    assert universe.missing == []
