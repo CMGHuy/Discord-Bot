@@ -255,6 +255,32 @@ describe('TradeDetailStore — notes and strategy', () => {
     expect(store.autoLesson()).toContain('1.4R');
   });
 
+  it('marks all three figures as estimates for a short hold on daily bars', () => {
+    open(null, 'RSI Divergence', { ...ENTRY, excursion_source: 'daily', holding_days: 0.4 });
+
+    const rows = store.excursions();
+    expect(rows.map((r) => r.estimate)).toEqual([true, true, true]);
+  });
+
+  it('marks a daily figure whose hold is unknown, like the backend rule', () => {
+    open(null, 'RSI Divergence', { ...ENTRY, excursion_source: 'daily', holding_days: null });
+    expect(store.excursions().every((r) => r.estimate)).toBe(true);
+  });
+
+  it.each([
+    ['5min', 0.4],
+    ['hourly', 0.4],
+    ['daily', 3.2],
+  ])('leaves %s figures held %s days unmarked', (source, held) => {
+    open(null, 'RSI Divergence', { ...ENTRY, excursion_source: source, holding_days: held });
+    expect(store.excursions().map((r) => r.estimate)).toEqual([false, false, false]);
+  });
+
+  it('leaves an entry written before v228 (no source field) unmarked', () => {
+    open(null, 'RSI Divergence', ENTRY);
+    expect(store.excursions().map((r) => r.estimate)).toEqual([false, false, false]);
+  });
+
   it('reports no excursions rather than dashes when a trade is unjournaled', () => {
     // An open position has no excursions to report. Three em dashes would
     // imply it does and that they could not be measured.
