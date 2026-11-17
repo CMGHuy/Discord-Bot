@@ -142,3 +142,122 @@ def gbm_frame(ticker: str, calendar, *, level: float, stressed,
                          "Low": np.minimum(open_, close) * np.exp(-down), "Close": close,
                          "Volume": np.full(n, GBM_VOLUME)},
                         index=pd.DatetimeIndex(calendar, name="Date"))
+
+
+def equal_weight_index(frames: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
+    """Level 100 x cumprod(1 + mean daily return); O/H/L from the mean ratios to close."""
+    if not frames or any(df.empty for df in frames.values()):
+        raise ValueError("cannot build an index from empty frames")
+    names = sorted(frames)
+    close = pd.DataFrame({t: frames[t]["Close"] for t in names})
+    level = 100.0 * (1.0 + close.pct_change(fill_method=None).mean(axis=1).fillna(0.0)).cumprod()
+
+    def ratio(col):
+        return pd.DataFrame({t: frames[t][col] / frames[t]["Close"] for t in names}).mean(axis=1)
+
+    volume = pd.DataFrame({t: frames[t]["Volume"] for t in names}).sum(axis=1)
+    return pd.DataFrame({"Open": level * ratio("Open"), "High": level * ratio("High"),
+                         "Low": level * ratio("Low"), "Close": level, "Volume": volume},
+                        index=pd.DatetimeIndex(close.index, name="Date"))
+
+
+def _write_csv(path: Path, df: pd.DataFrame) -> None:
+    df.loc[:, list(OHLCV)].to_csv(path, index_label="Date", date_format="%Y-%m-%d",
+                                  float_format=PRICE_FORMAT, lineterminator="\n")
+
+
+def _publish_manifest(path: Path, manifest: Mapping) -> None:
+    """Publish the completion marker only after its full JSON is closed."""
+    temporary = path.with_name(path.name + ".tmp")
+    try:
+        temporary.write_text(json.dumps(manifest, indent=2) + "\n",
+                             encoding="utf-8", newline="\n")
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def write_universe(out_dir, frames: Mapping[str, pd.DataFrame], *, kind: str,
+                   meta: Mapping) -> Path:
+    """One screen cache directory; universe.json is written last."""
+    if INDEX_TICKER in frames:
+        raise ValueError(f"{INDEX_TICKER} is the synthetic index; no ticker may use the name")
+    index = equal_weight_index(frames)
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / MANIFEST_FILE).unlink(missing_ok=True)
+    names = sorted(frames)
+    for ticker in names:
+        _write_csv(out / f"{ticker}.csv", frames[ticker])
+    _write_csv(out / f"{INDEX_TICKER}.csv", index)
+    first, last = (d.strftime("%Y-%m-%d") for d in (index.index[0], index.index[-1]))
+    (out / MEMBERSHIP_FILE).write_text(
+        "ticker,start_date,end_date\n" + "".join(f"{t},{first},\n" for t in names),
+        encoding="utf-8", newline="\n")
+    manifest = {"kind": kind, "seed": PLACEBO_SEED, "tickers": names,
+                "calendar_start": first, "calendar_end": last, **meta}
+    _publish_manifest(out / MANIFEST_FILE, manifest)
+    return out
+
+
+def _level_for(ticker: str, quartiles, seed: int) -> float:
+    rng = np.random.default_rng(ticker_seed(ticker, seed) + [_LEVEL_STREAM])
+    return float(quartiles[int(rng.integers(len(quartiles)))])
+
+
+def gbm_universe(out_dir, calendar, quartiles, *, n_tickers: int = GBM_TICKERS,
+                 seed: int = PLACEBO_SEED) -> Path:
+    """G000.. tickers; each path depends on its name and ``seed`` only."""
+    market = market_states(calendar, seed)
+    frames = {}
+    for i in range(n_tickers):
+        ticker = f"G{i:03d}"
+        frames[ticker] = gbm_frame(ticker, calendar, level=_level_for(ticker, quartiles, seed),
+                                   stressed=market, seed=seed)
+    return write_universe(out_dir, frames, kind="gbm",
+                          meta={"seed": seed, "n_tickers": n_tickers,
+                                "quartiles": [float(q) for q in quartiles]})
+
+
+def day_permutation(n: int, seed) -> np.ndarray:
+    """Day 0 fixed; days 1..n-1 permuted."""
+    return np.r_[0, 1 + np.random.default_rng(seed).permutation(n - 1)]
+
+
+def shuffle_frame(df: pd.DataFrame, perm: np.ndarray) -> pd.DataFrame:
+    """Rebuild ``df`` on its own index from the permuted days."""
+    close = df["Close"].to_numpy(dtype=float)
+    ret = np.r_[1.0, close[1:] / close[:-1]]
+    rebuilt = close[0] * np.cumprod(ret[perm])
+    cols = {c: rebuilt * (df[c].to_numpy(dtype=float) / close)[perm]
+            for c in ("Open", "High", "Low")}
+    return pd.DataFrame({**cols, "Close": rebuilt,
+                         "Volume": df["Volume"].to_numpy(dtype=float)[perm]},
+                        index=df.index)
+
+
+def _full_sources(source_dir, calendar) -> tuple[dict, dict]:
+    """Tickers with a bar on every calendar session, and their files' sha256."""
+    frames, hashes = {}, {}
+    for path in _source_files(source_dir):
+        df = _on_calendar(path, calendar)
+        if len(df) == len(calendar) and np.array_equal(df.index.values, calendar.values):
+            frames[path.stem] = df
+            hashes[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    if not frames:
+        raise ValueError(f"no ticker in {source_dir} has a bar on every calendar session")
+    return frames, hashes
+
+
+def shuffled_universe(out_dir, source_dir, calendar, *, seed: int = PLACEBO_SEED,
+                      copies: int = 1) -> Path:
+    """The real bars, whole days permuted alike across tickers; copy c >= 1 is <T>_c<c>."""
+    sources, hashes = _full_sources(source_dir, calendar)
+    frames = {}
+    for c in range(copies):
+        perm = day_permutation(len(calendar), seed if c == 0 else [seed, c])
+        suffix = "" if c == 0 else f"_c{c}"
+        for ticker, df in sources.items():
+            frames[ticker + suffix] = shuffle_frame(df, perm)
+    return write_universe(out_dir, frames, kind="shuffled",
+                          meta={"seed": seed, "copies": copies, "source_sha256": hashes})

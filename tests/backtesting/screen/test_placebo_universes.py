@@ -101,3 +101,157 @@ def test_atr_pct_quartiles_skip_index_and_context_files(tmp_path):
     assert len(set(only)) == 1
     with pytest.raises(ValueError, match="no ATR%"):
         placebo.atr_pct_quartiles(src, CAL, tickers=["ZZZ"])
+
+
+def _digest(directory):
+    return {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(directory.iterdir())}
+
+
+def test_equal_weight_index_averages_returns_and_ratios():
+    idx = pd.bdate_range("2010-01-04", periods=2)
+    up = pd.DataFrame({"Open": [10.0, 11.0], "High": [10.5, 11.5], "Low": [9.5, 10.5],
+                       "Close": [10.0, 11.0], "Volume": [1.0, 1.0]}, index=idx)
+    flat = pd.DataFrame({"Open": [20.0, 20.0], "High": [21.0, 22.0], "Low": [19.0, 18.0],
+                         "Close": [20.0, 20.0], "Volume": [2.0, 2.0]}, index=idx)
+    out = placebo.equal_weight_index({"A": up, "B": flat})
+    assert out["Close"].tolist() == pytest.approx([100.0, 105.0])
+    assert out["High"].iloc[1] == pytest.approx(105.0 * (11.5 / 11.0 + 22.0 / 20.0) / 2)
+    assert out["Volume"].tolist() == [3.0, 3.0]
+    assert (out["High"] >= out[["Open", "Close"]].max(axis=1)).all()
+
+
+def test_write_universe_lays_out_a_screen_cache(tmp_path):
+    calm = np.zeros(len(CAL), dtype=bool)
+    frames = {"B": placebo.gbm_frame("B", CAL, level=0.02, stressed=calm),
+              "A": placebo.gbm_frame("A", CAL, level=0.02, stressed=calm)}
+    out = placebo.write_universe(tmp_path / "u", frames, kind="test", meta={"extra": 1})
+    assert sorted(p.name for p in out.iterdir()) == [
+        "A.csv", "B.csv", "SPY.csv", "membership.csv", "universe.json"]
+    assert (out / "membership.csv").read_text(encoding="utf-8") == (
+        "ticker,start_date,end_date\nA,2010-01-04,\nB,2010-01-04,\n")
+    manifest = json.loads((out / "universe.json").read_text(encoding="utf-8"))
+    assert manifest == {"kind": "test", "seed": 42, "tickers": ["A", "B"],
+                        "calendar_start": "2010-01-04",
+                        "calendar_end": CAL[-1].strftime("%Y-%m-%d"), "extra": 1}
+    head = (out / "A.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert head == "Date,Open,High,Low,Close,Volume"
+    assert b"\r\n" not in (out / "A.csv").read_bytes()
+    assert placebo.read_frame(out / "SPY.csv").index.equals(CAL)
+    with pytest.raises(ValueError, match="SPY"):
+        placebo.write_universe(tmp_path / "v", {"SPY": frames["A"]}, kind="test", meta={})
+
+
+def test_gbm_universe_reproduces_and_ignores_the_ticker_count(tmp_path):
+    q = (0.01, 0.015, 0.02, 0.03)
+    a = placebo.gbm_universe(tmp_path / "a", CAL, q, n_tickers=5)
+    b = placebo.gbm_universe(tmp_path / "b", CAL, q, n_tickers=5)
+    c = placebo.gbm_universe(tmp_path / "c", CAL, q, n_tickers=3)
+    assert _digest(a) == _digest(b)
+    for t in ("G000", "G001", "G002"):
+        assert (a / f"{t}.csv").read_bytes() == (c / f"{t}.csv").read_bytes()
+    manifest = json.loads((a / "universe.json").read_text(encoding="utf-8"))
+    assert manifest["kind"] == "gbm" and manifest["tickers"] == [f"G{i:03d}" for i in range(5)]
+    assert manifest["quartiles"] == list(q) and manifest["seed"] == 42
+    d = placebo.gbm_universe(tmp_path / "d", CAL, q, n_tickers=3, seed=7)
+    assert (d / "G000.csv").read_bytes() != (c / "G000.csv").read_bytes()
+
+
+def test_day_permutation_keeps_day_zero():
+    perm = placebo.day_permutation(50, 42)
+    assert perm[0] == 0 and sorted(perm) == list(range(50))
+    assert np.array_equal(perm, placebo.day_permutation(50, 42))
+    assert not np.array_equal(perm, placebo.day_permutation(50, [42, 1]))
+
+
+def test_shuffle_frame_moves_whole_days():
+    df = random_walk(40, seed=3)
+    perm = placebo.day_permutation(40, 42)
+    out = placebo.shuffle_frame(df, perm)
+    ret = df["Close"].pct_change().to_numpy()
+    new = out["Close"].pct_change().to_numpy()
+    assert out["Close"].iloc[0] == df["Close"].iloc[0]
+    assert np.allclose(new[1:], ret[perm][1:])
+    assert np.allclose((out["Open"] / out["Close"]).to_numpy(),
+                       (df["Open"] / df["Close"]).to_numpy()[perm])
+    assert np.array_equal(out["Volume"].to_numpy(), df["Volume"].to_numpy()[perm])
+    assert out.index.equals(df.index)
+
+
+def test_shuffled_universe_keeps_cross_sections_and_reproduces(tmp_path):
+    src = _source(tmp_path)
+    random_walk(500, seed=5).to_csv(src / "DDD.csv", index_label="Date")   # short: dropped
+    a = placebo.shuffled_universe(tmp_path / "a", src, CAL)
+    b = placebo.shuffled_universe(tmp_path / "b", src, CAL)
+    assert _digest(a) == _digest(b)
+    manifest = json.loads((a / "universe.json").read_text(encoding="utf-8"))
+    assert manifest["kind"] == "shuffled" and manifest["tickers"] == ["AAA", "BBB", "CCC"]
+    assert sorted(manifest["source_sha256"]) == ["AAA.csv", "BBB.csv", "CCC.csv"]
+    assert manifest["source_sha256"]["AAA.csv"] == hashlib.sha256(
+        (src / "AAA.csv").read_bytes()).hexdigest()
+    rets = {t: placebo.read_frame(a / f"{t}.csv")["Close"].pct_change() for t in ("AAA", "BBB")}
+    orig = {t: placebo.read_frame(src / f"{t}.csv")["Close"].pct_change() for t in ("AAA", "BBB")}
+    pairs = sorted(zip(rets["AAA"].round(4)[1:], rets["BBB"].round(4)[1:]))
+    assert pairs == sorted(zip(orig["AAA"].round(4)[1:], orig["BBB"].round(4)[1:]))
+
+
+def test_shuffled_copies_add_suffixed_tickers(tmp_path):
+    src = _source(tmp_path)
+    out = placebo.shuffled_universe(tmp_path / "u", src, CAL, copies=2)
+    manifest = json.loads((out / "universe.json").read_text(encoding="utf-8"))
+    assert manifest["tickers"] == ["AAA", "AAA_c1", "BBB", "BBB_c1", "CCC", "CCC_c1"]
+    assert manifest["copies"] == 2
+    assert (out / "AAA.csv").read_bytes() != (out / "AAA_c1.csv").read_bytes()
+
+
+def test_shuffled_universe_refuses_a_cache_without_full_tickers(tmp_path):
+    src = _source(tmp_path, n=500)
+    with pytest.raises(ValueError, match="every calendar session"):
+        placebo.shuffled_universe(tmp_path / "u", src, CAL)
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_write_universe_manifest_is_atomic_and_last(tmp_path, monkeypatch, existing):
+    out = tmp_path / "u"
+    out.mkdir()
+    manifest = out / "universe.json"
+    if existing:
+        manifest.write_text('{"old": true}', encoding="utf-8")
+
+    def interrupt_publish(source, target):
+        assert source.parent == target.parent == out
+        assert target == manifest
+        assert not manifest.exists()
+        assert json.loads(source.read_text(encoding="utf-8"))["tickers"] == ["A"]
+        assert (out / "membership.csv").is_file()
+        assert placebo.read_frame(out / "SPY.csv").index.equals(CAL)
+        assert placebo.read_frame(out / "A.csv").index.equals(CAL)
+        raise OSError("interrupted publication")
+
+    monkeypatch.setattr(type(out), "replace", interrupt_publish)
+    with pytest.raises(OSError, match="interrupted publication"):
+        placebo.write_universe(out, {"A": random_walk(len(CAL))}, kind="test", meta={})
+    assert not manifest.exists()
+
+
+def test_write_universe_failed_rewrite_removes_completion_marker(tmp_path, monkeypatch):
+    out = tmp_path / "u"
+    out.mkdir()
+    manifest = out / "universe.json"
+    manifest.write_text('{"old": true}', encoding="utf-8")
+
+    def fail_csv(path, frame):
+        path.write_text("Date,Open", encoding="utf-8")
+        raise OSError("interrupted CSV")
+
+    monkeypatch.setattr(placebo, "_write_csv", fail_csv, raising=False)
+    with pytest.raises(OSError, match="interrupted CSV"):
+        placebo.write_universe(out, {"A": random_walk(len(CAL))}, kind="test", meta={})
+    assert not manifest.exists()
+
+
+@pytest.mark.parametrize("frames", [{}, {"A": pd.DataFrame(columns=placebo.OHLCV)}])
+def test_write_universe_refuses_empty_data(tmp_path, frames):
+    with pytest.raises(ValueError, match="empty"):
+        placebo.write_universe(tmp_path / "u", frames, kind="test", meta={})
+    assert not (tmp_path / "u" / "universe.json").exists()
