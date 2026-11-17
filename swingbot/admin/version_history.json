@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-16 18:21:55 UTC",
+  "generated_at": "2026-11-17 16:00:30 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.44.0",
-    "bot": "2.19.1"
+    "ui": "1.44.1",
+    "bot": "2.19.2"
   },
   "releases": [
     {
@@ -2680,6 +2680,20 @@
         "bot": "2.19.1"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-17",
+      "last_seen": "2026-11-17",
+      "commit": "6b903f2d",
+      "subject": "release(ui,bot): ui 1.44.1, bot 2.19.2 -- intraday MFE/MAE with estimate marker (v228)",
+      "versions": {
+        "ui": "1.44.1",
+        "bot": "2.19.2"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }
