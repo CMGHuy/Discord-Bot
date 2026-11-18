@@ -362,7 +362,7 @@ Expected: build succeeds (nothing imports the store yet; this proves the models 
 
 ```bash
 git add frontend/package.json frontend/package-lock.json frontend/src/app/api/models.ts frontend/src/app/api/api-client.ts frontend/src/app/stores/guide.store.ts frontend/src/app/stores/guide.store.spec.ts
-git commit -m "feat(guide): marked pin, guide API client and GuideStore (v235 V236-1)"
+git commit -m "feat(guide): marked pin, guide API client and GuideStore (v236 V236-1)"
 ```
 
 ### Task V236-2: `GuideLinkComponent` and the anchor spec
@@ -703,6 +703,641 @@ Expected: PASS (no new token, no raw colour, no outer margin).
 
 ```bash
 git add frontend/src/app/ui/guide-link.ts frontend/src/app/ui/guide-link.spec.ts frontend/src/app/workspaces/guide/guide-anchors.spec.ts
-git commit -m "feat(guide): GuideLinkComponent and the anchor freshness spec (v235 V236-2)"
+git commit -m "feat(guide): GuideLinkComponent and the anchor freshness spec (v236 V236-2)"
 ```
 
+
+### Task V236-3: Markdown helpers and figure registry
+
+**Model:** sonnet — pure functions plus DOM helpers with fixed contracts; the first `marked` use and the sanitiser proof.
+
+**Files:**
+- Create: `frontend/src/app/workspaces/guide/guide-markdown.ts`
+- Create: `frontend/src/app/workspaces/guide/guide-markdown.spec.ts`
+- Create: `frontend/src/app/workspaces/guide/guide-figures.ts`
+
+**Interfaces:**
+- Consumes: `GuideHeading` (V236-1, `api/models.ts`); `marked@18.2.1` (V236-1).
+- Produces (V236-4 and V236-9 rely on these exact names):
+  - `type GuideSegment = { kind: 'md'; html: string } | { kind: 'figure'; name: string }`
+  - `renderGuideSegments(markdown: string): GuideSegment[]` — splits on lines that are exactly `<!-- figure:<name> -->`, runs `marked.parse` (GFM) on each non-blank Markdown segment; the HTML is still unsanitised (the page binds it with `[innerHTML]`).
+  - `applyHeadingAnchors(container: HTMLElement, headings: readonly GuideHeading[], basePath = ''): void` — the n-th `.md > h2`/`.md > h3` gets the n-th API anchor as `id` plus one `a.permalink.sb-hit` to `basePath#anchor`; idempotent; surplus rendered headings stay unanchored.
+  - `scrollToAnchor(container: HTMLElement, anchor: string): boolean`
+  - `internalGuideUrl(href: string, slug: string | null): string | null` — router URL for `#frag` (needs a slug) and same-origin `/path`; `null` for `//host`, `http(s):` and a bare `#`.
+  - `GUIDE_FIGURES: Record<string, Type<unknown>> = {}` in the literal form V235-6's `figure_names()` parses (`tests/admin/test_guide_content.py`); V236-9 adds `pipeline`.
+
+The spec proves the sanitiser contract from Global Constraints: `details`/`summary` survive; `<script>`, `on*` handlers and `id` do not, which is why anchors go on after rendering.
+
+- [ ] **Step 1: Write the failing spec**
+
+Create `frontend/src/app/workspaces/guide/guide-markdown.spec.ts`:
+
+```ts
+import { SecurityContext, provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { DomSanitizer } from '@angular/platform-browser';
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  applyHeadingAnchors, internalGuideUrl, renderGuideSegments, scrollToAnchor,
+} from './guide-markdown';
+
+const sanitize = (html: string): string => {
+  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  return TestBed.inject(DomSanitizer).sanitize(SecurityContext.HTML, html) ?? '';
+};
+
+describe('renderGuideSegments', () => {
+  it('splits on a figure line and drops empty Markdown around it', () => {
+    const segments = renderGuideSegments('Before\n\n<!-- figure:pipeline -->\n\nAfter\n');
+    expect(segments.map((s) => s.kind)).toEqual(['md', 'figure', 'md']);
+    expect(segments[1]).toEqual({ kind: 'figure', name: 'pipeline' });
+    expect(renderGuideSegments('<!-- figure:pipeline -->')).toEqual([{ kind: 'figure', name: 'pipeline' }]);
+  });
+
+  it('reads Windows line endings the same way', () => {
+    expect(renderGuideSegments('A\r\n<!-- figure:pipeline -->\r\nB').map((s) => s.kind)).toEqual(['md', 'figure', 'md']);
+  });
+
+  it('leaves a marker that is not alone on its line as Markdown', () => {
+    expect(renderGuideSegments('text <!-- figure:pipeline -->').map((s) => s.kind)).toEqual(['md']);
+  });
+
+  it('renders GFM tables, the plain-words callout and Markdown inside details', () => {
+    const [md] = renderGuideSegments([
+      '> **In plain words** the bot finds levels.', '',
+      '| Key | Days |', '|---|---|', '| 2w | 10 |', '',
+      '<details><summary>Under the hood</summary>', '', 'Read **scan_run.py**.', '', '</details>',
+    ].join('\n'));
+    const html = md.kind === 'md' ? md.html : '';
+    expect(html).toContain('<blockquote>');
+    expect(html).toContain('<table>');
+    expect(html).toMatch(/<details>[\s\S]*<strong>scan_run.py<\/strong>[\s\S]*<\/details>/);
+  });
+});
+
+describe("Angular's sanitiser on rendered chapters", () => {
+  it('keeps details and summary', () => {
+    const [md] = renderGuideSegments('<details><summary>Under the hood</summary>\n\nText\n\n</details>');
+    const clean = sanitize(md.kind === 'md' ? md.html : '');
+    expect(clean).toContain('<details>');
+    expect(clean).toContain('<summary>Under the hood</summary>');
+  });
+
+  it('strips scripts, handlers and ids, which is why anchors are applied afterwards', () => {
+    const [md] = renderGuideSegments('<h2 id="x">T</h2>\n\n<img src="x" onerror="alert(1)">\n\n<script>alert(1)</script>');
+    const clean = sanitize(md.kind === 'md' ? md.html : '');
+    expect(clean).not.toContain('<script');
+    expect(clean).not.toContain('onerror');
+    expect(clean).not.toContain('id="x"');
+  });
+});
+
+function container(html: string): HTMLElement {
+  const host = document.createElement('article');
+  host.innerHTML = html;
+  return host;
+}
+
+const HEADINGS = [
+  { level: 2, text: 'Swing horizons', anchor: 'swing-horizons' },
+  { level: 3, text: 'Masked', anchor: 'masked' },
+];
+
+describe('applyHeadingAnchors', () => {
+  it('sets ids in document order across segments and links each heading to itself', () => {
+    const host = container('<div class="md"><h2>Swing horizons</h2></div><div class="fig"><h2>Not prose</h2></div>'
+      + '<div class="md"><p>x</p><h3>Masked</h3></div>');
+    applyHeadingAnchors(host, HEADINGS, '/insights/guide/what-it-is');
+    const [h2, h3] = host.querySelectorAll<HTMLElement>('.md > h2, .md > h3');
+    expect([h2.id, h3.id]).toEqual(['swing-horizons', 'masked']);
+    expect(host.querySelector('.fig h2')!.id).toBe('');
+    const link = h2.querySelector('a.permalink')!;
+    expect(link.getAttribute('href')).toBe('/insights/guide/what-it-is#swing-horizons');
+    expect(link.getAttribute('aria-label')).toBe('Link to this section: Swing horizons');
+    expect(link.classList).toContain('sb-hit');
+  });
+
+  it('is idempotent and tolerates more rendered headings than the list names', () => {
+    const host = container('<div class="md"><h2>A</h2><h2>B</h2><h2>C</h2></div>');
+    applyHeadingAnchors(host, HEADINGS);
+    applyHeadingAnchors(host, HEADINGS);
+    expect(host.querySelectorAll('a.permalink')).toHaveLength(2);
+    expect(host.querySelectorAll('h2')[2].id).toBe('');
+  });
+});
+
+describe('scrollToAnchor', () => {
+  it('scrolls the heading with that id into view and reports a miss', () => {
+    const host = container('<div class="md"><h2 id="masked">M</h2></div>');
+    const spy = vi.fn();
+    (host.querySelector('h2') as HTMLElement).scrollIntoView = spy;
+    expect(scrollToAnchor(host, 'masked')).toBe(true);
+    expect(spy).toHaveBeenCalledWith({ block: 'start' });
+    expect(scrollToAnchor(host, 'nope')).toBe(false);
+  });
+});
+
+describe('internalGuideUrl', () => {
+  it.each([
+    ['#masked', 'what-it-is', '/insights/guide/what-it-is#masked'],
+    ['/insights/guide/glossary#r-multiple', 'pipeline', '/insights/guide/glossary#r-multiple'],
+    ['/risk', null, '/risk'],
+    ['#', 'pipeline', null],
+    ['#masked', null, null],
+    ['//evil.example/x', 'pipeline', null],
+    ['https://example.com', 'pipeline', null],
+  ])('maps %s on %s to %s', (href, slug, expected) => {
+    expect(internalGuideUrl(href, slug)).toBe(expected);
+  });
+});
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `cd frontend && npx ng test --watch=false --include src/app/workspaces/guide/guide-markdown.spec.ts`
+Expected: FAIL — `Cannot find module './guide-markdown'`.
+
+- [ ] **Step 3: Write `guide-markdown.ts`**
+
+Create `frontend/src/app/workspaces/guide/guide-markdown.ts`:
+
+```ts
+import { marked } from 'marked';
+
+import { GuideHeading } from '../../api/models';
+
+/** A chapter body in render order: Markdown (as HTML, still unsanitised:
+ *  the template binds it with [innerHTML], which runs Angular's sanitiser)
+ *  or a registered figure component. */
+export type GuideSegment = { kind: 'md'; html: string } | { kind: 'figure'; name: string };
+
+/** The marker a chapter uses to place a figure, alone on its line. The
+ *  backend's `chapters.FIGURE_RE` is the same pattern. */
+const FIGURE_LINE = /^<!-- figure:([a-z0-9-]+) -->$/gm;
+
+function pushMarkdown(out: GuideSegment[], text: string): void {
+  if (text.trim() === '') return;
+  out.push({ kind: 'md', html: marked.parse(text, { async: false, gfm: true }) });
+}
+
+export function renderGuideSegments(markdown: string): GuideSegment[] {
+  const text = markdown.replace(/\r\n?/g, '\n');
+  const out: GuideSegment[] = [];
+  let last = 0;
+  for (const match of text.matchAll(FIGURE_LINE)) {
+    pushMarkdown(out, text.slice(last, match.index));
+    out.push({ kind: 'figure', name: match[1] });
+    last = match.index + match[0].length;
+  }
+  pushMarkdown(out, text.slice(last));
+  return out;
+}
+
+/**
+ * Angular's sanitiser drops `id`, so anchors go on after rendering: the
+ * n-th `h2`/`h3` of the prose gets the n-th heading the API listed (the
+ * server computes anchors; the content test keeps headings out of
+ * `<details>`, so both sides count the same headings). Figures are not
+ * prose and are skipped. Each heading gains a `#` permalink.
+ */
+export function applyHeadingAnchors(
+  container: HTMLElement, headings: readonly GuideHeading[], basePath = '',
+): void {
+  container.querySelectorAll<HTMLElement>('.md > h2, .md > h3').forEach((element, index) => {
+    const heading = headings[index];
+    if (!heading) return;
+    element.id = heading.anchor;
+    if (element.querySelector(':scope > a.permalink')) return;
+    const link = element.ownerDocument.createElement('a');
+    link.className = 'permalink sb-hit';
+    link.setAttribute('href', `${basePath}#${heading.anchor}`);
+    link.setAttribute('aria-label', `Link to this section: ${heading.text}`);
+    link.textContent = '#';
+    element.append(link);
+  });
+}
+
+export function scrollToAnchor(container: HTMLElement, anchor: string): boolean {
+  const target = [...container.querySelectorAll<HTMLElement>('[id]')].find((el) => el.id === anchor);
+  if (!target) return false;
+  target.scrollIntoView?.({ block: 'start' });
+  return true;
+}
+
+/** A link inside a chapter that the router should handle, as a router URL;
+ *  null for anything the browser should follow itself (other sites). */
+export function internalGuideUrl(href: string, slug: string | null): string | null {
+  if (href.startsWith('#')) return slug && href.length > 1 ? `/insights/guide/${slug}${href}` : null;
+  if (href.startsWith('/') && !href.startsWith('//')) return href;
+  return null;
+}
+```
+
+- [ ] **Step 4: Write `guide-figures.ts`**
+
+Create `frontend/src/app/workspaces/guide/guide-figures.ts`. Keep the comment free of braces and of the registry's name: `figure_names()` reads the keys between the first `= {` after `GUIDE_FIGURES` and the next `}`.
+
+```ts
+import { Type } from '@angular/core';
+
+/*
+ * Figures a chapter can place with a line of its own reading
+ * <!-- figure:NAME -->. Keys are the NAME; the content test fails a chapter
+ * that names a figure missing here. Keep this a flat literal of
+ * name: Component pairs, one per line.
+ */
+export const GUIDE_FIGURES: Record<string, Type<unknown>> = {};
+```
+
+- [ ] **Step 5: Run the spec and the content test that parses the registry**
+
+Run: `cd frontend && npx ng test --watch=false --include src/app/workspaces/guide/guide-markdown.spec.ts`
+Expected: PASS (16 tests).
+
+Run: `python scripts/dev/testrun.py file tests/admin/test_guide_content.py`
+Expected: PASS (`figure_names()` now reads the real, empty registry).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add frontend/src/app/workspaces/guide/guide-markdown.ts frontend/src/app/workspaces/guide/guide-markdown.spec.ts frontend/src/app/workspaces/guide/guide-figures.ts
+git commit -m "feat(guide): Markdown segments, heading anchors and figure registry (v236 V236-3)"
+```
+
+### Task V236-4: Guide routes and page
+
+**Model:** sonnet — the app's first `[innerHTML]` binding plus post-render DOM work; contracts fixed, patterns from Research and Calendar-day.
+
+**Files:**
+- Create: `frontend/src/app/workspaces/guide/guide.routes.ts`
+- Create: `frontend/src/app/workspaces/guide/guide.ts`
+- Create: `frontend/src/app/workspaces/guide/guide.spec.ts`
+- Modify: `frontend/src/app/workspaces/workspace-consistency.spec.ts` (`PAGE_ROUTES`, line 129: add `'guide/guide.ts'` after `'gallery/gallery.ts'`; the spec fails the moment `guide.routes.ts` exists)
+
+**Interfaces:**
+- Consumes: `GuideStore` (`chapters`, `bodies`, `status`, `error`, `chapterStatus`, `firstSlug`, `ensureLoaded()`, `loadChapter(slug)`), `GuideIndex` (V236-1); `renderGuideSegments`, `applyHeadingAnchors`, `scrollToAnchor`, `internalGuideUrl`, `GUIDE_FIGURES` (V236-3); `Page` (`ui/page.ts`), `Panel` (`ui/layout.ts`), `Async` (`ui/async.ts`); `RouteTitleService.detail`/`setDetail` (`calendar-day.ts` effect pattern); `routeData`/`onEvents` (`routing/route-metadata.ts`), `startRoute` (`routing/route-resolver.ts`).
+- Produces:
+  - `guideRoutes: Routes` — one componentless parent (`providers: [GuideStore]`, `runGuardsAndResolvers: 'always'`, `data: routeData('Guide', onEvents())`, `resolve.ready`) with children `''` and `':slug'`, both loading `Guide`. `''` shows the first chapter in place (no redirect). V236-7 mounts it at `insights/guide`.
+  - `Guide` (selector `sb-guide`), input `slug = input<string>()` (route param via `withComponentInputBinding`); exported `GUIDE_NOTICE: string`.
+  - Spec helpers in `guide.spec.ts` that V236-6 reuses: `INDEX`, `BODY`, `openGuide(slug, opts)`, `settle(fixture)`.
+- V236-6 edits `guide.ts`: keep the template's single `[page-primary]` element `div.guide-layout` with `article.guide-chapter` inside it.
+
+Three widths: one `72ch` column (`min-width: 0`, `overflow-wrap: anywhere`); tables and code blocks scroll inside themselves, so nothing overflows at 390px; `summary` rows and permalinks reach `--hit-min`. The per-width contents UI is V236-6.
+
+- [ ] **Step 1: Write the failing page spec**
+
+Create `frontend/src/app/workspaces/guide/guide.spec.ts`:
+
+```ts
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ActivatedRoute, Router, provideRouter } from '@angular/router';
+import { BehaviorSubject } from 'rxjs';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { authInterceptor, errorInterceptor, loadingInterceptor } from '../../api/interceptors';
+import { GuideIndex } from '../../api/models';
+import { RouteTitleService } from '../../routing/route-title.service';
+import { GuideStore } from '../../stores/guide.store';
+import { GUIDE_NOTICE, Guide } from './guide';
+import { GUIDE_FIGURES } from './guide-figures';
+import { guideRoutes } from './guide.routes';
+
+const INDEX: GuideIndex = { chapters: [
+  { slug: 'what-it-is', title: 'What the bot is (and isn’t)', order: 1, reviewed_for: '2.19.2',
+    headings: [{ level: 2, text: 'Swing horizons', anchor: 'swing-horizons' }, { level: 3, text: 'Masked', anchor: 'masked' }] },
+  { slug: 'glossary', title: 'Glossary', order: 12, reviewed_for: '2.19.1',
+    headings: [{ level: 3, text: 'R multiple', anchor: 'r-multiple' }] },
+] };
+
+const BODY = [
+  '> **In plain words** paper trades only.', '', '## Swing horizons', '', 'See the [glossary](/insights/guide/glossary#r-multiple).',
+  '', '<!-- figure:test-figure -->', '', '### Masked', '',
+  '<details><summary>Under the hood</summary>', '', '`strategy_types.py`', '', '</details>',
+].join('\n');
+
+@Component({ selector: 'sb-test-figure', changeDetection: ChangeDetectionStrategy.OnPush, template: '<p class="test-figure">figure</p>' })
+class TestFigure {}
+
+async function openGuide(slug: string | undefined, opts: { fragment?: string | null; status?: number } = {}) {
+  TestBed.resetTestingModule();
+  const fragment = new BehaviorSubject<string | null>(opts.fragment ?? null);
+  TestBed.configureTestingModule({ providers: [
+    provideZonelessChangeDetection(), provideRouter([]),
+    provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
+    provideHttpClientTesting(), GuideStore,
+    { provide: ActivatedRoute, useValue: { fragment } },
+  ] });
+  const http = TestBed.inject(HttpTestingController);
+  const fixture: ComponentFixture<Guide> = TestBed.createComponent(Guide);
+  if (slug !== undefined) fixture.componentRef.setInput('slug', slug);
+  const loaded = TestBed.inject(GuideStore).ensureLoaded();
+  http.expectOne('/api/v1/guide').flush(INDEX);
+  await loaded;
+  await settle(fixture);
+  const want = slug ?? 'what-it-is';
+  const request = http.expectOne(`/api/v1/guide/${want}`);
+  if (opts.status) request.flush({ error: { code: 'not_found', message: 'none' } }, { status: opts.status, statusText: 'x' });
+  else request.flush({ slug: want, title: 'T', reviewed_for: '2.19.2', markdown: BODY });
+  await settle(fixture);
+  return { fixture, el: fixture.nativeElement as HTMLElement, http, fragment };
+}
+
+async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
+  fixture.detectChanges();
+  await fixture.whenStable();
+  fixture.detectChanges();
+}
+
+describe('Guide page: one chapter', () => {
+  GUIDE_FIGURES['test-figure'] = TestFigure;
+  afterEach(() => vi.restoreAllMocks());
+
+  it('heads the page with the chapter, stamps its review and ends with the notice', async () => {
+    const { el } = await openGuide('what-it-is');
+    expect(el.querySelector('h1')!.textContent!.trim()).toBe('What the bot is (and isn’t)');
+    expect(el.querySelector('.guide-stamp')!.textContent!.trim()).toBe('Reviewed for bot v2.19.2');
+    expect(el.querySelector('.guide-notice')!.textContent!.trim()).toBe(GUIDE_NOTICE);
+  });
+
+  it('opens the first chapter when the URL names none', async () => {
+    const { el } = await openGuide(undefined);
+    expect(el.querySelector('h1')!.textContent!.trim()).toBe('What the bot is (and isn’t)');
+  });
+
+  it('renders Markdown through the sanitiser with details intact', async () => {
+    const { el } = await openGuide('what-it-is');
+    expect(el.querySelector('.md blockquote')).not.toBeNull();
+    expect(el.querySelector('.md details > summary')!.textContent).toBe('Under the hood');
+  });
+
+  it('places a registered figure between the prose segments', async () => {
+    const { el } = await openGuide('what-it-is');
+    expect(el.querySelectorAll('.md')).toHaveLength(2);
+    expect(el.querySelector('.test-figure')).not.toBeNull();
+  });
+
+  it('gives every heading its server anchor and a permalink', async () => {
+    const { el } = await openGuide('what-it-is');
+    expect([...el.querySelectorAll('.md > h2, .md > h3')].map((h) => h.id)).toEqual(['swing-horizons', 'masked']);
+    expect(el.querySelector('#masked a.permalink')!.getAttribute('href')).toBe('/insights/guide/what-it-is#masked');
+  });
+
+  it('scrolls a deep link to its heading', async () => {
+    const spy = vi.fn();
+    Element.prototype.scrollIntoView = spy;
+    await openGuide('what-it-is', { fragment: 'masked' });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((spy.mock.contexts[0] as HTMLElement).id).toBe('masked');
+  });
+
+  it('routes an in-guide link through the router', async () => {
+    const { el } = await openGuide('what-it-is');
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    el.querySelector<HTMLAnchorElement>('.md a[href^="/insights"]')!.click();
+    expect(navigate).toHaveBeenCalledWith('/insights/guide/glossary#r-multiple');
+  });
+
+  it('names the chapter in the breadcrumb on a chapter URL', async () => {
+    await openGuide('glossary');
+    expect(TestBed.inject(RouteTitleService).detail()).toBe('Glossary');
+  });
+
+  it('says so when the chapter does not exist', async () => {
+    const { el } = await openGuide('nope', { status: 404 });
+    expect(el.textContent).toContain('No guide chapter called “nope”');
+  });
+});
+
+describe('guideRoutes', () => {
+  it('scopes GuideStore and the resolver to one parent with two children', () => {
+    const [parent] = guideRoutes;
+    expect(parent.providers).toContain(GuideStore);
+    expect(parent.runGuardsAndResolvers).toBe('always');
+    expect(parent.resolve?.['ready']).toBeTypeOf('function');
+    expect(parent.children?.map((c) => c.path)).toEqual(['', ':slug']);
+  });
+
+  it('loads the Guide component for both children', async () => {
+    for (const child of guideRoutes[0].children ?? []) expect(await child.loadComponent!()).toBe(Guide);
+  });
+});
+```
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `cd frontend && npx ng test --watch=false --include src/app/workspaces/guide/guide.spec.ts`
+Expected: FAIL — `Cannot find module './guide'`.
+
+- [ ] **Step 3: Write the routes**
+
+Create `frontend/src/app/workspaces/guide/guide.routes.ts` (keep both literal `import('./guide')` calls: `workspace-consistency.spec.ts` matches that pattern):
+
+```ts
+import { inject } from '@angular/core';
+import { Routes } from '@angular/router';
+import { from } from 'rxjs';
+
+import { onEvents, routeData } from '../../routing/route-metadata';
+import { startRoute } from '../../routing/route-resolver';
+import { GuideStore } from '../../stores/guide.store';
+
+/** One store for every chapter URL, so moving between chapters keeps the
+ *  index and the bodies already fetched. No server event refreshes the
+ *  guide: chapters change only with a deploy. */
+export const guideRoutes: Routes = [{
+  path: '',
+  providers: [GuideStore],
+  runGuardsAndResolvers: 'always',
+  data: routeData('Guide', onEvents()),
+  resolve: { ready: startRoute(() => from(inject(GuideStore).ensureLoaded())) },
+  children: [
+    { path: '', loadComponent: () => import('./guide').then((m) => m.Guide) },
+    { path: ':slug', loadComponent: () => import('./guide').then((m) => m.Guide) },
+  ],
+}];
+```
+
+- [ ] **Step 4: Write the page**
+
+Create `frontend/src/app/workspaces/guide/guide.ts`:
+
+```ts
+import { NgComponentOutlet } from '@angular/common';
+import {
+  ChangeDetectionStrategy, Component, ElementRef, Type, ViewEncapsulation,
+  afterRenderEffect, computed, effect, inject, input, untracked, viewChild,
+} from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router } from '@angular/router';
+
+import { RouteTitleService } from '../../routing/route-title.service';
+import { GuideStore } from '../../stores/guide.store';
+import { Async } from '../../ui/async';
+import { Panel } from '../../ui/layout';
+import { Page } from '../../ui/page';
+import { GUIDE_FIGURES } from './guide-figures';
+import { applyHeadingAnchors, internalGuideUrl, renderGuideSegments, scrollToAnchor } from './guide-markdown';
+
+/** The one-line notice on every guide page (spec v215 § Risks). */
+export const GUIDE_NOTICE = 'Education about a paper-trading tool, not advice: alerts are not tailored to you, '
+  + 'a suggested size is a default, and past results do not predict future ones.';
+
+/**
+ * Insights → Guide (spec v215): one chapter at a time, rendered from the
+ * server's resolved Markdown. Chapter HTML is rendered by `marked` and bound
+ * with [innerHTML], so Angular's sanitiser runs on it; the prose styles are
+ * unencapsulated (ViewEncapsulation.None, every selector under `sb-guide`)
+ * because sanitised HTML carries no component attribute.
+ */
+@Component({
+  selector: 'sb-guide',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  encapsulation: ViewEncapsulation.None,
+  imports: [Async, NgComponentOutlet, Page, Panel],
+  template: `
+    <sb-page [heading]="chapter()?.title ?? null">
+      <div page-primary class="guide-layout">
+        <sb-panel class="guide-panel">
+          <sb-async [loading]="loading()" [error]="error()" [empty]="empty()" emptyReason="no-data-yet"
+                    [emptyTitle]="emptyTitle()" [staleAsOf]="null" shape="panel" (retry)="retry()">
+            <article #article class="guide-chapter" (click)="onContentClick($event)">
+              <p class="guide-stamp">Reviewed for bot v{{ chapter()?.reviewed_for }}</p>
+              @for (segment of segments(); track $index) {
+                @if (segment.kind === 'md') {
+                  <div class="md" [innerHTML]="segment.html"></div>
+                } @else {
+                  <ng-container *ngComponentOutlet="figure(segment.name)" />
+                }
+              }
+            </article>
+          </sb-async>
+        </sb-panel>
+        <p class="guide-notice">{{ notice }}</p>
+      </div>
+    </sb-page>
+  `,
+  styles: `
+    sb-guide .guide-layout { display: flex; flex-direction: column; gap: var(--space-14); min-width: 0; }
+    sb-guide .guide-chapter { max-width: 72ch; min-width: 0; overflow-wrap: anywhere; }
+    sb-guide .guide-stamp, sb-guide .guide-notice { margin: 0; color: var(--text-muted); font-size: var(--text-table); }
+    sb-guide .md h2 { margin: var(--space-20) 0 var(--space-8); font-size: var(--text-subhead); scroll-margin-top: var(--space-20); }
+    sb-guide .md h3 { margin: var(--space-14) 0 var(--space-6); font-size: var(--text-body); font-weight: 600; scroll-margin-top: var(--space-20); }
+    sb-guide .md p, sb-guide .md ul, sb-guide .md ol { margin: var(--space-8) 0; line-height: 1.55; }
+    sb-guide .md a { color: var(--accent); }
+    sb-guide .md blockquote { margin: var(--space-10) 0; padding: var(--space-8) var(--space-14); border-left: 2px solid var(--accent); background: var(--surface-raised); }
+    sb-guide .md table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+    sb-guide .md th, sb-guide .md td { padding: var(--cell-pad-y) var(--cell-pad-x); border-bottom: 1px solid var(--border); text-align: left; }
+    sb-guide .md pre { max-width: 100%; overflow-x: auto; padding: var(--space-8); background: var(--bg); font-family: var(--font-mono); }
+    sb-guide .md details { margin: var(--space-10) 0; padding: 0 var(--space-10); border: 1px solid var(--border); border-radius: var(--control-radius); }
+    sb-guide .md summary { display: flex; align-items: center; gap: var(--space-6); min-height: var(--hit-min); color: var(--text-muted); cursor: pointer; list-style: none; }
+    sb-guide .md summary::before { content: '▸'; }
+    sb-guide .md details[open] > summary::before { content: '▾'; }
+    sb-guide .md .permalink { margin-left: var(--space-6); color: var(--text-faint); text-decoration: none; }
+  `,
+})
+export class Guide {
+  /** The `:slug` route param; absent on `/insights/guide`. */
+  readonly slug = input<string>();
+
+  protected readonly store = inject(GuideStore);
+  private readonly router = inject(Router);
+  private readonly titles = inject(RouteTitleService);
+  private readonly fragment = toSignal(inject(ActivatedRoute).fragment, { initialValue: null });
+  private readonly article = viewChild<ElementRef<HTMLElement>>('article');
+  private scrolledTo: string | null = null;
+  protected readonly notice = GUIDE_NOTICE;
+
+  protected readonly activeSlug = computed(() => this.slug() || this.store.firstSlug());
+  protected readonly chapter = computed(() =>
+    this.store.chapters().find((c) => c.slug === this.activeSlug()) ?? null);
+  private readonly bodyStatus = computed(() => {
+    const slug = this.activeSlug();
+    return slug ? this.store.chapterStatus()[slug] ?? 'loading' : null;
+  });
+  protected readonly segments = computed(() => {
+    const slug = this.activeSlug();
+    const body = slug ? this.store.bodies()[slug] : undefined;
+    return body ? renderGuideSegments(body.markdown) : [];
+  });
+  protected readonly loading = computed(() =>
+    ['idle', 'loading'].includes(this.store.status()) || this.bodyStatus() === 'loading');
+  protected readonly error = computed(() =>
+    this.store.error() ?? (this.bodyStatus() === 'error' ? 'This chapter could not be loaded.' : null));
+  protected readonly empty = computed(() =>
+    this.store.status() === 'ready' && (this.activeSlug() === null || this.bodyStatus() === 'missing'));
+  protected readonly emptyTitle = computed(() => this.activeSlug() === null
+    ? 'The guide has no chapters yet' : `No guide chapter called “${this.activeSlug()}”`);
+
+  constructor() {
+    effect(() => {
+      const slug = this.activeSlug();
+      if (slug && this.store.status() === 'ready') untracked(() => this.store.loadChapter(slug));
+    });
+    // The breadcrumb's detail segment (calendar-day.ts pattern): the chapter
+    // on a chapter URL, none on the bare /insights/guide.
+    effect(() => {
+      const crumb = this.slug() ? this.chapter()?.title ?? null : null;
+      this.titles.detail();
+      untracked(() => this.titles.setDetail(crumb));
+    });
+    afterRenderEffect(() => {
+      const host = this.article()?.nativeElement;
+      const chapter = this.chapter();
+      this.segments();
+      if (!host || !chapter) return;
+      applyHeadingAnchors(host, chapter.headings, `/insights/guide/${chapter.slug}`);
+      this.scrollToFragment(host, chapter.slug, this.fragment());
+    });
+  }
+
+  protected figure(name: string): Type<unknown> | null {
+    return GUIDE_FIGURES[name] ?? null;
+  }
+
+  protected retry(): void {
+    void this.store.ensureLoaded();
+    const slug = this.activeSlug();
+    if (slug) this.store.loadChapter(slug);
+  }
+
+  /** Chapter links are plain <a href> in sanitised HTML; send the in-app
+   *  ones through the router instead of reloading the app. */
+  protected onContentClick(event: MouseEvent): void {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const href = (event.target as Element | null)?.closest('a')?.getAttribute('href');
+    const url = href ? internalGuideUrl(href, this.activeSlug()) : null;
+    if (url === null) return;
+    event.preventDefault();
+    this.scrolledTo = null;
+    void this.router.navigateByUrl(url);
+  }
+
+  /** Once per slug#fragment, and only when the heading is rendered: the
+   *  body arrives after the router's own anchor scroll would have run. */
+  private scrollToFragment(host: HTMLElement, slug: string, fragment: string | null): void {
+    const key = fragment ? `${slug}#${fragment}` : null;
+    if (key === null || key === this.scrolledTo) return;
+    if (scrollToAnchor(host, fragment!)) this.scrolledTo = key;
+  }
+}
+```
+
+- [ ] **Step 5: Pin the new route page in the consistency spec**
+
+In `frontend/src/app/workspaces/workspace-consistency.spec.ts`, `PAGE_ROUTES`, insert `'guide/guide.ts',` on the line after `'gallery/gallery.ts',` (line 129).
+
+- [ ] **Step 6: Run the page, Markdown, consistency and token specs**
+
+Run: `cd frontend && npx ng test --watch=false --include src/app/workspaces/guide/guide.spec.ts --include src/app/workspaces/guide/guide-markdown.spec.ts --include src/app/workspaces/workspace-consistency.spec.ts --include src/app/ui/spacing.spec.ts --include src/app/ui/all-sources.spec.ts`
+Expected: PASS. If `afterRenderEffect` has not run when a heading assertion reads the DOM, add one more `await settle(fixture)` in that test, never a timer.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add frontend/src/app/workspaces/guide/guide.routes.ts frontend/src/app/workspaces/guide/guide.ts frontend/src/app/workspaces/guide/guide.spec.ts frontend/src/app/workspaces/workspace-consistency.spec.ts
+git commit -m "feat(guide): chapter page with sanitised Markdown, anchors, deep links and figures (v236 V236-4)"
+```
