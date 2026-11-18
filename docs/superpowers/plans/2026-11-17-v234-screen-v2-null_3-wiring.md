@@ -1030,7 +1030,7 @@ git commit -m "feat(v234): placebo v2 runner, planted check and stop gate 2"
 
 - [ ] **Step 6: Run the v2 placebo (long, checkpointed)**
 
-Read `<D>` from plan v230's index: `grep -n "V230-5" docs/superpowers/plans/2026-11-16-v230-screen-v2-rescreen_0-index.md` (its `## Handoff` names the date the doc was rendered with). Dispatch `backtest-runner` (one at a time, in the plan's worktree, named explicitly), in the background; after a crash it re-runs the identical command (finished cells and planted record skipped, a cell in progress resumes from its stage checkpoints, V230-5's universes in `data/v230-placebo/` reused):
+Read `<D>` from plan v230's index: `grep -n "V230-5" docs/superpowers/plans/implemented/2026-11-16-v230-screen-v2-rescreen_0-index.md` (its `## Handoff` names the date the doc was rendered with). Dispatch `backtest-runner` (one at a time, in the plan's worktree, named explicitly), in the background; after a crash it re-runs the identical command (finished cells and planted record skipped, a cell in progress resumes from its stage checkpoints, V230-5's universes in `data/v230-placebo/` reused):
 
 ```bash
 mkdir -p logs

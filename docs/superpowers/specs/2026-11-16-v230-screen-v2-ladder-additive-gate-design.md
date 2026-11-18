@@ -641,3 +641,11 @@ veteran-trader. Line numbers refer to the spec as first committed
 - veteran-trader: earnings and OPEX inside the holding window -- rejected
   for now: no point-in-time earnings calendar exists for 2017–2020; listed
   under What follows.
+
+## Panel review of Plan 1 (V230-1..5), 2026-11-18
+
+quant-researcher, quant-engineer and veteran-trader reviewed the merged diff and the v1 results doc: no BLOCKING finding, stop gate 1 = BIAS stands (8 of 12 cells wholly outside ±0.02R). Advisories carried into plan v234 (not applied here, the v1 results are a closed measurement):
+
+- quant-researcher: until v234 re-screens them, the `uptrend_pullback` (+0.367) and `turtle_soup` (+0.316) SCREEN-PASS rows sit inside the null bias (+0.27..+0.37R) and are not evidence of edge; "Cells past 0.02R" counts two NOISY shuffled cells as bias; `accept_cell` FAILs a wholly-outside interval before the half-width check (doc rule line omits it); a PASS still allows ~0.02R residual bias; the shuffled event means are positive (real drift), so the absolute-R fifth clause also measures beta; shuffled `copies>1` blends SPY across copies; v234 must freeze the maximum copies/tickers before any v2 cell is read (optional stopping).
+- quant-engineer: `_month_turn` flags the final bar (not real lookahead, pin it in a test); placebo and scope/null-version are not in the checkpoint manifest, so a changed seed/trigger/null could resume stale pickles (key on the universe manifest hash and null version in v234); results doc lacks command, commit, bootstrap seed and gbm source hashes; shuffled universe is survivor-conditioned; `EVENT_START` default bound at definition time.
+- veteran-trader: GBM gaps/regime/volume are unrealistic, shuffled market cells are effectively one series, only next-open long arms were tested (no limit entries, no shorts): the BIAS is proven for that arm only, not sized for real setups.
