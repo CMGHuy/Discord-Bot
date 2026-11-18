@@ -27,14 +27,15 @@ from __future__ import annotations
 import hashlib
 import json
 import zlib
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Callable, Mapping
 
 import numpy as np
 import pandas as pd
 
-from swingbot.core.backtesting.screen import indicators
+from swingbot.core.backtesting.instrument import stats
+from swingbot.core.backtesting.screen import indicators, verdict
 from swingbot.core.backtesting.screen.context import CONTEXT_ONLY_STEMS
 from swingbot.core.backtesting.screen.ideas import Idea
 
@@ -415,3 +416,99 @@ def planted_value(base_rows, planted_rows) -> float | None:
     gains = [r["r_event"] - base[key] for r in planted_rows
              if (key := (r["ticker"], str(r["entry_date"])[:10])) in base]
     return float(np.mean(gains)) if gains else None
+
+
+@dataclass(frozen=True)
+class Cell:
+    universe: str
+    trigger: str
+    null: str
+    n: int
+    mean_r_event: float | None
+    mean_r_null: float | None
+    delta: float | None
+    ci_low: float | None
+    ci_high: float | None
+
+    @property
+    def half_width(self) -> float | None:
+        if self.ci_low is None or self.ci_high is None:
+            return None
+        return (self.ci_high - self.ci_low) / 2.0
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: Mapping) -> "Cell":
+        return cls(**{f.name: d[f.name] for f in fields(cls)})
+
+
+def cell_from_rows(universe: str, trigger: str, null_version: str, rows, *,
+                   n_resamples: int = stats.WEEK_BOOTSTRAP_RESAMPLES,
+                   seed: int = stats.WEEK_BOOTSTRAP_SEED) -> Cell:
+    """N, mean R per arm, delta and its week-clustered 95% interval."""
+    if not rows:
+        return Cell(universe, trigger, null_version, 0, None, None, None, None, None)
+    event = np.array([float(r["r_event"]) for r in rows])
+    null_r = np.array([float(r["r_null"]) for r in rows])
+    paired = [verdict.PairedEvent(str(r["entry_date"])[:10], float(e - z))
+              for r, e, z in zip(rows, event, null_r)]
+    low, high, _ = verdict.bootstrap(paired, n_resamples=n_resamples, seed=seed)
+    return Cell(universe, trigger, null_version, len(rows), float(event.mean()),
+                float(null_r.mean()), float((event - null_r).mean()), low, high)
+
+
+def _r(x: float) -> float:
+    return round(float(x), _PLACES)
+
+
+def accept_cell(cell: Cell) -> str:
+    """PASS / FAIL / NOISY under the inclusive 0.02R rule."""
+    if cell.n == 0 or cell.delta is None or cell.half_width is None:
+        return "NOISY"
+    if _r(cell.ci_low) > TOLERANCE_R or _r(cell.ci_high) < -TOLERANCE_R:
+        return "FAIL"
+    if _r(cell.half_width) > TOLERANCE_R:
+        return "NOISY"
+    return "PASS" if _r(abs(cell.delta)) <= TOLERANCE_R else "FAIL"
+
+
+def v1_premise_holds(cells) -> bool:
+    """True when some cell's absolute delta exceeds the tolerance."""
+    return any(c.delta is not None and _r(abs(c.delta)) > TOLERANCE_R for c in cells)
+
+
+def planted_recovered(cell: Cell, value) -> bool:
+    if value is None or cell.half_width is None:
+        return False
+    return _r(cell.ci_low) <= _r(value) <= _r(cell.ci_high)
+
+
+def _noisy(cell: Cell | None) -> bool:
+    """Judge the planted cell for noise only: its delta is meant to be large."""
+    return (cell is None or cell.n == 0 or cell.half_width is None
+            or _r(cell.half_width) > TOLERANCE_R)
+
+
+def _planted_block(planted_cell, value) -> dict:
+    return {"value": value, "cell": None if planted_cell is None else planted_cell.to_dict(),
+            "recovered": planted_cell is not None and planted_recovered(planted_cell, value),
+            "noisy": _noisy(planted_cell)}
+
+
+def acceptance(cells, planted_cell, value) -> dict:
+    """ACCEPT / STOP / ENLARGE over every placebo cell plus the planted check."""
+    if not cells:
+        raise ValueError("acceptance needs placebo cells; no cells given")
+    statuses = [accept_cell(c) for c in cells]
+    planted = _planted_block(planted_cell, value)
+    if "FAIL" in statuses:
+        outcome = "STOP"
+    elif "NOISY" in statuses or planted["noisy"]:
+        outcome = "ENLARGE"
+    else:
+        outcome = "ACCEPT" if planted["recovered"] else "STOP"
+    # Decide from all cells before serializing potentially repeated display keys.
+    verdicts = {f"{c.universe}/{c.trigger}": status for c, status in zip(cells, statuses)}
+    return {"verdict": outcome, "cells": verdicts, "planted": planted}

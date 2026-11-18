@@ -198,3 +198,125 @@ def test_failed_plant_metadata_invalidates_existing_completion(tmp_path, monkeyp
         placebo.plant_universe(base, out)
     assert not (out / placebo.MANIFEST_FILE).exists()
     assert not (out / (placebo.PLANTED_FILE + ".tmp")).exists()
+
+
+def _cell(delta, low, high, n=500, trigger="p_high20"):
+    return placebo.Cell("gbm-200", trigger, "v2", n, 0.1, 0.1 - (delta or 0.0),
+                        delta, low, high)
+
+
+def test_cell_from_rows_and_round_trip():
+    rows = [{"ticker": "A", "entry_date": f"2011-{m:02d}-03", "r_event": 0.3,
+             "r_null": 0.1} for m in range(1, 13)]
+    cell = placebo.cell_from_rows("gbm-200", "p_high20", "v1", rows, n_resamples=200)
+    assert (cell.universe, cell.trigger, cell.null) == ("gbm-200", "p_high20", "v1")
+    assert (cell.n, cell.mean_r_event, cell.mean_r_null) == (
+        12, pytest.approx(0.3), pytest.approx(0.1))
+    assert cell.delta == pytest.approx(0.2)
+    assert (cell.ci_low, cell.ci_high) == (pytest.approx(0.2), pytest.approx(0.2))
+    assert cell.half_width == pytest.approx(0.0)
+    assert placebo.Cell.from_dict(json.loads(json.dumps(cell.to_dict()))) == cell
+
+
+def test_empty_cell_has_no_estimate_and_requires_enlargement():
+    cell = placebo.cell_from_rows("gbm-200", "p_high20", "v1", [])
+    assert (cell.n, cell.mean_r_event, cell.mean_r_null, cell.delta,
+            cell.ci_low, cell.ci_high, cell.half_width) == (0, None, None, None,
+                                                          None, None, None)
+    assert placebo.accept_cell(cell) == "NOISY"
+    assert not placebo.planted_recovered(cell, 0.0)
+    assert not placebo.v1_premise_holds([cell])
+    assert placebo.Cell.from_dict(json.loads(json.dumps(cell.to_dict()))) == cell
+
+
+def test_cell_interval_resamples_whole_weeks_not_individual_events():
+    rows = [{"ticker": "A", "entry_date": "2011-01-03T09:30:00", "r_event": 2.0,
+             "r_null": 1.0},
+            {"ticker": "B", "entry_date": "2011-01-04T09:30:00", "r_event": 1.0,
+             "r_null": 2.0}]
+    cell = placebo.cell_from_rows("gbm-200", "p_high20", "v2", rows,
+                                  n_resamples=200, seed=7)
+    assert (cell.n, cell.mean_r_event, cell.mean_r_null) == (2, 1.5, 1.5)
+    assert (cell.delta, cell.ci_low, cell.ci_high) == (0.0, 0.0, 0.0)
+    rows[1]["entry_date"] = "2011-01-10T09:30:00"
+    split = placebo.cell_from_rows("gbm-200", "p_high20", "v2", rows,
+                                   n_resamples=200, seed=7)
+    assert (split.delta, split.ci_low, split.ci_high) == (0.0, -1.0, 1.0)
+
+
+@pytest.mark.parametrize("delta, low, high, expected", [
+    (0.02, 0.0, 0.04, "PASS"),
+    (-0.02, -0.04, 0.0, "PASS"),
+    (0.020000000000000004, 0.0, 0.04000000000000001, "PASS"),
+    (0.03, 0.01, 0.05, "FAIL"),
+    (0.0201, 0.0001, 0.0401, "FAIL"),
+    (0.0, -0.0201, 0.0201, "NOISY"),
+    (0.3, 0.21, 0.39, "FAIL"),
+    (-0.3, -0.39, -0.21, "FAIL"),
+    (0.03, -0.02, 0.08, "NOISY"),
+    (0.06, 0.02, 0.10, "NOISY"),
+    (-0.06, -0.10, -0.02, "NOISY"),
+    (None, None, None, "NOISY"),
+    (0.0, None, 0.01, "NOISY"),
+    (0.0, -0.01, None, "NOISY"),
+])
+def test_accept_cell_boundaries(delta, low, high, expected):
+    assert placebo.accept_cell(_cell(delta, low, high)) == expected
+
+
+def test_accept_cell_without_events_is_noisy_even_with_estimates():
+    assert placebo.accept_cell(_cell(0.3, 0.29, 0.31, n=0)) == "NOISY"
+
+
+def test_v1_premise_holds_only_past_the_tolerance():
+    calm = [_cell(0.02, 0.0, 0.04), _cell(-0.02, -0.04, 0.0)]
+    assert placebo.v1_premise_holds(calm) is False
+    assert placebo.v1_premise_holds(calm + [_cell(-0.0201, -0.05, 0.0)]) is True
+    assert placebo.v1_premise_holds([_cell(0.020000000000000004, 0.0, 0.04)]) is False
+    assert placebo.v1_premise_holds([]) is False
+
+
+def test_planted_recovered_is_interval_containment():
+    cell = _cell(0.3, 0.28, 0.32)
+    assert placebo.planted_recovered(cell, 0.28)
+    assert placebo.planted_recovered(cell, 0.32)
+    assert placebo.planted_recovered(cell, 0.32000000000000006)
+    assert not placebo.planted_recovered(cell, 0.3201)
+    assert not placebo.planted_recovered(cell, 0.2799)
+    assert not placebo.planted_recovered(cell, None)
+
+
+def test_acceptance_verdicts():
+    good, planted = [_cell(0.0, -0.01, 0.01)], _cell(0.3, 0.29, 0.31)
+    assert placebo.acceptance(good, planted, 0.3)["verdict"] == "ACCEPT"
+    assert placebo.acceptance(good + [_cell(0.05, 0.04, 0.06)], planted, 0.3)["verdict"] == "STOP"
+    assert placebo.acceptance(good + [_cell(0.0, -0.03, 0.03)], planted, 0.3)["verdict"] == "ENLARGE"
+    assert placebo.acceptance(good, planted, 0.35)["verdict"] == "STOP"
+    assert placebo.acceptance(good, _cell(0.3, 0.2, 0.4), 0.3)["verdict"] == "ENLARGE"
+    assert placebo.acceptance(good, None, None)["verdict"] == "ENLARGE"
+    out = placebo.acceptance(good, planted, 0.3)
+    assert out["cells"] == {"gbm-200/p_high20": "PASS"}
+    assert out["planted"] == {"recovered": True, "value": 0.3,
+                              "cell": planted.to_dict(), "noisy": False}
+    with pytest.raises(ValueError, match="no cells"):
+        placebo.acceptance([], planted, 0.3)
+
+
+def test_acceptance_failure_precedes_missing_or_noisy_planted_cell():
+    failed = [_cell(0.3, 0.21, 0.39)]
+    assert placebo.acceptance(failed, None, None)["verdict"] == "STOP"
+    noisy = _cell(0.3, 0.2, 0.4)
+    assert placebo.acceptance(failed, noisy, 0.3)["verdict"] == "STOP"
+    duplicate = failed + [_cell(0.0, -0.01, 0.01)]
+    assert placebo.acceptance(duplicate, None, None)["verdict"] == "STOP"
+
+
+@pytest.mark.parametrize("planted, value, expected", [
+    ((0.3, 0.28, 0.32), 0.32, "ACCEPT"),
+    ((0.3, 0.28, 0.32), None, "STOP"),
+    ((0.3, 0.29, 0.31, 0), 0.3, "ENLARGE"),
+    ((None, None, None), 0.3, "ENLARGE"),
+    ((0.3, 0.2, 0.4), 0.5, "ENLARGE"),
+])
+def test_acceptance_planted_boundaries(planted, value, expected):
+    assert placebo.acceptance([_cell(0.0, -0.01, 0.01)], _cell(*planted), value)["verdict"] == expected
