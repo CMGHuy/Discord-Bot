@@ -1117,3 +1117,16 @@ Verdict: **ENLARGE**
 | shuffled-c6/p_gap_up | NOISY |
 
 Planted value +0.1927 R; recovered: True; noisy: True.
+
+## Final outcome (partner, 2026-11-18): stop gate 2 = STOP
+
+The generated block above shows ENLARGE because the last enlargement run scored only the cells then on disk. The recorded outcome is **STOP**: gbm-200 and shuffled-c1 on `p_market_down` and `p_month_turn` were refused `NULL_STARVED` (107 to 159 of 107 to 159 event dates left an event under 5 candidates), `shuffled-c6/p_gap_up` stayed NOISY (+0.0013R, half-width 0.0275R), and the gbm-400 enlargement passed `p_gap_up` (+0.0083R, 0.0152), `p_high20` (+0.0005R, 0.0141) and `p_rsi2_dip` (+0.0045R, 0.0166). V234-9..12 do not run and no fallback null is tried; Parts B and C proceed on the v1 null.
+
+Reading limits the panel asked to be written down (all ADVISORY, no BLOCKING):
+- The planted check has half-width 0.0441R (above 0.02R) and was not enlarged: it shows v2 resolves an edge of about 0.2R on about 3000 events, not one of 0.05R. A later SCREEN-PASS on a small lift must not cite it as detection power.
+- Enlarging a shuffled universe by copies has a floor set by weekly clustering (6 copies of the same 514 series took the half-width from 0.0482 to 0.0275). Settling such a cell needs more weeks or more source series.
+- The v1 null bias (+0.27 to +0.37R on RSI2-dip and 20-bar sweep triggers, no-edge universes) is the same size as the recorded SCREEN-PASS deltas of `uptrend_pullback` and `turtle_soup`; those v1 verdicts cannot separate an edge from the bias.
+- gbm universes have no earnings gaps, so a PASS means no draw bias on smooth paths, not that the null reproduces gap-driven fills; p_gap_up is the least verified trigger.
+- Market and month-turn regime triggers cannot be screened against v2 (every ticker fires the same day, so the cross-section pool is empty); they stay on the v1 null, whose bias there is unbounded on real-like data.
+- The null's level fill anchors on its own bar and cannot gap past its level; size unmeasured.
+- Open engineering follow-ups: `_acceptance` scores only saved cells, and checkpoint manifests carry no code/config fingerprint (and record `costs` unresolved); market-scope starvation is counted per date, not per event; `_context_run` passes the constant `"screen-v1"` to `screen_family_q`.
