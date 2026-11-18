@@ -439,8 +439,8 @@ def run_stage(stage, out_dir, *, build, preregistration, sectors=None, cluster_f
 # --- ledger ----------------------------------------------------------------------
 
 LEDGER_VERDICTS = {"PASS": "PASS", "FAIL": "NO-LIFT", "NOT_SELECTED": "NO-LIFT",
-                   "NO_ELIGIBLE_CELL": "NO-LIFT", "THIN": "UNMEASURABLE",
-                   "UNDERPOWERED": "UNMEASURABLE", "refused:zero-diff": "UNMEASURABLE",
+                   "NO_ELIGIBLE_CELL": "NO-LIFT", "THIN": "INCONCLUSIVE",
+                   "UNDERPOWERED": "NO-LIFT", "refused:zero-diff": "UNMEASURABLE",
                    "OPEN": "OPEN"}
 
 
@@ -472,6 +472,14 @@ def _look_stats(cell, stages) -> dict:
     return next((c for c in stages.get(1, {}).get("cells", []) if c["cell"] == cell), {})
 
 
+def _ledger_verdict(cell, raw, stages) -> str:
+    """Pre-registration § Decisions: only the selected cell's Stage 3 FAIL is
+    `FAIL`; every other close (UNDERPOWERED, no plateau, Stage 2 FAIL) is `NO-LIFT`."""
+    if raw == "FAIL" and stages.get(3, {}).get("cell") == cell:
+        return "FAIL"
+    return LEDGER_VERDICTS[raw]
+
+
 def ledger_rows(out_dir, run_date, record) -> list:
     """One preregistration-ledger row per look (spec: 3 looks, BH family)."""
     stages = {s: _load(stage_path(out_dir, s)) for s in STAGE_RUNNERS
@@ -484,7 +492,7 @@ def ledger_rows(out_dir, run_date, record) -> list:
                                    "of M-S, stop 0.25% beyond S, clamped confluence plans; ExpR "
                                    "above the reference, fills >= 50%, WR within 2pp (v212)",
                      "instrument": "v2", "n": stats.get("n"), "exp_r": stats.get("expr"),
-                     "p": None, "verdict": LEDGER_VERDICTS[raw], "stage_verdict": raw,
+                     "p": None, "verdict": _ledger_verdict(cell, raw, stages), "stage_verdict": raw,
                      "record": record})
     return rows
 

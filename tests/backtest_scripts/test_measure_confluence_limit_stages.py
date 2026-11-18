@@ -116,15 +116,15 @@ def test_ledger_rows_one_per_look(tmp_path):
     rows = mcl.ledger_rows(tmp_path, "2026-11-20", "docs/superpowers/results/x.md")
     assert [r["id"] for r in rows] == ["v212-f0.333", "v212-f0.5", "v212-f0.667"]
     assert [(r["verdict"], r["stage_verdict"]) for r in rows] == [
-        ("UNMEASURABLE", "THIN"), ("NO-LIFT", "NOT_SELECTED"), ("NO-LIFT", "NOT_SELECTED")]
+        ("INCONCLUSIVE", "THIN"), ("NO-LIFT", "NOT_SELECTED"), ("NO-LIFT", "NOT_SELECTED")]
     assert {r["instrument"] for r in rows} == {"v2"} and rows[0]["n"] == 80
 
 
-def test_an_underpowered_stage0_makes_every_look_unmeasurable(tmp_path):
+def test_an_underpowered_stage0_makes_every_look_no_lift(tmp_path):
     mcl._write(mcl.stage_path(tmp_path, -1), {"verdict": "REACHABLE"})
     mcl._write(mcl.stage_path(tmp_path, 0), {"verdict": "UNDERPOWERED"})
     rows = mcl.ledger_rows(tmp_path, "2026-11-20", "r.md")
-    assert {(r["verdict"], r["stage_verdict"]) for r in rows} == {("UNMEASURABLE", "UNDERPOWERED")}
+    assert {(r["verdict"], r["stage_verdict"]) for r in rows} == {("NO-LIFT", "UNDERPOWERED")}
     assert {r["verdict"] for r in mcl.ledger_rows(tmp_path / "none", "d", "r")} == {"OPEN"}
 
 
@@ -176,7 +176,7 @@ def test_stage3_fails_a_non_thin_selected_cell_below_the_reference(tmp_path):
     _through_stage2(tmp_path)
     out = _stage3(tmp_path, 0.8)
     assert (out["verdict"], out["score"]["expr_beats_reference"]) == ("FAIL", False)
-    assert mcl.ledger_rows(tmp_path, "d", "r")[0]["verdict"] == "NO-LIFT"
+    assert mcl.ledger_rows(tmp_path, "d", "r")[0]["verdict"] == "FAIL"
 
 
 def test_no_train_stage_reruns_once_validation_is_read(tmp_path):
@@ -254,3 +254,15 @@ def test_stages_1_and_3_carry_disclosures_that_never_change_the_verdict(tmp_path
     text = render_disclosures(blob)
     assert "D range" in text and "direction" in text
     assert "disclosures" not in mcl._load(mcl.stage_path(tmp_path, 2))
+
+
+def test_a_refused_stage_minus1_makes_every_look_unmeasurable(tmp_path):
+    mcl._write(mcl.stage_path(tmp_path, -1), {"verdict": "refused:zero-diff"})
+    rows = mcl.ledger_rows(tmp_path, "2026-11-20", "r.md")
+    assert {(r["verdict"], r["stage_verdict"]) for r in rows} == {("UNMEASURABLE", "refused:zero-diff")}
+
+
+def test_only_the_selected_cells_stage3_fail_is_a_ledger_fail():
+    stages = {3: {"cell": "f0.5", "verdict": "FAIL"}}
+    assert mcl._ledger_verdict("f0.5", "FAIL", stages) == "FAIL"
+    assert mcl._ledger_verdict("f0.5", "FAIL", {2: {"verdict": "FAIL"}}) == "NO-LIFT"
