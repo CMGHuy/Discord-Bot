@@ -654,7 +654,7 @@ def count_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans,
     null draw, with a race-free exit bound (every trade lasts the full cap).
     Nothing is raced; no R is computed. v211: ``event_dates`` lists the ISO
     signal date of every counted event, ascending."""
-    ctx = ticker_context(idea, df, spans, context, event_start=event_start)
+    ctx = ticker_context(idea, df, spans, context)
     cap = idea.time_cap_bars
     cand, counts = race.candidate_events(ctx["raw"], ctx["member"], ctx["warm"], cap,
                                          entry=idea.entry)
