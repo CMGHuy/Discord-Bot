@@ -230,14 +230,44 @@ def test_another_exception_still_propagates(tmp_path):
                             out=lambda _: None)
 
 
-def test_a_restart_does_not_retry_an_unserved_ticker_and_the_manifest_works(tmp_path):
+class CountingMissing(MissingProvider):
+    """MissingProvider that also records the calls it refuses."""
+
+    def __init__(self, frames, missing="GC=F"):
+        super().__init__(frames, missing=missing)
+        self.asked = []
+
+    def daily_bars_between(self, tickers, start, end, *, adjustment):
+        self.asked.append((tuple(tickers), adjustment.value))
+        return super().daily_bars_between(tickers, start, end, adjustment=adjustment)
+
+
+def test_a_restart_retries_an_unserved_ticker_once_and_a_persistent_miss_stays_unserved(
+        tmp_path):
     frames = _both("AAA", [100.0])
-    raw_bars.fetch_bars(["AAA", "GC=F"], START, END, tmp_path,
-                        provider=MissingProvider(frames), out=lambda _: None)
-    again = MissingProvider(frames)
-    raw_bars.fetch_bars(["AAA", "GC=F"], START, END, tmp_path, provider=again,
+    first = CountingMissing(frames)
+    raw_bars.fetch_bars(["AAA", "GC=F"], START, END, tmp_path, provider=first,
                         out=lambda _: None)
-    assert again.calls == []
-    got = raw_bars.bars_manifest(tmp_path)["raw"]
-    assert (got["n_ok"], got["n_empty"], got["n_unserved"]) == (1, 0, 1)
-    assert "GC=F" not in repr(got)
+    assert first.asked.count((("GC=F",), "raw")) == 1        # no retry loop inside one run
+    again = CountingMissing(frames)
+    got = raw_bars.fetch_bars(["AAA", "GC=F"], START, END, tmp_path, provider=again,
+                              out=lambda _: None)
+    assert again.asked == [(("GC=F",), "raw"), (("GC=F",), "split")]   # AAA not refetched
+    assert all(got[k]["tickers"]["GC=F"] == {"status": "unserved"} for k in raw_bars.KINDS)
+    summary = raw_bars.bars_manifest(tmp_path)["raw"]
+    assert (summary["n_ok"], summary["n_empty"], summary["n_unserved"]) == (1, 0, 1)
+    assert "GC=F" not in repr(summary)
+
+
+def test_a_restart_fills_an_unserved_ticker_the_provider_now_serves(tmp_path):
+    frames = {**_both("AAA", [100.0]), **_both("GC=F", [50.0, 51.0])}
+    before = raw_bars.fetch_bars(["AAA", "GC=F"], START, END, tmp_path,
+                                 provider=MissingProvider(frames), out=lambda _: None)
+    aaa = {k: dict(before[k]["tickers"]["AAA"]) for k in raw_bars.KINDS}
+    got = raw_bars.fetch_bars(["AAA", "GC=F"], START, END, tmp_path,
+                              provider=FakeProvider(frames), out=lambda _: None)
+    for kind in raw_bars.KINDS:
+        assert got[kind]["tickers"]["GC=F"]["status"] == "ok"
+        assert got[kind]["tickers"]["AAA"] == aaa[kind]          # fetched tickers untouched
+    assert raw_bars.load_bars("GC=F", tmp_path, "raw") is not None
+    assert raw_bars.bars_manifest(tmp_path)["raw"]["n_unserved"] == 0

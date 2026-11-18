@@ -109,16 +109,23 @@ def _fetch_one(provider, ticker: str, start, end, kind: str, store: Path) -> dic
             "last": got.index.max().date().isoformat()}
 
 
+def _wants_fetch(entry: dict | None) -> bool:
+    """Never fetched, or unserved last time: AlpacaMiss also covers timeouts, 429 and 5xx,
+    so a restart asks again; only a fresh answer re-marks a ticker unserved."""
+    return entry is None or entry.get("status") == UNSERVED
+
+
 def fetch_bars(tickers, start: dt.date, end: dt.date, root: Path, *, provider,
                out=print) -> dict:
-    """Fetch each ticker's RAW and SPLIT bars once. The manifest is rewritten
-    after every ticker, so an interrupted fetch resumes where it stopped."""
+    """Fetch each ticker's RAW and SPLIT bars once per run. The manifest is rewritten
+    after every ticker, so an interrupted fetch resumes where it stopped; a restart
+    retries tickers marked unserved (once each, no loop inside a run)."""
     wanted = sorted({t.upper().strip() for t in tickers})
     manifests = {}
     for kind in KINDS:
         store = store_dir(root, kind)
         manifest = _read_manifest(store, kind, start, end)
-        todo = [t for t in wanted if t not in manifest["tickers"]]
+        todo = [t for t in wanted if _wants_fetch(manifest["tickers"].get(t))]
         for done, ticker in enumerate(todo, 1):
             manifest["tickers"][ticker] = _fetch_one(provider, ticker, start, end, kind, store)
             _write_manifest(store, manifest)
