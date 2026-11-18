@@ -945,3 +945,70 @@ def simulate_exit(
 
     return _not_triggered("expired" if strict else None)
 
+
+# --- v232: the exit walk from a given fill -------------------------------------
+
+def _from_fill_bar(df, fill_index: int, fill_price: float, plan: TradePlanV2,
+                   scale_out: bool, cap: int) -> ExitResult | None:
+    """The engine's own fill-bar exit for this plan, or None when the bar is clean.
+    A v192 waiting plan takes market_next_open's order (open beyond TP1, stop, TP1);
+    every other plan the v113 stop-first check (_fill_bar_exit)."""
+    if gap_reclaim.waits_for_open(plan):
+        from .market_next_open import next_open_fill_bar   # it imports this module
+        return next_open_fill_bar(df, fill_index, fill_price, plan, scale_out, cap)
+    return _fill_bar_exit(df, fill_index, fill_price, plan)
+
+
+def _flat_fill_bar(df, fill_index: int, fill_price: float):
+    """A copy of df whose fill bar is one flat print at the fill price, so a walk
+    that reads the fill bar itself (v180's gap-aware walk) books nothing there
+    unless the fill already sits at a level. The caller's frame is untouched."""
+    frame = df.copy()
+    for col in ("Open", "High", "Low", "Close"):
+        frame.iloc[fill_index, frame.columns.get_loc(col)] = fill_price
+    return frame
+
+
+def _gap_aware_from_fill(df, fill_index: int, fill_price: float, plan: TradePlanV2,
+                         cap: int, fill_bar_check: bool) -> ExitResult:
+    """v180 next-open strategies: the gap-aware single-leg walk, which walks the
+    fill bar as session 1. Unchecked, that bar is flattened first."""
+    from .next_open_entry import gap_aware_single_leg_walk   # it imports this module
+    frame = df if fill_bar_check else _flat_fill_bar(df, fill_index, fill_price)
+    return gap_aware_single_leg_walk(frame, fill_index, fill_price, plan, cap)
+
+
+def simulate_exit_from_fill(
+    df,
+    fill_index: int,
+    fill_price: float,
+    plan: TradePlanV2,
+    *,
+    scale_out: bool,
+    fill_bar_check: bool = False,
+    max_holding_days: int | None = None,
+) -> ExitResult:
+    """v232: the v1 exit walk from a fill that already happened (bar ``fill_index``
+    at ``fill_price``), for a live trade's own fill.
+
+    The hold cap is resolved exactly as simulate_exit resolves it. A v180
+    next-open strategy walks with next_open_entry's gap-aware walk; every other
+    plan with ``_walk_for(plan, scale_out)``, which starts at the bar after the
+    fill. ``fill_bar_check`` first runs the engine's own fill-bar rule (the v192
+    next-open order for a waiting plan, else ``_fill_bar_exit``); simulate_exit
+    applies it to limit and compression-short fills and to v192 waiting plans,
+    and the parity tests pass that setting. Live-replay reconciliation passes
+    False: the fill day is the day the daily walk never sees. The compression
+    short's risk-cap cancel is an entry decision and is not re-applied here.
+    """
+    if max_holding_days is None:
+        max_holding_days = HORIZONS[plan.horizon_key]["max_holding_days"]
+    cap = _hold_cap_bars(plan, max_holding_days)
+    from .next_open_entry import uses_next_open_fill   # it imports this module
+    if uses_next_open_fill(plan):
+        return _gap_aware_from_fill(df, fill_index, fill_price, plan, cap, fill_bar_check)
+    if fill_bar_check:
+        early = _from_fill_bar(df, fill_index, fill_price, plan, scale_out, cap)
+        if early is not None:
+            return early
+    return _walk_for(plan, scale_out)(df, fill_index, fill_price, plan, cap)

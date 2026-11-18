@@ -15,7 +15,7 @@ from swingbot.core.backtesting.instrument.stats import iso_week_key
 from swingbot.core.market.session import RTH_OPEN, nyse_calendar, session_close
 from swingbot.core.scanning.risk_features import session_bucket
 
-from .arms import deferral_bar, price_arms
+from .arms import deferral_bar, frictions_stamp, price_arms
 from .bars import (DEFER_AT, ET, deferral_start, et_date, et_time, horizon_end,
                    session_close_utc, to_utc)
 from .tradeability import event_flags, record
@@ -171,4 +171,5 @@ def build_pair(row: dict, bars, *, rule_hash: str, earnings_lookup=None) -> dict
                      "bars_to": window.index[-1].isoformat(),
                      "deferral_bar": bar.name.isoformat()},
         "rule_hash": rule_hash,
+        "frictions": frictions_stamp(),
     }

@@ -18,9 +18,11 @@ import pandas as pd
 from swingbot import config
 from swingbot.core.backtesting.screen.sides import net_r
 from swingbot.core.edge.frictions import commission_r
+from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION
 
 from .bars import et_date
 from .simulate import SIGN, Race, gross_r, race
+from .verdict import FROZEN
 
 ARMS = ("C", "A", "B")
 NET_DIRECTION = {"bullish": "long", "bearish": "short"}
@@ -32,12 +34,21 @@ class FrictionsError(RuntimeError):
     """Frictions are zero: a lift measured without costs is refused."""
 
 
+def frictions_stamp() -> dict:
+    """The cost inputs a pair's r_net depends on; stored on every pair row."""
+    return {"slippage_bps": float(config.SLIPPAGE_BPS), "commission_r": float(commission_r()),
+            "be_fraction": float(BREAKEVEN_TRIGGER_FRACTION)}
+
+
 def assert_frictions() -> None:
     bps = float(getattr(config, "SLIPPAGE_BPS", 0.0) or 0.0)
     commission = commission_r()
     if bps <= 0 or commission <= 0:
         raise FrictionsError(f"zero frictions refused (SLIPPAGE_BPS={bps}, "
                              f"commission_r={commission})")
+    if BREAKEVEN_TRIGGER_FRACTION != FROZEN["be_fraction"]:
+        raise FrictionsError(f"be_fraction {BREAKEVEN_TRIGGER_FRACTION} differs from the "
+                             f"frozen {FROZEN['be_fraction']}")
 
 
 def shifted_levels(fill: float, *, entry: float, stop: float, tp1: float) -> tuple[float, float]:

@@ -150,3 +150,31 @@ def test_exploratory_close_only_when_uncalibrated():
 def test_every_ledger_mapping_is_a_valid_ledger_row(ledger):
     stats.validate_ledger_row({"id": verdict.LEDGER_ID, "date": "2027-02-23", "hypothesis": "h",
                                "instrument": "v1", "record": "docs/x.md", **ledger})
+
+
+STAMP = {"slippage_bps": 5.0, "commission_r": 0.01, "be_fraction": 0.5}
+
+
+def test_assert_same_frictions_accepts_one_stamp_and_ignores_unstamped_rows():
+    verdict.assert_same_frictions([{"frictions": STAMP}, {"frictions": dict(reversed(list(STAMP.items())))}, {}])
+    verdict.assert_same_frictions([{}, {"frictions": None}], STAMP)
+    verdict.assert_same_frictions([{"frictions": STAMP}], STAMP)
+
+
+def test_assert_same_frictions_refuses_a_mixed_log_or_a_changed_current_stamp():
+    other = {**STAMP, "slippage_bps": 9.0}
+    with pytest.raises(verdict.VerdictRefused, match="frictions"):
+        verdict.assert_same_frictions([{"frictions": STAMP}, {"frictions": other}])
+    with pytest.raises(verdict.VerdictRefused, match="frictions"):
+        verdict.assert_same_frictions([{"frictions": STAMP}], other)
+
+
+def test_assert_one_rule_also_refuses_mixed_frictions():
+    other = {**STAMP, "commission_r": 0.02}
+    with pytest.raises(verdict.VerdictRefused, match="frictions"):
+        verdict.assert_one_rule([{"rule_hash": verdict.rule_hash(), "frictions": STAMP},
+                                 {"rule_hash": verdict.rule_hash(), "frictions": other}])
+
+
+def test_the_frozen_rule_hash_is_unchanged_by_the_frictions_stamp():
+    assert verdict.rule_hash() == "8bbaaa9781535813"

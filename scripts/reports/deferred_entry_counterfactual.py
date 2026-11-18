@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """v229 deferred-entry counterfactual: do late-session entries beat early ones?
 
-Spec: docs/superpowers/specs/2026-11-14-v229-deferred-entry-counterfactual-design.md
+Spec: docs/superpowers/specs/implemented/2026-11-14-v229-deferred-entry-counterfactual-design.md
 
 Modes:
   append       log every eligible LONG plan not yet in the pair log; one count line (weekly cron)
@@ -96,6 +96,7 @@ def build_pair_for(row: dict, frame) -> dict:
 def append_new(scanned, log_path) -> tuple[int, dict]:
     logged = pairlog.read_pairs(log_path)
     known = set(logged)
+    verdict.assert_same_frictions(list(logged.values()), arms.frictions_stamp())
     added = 0
     for row, frame, reason in scanned:
         if reason != "eligible" or row.get("direction") != "bullish" or row.get("trade_id") in known:

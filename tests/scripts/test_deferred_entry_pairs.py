@@ -10,7 +10,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "reports"))
-from deferred_entry import pairs  # noqa: E402
+from deferred_entry import arms, pairs  # noqa: E402
 from swingbot import config  # noqa: E402
 from tests.scripts.v229_fixtures import et, five_min  # noqa: E402
 
@@ -18,7 +18,7 @@ DAYS = ["2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06", "2026-11-09", "2
 ARCHIVE_END = et("2026-11-10 15:55").isoformat()
 NO_EARNINGS = lambda ticker: []  # noqa: E731 -- never touch the network in tests
 PAIR_KEYS = {"trade_id", "ticker", "direction", "opened_at", "entry_date", "iso_week", "bucket",
-             "trade", "arms", "live", "tradeability", "coverage", "rule_hash"}
+             "trade", "arms", "live", "tradeability", "coverage", "rule_hash", "frictions"}
 
 
 @pytest.fixture(autouse=True)
@@ -131,6 +131,7 @@ def test_build_pair_has_the_pair_shape_and_serialises():
     assert set(out["arms"]) == {"C", "A", "B"} and out["arms"]["A"]["arm"] == "A"
     assert out["live"] == {"reason": "loss", "outcome": "loss", "r_realized": -1.02}
     assert out["rule_hash"] == "0123abcd4567ef89"
+    assert out["frictions"] == arms.frictions_stamp()
     assert out["coverage"] == {"bars_from": et("2026-11-03 10:05").isoformat(),
                                "bars_to": et("2026-11-10 15:55").isoformat(),
                                "deferral_bar": et("2026-11-03 15:30").isoformat()}

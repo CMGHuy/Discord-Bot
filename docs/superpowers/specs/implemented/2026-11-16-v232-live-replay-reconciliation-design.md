@@ -563,3 +563,16 @@ veteran-trader (11 advisory):
   paragraph.
 - Re-basing counts and stop-distance shift -- applied.
 - Gap size and live exit relative to the open -- applied.
+
+## Panel review (pre-close-out, merged diff 17a58dd5..b723d526)
+
+quant-engineer, quant-researcher and veteran-trader all returned FINDINGS with no BLOCKING item. Every finding is ADVISORY and about what the printed figures invite a reader to conclude; none changes a committed number. All are deferred to the results doc's follow-up notes, never edited into the generated report by hand.
+
+- quant-engineer: window end defaults to the run day, so a run during the session could score a partial bar; layer 2 reads today's dividend-adjusted store; per-trade rows and raw bars are not archived, only hashes -- deferred: record an explicit `--until` and run after the close on a rerun.
+- quant-engineer and quant-researcher: tag means and confusion grids use all scored rows while the v2 effect rows use only trades the v2 backtest filled (N 413 against 296), and the v1 and v2 confusion grids are identical -- deferred: label the populations or compute per fill model.
+- quant-engineer: live R is rescaled by `trade.stop_loss`, which may be the moved stop on the 186 stop-moved longs -- deferred: pin with a stop-moved test or use the issued stop as the unit.
+- quant-researcher: the re-based backtest total (+1040.63R long headline v1) comes from five trades with near-zero stop distance and the effect means are tail-driven (mean +0.427 against median +0.071) -- deferred: show a median or trimmed column and flag the re-based figure; thin tag cells carry no thin flag; ledger `n` is combined (504) with the split in the record; layer 2 matches 54 of 494 long headline plans, so its counts describe the replay's setup more than live selection.
+- quant-researcher: the 2026 per-direction backtest R is now published before v233 Spec 2 freezes its one holdout shot -- raised to the partner: whether v233 needs a disclosure line is their call.
+- veteran-trader: `gap_through` pools stop gaps and target gaps; entry slip and poll fill are zero by construction in the paper engine; 94 of 413 long exits and entries are outside regular hours; 186 stop moves with no count of announced ones; `same_day_exit` flips sign with the fill model and is untestable on daily bars; the caveat omits CFD-versus-stock fills, borrow and squeeze, and metals having no bars; the pre-open plan subset has no gap result -- deferred: split the gap tag, label the zero-by-construction rows, add the missing caveats.
+
+Skills: none affected (`rows` export mode and every engine function are unchanged; the new report lives under `scripts/reports/reconcile/`).

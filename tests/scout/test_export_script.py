@@ -288,3 +288,171 @@ def test_the_excursion_column_reads_the_journal_doc(source, book_rows_db):
     assert got[("trade", "orphan-closed-trade")] is None          # doc '{}': no source yet
     assert got[("plan", "unfilled-plan")] is None                 # plan rows are NULL
     assert got[("plan", "open-plan")] is None
+
+
+# --- v232: the reconcile mode (JSON lines for live_replay_reconcile.py) -----------
+
+READ_ONLY = "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;"
+
+
+def reconcile_body(source: str) -> str:
+    """export_reconcile and export_deploys: from the reconcile function to main."""
+    return source[source.index("export_reconcile() {"):source.index("\nmain() {")]
+
+
+def test_reconcile_has_its_own_read_only_guard_before_its_first_select(source):
+    body = reconcile_body(source)
+    assert READ_ONLY in body
+    assert body.index(READ_ONLY) < body.index("SELECT")
+    assert "SET TIME ZONE 'UTC';" in body
+
+
+def test_reconcile_is_json_lines_not_a_second_copy(source):
+    body = reconcile_body(source)
+    assert "COPY (" not in body and "UNION ALL" not in body
+    assert " -A -t " in body and " -X -q " in body and "ON_ERROR_STOP=1" in body
+    assert body.count("SELECT row_to_json(x) FROM (") == 3
+    assert "<<'SQL'" in body                # quoted: bash expands nothing in the SQL
+
+
+def test_reconcile_plan_lines_join_trade_and_journal_docs(source):
+    body = reconcile_body(source)
+    assert "'plan'::text AS kind," in body
+    assert all(f" AS {alias}" in body for alias in ("plan", "trade", "journal"))
+    assert "LEFT JOIN trades t ON t.doc->>'plan_id' = p.plan_id" in body
+    assert "LEFT JOIN journal_entries j ON j.trade_id = t.trade_id" in body
+    assert "WHERE p.created_at >= (:'since')::timestamptz" in body
+
+
+def _merge_of(body: str, alias: str) -> str:
+    """The SQL expression emitted AS <alias> in the reconcile plan select: the
+    select lists one aliased expression per line, from `AS kind` to FROM plans."""
+    select = body[body.index("'plan'::text AS kind"):body.index("FROM plans p")]
+    lines = [line.strip() for line in select.splitlines()]
+    out = []
+    for line in lines[lines.index(f"-- {alias}") + 1:]:
+        if line.startswith("--"):
+            break
+        out.append(line)
+    return " ".join(out)
+
+
+PLAN_COLUMNS = ("plan_id", "ticker", "strategy", "horizon_key", "status", "created_at",
+                "valid_session")
+TRADE_COLUMNS = ("trade_id", "ticker", "strategy", "horizon", "direction", "status",
+                 "opened_at", "closed_at", "entry", "stop_loss")
+JOURNAL_COLUMNS = ("trade_id", "strategy", "outcome", "closed_at", "created_at")
+
+
+@pytest.mark.parametrize("alias, alias_of, columns", [
+    ("plan", "p", PLAN_COLUMNS), ("trade", "t", TRADE_COLUMNS),
+    ("journal", "j", JOURNAL_COLUMNS)])
+def test_reconcile_merges_the_identity_columns_into_each_doc(source, alias, alias_of, columns):
+    # The docs do not hold the columns promoted out of them (schema.py), so the
+    # export puts them back like codec.merge_doc: the columns are the right operand, so a
+    # non-null column overrides a stale doc copy, and null columns are stripped (omitted).
+    expr = _merge_of(reconcile_body(source), alias)
+    for column in columns:
+        assert f"'{column}', {alias_of}.{column}" in expr
+    assert f"{alias_of}.doc || jsonb_strip_nulls(jsonb_build_object(" in expr
+    assert f"|| {alias_of}.doc" not in expr
+    assert expr.count("jsonb_build_object(") == 1 and expr.rstrip(" ,").endswith(f"AS {alias}")
+
+
+@pytest.mark.parametrize("alias, alias_of, key", [("trade", "t", "trade_id"),
+                                                  ("journal", "j", "trade_id")])
+def test_reconcile_keeps_a_missing_left_join_row_null(source, alias, alias_of, key):
+    expr = _merge_of(reconcile_body(source), alias)
+    assert f"CASE WHEN {alias_of}.{key} IS NULL THEN NULL ELSE" in expr
+
+
+def test_reconcile_rejection_and_watchlist_lines(source):
+    body = reconcile_body(source)
+    assert ("'rejection'::text AS kind, r.ticker AS ticker, r.gate AS gate, "
+            "r.strategy AS strategy, r.horizon AS horizon, r.signal_date AS signal_date") in body
+    assert "FROM gate_rejections r" in body and "WHERE r.signal_date >= :'since'" in body
+    assert "'watchlist'::text AS kind, w.ticker AS ticker, w.added_at AS added_at" in body
+    watch = body[body.index("FROM watchlist w"):]
+    assert "WHERE" not in watch.split(") x;")[0]          # the whole table
+
+
+def test_reconcile_date_reaches_sql_only_as_a_psql_variable(source):
+    body = reconcile_body(source)
+    assert '-v since="$since"' in body
+    sql = body[body.index("<<'SQL'"):body.rindex("\nSQL\n")]
+    assert "$since" not in sql and "${" not in sql
+
+
+def test_the_rows_copy_is_still_the_first_and_only_copy(source):
+    assert source.index("COPY (") < source.index("export_reconcile() {")
+
+
+PLAN_LINE = '{"kind":"plan","plan":{"plan_id":"P1"},"trade":null,"journal":null}'
+WATCH_LINE = '{"kind":"watchlist","ticker":"AAA","added_at":"2026-09-01T00:00:00+00:00"}'
+DOCKER_STUB = (
+    'docker() { echo "ARGS $*" >&2; cat >/dev/null; '
+    f"printf '%s\n' '{PLAN_LINE}' '{WATCH_LINE}'; }}; export -f docker; "
+)
+
+
+def _run_reconcile(source, tmp_path, *args, stub=DOCKER_STUB):
+    env = dict(os.environ, SWING_BOT_DIR=tmp_path.as_posix())
+    if not _seen_by_bash(env, "SWING_BOT_DIR"):
+        pytest.skip("this bash cannot see the Windows temp dir (WSL bash)")
+    command = stub + "bash -s -- reconcile " + " ".join(args)
+    return subprocess.run([_bash(), "-c", command], input=source.encode("utf-8"),
+                          env=env, capture_output=True, timeout=60)
+
+
+@pytest.mark.parametrize("since", ["", "2026-9-15", "yesterday", "'2026-09-15;'"])
+def test_reconcile_refuses_a_missing_or_malformed_date_before_any_query(source, tmp_path, since):
+    stub = 'docker() { echo CALLED >&2; return 9; }; export -f docker; '
+    done = _run_reconcile(source, tmp_path, since, stub=stub)
+    assert done.returncode == 2
+    assert b"YYYY-MM-DD" in done.stderr
+    assert b"CALLED" not in done.stderr and done.stdout == b""
+
+
+def test_reconcile_streams_psql_then_wraps_each_deploy_line(source, tmp_path):
+    (tmp_path / "backups").mkdir()
+    (tmp_path / "backups" / "deploys.jsonl").write_bytes(
+        b'{"at":"2026-09-15T08:54:50Z","commit":"abc1234"}\n'
+        b"\n"
+        b'{"at":"2026-10-02T10:00:00Z","commit":"def5678"}\r\n')
+    done = _run_reconcile(source, tmp_path, "2026-09-15")
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.decode("utf-8").splitlines() == [
+        PLAN_LINE,
+        WATCH_LINE,
+        '{"kind":"deploy","entry":{"at":"2026-09-15T08:54:50Z","commit":"abc1234"}}',
+        '{"kind":"deploy","entry":{"at":"2026-10-02T10:00:00Z","commit":"def5678"}}',
+    ]
+    args = done.stderr.decode("utf-8")
+    assert "-A -t" in args and "since=2026-09-15" in args
+    assert "compose exec -T db psql -U swingbot -d swingbot" in args
+
+
+def test_reconcile_without_a_deploy_file_prints_no_deploy_line(source, tmp_path):
+    done = _run_reconcile(source, tmp_path, "2026-09-15")
+    assert done.returncode == 0, done.stderr
+    assert b'"kind":"deploy"' not in done.stdout
+    assert done.stdout.decode("utf-8").splitlines() == [PLAN_LINE, WATCH_LINE]
+
+
+def test_reconcile_fails_when_psql_fails_and_prints_no_deploys(source, tmp_path):
+    (tmp_path / "backups").mkdir()
+    (tmp_path / "backups" / "deploys.jsonl").write_bytes(b'{"at":"x","commit":"y"}\n')
+    stub = 'docker() { cat >/dev/null; return 3; }; export -f docker; '
+    done = _run_reconcile(source, tmp_path, "2026-09-15", stub=stub)
+    assert done.returncode != 0
+    assert b'"kind":"deploy"' not in done.stdout
+
+
+def test_the_usage_line_names_the_reconcile_mode(source, tmp_path):
+    env = dict(os.environ, SWING_BOT_DIR=tmp_path.as_posix())
+    if not _seen_by_bash(env, "SWING_BOT_DIR"):
+        pytest.skip("this bash cannot see the Windows temp dir (WSL bash)")
+    done = subprocess.run([_bash(), "-s", "--", "nope"], input=source, env=env,
+                          text=True, capture_output=True, timeout=30)
+    assert done.returncode == 2
+    assert "rows|rejections|reconcile <since YYYY-MM-DD>" in done.stderr

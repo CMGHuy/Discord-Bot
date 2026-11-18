@@ -217,3 +217,22 @@ def test_the_verdict_refuses_a_log_written_under_another_rule(tmp_path, fake_boo
 def test_every_mode_is_offered():
     args = cli.build_parser().parse_args(["--mode", "verdict", "--rows", "r.csv", "--t0", T0])
     assert args.mode == "verdict" and set(cli.MODES) == {"exploratory", "verdict"}
+
+
+def test_append_refuses_when_the_frictions_changed_since_the_log_was_stamped(tmp_path, fake_book, monkeypatch, capsys):
+    from swingbot import config
+    monkeypatch.setattr(config, "SLIPPAGE_BPS", 5.0, raising=False)
+    stamped = {**_pair("t-0", "2026-11-24"), "frictions": arms.frictions_stamp()}
+    pairlog.append_pair(tmp_path / "pairs.jsonl", stamped)
+    monkeypatch.setattr(config, "SLIPPAGE_BPS", 9.0, raising=False)
+    fake_book.rows = [_row("t-1", "2026-11-25", "eligible")]
+    assert _run(tmp_path, "append") == 2
+    assert "v229 refused:" in capsys.readouterr().err and fake_book.built == []
+
+
+def test_append_allows_an_unstamped_only_log(tmp_path, fake_book, monkeypatch, capsys):
+    from swingbot import config
+    monkeypatch.setattr(config, "SLIPPAGE_BPS", 9.0, raising=False)
+    pairlog.append_pair(tmp_path / "pairs.jsonl", _pair("t-0", "2026-11-24"))
+    fake_book.rows = [_row("t-1", "2026-11-25", "eligible")]
+    assert _run(tmp_path, "append") == 0

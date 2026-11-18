@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V229-7" -A 400 <this file>`); never read the file whole.
 
-**Spec:** [2026-11-14-v229-deferred-entry-counterfactual-design.md](../specs/2026-11-14-v229-deferred-entry-counterfactual-design.md)
+**Spec:** [2026-11-14-v229-deferred-entry-counterfactual-design.md](../../specs/implemented/2026-11-14-v229-deferred-entry-counterfactual-design.md)
 **Index:** [2026-11-15-v229-deferred-entry-counterfactual_0-index.md](2026-11-15-v229-deferred-entry-counterfactual_0-index.md) — Global Constraints, Parallelisation, the task ledger, the shared shapes (PAIR, DELTA, CALIBRATION, FROZEN) and the Handoff resolutions all live there and bind every task below.
 
 Scope: the append-once pair log, the statistics and calibration, the frozen rule with its window and verdict guard, the results Markdown and JSON, and the CLI that wires part 1's modules to these.

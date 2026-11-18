@@ -1,7 +1,7 @@
 # v229 exploratory read — deferred entry on the live LONG book
 
-**Spec:** `docs/superpowers/specs/2026-11-14-v229-deferred-entry-counterfactual-design.md`.
-**Plan:** `docs/superpowers/plans/2026-11-15-v229-deferred-entry-counterfactual_0-index.md`, Task V229-13.
+**Spec:** `docs/superpowers/specs/implemented/2026-11-14-v229-deferred-entry-counterfactual-design.md`.
+**Plan:** `docs/superpowers/plans/implemented/2026-11-15-v229-deferred-entry-counterfactual_0-index.md`, Task V229-13.
 **Pre-registration:** `docs/superpowers/results/2026-11-17-v229-preregistration.md`; T0 `2026-11-17T18:43:37+00:00`; rule hash `8bbaaa9781535813`.
 **Host checkout:** `5dd375ca454250f6aab5c1f86616dec43e0b40b8` (script SHA in the report body: `5dd375ca454250f6aab5c1f86616dec43e0b40b8`); archive last bar `2026-11-17T18:05:00+00:00`.
 **Run:** `export_book_rows.sh rows` on the VM host, then the CLI in `append` and `exploratory` mode in the bot container (commands in plan V229-13).

@@ -189,3 +189,6 @@ data/backfill_equity_samples/
 
 # v212 full row dump, 105 MB: over GitHub's 100 MB push limit
 docs/superpowers/results/v212/v212-rows-train-rows.json
+
+# v232 live-replay reconciliation: per-trade rows (strategy/horizon/ticker), layer 2 checkpoints, raw bars
+data/v232/

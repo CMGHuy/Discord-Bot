@@ -103,12 +103,12 @@ class AlpacaProvider:
                 raise AlpacaAuthError(str(exc)) from exc
             raise AlpacaMiss(str(exc)) from exc
 
-    def _bars(self, tickers, timeframe, start, end=None):
+    def _bars(self, tickers, timeframe, start, end=None, *, adjustment=Adjustment.ALL):
         latest = self._now() - SIP_DELAY
         by_symbol = {to_alpaca_symbol(t): t for t in tickers}
         req = StockBarsRequest(symbol_or_symbols=list(by_symbol), timeframe=timeframe,
                                start=start, end=latest if end is None else min(end, latest),
-                               feed=DataFeed.SIP, adjustment=Adjustment.ALL)
+                               feed=DataFeed.SIP, adjustment=adjustment)
         raw = self._call("get_stock_bars", req, self._bars_client) or {}
         return {by_symbol[s]: df for s, df in _frames_from_raw(raw).items() if s in by_symbol}
 
@@ -117,11 +117,13 @@ class AlpacaProvider:
         raw = self._bars(tickers, TimeFrame.Day, _start_for(period, now))
         return {t: to_yf_daily(df) for t, df in raw.items() if not df.empty}
 
-    def daily_bars_between(self, tickers, start, end):
-        """v171 D4: daily bars dated start..end (inclusive), SIP, Adjustment.ALL."""
+    def daily_bars_between(self, tickers, start, end, *, adjustment=Adjustment.ALL):
+        """v171 D4: daily bars dated start..end (inclusive), SIP, Adjustment.ALL.
+        v232: ``adjustment`` (default ALL, unchanged) lets the live-replay
+        reconciliation ask for RAW and SPLIT bars; nothing else passes it."""
         lo = datetime(start.year, start.month, start.day, tzinfo=timezone.utc)
         hi = datetime(end.year, end.month, end.day, tzinfo=timezone.utc) + timedelta(days=1)
-        raw = self._bars(tickers, TimeFrame.Day, lo, hi)
+        raw = self._bars(tickers, TimeFrame.Day, lo, hi, adjustment=adjustment)
         return {t: to_yf_daily(df) for t, df in raw.items() if not df.empty}
 
     def intraday_bars(self, ticker, interval):
