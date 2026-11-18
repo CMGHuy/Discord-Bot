@@ -161,3 +161,7 @@ The plan is a chain with two stops; the parallel room is small.
 
 ## Handoff
 - 2026-11-17: Part A split at stop gate 1 (partner). This plan (V230-1..V230-5) is fully written: Parts 1-2 committed, ready to implement. Its later steps are plan v234. V230-5's `## Handoff` entry (BIAS / NO-BIAS) decides whether v234 runs at all.
+
+- **V230-5 (2026-11-18): stop gate 1 = BIAS.** All 12 v1 cells completed across `gbm-200` and `shuffled-c1` with six triggers each. Every cell had events. The shuffled universe used 514 full-calendar ticker files.
+- [Rendered report](../results/2026-11-18-v230-null-placebo.md) and [cell records](../results/v230/placebo-v1.json). Largest |Δ| was `shuffled-c1/p_high20` at -0.4984R (95% interval [-0.5553, -0.4411]R). Cells past 0.02R were `gbm-200/p_gap_up`, `gbm-200/p_high20`, `gbm-200/p_rsi2_dip`, `gbm-200/p_sweep20`, `shuffled-c1/p_gap_up`, `shuffled-c1/p_high20`, `shuffled-c1/p_market_down`, `shuffled-c1/p_month_turn`, `shuffled-c1/p_rsi2_dip`, `shuffled-c1/p_sweep20`.
+- Plan v234's prerequisite is met. Its first task is V234-1. V234-8 re-renders the same report with `--date 2026-11-18`.
