@@ -5,6 +5,8 @@
 #       < scripts/ops/export_book_rows.sh > "$SCRATCH/rows.csv"
 #   bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && bash -s -- rejections" \
 #       < scripts/ops/export_book_rows.sh > "$SCRATCH/rejections.csv"
+#   bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && bash -s -- reconcile 2026-07-01" \
+#       < scripts/ops/export_book_rows.sh > "$SCRATCH/reconcile.jsonl"
 #
 # rows:       one psql session, opened READ ONLY, one COPY ... TO STDOUT (CSV
 #             with a header): every closed trade (journal x trades, left-joined
@@ -14,6 +16,13 @@
 # rejections: grep of the HOST logs for "plan rejected (", reduced to
 #             date,reason,count. Each file's first timestamp goes to stderr so
 #             the current-versus-rotated coverage is visible.
+# reconcile:  v232. JSON lines from one psql session opened READ ONLY,
+#             unaligned tuples only (-A -t), each line built by row_to_json and
+#             tagged with "kind": plan (plan doc + trade doc + journal doc, one
+#             line per plan-trade pair), rejection (gate_rejections), watchlist
+#             (the whole table); then each line of backups/deploys.jsonl wrapped
+#             as {"kind":"deploy","entry":...}. The since date (YYYY-MM-DD)
+#             reaches SQL only as the psql variable :'since'.
 #
 # Nothing here writes: no interpreter, no repository helper, no file on the VM.
 # The output columns are fixed (rows: 39: plan_issued_at and plan_issued_at_source
@@ -148,12 +157,52 @@ export_rejections() {
     | awk '{ n = $1; sub(/^ *[0-9]+ /, ""); print $0 "," n }'
 }
 
+export_reconcile() {
+  local since="${1:-}"
+  if ! [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    echo "export_book_rows: reconcile needs a since date as YYYY-MM-DD" >&2
+    return 2
+  fi
+  docker compose exec -T db psql -U swingbot -d swingbot -X -q -A -t -v ON_ERROR_STOP=1 \
+    -v since="$since" <<'SQL'
+SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;
+SET TIME ZONE 'UTC';
+SELECT row_to_json(x) FROM (
+  SELECT 'plan'::text AS kind, p.doc AS plan, t.doc AS trade, j.doc AS journal
+  FROM plans p
+  LEFT JOIN trades t ON t.doc->>'plan_id' = p.plan_id
+  LEFT JOIN journal_entries j ON j.trade_id = t.trade_id
+  WHERE p.created_at >= (:'since')::timestamptz
+  ORDER BY p.created_at, p.plan_id, t.trade_id
+) x;
+SELECT row_to_json(x) FROM (
+  SELECT 'rejection'::text AS kind, r.ticker AS ticker, r.gate AS gate, r.strategy AS strategy, r.horizon AS horizon, r.signal_date AS signal_date
+  FROM gate_rejections r
+  WHERE r.signal_date >= :'since'
+  ORDER BY r.signal_date, r.ticker, r.gate, r.strategy, r.horizon
+) x;
+SELECT row_to_json(x) FROM (
+  SELECT 'watchlist'::text AS kind, w.ticker AS ticker, w.added_at AS added_at
+  FROM watchlist w
+  ORDER BY w.ticker
+) x;
+SQL
+  export_deploys
+}
+
+export_deploys() {
+  local file="backups/deploys.jsonl"
+  [ -f "$file" ] || return 0
+  sed -e 's/\r$//' -n -e 's/^[[:space:]]*\({.*}\)[[:space:]]*$/{"kind":"deploy","entry":\1}/p' "$file"
+}
+
 main() {
   cd "${SWING_BOT_DIR:-/opt/swing-bot}"
   case "${1:-}" in
     rows) export_rows ;;
     rejections) export_rejections ;;
-    *) echo "usage: bash -s -- rows|rejections" >&2; exit 2 ;;
+    reconcile) export_reconcile "${2:-}" ;;
+    *) echo "usage: bash -s -- rows|rejections|reconcile <since YYYY-MM-DD>" >&2; exit 2 ;;
   esac
 }
 
