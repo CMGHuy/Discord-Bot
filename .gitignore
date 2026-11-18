@@ -180,6 +180,7 @@ data/short_interest_queue.json
 
 # v211 screen checkpoints (per-ticker pickles, deleted once the record is committed)
 data/screen_checkpoints/
+data/v230-placebo/
 
 # v222 / backfill scratch output in the bind-mounted data/ (evidence copy lives in docs/superpowers/results/v222/)
 data/v222/
