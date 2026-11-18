@@ -10,6 +10,7 @@ Every trigger races long, fixed (stop 1.5 x ATR14, target 3 x ATR14), next-open 
 | Label | Kind | Tickers | Calendar | Seed | Detail |
 |---|---|---:|---|---:|---|
 | gbm-200 | gbm | 200 | 2010-01-04..2019-12-31 | 42 | ATR% quartiles 0.0153, 0.0189, 0.0226, 0.0300 |
+| planted-gbm-200 | planted | 200 | 2010-01-04..2019-12-31 | 42 | planted on gbm, +0.5 ATR14 over 10 bars, spacing 120 |
 | shuffled-c1 | shuffled | 514 | 2010-01-04..2019-12-31 | 42 | copies 1, 514 source files |
 
 <details><summary>Source file sha256 (shuffled-c1)</summary>
@@ -548,6 +549,19 @@ Every trigger races long, fixed (stop 1.5 x ATR14, target 3 x ATR14), next-open 
 | shuffled-c1 | p_rsi2_dip | v1 | 33895 | +0.0955 | -0.2755 | +0.3711 | [+0.3188, +0.4231] | 0.0521 | FAIL |
 | shuffled-c1 | p_sweep20 | v1 | 33257 | +0.0483 | -0.2727 | +0.3210 | [+0.2669, +0.3774] | 0.0552 | FAIL |
 
+## Cells, null v2
+
+| Universe | Trigger | Null | N | mean R event | mean R null | Δ | 95% interval | half-width | rule |
+|---|---|---|---:|---:|---:|---:|---|---:|---|
+| gbm-200 | p_gap_up | v2 | 12947 | -0.0396 | -0.0620 | +0.0224 | [-0.0011, +0.0466] | 0.0239 | NOISY |
+| gbm-200 | p_high20 | v2 | 13816 | -0.0509 | -0.0592 | +0.0083 | [-0.0121, +0.0295] | 0.0208 | NOISY |
+| gbm-200 | p_rsi2_dip | v2 | 10085 | -0.0525 | -0.0581 | +0.0056 | [-0.0182, +0.0290] | 0.0236 | NOISY |
+| gbm-200 | p_sweep20 | v2 | 17259 | -0.0516 | -0.0571 | +0.0055 | [-0.0109, +0.0220] | 0.0164 | PASS |
+| shuffled-c1 | p_gap_up | v2 | 50205 | +0.0774 | +0.1069 | -0.0295 | [-0.0848, +0.0115] | 0.0482 | NOISY |
+| shuffled-c1 | p_high20 | v2 | 42454 | +0.0187 | +0.0162 | +0.0025 | [-0.0163, +0.0217] | 0.0190 | PASS |
+| shuffled-c1 | p_rsi2_dip | v2 | 34253 | +0.0821 | +0.0924 | -0.0103 | [-0.0291, +0.0086] | 0.0189 | PASS |
+| shuffled-c1 | p_sweep20 | v2 | 34738 | +0.0654 | +0.0608 | +0.0046 | [-0.0102, +0.0197] | 0.0149 | PASS |
+
 ## Stop gate 1 (v1)
 
 Gate: **BIAS**
@@ -555,3 +569,14 @@ Gate: **BIAS**
 At least one cell has |Δ| > 0.02R: the v1 bias is measured, meeting v234's prerequisite for the v2 null.
 
 Cells past 0.02R: gbm-200/p_gap_up (-0.0676), gbm-200/p_high20 (-0.4267), gbm-200/p_rsi2_dip (+0.3068), gbm-200/p_sweep20 (+0.2689), shuffled-c1/p_gap_up (-0.0909), shuffled-c1/p_high20 (-0.4984), shuffled-c1/p_market_down (+0.0589), shuffled-c1/p_month_turn (+0.0758), shuffled-c1/p_rsi2_dip (+0.3711), shuffled-c1/p_sweep20 (+0.3210).
+
+## Stop gate 2 (v2)
+
+Verdict: **PENDING**
+
+Refused cells are no cells and no verdict (never read as STOP or ENLARGE); the partner decides how to proceed. Refusals:
+
+- gbm-200/p_market_down: NULL_STARVED: 142 of 147 event dates left an event under 5 candidates
+- gbm-200/p_month_turn: NULL_STARVED: 107 of 107 event dates left an event under 5 candidates
+- shuffled-c1/p_market_down: NULL_STARVED: 159 of 159 event dates left an event under 5 candidates
+- shuffled-c1/p_month_turn: NULL_STARVED: 107 of 107 event dates left an event under 5 candidates
