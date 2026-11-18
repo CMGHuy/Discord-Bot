@@ -171,3 +171,18 @@ def test_selection_counts_per_side_and_era_with_measured_zeros():
     assert counts["short"]["headline"]["matched"] == 0
     assert {side: set(eras) for side, eras in counts.items()} == {
         "long": {"headline", "earlier"}, "short": {"headline", "earlier"}}
+
+
+def test_two_trades_on_one_plan_keep_their_own_live_net_and_era():
+    doc = _doc("P1")
+    first = _rec(doc, opened="2026-09-10T15:01:00+00:00")
+    first = dataclasses.replace(first, trade={**first.trade, "trade_id": "T-A"})
+    second = _rec(doc, opened="2026-10-06T15:01:00+00:00")
+    second = dataclasses.replace(second, trade={**second.trade, "trade_id": "T-B"})
+    export = _export(first, second)
+    plans = layer2.live_plans(export, {"T-A": _Row(0.5), "T-B": _Row(-1.0)})
+    assert [p.r_live_net for p in plans] == [0.5, -1.0]
+    counts = layer2.selection_counts(layer2.match([], plans), export)
+    early, late = counts["long"]["earlier"]["live_only"], counts["long"]["headline"]["live_only"]
+    assert (early["n"], early["live_r_n"], early["live_r_net"]) == (1, 1, 0.5)
+    assert (late["n"], late["live_r_n"], late["live_r_net"]) == (1, 1, -1.0)

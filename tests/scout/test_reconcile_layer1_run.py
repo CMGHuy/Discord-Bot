@@ -244,7 +244,7 @@ def test_run_layer1_returns_rows_in_export_order_and_checkpoints_each(tmp_path):
     path = tmp_path / "trade-rows.jsonl"
     rows = _run(path)
     assert [r.plan_id for r in rows] == ["P1", "P2", "P3", "P4"]
-    assert checkpoint.JsonlCheckpoint(path).done() == {"P1", "P2", "P3", "P4"}
+    assert checkpoint.JsonlCheckpoint(path).done() == {"T-P1", "T-P2", "P3", "T-P4"}
     assert [r.scored for r in rows] == [True, True, False, False]
     assert rows[3].refusal == "split_in_window"
 
@@ -261,6 +261,56 @@ def test_a_restart_skips_finished_trades_and_returns_equal_rows(tmp_path):
     bars = Counting()
     assert _run(path, bars=bars) == first
     assert bars.calls == []
+
+
+def _second_trade(rec, trade_id="T-P1b", r_realized=-1.0, exit_price=98.0):
+    """The same plan re-entered: a second exported line, its own trade and journal."""
+    trade = {**rec.trade, "trade_id": trade_id, "exit_price": exit_price, "close_reason": "stop"}
+    journal = {"trade_id": trade_id, "outcome": "loss", "r_realized": r_realized}
+    return dataclasses.replace(rec, trade=trade, journal=journal)
+
+
+def _two_trade_book():
+    first = _rec("P1", "AAA")
+    return _export(first, _second_trade(first), _rec("P3", "AAA", klass="unfilled"))
+
+
+def test_the_unit_key_is_the_trade_id_else_the_plan_id():
+    first = _rec("P1", "AAA")
+    assert records.unit_key(first) == "T-P1" == _row(first).key
+    assert records.unit_key(_second_trade(first)) == "T-P1b" == _row(_second_trade(first)).key
+    unfilled = _rec("P3", klass="unfilled")
+    assert records.unit_key(unfilled) == "P3" == _row(unfilled).key
+
+
+def test_two_trades_on_one_plan_are_two_rows_each_counted_once(tmp_path):
+    from reconcile import table
+    path = tmp_path / "rows.jsonl"
+    rows = _run(path, export=_two_trade_book())
+    assert [(r.plan_id, r.trade_id) for r in rows] == [("P1", "T-P1"), ("P1", "T-P1b"),
+                                                        ("P3", None)]
+    assert rows[0].r_live_gross > 0 > rows[1].r_live_gross
+    assert checkpoint.JsonlCheckpoint(path).done() == {"T-P1", "T-P1b", "P3"}
+    want = rows[0].r_live_gross - rows[0].cost_r + rows[1].r_live_gross - rows[1].cost_r
+    assert table.book_total(rows, side="long", era="headline") == pytest.approx(want)
+    for m in ("v1", "v2"):
+        lines = table.build_table(rows, side="long", fill_model=m)
+        table.self_check(lines, rows, side="long", fill_model=m, era="headline")
+        assert lines[-1].n == 2 and lines[-1].total_r == pytest.approx(want)
+
+
+def test_a_restart_skips_each_trade_of_a_two_trade_plan_exactly_once(tmp_path):
+    path = tmp_path / "rows.jsonl"
+    book = _two_trade_book()
+    first = _run(path, export=_export(book.records[0]))            # killed after T-P1
+    bars = Counting()
+    rows = _run(path, export=book, bars=bars)
+    assert [r.trade_id for r in rows] == ["T-P1", "T-P1b", None]
+    assert rows[0] == first[0]
+    keys = [json.loads(x)["key"] for x in path.read_text(encoding="utf-8").splitlines()]
+    assert keys == ["T-P1", "T-P1b", "P3"]
+    again = Counting()
+    assert _run(path, export=book, bars=again) == rows and again.calls == []
 
 
 def test_a_torn_last_line_is_rescored(tmp_path):

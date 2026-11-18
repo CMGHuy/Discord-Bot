@@ -42,6 +42,10 @@ class TradeRow:
     would_fill: dict
 
     @property
+    def key(self) -> str:
+        return records.key_of(self.plan_id, self.trade_id)
+
+    @property
     def scored(self) -> bool:
         return self.klass == "closed" and self.refusal is None
 
@@ -177,14 +181,20 @@ def run_layer1(export, bars, checkpoint, *, frictions: dict, start: dt.date,
     cached, last_exits = _memo(bars), _last_exits(export)
     total = len(export.records)
     done = checkpoint.done()
-    todo = [rec for rec in export.records if rec.plan_id not in done]
+    todo = [rec for rec in export.records if records.unit_key(rec) not in done]
     out(f"layer 1: {total - len(todo)}/{total} trades already scored, {len(todo)} to go")
     for n, rec in enumerate(todo, 1):
         row = row_for(rec, cached, frictions=frictions, start=start,
                       last_exit=last_exits.get(rec.ticker))
-        checkpoint.append(rec.plan_id, row.to_dict())
+        checkpoint.append(records.unit_key(rec), row.to_dict())
         if n % PROGRESS_EVERY == 0 or n == len(todo):
             finished = total - len(todo) + n
             out(f"layer 1: {finished}/{total} trades ({100.0 * finished / total:.0f}%)")
-    by_plan = {d["plan_id"]: TradeRow.from_dict(d) for d in checkpoint.rows()}
-    return [by_plan[rec.plan_id] for rec in export.records if rec.plan_id in by_plan]
+    return rows_in_export_order(export, checkpoint.rows())
+
+
+def rows_in_export_order(export, dicts) -> list[TradeRow]:
+    """Checkpointed rows, one per export line (unit_key), in export order."""
+    by_key = {row.key: row for row in map(TradeRow.from_dict, dicts)}
+    keys = [records.unit_key(rec) for rec in export.records]
+    return [by_key[k] for k in keys if k in by_key]

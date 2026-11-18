@@ -104,8 +104,7 @@ def _layer1(export, args) -> list:
 
     layer1_run.run_layer1(export, bars, checkpoint, frictions=friction_settings(),
                           start=args.since)
-    by_plan = {d["plan_id"]: layer1_run.TradeRow.from_dict(d) for d in checkpoint.rows()}
-    return [by_plan[rec.plan_id] for rec in export.records if rec.plan_id in by_plan]
+    return layer1_run.rows_in_export_order(export, checkpoint.rows())
 
 
 def _layer2(export, rows, window, params, modes, lane_dir: Path) -> tuple[dict, dict]:
@@ -117,7 +116,7 @@ def _layer2(export, rows, window, params, modes, lane_dir: Path) -> tuple[dict, 
     cov = layer2_run.coverage(frames, window, base_tickers=base, modes=modes,
                               snapshot_fn=layer2_run.SNAPSHOT_FN)
     cov["store_missing"] = sorted(missing)
-    plans = layer2.live_plans(export, {r.plan_id: r for r in rows})
+    plans = layer2.live_plans(export, {r.key: r for r in rows})
     return layer2.selection_counts(layer2.match(signals, plans), export), cov
 
 

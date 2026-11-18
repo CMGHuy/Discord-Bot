@@ -47,6 +47,16 @@ class Export:
     deploys: tuple[dict, ...]
 
 
+def key_of(plan_id: str, trade_id: str | None) -> str:
+    """One export line's unit: its trade, else (an unfilled plan) its plan. A plan the
+    bot re-entered is exported once per trade, so plan_id alone is not unique."""
+    return trade_id if trade_id is not None else plan_id
+
+
+def unit_key(rec: LiveRecord) -> str:
+    return key_of(rec.plan_id, (rec.trade or {}).get("trade_id"))
+
+
 def _plan_record(obj: dict) -> LiveRecord:
     plan = obj["plan"]
     return LiveRecord(plan["plan_id"], plan["ticker"], plan["direction"], plan,

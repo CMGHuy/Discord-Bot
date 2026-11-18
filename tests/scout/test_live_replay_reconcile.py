@@ -98,6 +98,22 @@ def test_trade_rows_are_checkpointed_and_hashed(env):
     assert report["layer1"]["long"]["headline"]["v1"]["table"][-1]["n"] == 3
 
 
+def test_a_plan_with_two_trades_yields_two_rows_in_the_report(env):
+    first = _rec("P1", "AAA")
+    second = {"kind": "plan", "plan": first.plan,
+              "trade": {**first.trade, "trade_id": "T-P1b", "exit_price": 98.0,
+                        "close_reason": "stop"},
+              "journal": {"trade_id": "T-P1b", "outcome": "loss", "r_realized": -1.0}}
+    with open(env["export"], "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(second) + "\n")
+    assert cli.main(_argv(env)) == 0
+    keys = [json.loads(x)["key"] for x in
+            (env["tmp"] / "work" / "trade-rows.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert sorted(keys) == ["P3", "T-P1", "T-P1b", "T-P2", "T-P4", "T-P5"]
+    table_lines = _json(env)["layer1"]["long"]["headline"]["v1"]["table"]
+    assert table_lines[-1]["n"] == 4                       # P1 twice, P4, P5
+
+
 def test_a_rerun_resumes_and_writes_the_same_report(env):
     assert cli.main(_argv(env)) == 0
     first, calls = _json(env), env["provider"].calls

@@ -72,6 +72,7 @@ class LivePlan:
     stop: float | None
     target: float | None
     r_live_net: float | None
+    key: str               # records.unit_key: a re-entered plan has one LivePlan a trade
 
 
 def _num(value) -> float | None:
@@ -86,12 +87,13 @@ def _live_plan(rec, row) -> LivePlan:
     return LivePlan(rec.plan_id, rec.ticker, rec.direction, rec.plan.get("source"),
                     sessions.issue_session(stamp), rec.plan.get("horizon_key"), bucket,
                     _num(entry), _num(plan.stop_loss), _num(plan.tp1),
-                    None if row is None else row.r_live_net)
+                    None if row is None else row.r_live_net, records.unit_key(rec))
 
 
-def live_plans(export, rows_by_plan: dict) -> list[LivePlan]:
-    """Every exported plan (filled or not), in export order; live net R from its TradeRow."""
-    return [_live_plan(rec, rows_by_plan.get(rec.plan_id)) for rec in export.records]
+def live_plans(export, rows_by_key: dict) -> list[LivePlan]:
+    """Every export line (filled or not), in export order; live net R from its TradeRow,
+    looked up by records.unit_key."""
+    return [_live_plan(rec, rows_by_key.get(records.unit_key(rec))) for rec in export.records]
 
 
 @dataclasses.dataclass
@@ -195,7 +197,7 @@ def _signal_cell(counts: dict, signal) -> dict:
 
 
 def _plan_cell(counts: dict, recs: dict, plan) -> dict:
-    return counts[_side(plan.direction)][records.era_of(recs[plan.plan_id])]
+    return counts[_side(plan.direction)][records.era_of(recs[plan.key])]
 
 
 def _add_matched(cell: dict, plan, signal) -> None:
@@ -227,7 +229,7 @@ def _add_replay_only(cell: dict, signal, export) -> None:
 def selection_counts(result: MatchResult, export) -> dict:
     """counts[side][era]; every plan in `result` comes from live_plans(export, ...)."""
     counts = {side: {era: _empty_cell() for era in ERAS} for side in SIDES}
-    recs = {rec.plan_id: rec for rec in export.records}
+    recs = {records.unit_key(rec): rec for rec in export.records}
     for plan, signal in result.matched:
         _add_matched(_plan_cell(counts, recs, plan), plan, signal)
     for plan in result.live_only:
