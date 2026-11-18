@@ -118,8 +118,8 @@ def _scored(rec, raw, row: dict) -> dict:
 
 
 def _closed(rec, bars, row: dict, frictions: dict, start, last_exit) -> dict:
-    if rec.journal is None:
-        return {**row, "refusal": "no_journal"}
+    if rec.journal is None or rec.journal.get("r_realized") is None:
+        return {**row, "refusal": "no_journal"}       # no journal R: no live R, counted at 0R
     try:
         layer1.live_risk(rec)
     except ValueError:

@@ -73,6 +73,11 @@ def _rec(plan_id="P1", ticker="AAA", direction="bullish", klass="closed", **plan
         trade = journal = None
     if klass == "no_journal":
         journal = None
+    if klass == "null_r":
+        journal = {**journal, "r_realized": None}
+    if klass == "manual_null_r":
+        trade["close_reason"] = "manual"
+        journal = {**journal, "r_realized": None}
     return records.LiveRecord(plan_id, ticker, direction, doc, trade, journal)
 
 
@@ -144,12 +149,23 @@ def test_a_manual_close_keeps_live_r_only():
     ("ZZZ", {}, "closed", "no_bars"),
     ("EEE", {"start": START}, "closed", "no_fill_bar"),
     ("AAA", {}, "no_journal", "no_journal"),
+    ("AAA", {}, "null_r", "no_journal"),
+    ("AAA", {}, "manual_null_r", "no_journal"),
 ])
 def test_refusals_keep_the_live_net_where_it_exists(ticker, kw, klass, expected):
     row = _row(_rec("PX", ticker, klass=klass), **kw)
     assert row.refusal == expected and expected in layer1_run.REFUSALS
     assert not row.scored and row.values == {}
     assert (row.r_live_net is None) == (expected == "no_journal")
+
+
+def test_a_null_journal_r_is_classed_by_its_trade_and_carries_no_engine_values():
+    for klass in ("null_r", "manual_null_r"):
+        rec = _rec("PN", klass=klass)
+        row = _row(rec)
+        assert row.klass == records.class_of(rec) and row.refusal == "no_journal"
+        assert row.r_live_gross is None and row.cost_r is None and row.r_live_net is None
+        assert row.values == {} and row.effects == {} and row.tags == () and not row.scored
 
 
 def test_a_fill_on_the_issued_stop_is_refused_zero_risk():
