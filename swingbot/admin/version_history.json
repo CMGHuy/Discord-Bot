@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-17 16:00:30 UTC",
+  "generated_at": "2026-11-18 22:26:26 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.44.1",
-    "bot": "2.19.2"
+    "bot": "2.19.3"
   },
   "releases": [
     {
@@ -2694,6 +2694,19 @@
       },
       "changed": [
         "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-18",
+      "last_seen": "2026-11-18",
+      "commit": "2741ec24",
+      "subject": "release(bot): 2.19.3 -- v212 confluence limit entry (knob inert at 0), measurement NO-LIFT (UNDERPOWERED at Stage 0)",
+      "versions": {
+        "ui": "1.44.1",
+        "bot": "2.19.3"
+      },
+      "changed": [
         "bot"
       ]
     }
