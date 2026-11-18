@@ -1,4 +1,5 @@
 """v232 V232-14: report assembly and the results Markdown."""
+import copy
 import dataclasses
 import sys
 from pathlib import Path
@@ -64,3 +65,25 @@ def test_the_doc_opens_with_the_caveat_and_carries_the_labels():
 def test_coverage_counts_and_refused_tickers_are_listed():
     assert REPORT["meta"]["coverage"]["base_missing_days"] == {"AAA": 2} and "AAA 2" in MD
     assert REPORT["populations"]["long"]["headline"]["refused_tickers"]["split_in_window"] == ["AAA"]
+
+
+def test_backtest_r_keyed_by_strategy_is_a_leak():
+    assert render.leaks(REPORT, MD) == [] and "AAA 2" in MD     # coverage counts pass (Handoff)
+    bad = copy.deepcopy(REPORT)
+    bad["layer1"]["long"]["headline"]["v1"]["by_strategy"] = {"RSI": 0.4}
+    assert any("by_strategy" in p for p in render.leaks(bad, MD))
+
+
+def test_a_forbidden_key_or_backtest_key_outside_layer1_is_a_leak():
+    bad = copy.deepcopy(REPORT)
+    bad["populations"]["long"]["headline"]["ticker"] = "AAA"
+    bad["selection"]["long"]["headline"]["r_as_backtest"] = 1.0
+    problems = render.leaks(bad, MD)
+    assert any("forbidden key" in p for p in problems)
+    assert any("outside layer1" in p for p in problems)
+
+
+def test_a_heading_with_backtest_r_by_ticker_is_a_leak():
+    assert render.leaks(REPORT, MD + "\n## Backtest R by ticker\n")
+    assert render.leaks(REPORT, MD + "\n| Strategy | exit effect |\n|---|---|\n")
+    assert render.leaks(REPORT, MD + "\n## Live net R by ticker\n") == []

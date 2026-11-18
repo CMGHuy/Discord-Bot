@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import re
 
 from autopsy.eras import ERA_BOUNDARY_UTC
 
-from . import intervals, layer1, layer2, records, sessions, table
+from . import intervals, layer1, layer2, records, sessions, table, tags
 
 TITLE = "v232 - Live versus replay reconciliation, per direction"
 CAVEAT = (
@@ -241,3 +242,50 @@ def render_markdown(report: dict) -> str:
         for m in layer1.FILL_MODELS:
             out += _block_md(report["layer1"][s][e][m], title, m)
     return "\n".join(out + _tail_md(report)) + "\n"
+
+
+FORBIDDEN_KEYS = ("strategy", "horizon", "horizon_key", "ticker", "ledger", "parameter", "params")
+BACKTEST_R_KEYS = ("backtest", "r_as_backtest", "r_exit_only", "r_rebased", "r_rebased_total",
+                   "effects", "entry", "exit", "gap_net", "table", "confusion", "rebase",
+                   "cost_check")
+_LAYER1_VOCAB = frozenset({
+    *layer2.SIDES, *layer2.ERAS, *layer1.FILL_MODELS, *tags.TAGS, *layer1.OUTCOME_CLASSES,
+    *EFFECT_LABELS, *(f.name for f in dataclasses.fields(intervals.CellStats)),
+    *(f.name for f in dataclasses.fields(table.Line)),
+    "table", "selection", "effects", "cost_check", "confusion", "tags", "rebase",
+    "mean_exit_effect", "zero_cost_backtest", "equally_costed", "n_filled", "n_no_fill",
+    "n_rebased", "r_rebased_total", "stop_shift_pct", "median", "p90"})
+_COMPONENT = re.compile(r"\b(strateg\w*|horizons?|tickers?|ledgers?|parameters?|params)\b", re.I)
+_BACKTEST = re.compile(r"backtest|exit[ _-]only|entry effect|exit effect|re-?based", re.I)
+
+
+def _walk(node, path=()):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield path, key
+            yield from _walk(value, path + (str(key),))
+    elif isinstance(node, list):
+        for value in node:
+            yield from _walk(value, path)
+
+
+def _key_leaks(path: tuple, key) -> list[str]:
+    in_layer1 = path[:1] == ("layer1",)
+    checks = ((key in FORBIDDEN_KEYS, "forbidden key"),
+              (in_layer1 and key not in _LAYER1_VOCAB, "key outside the per-direction vocabulary"),
+              (not in_layer1 and key in BACKTEST_R_KEYS, "backtest R outside layer1"))
+    return [f"json {'.'.join(path + (str(key),))}: {why}" for hit, why in checks if hit]
+
+
+def _is_header(lines: list, i: int) -> bool:
+    nxt = lines[i + 1] if i + 1 < len(lines) else ""
+    return lines[i].startswith("#") or (lines[i].startswith("|") and nxt.startswith("|-"))
+
+
+def leaks(report: dict, markdown: str) -> list[str]:
+    """Every place backtest R could be keyed by a component; [] when the report is clean."""
+    out = [p for path, key in _walk(report) for p in _key_leaks(path, key)]
+    lines = markdown.splitlines()
+    out += [f"markdown line {i + 1}: {line.strip()}" for i, line in enumerate(lines)
+            if _is_header(lines, i) and _COMPONENT.search(line) and _BACKTEST.search(line)]
+    return out
