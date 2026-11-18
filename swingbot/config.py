@@ -244,7 +244,7 @@ FIELDS: list[Field] = [
                "3rd full session (3 sessions) after the alert and cancelled if TP1 trades "
                "first. A plan whose stop would sit more than 2% from the limit is dropped "
                "(limit_stop_beyond_cap). Unmeasured -- see "
-               "docs/superpowers/specs/2026-11-06-v212-confluence-limit-entry.md. Keep 0."),
+               "docs/superpowers/specs/implemented/2026-11-06-v212-confluence-limit-entry.md. Keep 0."),
     Field("MIN_RISK_REWARD_RATIO", "MIN_RISK_REWARD_RATIO", "Trade Filters & Risk", "Min reward:risk ratio",
           type="float", default="1.5", min=0, step=0.1,
           help="Hard filter, enforced exactly as set: dropped entirely unless the reward:risk to target 1 "

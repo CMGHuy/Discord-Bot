@@ -5,7 +5,7 @@
 **Bump:** bot patch (arm branch inert while `CONFLUENCE_LIMIT_ENTRY_F = 0`)
 **Edge:** expectancy — the live half of v212's limit entry; no lift of its own.
 **Screen:** exempt (post-signal) — inherited from v212
-**Spec:** [v216 — Confluence limit entry: live path](../specs/2026-11-06-v216-confluence-limit-live-path.md)
+**Spec:** [v216 — Confluence limit entry: live path](../../specs/no-lift/2026-11-06-v216-confluence-limit-live-path.md)
 **Gate:** implement **only after v212 records a Stage 3 PASS**; on any other v212 verdict this plan moves to `no-lift/` unimplemented.
 **Depends on:** v212's V212-2 (`limit_entry_f`, `to_limit_plan`) and V212-4 (`limit_entry_rule.bar_outcome`, `is_arm_limit`) on `main`. Global Constraints: v212 index [`2026-11-06-v212-confluence-limit-entry_0-index.md`](2026-11-06-v212-confluence-limit-entry_0-index.md) § Global Constraints apply to every task here.
 **Brief:** `.superpowers/briefs/2026-11-06-v212-confluence-limit-entry.md` (§3e live limit step, §3f heat, §3h alert text)

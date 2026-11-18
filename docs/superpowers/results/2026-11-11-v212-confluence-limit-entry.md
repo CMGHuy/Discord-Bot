@@ -1,8 +1,8 @@
 # v212 — Confluence limit entry partway to the support: results
 
-**Spec (the pre-registration):** `docs/superpowers/specs/2026-11-06-v212-confluence-limit-entry.md`.
+**Spec (the pre-registration):** `docs/superpowers/specs/implemented/2026-11-06-v212-confluence-limit-entry.md`.
 **Pre-registration record:** `docs/superpowers/results/2026-11-11-v212-preregistration.md` (committed `3aedb886`; `observed_n` appended in `0b0915e2`, before Stage 0).
-**Plan:** `docs/superpowers/plans/2026-11-06-v212-confluence-limit-entry_0-index.md`.
+**Plan:** `docs/superpowers/plans/implemented/2026-11-06-v212-confluence-limit-entry_0-index.md`.
 **Driver:** `scripts/backtest/measure_confluence_limit.py` at `main` `4497ddd8`; stage files under `docs/superpowers/results/v212/`.
 **Verdict:** NO-LIFT (UNDERPOWERED at Stage 0); selected cell `none`. `CONFLUENCE_LIMIT_ENTRY_F` stays `0`.
 

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Dispatch `task-implementer` at each task's `**Model:**` tier.
 
-**Spec:** [v212 — Confluence limit entry partway to the support](../specs/2026-11-06-v212-confluence-limit-entry.md) (rule 6 as corrected in e5dd654f: a gap through the stop fills at the open and exits at that open, about 0R less frictions, outcome `"loss"`; the from-L reading is only the disclosed `gap_stop_r_from_limit`)
+**Spec:** [v212 — Confluence limit entry partway to the support](../../specs/implemented/2026-11-06-v212-confluence-limit-entry.md) (rule 6 as corrected in e5dd654f: a gap through the stop fills at the open and exits at that open, about 0R less frictions, outcome `"loss"`; the from-L reading is only the disclosed `gap_stop_r_from_limit`)
 **Index:** [`2026-11-06-v212-confluence-limit-entry_0-index.md`](2026-11-06-v212-confluence-limit-entry_0-index.md) — Goal, Architecture, **Global Constraints**, Review Focus, Parallelisation and the task ledger live there; every task below implicitly includes the Global Constraints.
 **Brief:** `.superpowers/briefs/2026-11-06-v212-confluence-limit-entry.md`
 

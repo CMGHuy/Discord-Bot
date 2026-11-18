@@ -1,7 +1,7 @@
 # v212 pre-registration — Confluence limit entry partway to the support
 
-**Spec:** `docs/superpowers/specs/2026-11-06-v212-confluence-limit-entry.md`, last changed in `d8d33c79`.
-**Plan:** `docs/superpowers/plans/2026-11-06-v212-confluence-limit-entry_0-index.md`.
+**Spec:** `docs/superpowers/specs/implemented/2026-11-06-v212-confluence-limit-entry.md`, last changed in `d8d33c79`.
+**Plan:** `docs/superpowers/plans/implemented/2026-11-06-v212-confluence-limit-entry_0-index.md`.
 **Code:** `main` at `4497ddd8` (V212-1..V212-14 merged, CI green). No edit under `swingbot/` or `scripts/` until the last stage file is committed.
 **Driver:** `scripts/backtest/measure_confluence_limit.py`; stage files under `docs/superpowers/results/v212/`.
 **Committed before any compute.** `observed_n` is appended after the outcome-blind Stage −1 census, in its own commit, before Stage 0 (plan index § OPEN).

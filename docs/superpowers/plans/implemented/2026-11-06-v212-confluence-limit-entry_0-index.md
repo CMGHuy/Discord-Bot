@@ -3,10 +3,10 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Dispatch `task-implementer` at each task's `**Model:**` tier and escalate per `docs/claude/model-routing.md`. **Never read a part whole**: `grep -n "^### Task V212-11:" -A 400 docs/superpowers/plans/2026-11-06-v212-confluence-limit-entry_3-*.md`.
 
 **Bump:** bot patch (the knob ships inert at 0; no observable difference until a pass and a partner decision)
-**Split:** the live path (G4; written here as part 2, V212-6..V212-10 with V212-9b) moved to [v216](2026-11-06-v216-confluence-limit-live-path.md) on 2026-11-06 at the 20-task cap, renumbered V216-1..6; v216 is implemented only after a Stage 3 pass here. Task ids V212-6..V212-10 are retired, never reused.
-**Edge:** expectancy — a prediction: on clamped confluence plans a limit partway to the support with its stop under the support raises ExpR on filled trades, with fewer trades and fewer noise stop-outs. If no cell passes, the closing commit amends this to "expectancy, measured none" with one clause.
+**Split:** the live path (G4; written here as part 2, V212-6..V212-10 with V212-9b) moved to [v216](../no-lift/2026-11-06-v216-confluence-limit-live-path.md) on 2026-11-06 at the 20-task cap, renumbered V216-1..6; v216 is implemented only after a Stage 3 pass here. Task ids V212-6..V212-10 are retired, never reused.
+**Edge:** expectancy, measured none — the chain ended at Stage 0: the paired MDE of cell f0.667 (0.139R) exceeded the 0.10R ceiling, so no ExpR was scored and VALIDATION stays unspent.
 **Screen:** exempt (post-signal)
-**Spec:** [v212 — Confluence limit entry partway to the support (pre-registration)](../specs/2026-11-06-v212-confluence-limit-entry.md)
+**Spec:** [v212 — Confluence limit entry partway to the support (pre-registration)](../../specs/implemented/2026-11-06-v212-confluence-limit-entry.md)
 **Brief:** `.superpowers/briefs/2026-11-06-v212-confluence-limit-entry.md` (§2 signatures, §3a–3h excerpts, §4 test patterns, §6 traps)
 **Worktree:** implement V212-1..V212-14 in `.claude/worktrees/2026-11-06-v212-confluence-limit-entry` (branch of the same name, created in V212-1's first step; `docs/claude/document-lifecycle.md`). V212-15..V212-17 run on `main` after V212-1..14 are merged and the CI run on that push is green.
 

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Dispatch `task-implementer` at each task's `**Model:**` tier. **Never read a part whole**: `grep -n "^### Task V212-16:" -A 330 <this file>`.
 
-**Spec:** [v212 — Confluence limit entry partway to the support](../specs/2026-11-06-v212-confluence-limit-entry.md) (§ The rule (frozen here) and § Pass rule are the pre-registration; rule 6 as corrected in e5dd654f)
+**Spec:** [v212 — Confluence limit entry partway to the support](../../specs/implemented/2026-11-06-v212-confluence-limit-entry.md) (§ The rule (frozen here) and § Pass rule are the pre-registration; rule 6 as corrected in e5dd654f)
 **Index:** [`2026-11-06-v212-confluence-limit-entry_0-index.md`](2026-11-06-v212-confluence-limit-entry_0-index.md) — Goal, Architecture, **Global Constraints**, Review Focus, Parallelisation and the task ledger live there; every task below implicitly includes the Global Constraints.
 **Previous:** [part 3, V212-11..V212-14](2026-11-06-v212-confluence-limit-entry_3-measurement.md) — the replay module, the portfolio pass, the measure script `scripts/backtest/measure_confluence_limit.py` and the disclosures module this part runs.
 **Brief:** `.superpowers/briefs/2026-11-06-v212-confluence-limit-entry.md`
