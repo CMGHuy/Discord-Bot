@@ -9,7 +9,9 @@ race completeness, which reads the frame's end exactly as v1 does.
 Stage 2 (draw, per date): for an event on ticker i at date t the pool is
 every other ticker j eligible at t, in the same trend state, in the same ATR%
 tercile of t's eligible cross-section, with no raw event at t. Market-scope
-ideas draw from the same ticker's trailing sessions instead.
+ideas draw from the same ticker's trailing sessions instead. Market scope:
+the same ticker's TRAILING_DAYS sessions before t, embargoed CAP bars around
+every raw event, so no null bar postdates its event.
 
 Stage 3 (race, per null ticker): null bars raced on their own frame with
 their own ATR14 and scattered back to their events.
@@ -361,3 +363,57 @@ def check_starvation(result: DrawResult, scope: str) -> None:
         raise NullRefusal(_REFUSAL_CODES[scope],
                           f"{result.starved_dates} of {result.event_dates} event dates "
                           f"left an event under {null.MIN_CANDIDATES} candidates")
+
+
+TRAILING_DAYS = 252
+
+
+def _embargoed(event: np.ndarray, lo: int, hi: int, cap: int) -> np.ndarray:
+    """True for positions lo..hi-1 within ``cap`` bars of any raw event in ``event``."""
+    hits = np.flatnonzero(event)
+    window = np.arange(lo, hi)
+    if hits.size == 0:
+        return np.zeros(window.size, dtype=bool)
+    nxt = np.searchsorted(hits, window)                       # first event at or after p
+    after = hits[np.minimum(nxt, hits.size - 1)] - window
+    before = window - hits[np.maximum(nxt - 1, 0)]
+    return ((nxt < hits.size) & (after <= cap)) | ((nxt > 0) & (before <= cap))
+
+
+def market_pool(panel: TickerPanel, pos: int, *, cap: int) -> np.ndarray:
+    """Market scope: own positions in the TRAILING_DAYS sessions before ``pos``,
+    eligible, same trend state, more than ``cap`` bars from every raw event.
+    Reads the event flag up to ``pos`` only; ``pos`` is itself a raw event, so
+    a later event could only embargo bars ``pos`` already embargoes."""
+    lo = max(0, pos - TRAILING_DAYS)
+    near = _embargoed(panel.event[: pos + 1], lo, pos, cap)
+    keep = (panel.eligible[lo:pos] & (panel.trend[lo:pos] == panel.trend[pos]) & ~near)
+    return np.arange(lo, pos)[keep]
+
+
+def _draw_market_ticker(tally: _Tally, panel: TickerPanel, positions, *,
+                        idea: str, cap: int, k: int) -> None:
+    rng = np.random.default_rng(null.null_seed(_v2_name(idea), panel.ticker))
+    for pos in np.sort(np.asarray(positions, dtype=int)).tolist():
+        day = panel.dates[pos]
+        pool = market_pool(panel, pos, cap=cap)
+        starved = pool.size < null.MIN_CANDIDATES
+        tally.mark_date(day, starved)
+        if starved:
+            tally.dropped[panel.ticker] += 1
+            continue
+        pick = np.sort(rng.choice(pool, size=min(k, pool.size), replace=False))
+        tally.count_slots(pick.size)
+        tally.add(_records(panel.ticker, pos, day, [panel.ticker] * pick.size, pick))
+
+
+def draw_market_scope(panels: Mapping[str, TickerPanel], booked: Mapping, *, idea: str,
+                      cap: int, k: int = null.K) -> DrawResult:
+    """Stage 2, market scope: one generator per ticker, its events ascending."""
+    unknown = sorted(set(booked) - set(panels))
+    if unknown:
+        raise ValueError(f"booked tickers without a panel: {unknown[:5]}")
+    tally = _Tally()
+    for ticker in sorted(booked):
+        _draw_market_ticker(tally, panels[ticker], booked[ticker], idea=idea, cap=cap, k=k)
+    return tally.result()
