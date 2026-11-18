@@ -352,6 +352,9 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # byte for byte by the preflight test.
     ("tests/backtest_scripts/golden/count_only_range_breakdown_close.md",
      ("tests/backtest_scripts/test_screen_preflight.py",)),
+    # v234 V234-2: the v1/v2 null golden draws, captured once, compared exactly.
+    ("tests/backtesting/screen/golden/null_draws.json",
+     ("tests/backtesting/screen/test_null_golden.py",)),
 )
 
 # Known to affect no test. Distinct from "unplaceable", which widens: silence
