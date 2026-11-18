@@ -126,3 +126,17 @@ def test_a_failed_guard_writes_nothing(env, monkeypatch, guard):
         monkeypatch.setattr(render, "leaks", lambda report, markdown: ["json x: forbidden key"])
     assert cli.main(_argv(env)) == 2
     assert not _out(env)[0].exists() and not _out(env)[1].exists()
+
+
+def test_a_params_digest_mismatch_refuses_before_any_work(env):
+    assert cli.main(_argv(env, "--expect-params-digest", "e" * 64)) == 2
+    assert env["provider"].calls == 0 and not _out(env)[1].exists()
+    assert cli.main(_argv(env, "--expect-params-digest", "d" * 64)) == 0
+
+
+def test_a_stale_work_dir_refuses(env):
+    assert cli.main(_argv(env)) == 0
+    held = json.loads((env["tmp"] / "work" / "run.json").read_text(encoding="utf-8"))
+    assert (held["since"], held["until"]) == ("2026-10-05", "2026-10-20")
+    assert held["export_sha256"] == hashlib.sha256(env["export"].read_bytes()).hexdigest()
+    assert cli.main(_argv(env, since="2026-10-01")) == 2

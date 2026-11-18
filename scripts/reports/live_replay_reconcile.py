@@ -4,7 +4,7 @@
     python scripts/reports/live_replay_reconcile.py --export data/v232/reconcile.jsonl \
         --since 2026-07-01 [--until D] [--fetch-bars] [--short-modes broad,isolated|none]
 
-Checkpoints under --work-dir; the same command resumes. Exit 2: self-check or leak guard.
+Checkpoints under --work-dir; the same command resumes. Exit 2: self-check, leak guard, the parameter digest, another run's work dir.
 """
 from __future__ import annotations
 
@@ -56,6 +56,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--results-dir", type=Path, default=ROOT / "docs" / "superpowers" / "results")
     p.add_argument("--resamples", type=int, default=WEEK_BOOTSTRAP_RESAMPLES)
     p.add_argument("--seed", type=int, default=WEEK_BOOTSTRAP_SEED)
+    p.add_argument("--expect-params-digest", default=None, help="production's ScanParams SHA-256")
     p.add_argument("--short-modes", type=_modes, default=None, help="default: live configuration")
     return p
 
@@ -79,6 +80,19 @@ def _commit() -> str | None:
     except (OSError, subprocess.CalledProcessError):
         return None
     return done.stdout.strip()
+
+
+def _claim_work_dir(work: Path, key: dict) -> None:
+    """A work dir serves one export, window and bars root; another run refuses."""
+    path = work / "run.json"
+    if path.is_file():
+        held = json.loads(path.read_text(encoding="utf-8"))
+        if held != key:
+            raise RunRefused(f"{work} holds checkpoints for {held}; use a new --work-dir")
+        return
+    work.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(json.dumps(key, sort_keys=True) + "\n")
 
 
 def _layer1(export, args) -> list:
@@ -134,8 +148,13 @@ def _write(args, report: dict, markdown: str) -> None:
 def _run(args, argv) -> int:
     params = ScanParams.from_config()
     digest = layer2_run.params_digest(params)
+    if args.expect_params_digest and args.expect_params_digest != digest:
+        raise RunRefused("the local ScanParams digest differs from production's; nothing ran")
     end = args.until or dt.date.today()
     window = (args.since.isoformat(), end.isoformat())
+    _claim_work_dir(args.work_dir, {"export_sha256": _sha256(args.export), "since": window[0],
+                                    "until": args.until and window[1],
+                                    "bars_root": str(Path(args.bars_root).resolve())})
     inputs: dict = {}
     export = records.load_export(args.export, input_fingerprints=inputs, until=args.until)
     if args.fetch_bars:
