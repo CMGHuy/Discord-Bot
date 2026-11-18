@@ -5,6 +5,9 @@ import numpy as np
 import pandas as pd
 
 CAP = 4
+#: v230: fires for every member on the same date; the v2 null draws from this
+#: ticker's trailing sessions (spec v230 A2).
+SCOPE = "market"
 PARAMS = {"day": "last trading day of the calendar month"}
 SUMMARY = "t is the last trading day of its calendar month (ticker's own bar dates)"
 SOURCE = "Ariel (1987); Lakonishok & Smidt (1988)"

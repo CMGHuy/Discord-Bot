@@ -31,6 +31,13 @@ control_condition and condition, and a float column bottom (spec v214 G3). An
 avoid idea races the fixed shape from the next open, and its verdict is the
 six-clause avoid rule (screen/verdict.py). A changed MODE is a new idea with a
 new name.
+
+v230: a module may also export SCOPE ("ticker" default, or "market"). A
+"market" idea fires for every member on one date (a calendar or an
+intermarket trigger); the v2 null draws its pool from the same ticker's
+trailing sessions instead of other tickers on the same date (spec v230 A2).
+A market-scope idea is an edge idea entered at the next open. A changed
+SCOPE is a new idea with a new name.
 """
 from __future__ import annotations
 
@@ -65,6 +72,9 @@ CONTEXT_KINDS = ("z", "level")
 #: v214: "edge" (every idea before v214: must beat the matched null) or "avoid"
 #: (must do worse than the null AND a control arm; licenses a veto spec only).
 MODES = ("edge", "avoid")
+#: v230: "ticker" (pool = other tickers on the same date) or "market" (pool =
+#: the same ticker's trailing sessions; triggers that fire for every member at once).
+SCOPES = ("ticker", "market")
 
 
 def _shape_problem(idea: "Idea") -> str | None:
@@ -113,6 +123,18 @@ def _mode_problem(idea: "Idea") -> str | None:
     return None
 
 
+def _scope_problem(scope: str, mode: str, entry: str) -> str | None:
+    """v230: an unknown scope, or a market-scope idea on a path the v2 null
+    does not build (avoid mode, level entry), is refused at registration."""
+    if scope not in SCOPES:
+        return f"scope {scope!r} is not one of {SCOPES}"
+    if scope == "market" and mode == "avoid":
+        return "a market-scope idea in avoid mode is not built in v230"
+    if scope == "market" and entry == "level":
+        return "a market-scope idea with a level entry is not built in v230"
+    return None
+
+
 @dataclass(frozen=True)
 class Idea:
     name: str
@@ -131,10 +153,13 @@ class Idea:
     context_kind: str = "z"
     mode: str = "edge"
     states: Callable[[pd.DataFrame], pd.DataFrame] | None = None
+    scope: str = "ticker"
 
     def __post_init__(self):
+        scope = _scope_problem(self.scope, self.mode, self.entry)
         problem = (_side_problem(self) or _shape_problem(self)
-                   or _context_problem(self) or _mode_problem(self))
+                   or _context_problem(self) or _mode_problem(self)
+                   or (scope and f"{self.name}: {scope}"))
         if problem:
             raise ValueError(problem)
         object.__setattr__(self, "params", MappingProxyType(dict(self.params)))
@@ -156,7 +181,8 @@ def _load(name: str) -> Idea:
                 family=tuple(getattr(module, "FAMILY", ())),
                 context_kind=getattr(module, "CONTEXT_KIND", "z"),
                 mode=getattr(module, "MODE", "edge"),
-                states=getattr(module, "states", None))
+                states=getattr(module, "states", None),
+                scope=getattr(module, "SCOPE", "ticker"))
 
 
 IDEAS: dict[str, Idea] = {name: _load(name) for name in IDEA_MODULES}

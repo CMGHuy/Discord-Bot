@@ -383,3 +383,74 @@ def test_load_refuses_an_avoid_module_without_states(monkeypatch):
     bad = _fake_module(monkeypatch, "fake_avoid_no_states", CAP=20, MODE="avoid")
     with pytest.raises(ValueError, match="states"):
         ideas._load(bad)
+
+
+MARKET_SCOPE = {"turn_of_month", "bond_spike_rebound", "dollar_drop"}
+
+
+def test_scopes_and_the_default():
+    """v230 A2: SCOPE is part of the frozen definition, default "ticker"."""
+    assert ideas.SCOPES == ("ticker", "market")
+    assert Idea(name="x", events=_events, time_cap_bars=5).scope == "ticker"
+
+
+def test_every_registered_idea_pins_its_scope():
+    """v230 A2: exactly the three market-wide triggers named by the spec read
+    SCOPE = "market"; every other idea (the shock ideas included) is "ticker"."""
+    assert {n: i.scope for n, i in IDEAS.items()} == {
+        n: ("market" if n in MARKET_SCOPE else "ticker") for n in IDEAS}
+
+
+def test_scope_is_the_last_field():
+    names = [f.name for f in dataclasses.fields(Idea)]
+    assert names[-1] == "scope"
+    assert names[-3:-1] == ["mode", "states"]
+
+
+def test_an_unknown_scope_is_refused():
+    with pytest.raises(ValueError, match="x: scope 'sector' is not one of"):
+        Idea(name="x", events=_events, time_cap_bars=5, scope="sector")
+
+
+def test_a_market_scope_avoid_idea_is_refused():
+    with pytest.raises(ValueError, match="market-scope idea in avoid mode is not built in v230"):
+        Idea(name="x", events=_events, time_cap_bars=20, mode="avoid", states=_states,
+             scope="market")
+
+
+def test_a_market_scope_level_idea_is_refused():
+    with pytest.raises(ValueError,
+                       match="market-scope idea with a level entry is not built in v230"):
+        Idea(name="x", events=_events, time_cap_bars=20, direction="short",
+             entry="level", levels=_levels, scope="market")
+
+
+def test_a_market_scope_edge_idea_on_the_next_open_is_accepted():
+    idea = Idea(name="x", events=_events, time_cap_bars=4, scope="market")
+    assert (idea.scope, idea.mode, idea.entry) == ("market", "edge", "next_open")
+
+
+@pytest.mark.parametrize("scope, mode, entry, expected", [
+    ("ticker", "edge", "next_open", None),
+    ("ticker", "avoid", "next_open", None),
+    ("ticker", "edge", "level", None),
+    ("market", "edge", "next_open", None),
+    ("market", "avoid", "next_open", "a market-scope idea in avoid mode is not built in v230"),
+    ("market", "edge", "level", "a market-scope idea with a level entry is not built in v230"),
+    ("both", "edge", "next_open", "scope 'both' is not one of ('ticker', 'market')"),
+])
+def test_scope_problem_table(scope, mode, entry, expected):
+    assert ideas._scope_problem(scope, mode, entry) == expected
+
+
+def test_load_reads_scope_and_defaults_to_ticker(monkeypatch):
+    plain = _fake_module(monkeypatch, "fake_scope_default", CAP=10)
+    market = _fake_module(monkeypatch, "fake_scope_market", CAP=4, SCOPE="market")
+    assert ideas._load(plain).scope == "ticker"
+    assert ideas._load(market).scope == "market"
+
+
+def test_load_refuses_an_unknown_scope(monkeypatch):
+    bad = _fake_module(monkeypatch, "fake_scope_bad", CAP=4, SCOPE="world")
+    with pytest.raises(ValueError, match="scope 'world'"):
+        ideas._load(bad)
