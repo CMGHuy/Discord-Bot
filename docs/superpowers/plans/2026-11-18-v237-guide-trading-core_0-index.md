@@ -79,7 +79,7 @@ green CI run.
 - Every new function stays under cyclomatic complexity 15; every new `except Exception` that does not re-raise calls `swallowed(log, "<unique tag>", exc, ...)`.
 - No DB in tests: guide test modules patch `live_market._load_trades` and `live_risk._load_account`; cards read the committed `validation_registry.json` only through a patched `live_strategies._badge` in unit tests.
 - `frontend/src/app/workspaces/guide/guide-anchors.json` is regenerated with `python scripts/dev/guide_anchors.py`, never edited by hand.
-- Per-task verification is the narrow run (`python scripts/dev/testrun.py file <test>`); only V237-15 runs the full suite, through CI.
+- Per-task verification is the narrow run (`python scripts/dev/testrun.py file <test>`); only V237-14's final steps (9–12) run the full suite, through CI.
 - Do not change trading behaviour; v237 touches only `swingbot/admin/guide/`, `docs/guide/`, guide tests and the guide layout check.
 
 ## Parallelisation
@@ -93,8 +93,7 @@ Implementation is almost entirely sequential; part *writers* may run two at a ti
 - **V237-6 after V237-4** (consumes `cards.load_cards`, `parse_card`); could run beside V237-5 (disjoint files: `test_guide_content.py`, `test_guide_sources.py`) — the one parallel pair.
 - **V237-7 after V237-5 and V237-6**: the cards must pass the card checks and render through `strategies.cards`.
 - **V237-8 → V237-9 → … → V237-13**: every chapter task edits `tests/admin/test_guide_chapter_text.py` and regenerates `guide-anchors.json` (shared files, Handoff 9); chapters link to glossary anchors V237-8 pins and use placeholders from V237-1..5; chapter 5 needs the cards (V237-7).
-- **V237-14 after V237-13**: the layout check counts eight chapters in the drawer.
-- **V237-15 last**: full suite via CI.
+- **V237-13 → V237-13b → V237-14**: 13b finishes chapter 8; V237-14 links chapters 4–7 to it, moves the layout check to eight chapters, and ends with the CI run (last task).
 
 ## Task ledger
 
@@ -118,8 +117,8 @@ Implementation is almost entirely sequential; part *writers* may run two at a ti
 | V237-12 | Chapter 7: Building the trade plan | 3 | sonnet | C `docs/guide/07-trade-plan.md`, M `tests/admin/test_guide_chapter_text.py`, Regenerate `guide-anchors.json` | slug `trade-plan`, order 7, title `Building the trade plan`; anchors `entry`, `the-stop`, `the-stop-distance-cap-and-the-clamp`, `the-stop-never-widens`, `targets-that-pay-for-the-risk`, `scale-out-and-the-runner`, `how-a-plan-closes`, `backtest-and-live-use-the-same-plan` |
 | V237-12b | Chapter 7 later sections | 3 | sonnet | M `docs/guide/07-trade-plan.md`, M `tests/admin/test_guide_chapter_text.py`, Regenerate `guide-anchors.json` | ch.7 anchors `the-stop-never-widens` through `backtest-and-live-use-the-same-plan`; runs right after V237-12, merges with it |
 | V237-13 | Chapter 8: Sizing and risk | 4 | sonnet | C `docs/guide/08-sizing-risk.md`, M `tests/admin/test_guide_chapter_text.py`, Regenerate `guide-anchors.json` | slug `sizing-risk`, order 8, title `Sizing and risk`; anchors `three-limits-not-one`, `how-the-share-count-is-found`, `sizing-modes`, `gap-aware-sizing`, `portfolio-and-correlated-heat`, `drawdown-throttle-and-kill-switch`, `reject-clamp-or-size-0`, `caps-that-are-not-applied`, `costs-turnover-and-tax` |
-| V237-14 | Layout check covers chapters 4–8 | 4 | sonnet | M `scripts/dev/guide_layout_check.py`, M `tests/scripts/test_guide_layout_check.py`, M `frontend/scripts/layout-audit-lib.mjs`, M `frontend/scripts/layout-audit-lib.test.mjs`, C `docs/superpowers/results/2026-11-18-v237-guide-layout.md` | `CHAPTERS_IN_DRAWER = 8`; `PAGES` += `"strategies"`, `"sizing-risk"`; `DEEP_LINKS` += `"sizing-risk#reject-clamp-or-size-0"`; layout-audit `ROUTES` += `/insights/guide/strategies` (count +1) |
-| V237-15 | Full-suite verification | 4 | haiku | none (run only; CI) | push, then watch the CI run green (`0 failed`, `0 xfailed`) |
+| V237-13b | Chapter 8 later sections | 4 | sonnet | M `docs/guide/08-sizing-risk.md`, M `docs/guide/12-glossary.md` (`Drawdown throttle` sentence), M `tests/admin/test_guide_chapter_text.py`, Regenerate `guide-anchors.json` | ch.8 anchors `portfolio-and-correlated-heat` through `costs-turnover-and-tax` (`CH8_ANCHORS` = all nine); runs right after V237-13, merges with it |
+| V237-14 | Layout check covers chapters 4–8, chapter links, then CI | 4 | sonnet | M `scripts/dev/guide_layout_check.py`, M `tests/scripts/test_guide_layout_check.py`, M `frontend/scripts/layout-audit-lib.mjs`, M `frontend/scripts/layout-audit-lib.test.mjs`, M `docs/guide/0{4,5,6,7}-*.md` (links only), M `tests/admin/test_guide_chapter_text.py`, C `docs/superpowers/results/2026-11-18-v237-guide-layout.md` | `CHAPTERS_IN_DRAWER = 8`; `PAGES` += `"strategies"`, `"sizing-risk"`; `DEEP_LINKS` += `"sizing-risk#reject-clamp-or-size-0"`; layout-audit `ROUTES` += `/insights/guide/strategies` (count +1); every plain "chapter N" in chapters 4–7 linked; Steps 9–12 (the old V237-15): push, watch CI green (`0 failed`, `0 xfailed`), record in `## Handoff` |
 
 ## Parts
 
@@ -129,7 +128,7 @@ Implementation is almost entirely sequential; part *writers* may run two at a ti
 | 1b | `2026-11-18-v237-guide-trading-core_1b-strategies-checks.md` | V237-5, V237-6 | `strategies.cards`, card content checks |
 | 2 | `2026-11-18-v237-guide-trading-core_2-cards-levels.md` | V237-7, V237-7b, V237-8, V237-9, V237-9b | nineteen cards (live, masked), glossary terms, chapter 4 |
 | 3 | `2026-11-18-v237-guide-trading-core_3-strategies-gates-plan.md` | V237-10, V237-11, V237-11b, V237-12, V237-12b | chapters 5, 6, 7 |
-| 4 | `2026-11-18-v237-guide-trading-core_4-sizing-layout.md` | V237-13, V237-14, V237-15 | chapter 8, layout check, CI |
+| 4 | `2026-11-18-v237-guide-trading-core_4-sizing-layout.md` | V237-13, V237-13b, V237-14 | chapter 8, chapter links, layout check, CI |
 
 ## Handoff
 
@@ -144,7 +143,7 @@ Controller decisions, 2026-11-18 (binding on every part writer):
 7. **New placeholders for chapters 7–8** (no bare `N%`): V237-1/2/3 add them and update v235's whitelist assertions (`test_risk_table_has_exactly_the_planned_names`, `test_registry_merges_both_tables_and_nothing_else`) in the same task.
 8. **Links**: only chapters that exist after v236 + v237 (1, 3, 4–8, 12) and glossary anchors pinned in `GLOSSARY_LINKED` (v236's 30 plus V237-8's 15). No links to chapters 2, 9, 10, 11 (Plan C). Self-links `(#anchor)` name a heading of the same chapter.
 9. **Each chapter task carries the full chapter text** with `sources:` verified against code (`git grep -n` each symbol before writing); chapter tasks regenerate `guide-anchors.json` and run one at a time.
-10. **Verification**: per-task narrow runs; V237-15 is the single full-suite task, run by CI. Max 20 tasks (15 here); each task < 20 KB.
+10. **Verification**: per-task narrow runs; V237-14 Steps 9–12 are the single full-suite run, by CI (was V237-15; folded, see Part 4 note). Max 20 tasks (20 here, with b-splits); each task < 20 KB.
 
 Plan-writer decisions (index, 2026-11-18), for the controller to check:
 
@@ -160,4 +159,5 @@ Plan-writer decisions (index, 2026-11-18), for the controller to check:
 - **Part 3 split (controller, 2026-11-18)**: V237-11 → V237-11b and V237-12 → V237-12b (each pair runs back to back and merges together). Ledger at 19 rows: part 4 may add at most one `b`.
 - **Earnings blackout row fixed (controller, 2026-11-18)**: `in_earnings_blackout` has no caller in the live scan, so V237-3's `SWITCH_ROWS` row 6 is never "applied" (`lambda: False`, pinned by `test_earnings_blackout_is_never_applied`), whatever `EARNINGS_BLACKOUT_SESSIONS` says.
 - **Links for V237-13**: chapter 5 mentions "chapter 6/7", chapter 6 "chapter 7/8", chapter 7 "chapter 8", chapter 4 "chapters 5–7" in plain text; V237-13 (chapter 8, the last chapter) turns them into links.
+- **Part 4 split and fold (controller, 2026-11-18)**: V237-13 → V237-13b (chapter 8, 30.7 KB as one task); the ledger was already at 20 rows, so the old V237-15 (CI run) is folded into V237-14 as Steps 9–12 and the plan ends at V237-14 (20 tasks). Handoff 10's "V237-15" now reads "V237-14 Steps 9–12". The "Links for V237-13" job moved to V237-14, which also links two plain "chapter 4" mentions (ch.5, ch.6) so its no-plain-mention test covers chapters 4–8 evenly.
 - **Findings, out of scope (2026-11-18)**: `SCALE_OUT_ENABLED` has no live reader (only `scan_params.scale_out_enabled`, unread; `PlanManager._step_active` always closes `tp1_fraction` at TP1) — chapter 7 doesn't cite it. The strategy pass's RS laggard rule ignores `RS_GATE` (chapter 6 says so under the hood). `RUNNER_GIVEBACK_ENABLED` has no placeholder. Candidates for their own small fixes.
