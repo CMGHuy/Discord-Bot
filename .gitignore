@@ -192,3 +192,6 @@ docs/superpowers/results/v212/v212-rows-train-rows.json
 
 # v232 live-replay reconciliation: per-trade rows (strategy/horizon/ticker), layer 2 checkpoints, raw bars
 data/v232/
+
+# v212 touch-variant row dump, 108 MB: over GitHub push limit
+docs/superpowers/results/v212/v212-rows-train-touch-rows.json

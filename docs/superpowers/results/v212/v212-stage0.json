@@ -1,0 +1,29 @@
+{
+ "stage": 0,
+ "verdict": "UNDERPOWERED",
+ "mde_ceiling_r": 0.1,
+ "power": 0.8,
+ "cells": [
+  {
+   "cell": "f0.333",
+   "observed_n": 12101,
+   "target_n": 6050,
+   "mde_r": 0.07778469000258208,
+   "powered": true
+  },
+  {
+   "cell": "f0.5",
+   "observed_n": 15356,
+   "target_n": 7678,
+   "mde_r": 0.09793541077949326,
+   "powered": true
+  },
+  {
+   "cell": "f0.667",
+   "observed_n": 15276,
+   "target_n": 7638,
+   "mde_r": 0.13907202757661857,
+   "powered": false
+  }
+ ]
+}
