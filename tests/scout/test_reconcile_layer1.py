@@ -58,6 +58,34 @@ def test_r_live_is_unchanged_when_the_trade_keeps_the_issued_stop():
     assert layer1.r_live(_rec(journal_kw={"r_realized": -1.0})) == pytest.approx(-1.0)
 
 
+def test_the_live_r_source_is_the_journal_when_it_holds_r():
+    assert layer1.live_r_source(_rec(journal_kw={"r_realized": -1.0})) == ("journal", -1.0)
+
+
+@pytest.mark.parametrize("journal", [None, {"trade_id": "T1", "outcome": "win",
+                                            "r_realized": None}])
+def test_without_journal_r_the_trade_doc_gives_r_by_metrics_r_multiple(journal):
+    import dataclasses
+    from swingbot.core.analytics.metrics import r_multiple
+    rec = dataclasses.replace(_rec(trade_kw={"stop_loss": 97.8}), journal=journal)
+    source, own = layer1.live_r_source(rec)
+    assert source == "trade" and own == pytest.approx(r_multiple(rec.trade))
+    assert own == pytest.approx(3.8 / 2.4)                     # (104 - 100.2) / (100.2 - 97.8)
+    assert layer1.r_live(rec) == pytest.approx(3.8 / 2.2)      # re-expressed in the live unit
+
+
+def test_a_short_trade_doc_r_is_signed_in_the_trades_favour():
+    import dataclasses
+    rec = dataclasses.replace(_rec("bearish"), journal=None)
+    assert layer1.live_r_source(rec) == ("trade", pytest.approx(3.8 / 2.2))
+
+
+def test_no_journal_r_and_no_trade_r_has_no_source():
+    import dataclasses
+    rec = dataclasses.replace(_rec(trade_kw={"exit_price": None}), journal=None)
+    assert layer1.live_r_source(rec) == (None, None)
+
+
 def test_a_fill_on_the_issued_stop_raises():
     with pytest.raises(ValueError, match="issued stop"):
         layer1.live_risk(_rec(trade_kw={"entry": 98.0}))

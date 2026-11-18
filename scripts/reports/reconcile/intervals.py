@@ -131,13 +131,20 @@ def _refusal_counts(rows) -> dict:
                                 for k in raw_bars.REFUSALS}}
 
 
+def _source_counts(rows) -> dict:
+    """Where each row's live R came from (layer1.R_SOURCES), zeros kept."""
+    return {k: sum(r.r_source == k for r in rows) for k in layer1.R_SOURCES}
+
+
 def population(rows) -> dict:
-    """Class counts, refusals (refused tickers listed), unfilled reasons and would-fill."""
+    """Class counts, refusals (refused tickers listed), unfilled reasons, live R sources
+    and would-fill."""
     unfilled = [r for r in rows if r.klass == "unfilled"]
     reasons = Counter(r.unfilled_reason or "unknown" for r in unfilled)
     return {"classes": {k: sum(r.klass == k for r in rows) for k in records.CLASSES},
             "scored": sum(r.scored for r in rows), **_refusal_counts(rows),
             "unfilled_reasons": dict(sorted(reasons.items())),
+            "r_source": _source_counts(rows),
             "would_fill": {m: _yes_no(unfilled, m) for m in layer1.FILL_MODELS}}
 
 

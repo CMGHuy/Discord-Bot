@@ -74,7 +74,7 @@ def test_rows_without_live_r_are_counted_not_summed():
     lines, _ = _table()
     refused = next(line for line in lines if line.key == "refused")
     assert (refused.n, round(refused.total_r, 6)) == (3, 0.6)
-    assert "2 without live R (no journal R or zero risk)" in refused.label
+    assert "2 without live R (no R in journal or trade doc, or zero risk)" in refused.label
     clean, _ = _table([r for r in BOOK if r.refusal not in table.NO_LIVE_R])
     assert next(line for line in clean if line.key == "refused").label == table.LABELS["refused"]
 

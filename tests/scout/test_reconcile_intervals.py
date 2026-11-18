@@ -122,6 +122,14 @@ def test_population_counts_classes_refusals_and_would_fill():
                                  "v2": {"yes": 0, "no": 1, "unknown": 1}}
 
 
+def test_population_counts_each_live_r_source_with_measured_zeros():
+    rows = [_full(r_source="journal"), _full(r_source="trade"),
+            _full(klass="manual", r_source="trade"),
+            _full(refusal="no_journal", r_live_net=None), _full(klass="unfilled")]
+    assert intervals.population(rows)["r_source"] == {"journal": 1, "trade": 2}
+    assert intervals.population([])["r_source"] == {"journal": 0, "trade": 0}
+
+
 def test_slip_reads_both_measures_and_the_gap_detail():
     gap = {"gap_r": -1.2, "gap_pct": -2.0, "exit_vs_open_r": 0.1, "exit_vs_stop_r": -1.1}
     rows = [_full(entry_slip=[10.0, 0.06], poll_fill=[5.0, 0.02], gap=gap),

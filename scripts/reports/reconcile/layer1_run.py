@@ -40,6 +40,7 @@ class TradeRow:
     live_class: str | None
     unfilled_reason: str | None
     would_fill: dict
+    r_source: str | None = None     # layer1.R_SOURCES: journal r_realized, else the trade doc
 
     @property
     def key(self) -> str:
@@ -63,6 +64,8 @@ class TradeRow:
             data[key] = None if data[key] is None else tuple(data[key])
         for key in ("values", "effects", "would_fill"):
             data[key] = data[key] or {}
+        if "r_source" not in d and data["r_live_gross"] is not None:
+            data["r_source"] = "journal"        # rows written before the trade-doc fallback
         return cls(**data)
 
 
@@ -105,7 +108,8 @@ def _live(rec, row: dict, frictions: dict) -> dict:
     gross = layer1.r_live(rec)
     cost = layer1.live_cost_r(rec, frictions)
     return {**row, "r_live_gross": gross, "cost_r": cost, "r_live_net": gross - cost,
-            "live_class": layer1.outcome_class(rec.journal.get("outcome"), gross)}
+            "r_source": layer1.live_r_source(rec)[0],
+            "live_class": layer1.outcome_class((rec.journal or {}).get("outcome"), gross)}
 
 
 def _scored(rec, raw, row: dict) -> dict:
@@ -122,8 +126,8 @@ def _scored(rec, raw, row: dict) -> dict:
 
 
 def _closed(rec, bars, row: dict, frictions: dict, start, last_exit) -> dict:
-    if rec.journal is None or rec.journal.get("r_realized") is None:
-        return {**row, "refusal": "no_journal"}       # no journal R: no live R, counted at 0R
+    if layer1.live_r_source(rec)[0] is None:
+        return {**row, "refusal": "no_journal"}       # no journal or trade R: counted at 0R
     try:
         layer1.live_risk(rec)
     except ValueError:

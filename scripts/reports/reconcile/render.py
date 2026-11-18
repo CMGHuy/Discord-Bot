@@ -198,7 +198,9 @@ def _head_md(report: dict) -> list[str]:
         rows.append([s, e, *p["classes"].values(), p["scored"],
                      *(f"{w['yes']}/{w['no']}" for w in p["would_fill"].values())])
         listed = {k: ", ".join(v) for k, v in p["refused_tickers"].items() if v}
-        notes.append(f"- {s} {e}: refused {_counts({k: n for k, n in p['refusals'].items() if n})}"
+        src = p["r_source"]
+        notes.append(f"- {s} {e}: live R from journal {src['journal']}, from the trade doc "
+                     f"{src['trade']}; refused {_counts({k: n for k, n in p['refusals'].items() if n})}"
                      f" (bars: {_counts(listed)}); unfilled reasons {_counts(p['unfilled_reasons'])}.")
     header = ["Side", "Era", *records.CLASSES, "scored",
               *(f"would fill {m} (yes/no)" for m in layer1.FILL_MODELS)]

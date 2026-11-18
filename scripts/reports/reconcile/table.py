@@ -72,7 +72,8 @@ def _refused_label(refused: list) -> str:
     k = sum(r.refusal in NO_LIVE_R for r in refused)
     if not k:
         return LABELS["refused"]
-    return f"{LABELS['refused']}; {k} without live R (no journal R or zero risk), counted at 0R"
+    return (f"{LABELS['refused']}; {k} without live R (no R in journal or trade doc, "
+            "or zero risk), counted at 0R")
 
 
 def build_table(rows, *, side: str, fill_model: str, era: str = "headline") -> list[Line]:

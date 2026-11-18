@@ -11,6 +11,7 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 
+from swingbot.core.analytics.metrics import r_multiple
 from swingbot.core.backtesting.instrument.contract import ZERO_COSTS, resolve
 from swingbot.core.edge.frictions import apply_frictions, borrow_r, commission_r
 from swingbot.core.planning import exit_sim, exit_sim_v2
@@ -33,10 +34,26 @@ def live_risk(rec) -> float:
     return risk
 
 
+R_SOURCES = ("journal", "trade")
+
+
+def live_r_source(rec) -> tuple[str | None, float | None]:
+    """The live R in the trade's own unit and where it came from: the journal's r_realized,
+    else the app's own definition metrics.r_multiple(trade); (None, None) when neither."""
+    journal_r = (rec.journal or {}).get("r_realized")
+    if journal_r is not None:
+        return "journal", float(journal_r)
+    trade_r = r_multiple(rec.trade)
+    return ("trade", float(trade_r)) if trade_r is not None else (None, None)
+
+
 def r_live(rec) -> float:
-    """Journal R (gross, the trade's own unit) re-expressed in the live unit."""
+    """Live R (gross, the trade's own unit, see live_r_source) in the live unit."""
+    _, own_r = live_r_source(rec)
+    if own_r is None:
+        raise ValueError(f"plan {rec.plan_id}: no R in the journal or the trade doc")
     own = abs(float(rec.trade["entry"]) - float(rec.trade["stop_loss"]))
-    return float(rec.journal["r_realized"]) * own / live_risk(rec)
+    return own_r * own / live_risk(rec)
 
 
 def _slip(price: float, side: str, bps: float) -> float:

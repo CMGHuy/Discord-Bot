@@ -78,6 +78,10 @@ def _rec(plan_id="P1", ticker="AAA", direction="bullish", klass="closed", **plan
     if klass == "manual_null_r":
         trade["close_reason"] = "manual"
         journal = {**journal, "r_realized": None}
+    if klass in ("no_r", "manual_no_r"):              # no journal R and no exit price: no R
+        trade, journal = {**trade, "exit_price": None}, None
+    if klass == "manual_no_r":
+        trade["close_reason"] = "manual"
     return records.LiveRecord(plan_id, ticker, direction, doc, trade, journal)
 
 
@@ -148,9 +152,8 @@ def test_a_manual_close_keeps_live_r_only():
     ("DDD", {}, "closed", "bars_end_early"),
     ("ZZZ", {}, "closed", "no_bars"),
     ("EEE", {"start": START}, "closed", "no_fill_bar"),
-    ("AAA", {}, "no_journal", "no_journal"),
-    ("AAA", {}, "null_r", "no_journal"),
-    ("AAA", {}, "manual_null_r", "no_journal"),
+    ("AAA", {}, "no_r", "no_journal"),
+    ("AAA", {}, "manual_no_r", "no_journal"),
 ])
 def test_refusals_keep_the_live_net_where_it_exists(ticker, kw, klass, expected):
     row = _row(_rec("PX", ticker, klass=klass), **kw)
@@ -159,13 +162,59 @@ def test_refusals_keep_the_live_net_where_it_exists(ticker, kw, klass, expected)
     assert (row.r_live_net is None) == (expected == "no_journal")
 
 
-def test_a_null_journal_r_is_classed_by_its_trade_and_carries_no_engine_values():
-    for klass in ("null_r", "manual_null_r"):
+def test_no_r_from_journal_or_trade_is_classed_by_its_trade_and_carries_no_engine_values():
+    for klass in ("no_r", "manual_no_r"):
         rec = _rec("PN", klass=klass)
         row = _row(rec)
         assert row.klass == records.class_of(rec) and row.refusal == "no_journal"
         assert row.r_live_gross is None and row.cost_r is None and row.r_live_net is None
         assert row.values == {} and row.effects == {} and row.tags == () and not row.scored
+
+
+@pytest.mark.parametrize("klass", ["no_journal", "null_r"])
+def test_a_closed_trade_without_journal_r_takes_its_r_from_the_trade_doc(klass):
+    from swingbot.core.analytics.metrics import r_multiple
+    rec = _rec("PT", klass=klass)
+    row = _row(rec)
+    assert row.refusal is None and row.scored and row.r_source == "trade"
+    assert row.r_live_gross == pytest.approx(r_multiple(rec.trade))   # issued stop kept
+    assert row.r_live_net == pytest.approx(row.r_live_gross - row.cost_r)
+    assert row.live_class == "win" and set(row.values) == {"v1", "v2"}
+
+
+def test_a_manual_close_without_journal_r_takes_its_r_from_the_trade_doc():
+    row = _row(_rec("PM", klass="manual_null_r"))
+    assert (row.klass, row.refusal, row.r_source) == ("manual", None, "trade")
+    assert row.r_live_net == pytest.approx(row.r_live_gross - row.cost_r)
+
+
+def test_a_journal_r_row_says_so_and_unscored_rows_name_no_source():
+    assert _row(_rec()).r_source == "journal"
+    assert _row(_rec(klass="no_r")).r_source is None
+    assert _row(_rec(klass="unfilled")).r_source is None
+    assert _row(_rec(klass="still_open")).r_source is None
+
+
+def test_an_old_checkpoint_row_reads_back_with_its_r_source_inferred():
+    old = _row(_rec()).to_dict()
+    del old["r_source"]
+    assert layer1_run.TradeRow.from_dict(old).r_source == "journal"
+    none = _row(_rec(klass="no_r")).to_dict()
+    del none["r_source"]
+    assert layer1_run.TradeRow.from_dict(none).r_source is None
+
+
+def test_trade_doc_rows_close_the_table_and_the_book(tmp_path):
+    from reconcile import table
+    rows = _run(tmp_path / "rows.jsonl", export=_export(
+        _rec("P1"), _rec("P2", klass="no_journal"), _rec("P3", klass="manual_null_r"),
+        _rec("P4", klass="no_r")))
+    assert [r.r_source for r in rows] == ["journal", "trade", "trade", None]
+    want = sum(r.r_live_gross - r.cost_r for r in rows[:3])
+    for m in ("v1", "v2"):
+        lines = table.build_table(rows, side="long", fill_model=m)
+        table.self_check(lines, rows, side="long", fill_model=m, era="headline")
+        assert lines[-1].n == 4 and lines[-1].total_r == pytest.approx(want)
 
 
 def test_a_fill_on_the_issued_stop_is_refused_zero_risk():

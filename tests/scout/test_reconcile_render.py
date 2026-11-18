@@ -89,6 +89,13 @@ def test_a_heading_with_backtest_r_by_ticker_is_a_leak():
     assert render.leaks(REPORT, MD + "\n## Live net R by ticker\n") == []
 
 
+def test_each_population_line_names_its_live_r_sources():
+    for s, e in render._PAIRS:
+        src = REPORT["populations"][s][e]["r_source"]
+        assert (f"- {s} {e}: live R from journal {src['journal']}, "
+                f"from the trade doc {src['trade']};") in MD
+
+
 def test_the_run_line_counts_unserved_bars_too():
     bars = {"raw": {"sha256": "a" * 64, "start": "x", "end": "y", "n_ok": 85, "n_empty": 2,
                     "n_unserved": 1},
