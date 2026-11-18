@@ -173,11 +173,11 @@ SET TIME ZONE 'UTC';
 SELECT row_to_json(x) FROM (
   SELECT 'plan'::text AS kind,
   -- plan
-  jsonb_build_object('plan_id', p.plan_id, 'ticker', p.ticker, 'strategy', p.strategy, 'horizon_key', p.horizon_key, 'status', p.status, 'created_at', p.created_at, 'valid_session', p.valid_session) || p.doc AS plan,
+  p.doc || jsonb_strip_nulls(jsonb_build_object('plan_id', p.plan_id, 'ticker', p.ticker, 'strategy', p.strategy, 'horizon_key', p.horizon_key, 'status', p.status, 'created_at', p.created_at, 'valid_session', p.valid_session)) AS plan,
   -- trade
-  CASE WHEN t.trade_id IS NULL THEN NULL ELSE jsonb_build_object('trade_id', t.trade_id, 'ticker', t.ticker, 'strategy', t.strategy, 'horizon', t.horizon, 'direction', t.direction, 'status', t.status, 'opened_at', t.opened_at, 'closed_at', t.closed_at, 'entry', t.entry, 'stop_loss', t.stop_loss) || t.doc END AS trade,
+  CASE WHEN t.trade_id IS NULL THEN NULL ELSE t.doc || jsonb_strip_nulls(jsonb_build_object('trade_id', t.trade_id, 'ticker', t.ticker, 'strategy', t.strategy, 'horizon', t.horizon, 'direction', t.direction, 'status', t.status, 'opened_at', t.opened_at, 'closed_at', t.closed_at, 'entry', t.entry, 'stop_loss', t.stop_loss)) END AS trade,
   -- journal
-  CASE WHEN j.trade_id IS NULL THEN NULL ELSE jsonb_build_object('trade_id', j.trade_id, 'strategy', j.strategy, 'outcome', j.outcome, 'closed_at', j.closed_at, 'created_at', j.created_at) || j.doc END AS journal
+  CASE WHEN j.trade_id IS NULL THEN NULL ELSE j.doc || jsonb_strip_nulls(jsonb_build_object('trade_id', j.trade_id, 'strategy', j.strategy, 'outcome', j.outcome, 'closed_at', j.closed_at, 'created_at', j.created_at)) END AS journal
   FROM plans p
   LEFT JOIN trades t ON t.doc->>'plan_id' = p.plan_id
   LEFT JOIN journal_entries j ON j.trade_id = t.trade_id

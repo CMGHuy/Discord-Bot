@@ -349,11 +349,14 @@ JOURNAL_COLUMNS = ("trade_id", "strategy", "outcome", "closed_at", "created_at")
     ("journal", "j", JOURNAL_COLUMNS)])
 def test_reconcile_merges_the_identity_columns_into_each_doc(source, alias, alias_of, columns):
     # The docs do not hold the columns promoted out of them (schema.py), so the
-    # export puts them back; the doc is the right operand, so a doc value wins.
+    # export puts them back like codec.merge_doc: the columns are the right operand, so a
+    # non-null column overrides a stale doc copy, and null columns are stripped (omitted).
     expr = _merge_of(reconcile_body(source), alias)
     for column in columns:
         assert f"'{column}', {alias_of}.{column}" in expr
-    assert f"|| {alias_of}.doc" in expr
+    assert f"{alias_of}.doc || jsonb_strip_nulls(jsonb_build_object(" in expr
+    assert f"|| {alias_of}.doc" not in expr
+    assert expr.count("jsonb_build_object(") == 1 and expr.rstrip(" ,").endswith(f"AS {alias}")
 
 
 @pytest.mark.parametrize("alias, alias_of, key", [("trade", "t", "trade_id"),
