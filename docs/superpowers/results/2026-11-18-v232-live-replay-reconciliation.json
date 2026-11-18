@@ -1,0 +1,3145 @@
+{
+  "title": "v232 - Live versus replay reconciliation, per direction",
+  "caveat": "The live book is a paper book. Entries and exits are filled at a quote polled once a minute, with no spread, no queue, no partial fills, no rejected orders and no failed locates. Costs in this report are modelled (5 bps a fill, commission, 0.5% a year borrow on shorts), not paid, and borrow availability is not modelled at all. A stop that a real order would fill at a gapped open is filled here where the poll saw it. So this report measures the backtest against the paper engine. It does not show that either is achievable in a real account; the eToro demo stage is the first place that can be measured. The \"unexplained\" shares carry the same warning.",
+  "interval_label": "descriptive; under-covers below 20 clusters",
+  "notes": [
+    "Intervals: one-arm week-cluster bootstrap over entry weeks, descriptive; under-covers below 20 clusters. Tag means carry no interval; thin = under 30 trades or under 8 weeks.",
+    "R is in the live trade's risk unit |live fill - issued stop|; costs are modelled.",
+    "Exit effect = R_live - R_exit_only; entry effect = R_exit_only - R_as_backtest. The other order needs the backtest entry under live's intraday exits, which nobody observed, so the entry x exit interaction sits in the exit effect.",
+    "The backtest's signal bar is the session of issue, so the entry effect includes the intraday drift from the live issue to the daily close.",
+    "The era boundary (2026-09-15T08:54:50Z) and the manual-close rule were set after the book autopsy had read this book; acceptable for a description.",
+    "Layer 2 replays the live scan with today's parameters, one decision a day at the close, without the strategy-sourced pass, alert cap, portfolio heat or live track record. Replay-only counts rest on replay holding periods (no replay outcome is stored or printed) and are a lower bound: removed tickers that never produced a plan or rejection are missing.",
+    "Holdout: no outcome of a signal live did not trade is read; backtest R appears per direction, fill model and era only; the ledger split is shown for live figures only.",
+    "Citation rule: a later spec may cite mechanism counts and shares from this report; it may not cite a backtest-R effect size from it as evidence, and it still owes its own screen or pre-registration."
+  ],
+  "meta": {
+    "commit": "aa975dd980d44d0598edef498dd8c5d79b63932d",
+    "window": [
+      "2026-07-01",
+      "2026-11-18"
+    ],
+    "params_digest": "fcde4e8fd867f51b2be26c68dca2b97f3208f019ab064f2f2d0c1df6e5eb105a",
+    "short_modes": [],
+    "inputs": {
+      "reconcile.jsonl": "0fc54aa86d4f5fb9b943ec50285840de142f3d3dc620ee2610436369cc03cfbb"
+    },
+    "rows_sha256": "956e992b2da59eff9ce32e9c6707749107c4e16567660ee9acd6009560e4b33d",
+    "lanes_sha256": {
+      "lane-base.jsonl": "73b7f13105de6f45ffe7d901896bae93164029f921f214e5d97acfba812bc912"
+    },
+    "bars": {
+      "raw": {
+        "sha256": "fc966a8bd7cb39689d827ec6d4f028add8b9fe9cff09c4426c75835f211dd039",
+        "start": "2026-07-01",
+        "end": "2026-11-18",
+        "n_ok": 85,
+        "n_empty": 2,
+        "n_unserved": 1
+      },
+      "split": {
+        "sha256": "2c0c62647e3be4b1bf8ab6f1610aaec93421e381d14bf22c817a9361fa3b923a",
+        "start": "2026-07-01",
+        "end": "2026-11-18",
+        "n_ok": 85,
+        "n_empty": 2,
+        "n_unserved": 1
+      }
+    },
+    "coverage": {
+      "window": [
+        "2026-07-01",
+        "2026-11-18"
+      ],
+      "sessions": 98,
+      "spy_missing": false,
+      "base_missing_days": {
+        "GC=F": 98,
+        "XAGUSD": 98,
+        "XAUUSD": 98
+      },
+      "panel_gaps": {},
+      "snapshot_missing": [],
+      "extra_missing": {},
+      "store_missing": [
+        "GC=F",
+        "XAGUSD",
+        "XAUUSD"
+      ]
+    },
+    "n_resamples": 10000,
+    "seed": 42,
+    "invocation": {
+      "argv": [
+        "--export",
+        "data/v232/reconcile.jsonl",
+        "--since",
+        "2026-07-01",
+        "--until",
+        "2026-11-18",
+        "--fetch-bars",
+        "--expect-params-digest",
+        "fcde4e8fd867f51b2be26c68dca2b97f3208f019ab064f2f2d0c1df6e5eb105a",
+        "--short-modes",
+        "none",
+        "--date",
+        "2026-11-18"
+      ],
+      "options": {
+        "export": "data\\v232\\reconcile.jsonl",
+        "since": "2026-07-01",
+        "until": "2026-11-18",
+        "bars_root": "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-11-16-v232-live-replay-reconciliation\\data\\v232\\bars",
+        "work_dir": "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-11-16-v232-live-replay-reconciliation\\data\\v232",
+        "fetch_bars": "True",
+        "date": "2026-11-18",
+        "results_dir": "E:\\Documents\\Private\\Projects\\Discord-Bot\\.claude\\worktrees\\2026-11-16-v232-live-replay-reconciliation\\docs\\superpowers\\results",
+        "resamples": "10000",
+        "seed": "42",
+        "expect_params_digest": "fcde4e8fd867f51b2be26c68dca2b97f3208f019ab064f2f2d0c1df6e5eb105a",
+        "short_modes": "frozenset()"
+      }
+    }
+  },
+  "deploys": [
+    {
+      "ts": "2026-10-01T12:43:36Z",
+      "git_sha": "14551c3cd6bc7b547a162c00c6b70a62b100144a"
+    },
+    {
+      "ts": "2026-10-01T13:57:37Z",
+      "git_sha": "7adc8ec3aff2cd95515d716e25047a988c8f98df"
+    },
+    {
+      "ts": "2026-10-01T17:20:54Z",
+      "git_sha": "6b9c09d0ac04f853a8b893d2c17ff4e018bae461"
+    },
+    {
+      "ts": "2026-10-01T17:28:43Z",
+      "git_sha": "fe292bdbd9d67830dd4ad7b20efb737b652864b6"
+    },
+    {
+      "ts": "2026-10-01T18:51:02Z",
+      "git_sha": "275f6bb0ec1e6ed54f9a8acff1f6a55e75bd02f6"
+    },
+    {
+      "ts": "2026-10-01T19:58:54Z",
+      "git_sha": "519452b054ebfc2fc5b6cfedd0a1c44545c941a7"
+    },
+    {
+      "ts": "2026-10-01T20:28:22Z",
+      "git_sha": "34a06af46b2ec5fa77f4cd788a739182f339c379"
+    },
+    {
+      "ts": "2026-10-01T21:32:43Z",
+      "git_sha": "a0da07a7a09a489ef758b02d11639dd4d4e33de2"
+    },
+    {
+      "ts": "2026-10-01T21:39:12Z",
+      "git_sha": "33580cbc3368f6b627b881d10a0e3787b283565d"
+    },
+    {
+      "ts": "2026-10-01T21:55:40Z",
+      "git_sha": "aabee1c11d8d760c0171e85a3381b0d682efee70"
+    },
+    {
+      "ts": "2026-10-02T07:58:23Z",
+      "git_sha": "122b7444afe89fdff0a7d5338fcf61ca5c66e588"
+    },
+    {
+      "ts": "2026-10-02T08:22:21Z",
+      "git_sha": "37962d6a2643b5ccdc0ef26e923d8e552429d242"
+    },
+    {
+      "ts": "2026-10-02T08:41:22Z",
+      "git_sha": "c74bbaefe4561e4d96772de897e4cd4c9a351aeb"
+    },
+    {
+      "ts": "2026-10-02T08:45:03Z",
+      "git_sha": "c74bbaefe4561e4d96772de897e4cd4c9a351aeb"
+    },
+    {
+      "ts": "2026-10-02T14:40:23Z",
+      "git_sha": "f109286d89eb7745ad5c22847d4f5c0d2c8139c7"
+    },
+    {
+      "ts": "2026-10-02T15:27:12Z",
+      "git_sha": "669e332ee0262e3932233d072e2b08e3f581c7ea"
+    },
+    {
+      "ts": "2026-10-04T12:14:35Z",
+      "git_sha": "38a9f356821bbfe6f57fcd2c2c8dfcf94d78c3f3"
+    },
+    {
+      "ts": "2026-10-04T14:21:28Z",
+      "git_sha": "c0cf9adb670020e1cdea63e743361d8a27b516b8"
+    },
+    {
+      "ts": "2026-10-05T12:02:50Z",
+      "git_sha": "570e9568f5b2a384034c337db9a3b034a978e3ea"
+    },
+    {
+      "ts": "2026-10-05T13:34:30Z",
+      "git_sha": "fff6600453f69e6d0bdd94e1b71cdf2cf8382b04"
+    },
+    {
+      "ts": "2026-10-05T15:46:37Z",
+      "git_sha": "2bc9a770419fbc9fc03e805fa4c72aa2076e4bb2"
+    },
+    {
+      "ts": "2026-10-07T13:20:01Z",
+      "git_sha": "e25cda9333ee561c6022fd2456baa78b22820bd0"
+    },
+    {
+      "ts": "2026-10-07T14:06:01Z",
+      "git_sha": "802abebe5a7c635cb9a95d2d0e60a71713825931"
+    },
+    {
+      "ts": "2026-10-08T12:09:42Z",
+      "git_sha": "e0cf36be5674791734f2c72e52e0ede0a99e4fb8"
+    },
+    {
+      "ts": "2026-10-09T09:46:36Z",
+      "git_sha": "655bb005190f6516718126834790c488d77a07b3"
+    },
+    {
+      "ts": "2026-10-09T10:52:53Z",
+      "git_sha": "51a9a5f28b712b8f29b41e62f35a486c8c8a1fa8"
+    },
+    {
+      "ts": "2026-10-09T11:17:00Z",
+      "git_sha": "16707dd234f2be9e3bbcf5f6a3d4e3106ea56628"
+    },
+    {
+      "ts": "2026-10-09T11:26:36Z",
+      "git_sha": "137376e016d0c8f0af98e20c9d4653572ce17f55"
+    },
+    {
+      "ts": "2026-10-09T11:46:09Z",
+      "git_sha": "613311ae382cd4dd06d0636ed80fce64bb1c8772"
+    },
+    {
+      "ts": "2026-10-09T13:49:21Z",
+      "git_sha": "c1ed126ba209b3d5bcfc2c993252226abe96ca37"
+    },
+    {
+      "ts": "2026-10-09T14:02:33Z",
+      "git_sha": "36cbcc60bb3b756e64bc407237c23164040ee55b"
+    },
+    {
+      "ts": "2026-10-09T14:32:17Z",
+      "git_sha": "c183249e753bb2820131eaa6f32302ac26fccdfa"
+    },
+    {
+      "ts": "2026-10-09T14:59:11Z",
+      "git_sha": "220d8dfac55e30554d0166f400ac6b70452ea8a8"
+    },
+    {
+      "ts": "2026-10-10T07:02:20Z",
+      "git_sha": "b66f0e1dc02a51528b6629dbe10679ab752c5c92"
+    },
+    {
+      "ts": "2026-10-10T07:13:26Z",
+      "git_sha": "5969585613875f38a8fb4954bd9c1f8268a9da9b"
+    },
+    {
+      "ts": "2026-10-10T12:20:15Z",
+      "git_sha": "b180c8823d605fa6f4083a227c39af92839353f7"
+    },
+    {
+      "ts": "2026-10-10T12:23:04Z",
+      "git_sha": "b180c8823d605fa6f4083a227c39af92839353f7"
+    },
+    {
+      "ts": "2026-10-10T13:11:24Z",
+      "git_sha": "76f60d481d849262051af791229a88be5a4a4f62"
+    },
+    {
+      "ts": "2026-10-10T13:42:04Z",
+      "git_sha": "1ce5c475b80263fd70feb1b61d7ad01df19018b9"
+    },
+    {
+      "ts": "2026-10-10T13:57:13Z",
+      "git_sha": "b179e62ab3ffa77af6e2d95664c2f352ade373ec"
+    },
+    {
+      "ts": "2026-10-10T14:39:11Z",
+      "git_sha": "c23d79ad7e04cbe4e49d8e812959206744e43a1a"
+    },
+    {
+      "ts": "2026-10-10T14:43:26Z",
+      "git_sha": "70d151c61f8f32467e963e42f18978d017a080dd"
+    },
+    {
+      "ts": "2026-10-10T14:46:54Z",
+      "git_sha": "70d151c61f8f32467e963e42f18978d017a080dd"
+    },
+    {
+      "ts": "2026-10-10T15:33:29Z",
+      "git_sha": "690501fad65866bf69f41e752d609d2aa37fd1c8"
+    },
+    {
+      "ts": "2026-10-10T17:20:39Z",
+      "git_sha": "c63776d664d566bcf522bd1c68d4bfc1ebed86ad"
+    },
+    {
+      "ts": "2026-10-12T07:29:38Z",
+      "git_sha": "fcabf6cd20b923c5b2ef242f23eafa6ae8a7f780"
+    },
+    {
+      "ts": "2026-10-12T09:37:11Z",
+      "git_sha": "37fc95be1babb94fa12ca054a5649534489cff92"
+    },
+    {
+      "ts": "2026-10-12T12:32:24Z",
+      "git_sha": "5c95fa42c77045996347aae38f64f9f88ef6e3fd"
+    },
+    {
+      "ts": "2026-10-12T20:04:25Z",
+      "git_sha": "34d2b11bf84390ed37254eb60575217384f4d269"
+    },
+    {
+      "ts": "2026-10-15T16:45:49Z",
+      "git_sha": "4aea5e7f965859ef2b2743f3c70d2ee31c5b8390"
+    },
+    {
+      "ts": "2026-10-15T17:16:27Z",
+      "git_sha": "7052b1dfd62ee6c990df2af9ee1c36b4518fb57a"
+    },
+    {
+      "ts": "2026-10-15T22:16:57Z",
+      "git_sha": "b22e799e1c59cf94679b2d5f32c6573076854923"
+    },
+    {
+      "ts": "2026-10-16T08:47:38Z",
+      "git_sha": "2a5d7df6d974be0041acd3cedaeeddc97ead03a3"
+    },
+    {
+      "ts": "2026-10-16T09:12:11Z",
+      "git_sha": "1f5e94cedd2f28c20d1081b90ca36ff20f7dd36b"
+    },
+    {
+      "ts": "2026-10-16T14:21:15Z",
+      "git_sha": "81843c8ede31c0b3e10f3b069c4ae474909ff3b7"
+    },
+    {
+      "ts": "2026-10-16T14:26:15Z",
+      "git_sha": "d5ebc93125ae20862192bc76e6e76c50f6796f5e"
+    },
+    {
+      "ts": "2026-10-16T15:32:45Z",
+      "git_sha": "6a44da7e61c38ff0ce7c7f84a8d0c39ebd68f1a8"
+    },
+    {
+      "ts": "2026-10-16T15:37:01Z",
+      "git_sha": "157cc0f099d33c643186c045bb62c98714e661a4"
+    },
+    {
+      "ts": "2026-10-16T15:46:17Z",
+      "git_sha": "e6675ffd789b56ded6c21db94fa7d88facc8abf1"
+    },
+    {
+      "ts": "2026-10-16T19:42:18Z",
+      "git_sha": "14b2b877bb9191d0eb2696290a226cc620afb3b7"
+    },
+    {
+      "ts": "2026-10-17T09:10:53Z",
+      "git_sha": "6058e20e08bc710a86feadc8c4b3975527db8bfa"
+    },
+    {
+      "ts": "2026-10-17T09:39:36Z",
+      "git_sha": "f0798e5a8ce4184add71314e1b8aec4f9e68042d"
+    },
+    {
+      "ts": "2026-10-17T13:28:24Z",
+      "git_sha": "774dce637251098bc424201b4042075769c4ce08"
+    },
+    {
+      "ts": "2026-10-17T14:03:52Z",
+      "git_sha": "0fd32edad31bf058959f250be1482e3ae8cfa26a"
+    },
+    {
+      "ts": "2026-10-18T16:41:56Z",
+      "git_sha": "3ea7ef3cf7dd107c20b9febb487b8500ce87b4ec"
+    },
+    {
+      "ts": "2026-10-18T18:51:47Z",
+      "git_sha": "47e4d36a660e2535340d5880d057019f9c1c2bb4"
+    },
+    {
+      "ts": "2026-10-19T18:29:35Z",
+      "git_sha": "f067dccc15dd007b10b1fdf575531d512d9e9696"
+    },
+    {
+      "ts": "2026-10-19T20:28:30Z",
+      "git_sha": "656aa2da2666f2f9c6f94a0b85376d49e0892d1c"
+    },
+    {
+      "ts": "2026-10-20T08:45:36Z",
+      "git_sha": "52073b7a021f36785684ffb172d7f538e54eb54b"
+    },
+    {
+      "ts": "2026-10-20T10:03:09Z",
+      "git_sha": "06ac6f0f1669ee331c9b7a784ed9fce902cb80a6"
+    },
+    {
+      "ts": "2026-10-20T15:32:41Z",
+      "git_sha": "618a486e6896d5868f2288ef097da4c2ffc2486c"
+    },
+    {
+      "ts": "2026-10-20T15:41:44Z",
+      "git_sha": "d80cc708b5ab619fc09dab226d77d14ae7817df8"
+    },
+    {
+      "ts": "2026-10-20T18:36:44Z",
+      "git_sha": "5339c5eb8b6cfcc4cc8d04f9b20ab6cc8003b4d0"
+    },
+    {
+      "ts": "2026-10-20T18:49:53Z",
+      "git_sha": "5707fe9c115a9bbaef111dfbbac58fb5cc9849f4"
+    },
+    {
+      "ts": "2026-10-20T20:15:25Z",
+      "git_sha": "a341865c335da940429971039b38c25de1e85925"
+    },
+    {
+      "ts": "2026-10-21T07:47:31Z",
+      "git_sha": "0a180872573523470343d717280a7fa419382ea8"
+    },
+    {
+      "ts": "2026-10-21T09:18:44Z",
+      "git_sha": "ce7fc565e44d9aced0787982c34a0974a2827688"
+    },
+    {
+      "ts": "2026-10-21T09:39:26Z",
+      "git_sha": "f6da826533a9265b47448a393340f633827ac693"
+    },
+    {
+      "ts": "2026-10-21T13:57:32Z",
+      "git_sha": "16964bc45fdb0581a826d1496913c6cff46cdaa0"
+    },
+    {
+      "ts": "2026-10-21T14:44:07Z",
+      "git_sha": "a041bee2cf006036582c383815771ea7269432e8"
+    },
+    {
+      "ts": "2026-10-21T17:42:32Z",
+      "git_sha": "6715f9a9199a9dacd9142d6d7a915a48fc158d56"
+    },
+    {
+      "ts": "2026-10-21T17:45:27Z",
+      "git_sha": "6715f9a9199a9dacd9142d6d7a915a48fc158d56"
+    },
+    {
+      "ts": "2026-10-21T21:09:10Z",
+      "git_sha": "8bae3bab5ac143512846c2d00ac1c6114843d417"
+    },
+    {
+      "ts": "2026-10-22T09:48:54Z",
+      "git_sha": "0d4fe73abee696c3c3c977eb1aa8821dd440b6de"
+    },
+    {
+      "ts": "2026-10-22T12:59:27Z",
+      "git_sha": "107140ab2e52f0c1e0c685c1b641a7d899684043"
+    },
+    {
+      "ts": "2026-10-23T09:43:18Z",
+      "git_sha": "9ba8a5a623fcb16910073bdfa36b909dd6df743d"
+    },
+    {
+      "ts": "2026-10-23T12:59:34Z",
+      "git_sha": "0646fa34ec6a355fa1ab26a72631b7bdd69531af"
+    },
+    {
+      "ts": "2026-10-23T15:09:52Z",
+      "git_sha": "751c5d0933d2ddc63ec845735348ca776ee7e888"
+    },
+    {
+      "ts": "2026-10-23T16:37:41Z",
+      "git_sha": "6a5b7c55449e994e4b2807fe1b50a2294f6c1dbc"
+    },
+    {
+      "ts": "2026-10-24T15:03:54Z",
+      "git_sha": "b37c6e441058dbcf01f177daa710fea3d110d6a2"
+    },
+    {
+      "ts": "2026-10-24T19:56:19Z",
+      "git_sha": "c8fb1be8fcdfd0f5e85cdaed8b3c10e587b7423e"
+    },
+    {
+      "ts": "2026-10-24T20:59:44Z",
+      "git_sha": "3add38361356c6036620907a2814341d3ced17d4"
+    },
+    {
+      "ts": "2026-10-25T19:28:31Z",
+      "git_sha": "8e627d483018b5f481fd063303389620faf51e46"
+    },
+    {
+      "ts": "2026-10-25T22:19:32Z",
+      "git_sha": "f31834de4e30507245ad290cfade46239f2535cd"
+    },
+    {
+      "ts": "2026-10-26T14:45:37Z",
+      "git_sha": "72d7784ee660f602ac89a0cb02d3f7b5b3c60458"
+    },
+    {
+      "ts": "2026-10-28T15:12:22Z",
+      "git_sha": "0abd600a79a9f44f4759b2dcf9f9039c7e3f1f03"
+    },
+    {
+      "ts": "2026-10-29T11:05:04Z",
+      "git_sha": "8d0f0f0e960a88777d210d94734f6c531624f844"
+    },
+    {
+      "ts": "2026-10-29T13:38:12Z",
+      "git_sha": "1faac3fb6a0f4c39eee3423b5e54690f6e9d706e"
+    },
+    {
+      "ts": "2026-10-29T14:26:32Z",
+      "git_sha": "004b2ca7dd401135bec8f029d66d3a357ae4e6f3"
+    },
+    {
+      "ts": "2026-10-29T15:12:33Z",
+      "git_sha": "046ee439e9a7ed6e3824ed379e216400b08d8593"
+    },
+    {
+      "ts": "2026-10-30T18:12:25Z",
+      "git_sha": "a188f1f476076f3ddb2c9a501e9cf8d54a65c871"
+    },
+    {
+      "ts": "2026-10-30T18:19:45Z",
+      "git_sha": "76be6af580d5ea16b8c2bf6513f982f957b7fb51"
+    },
+    {
+      "ts": "2026-11-04T15:21:49Z",
+      "git_sha": "4b7160af40aaf7706d46a2d6a6de8da8ddd4b242"
+    },
+    {
+      "ts": "2026-11-04T21:10:03Z",
+      "git_sha": "47fefba0675dadca08260ea58f3f24dbd96f0456"
+    },
+    {
+      "ts": "2026-11-05T12:42:21Z",
+      "git_sha": "76e1fa5353dd8e504a2bc2a4735878214a61ab22"
+    },
+    {
+      "ts": "2026-11-05T13:50:26Z",
+      "git_sha": "67d33bf256ee71d9db3126de7aa4232663711758"
+    },
+    {
+      "ts": "2026-11-05T14:03:08Z",
+      "git_sha": "2fc791252ee1b8d256f063693e2e795a715cec8e"
+    },
+    {
+      "ts": "2026-11-05T16:48:58Z",
+      "git_sha": "d0500efab0ccfecaf14013703739b3def27f5631"
+    },
+    {
+      "ts": "2026-11-06T10:21:10Z",
+      "git_sha": "d071489ba500c6d79193d4d894f272ba3caccca3"
+    },
+    {
+      "ts": "2026-11-06T10:25:22Z",
+      "git_sha": "d5f56464e217f9d2b72695603a948104798ed096"
+    },
+    {
+      "ts": "2026-11-06T12:21:16Z",
+      "git_sha": "68927fbd8cc2588347b049d4d4467bb5c2201751"
+    },
+    {
+      "ts": "2026-11-06T15:32:07Z",
+      "git_sha": "d71a55f99dbeb03337f3670dd6e62b16be86d44e"
+    },
+    {
+      "ts": "2026-11-06T16:07:37Z",
+      "git_sha": "2365278852ecd5d6e82e0ae815b2bc1083ef69f0"
+    },
+    {
+      "ts": "2026-11-06T16:43:16Z",
+      "git_sha": "7b17ccc000ae6a420589103fb3e3b907ec33a1f7"
+    },
+    {
+      "ts": "2026-11-06T18:31:40Z",
+      "git_sha": "f970e005eccff972d3e6fa554197debe0a2e5aad"
+    },
+    {
+      "ts": "2026-11-06T19:08:58Z",
+      "git_sha": "8d4e87fe10d6e8e61f8e8ee163bfdff1bf868dc2"
+    },
+    {
+      "ts": "2026-11-06T22:39:39Z",
+      "git_sha": "c8a9f0ebea615ed8bef6998c11ea81fae3c66e3a"
+    },
+    {
+      "ts": "2026-11-06T23:01:47Z",
+      "git_sha": "014f193f0816cd34f6709fa0f5375eb02859b775"
+    },
+    {
+      "ts": "2026-11-06T23:06:27Z",
+      "git_sha": "eb56492bd9ed4f96863a020c3099c6d3e410e741"
+    },
+    {
+      "ts": "2026-11-06T23:30:19Z",
+      "git_sha": "06460bbe5985fc733d5c2466149fed9fd9c86c64"
+    },
+    {
+      "ts": "2026-11-09T08:43:19Z",
+      "git_sha": "1027ba6b3059df36c0cde9d6b80b15495287cc13"
+    },
+    {
+      "ts": "2026-11-09T14:25:46Z",
+      "git_sha": "214f490edae0824cc669709a4ed381f86491f6ac"
+    },
+    {
+      "ts": "2026-11-09T14:53:48Z",
+      "git_sha": "86d3ec24ad8df752dde3cbecc4a11bf0debdb91c"
+    },
+    {
+      "ts": "2026-11-10T09:15:37Z",
+      "git_sha": "50a970cb5dbbe878fcdea687dce2abc1665f8afb"
+    },
+    {
+      "ts": "2026-11-10T11:31:46Z",
+      "git_sha": "82db01287cac3489b6ed53745b45bb442099c486"
+    },
+    {
+      "ts": "2026-11-10T12:44:31Z",
+      "git_sha": "0fb1f9f0d365a086bedd49f52b39c9cc34270e29"
+    },
+    {
+      "ts": "2026-11-10T12:53:29Z",
+      "git_sha": "997d7f5aea44e17646442cf97061403cc8b3e2a3"
+    },
+    {
+      "ts": "2026-11-10T18:01:11Z",
+      "git_sha": "e4802b0809d3705d001b1d3fdd19827032d9a959"
+    },
+    {
+      "ts": "2026-11-10T20:56:40Z",
+      "git_sha": "8a43bfdd5a88e680c7844be7c7a925616e7f1c6c"
+    },
+    {
+      "ts": "2026-11-10T21:18:25Z",
+      "git_sha": "00921d7b74e5650f2cc2bef0f9a3bad81f9d7c39"
+    },
+    {
+      "ts": "2026-11-10T21:23:25Z",
+      "git_sha": "7ab2789a4c35f7be5a3c9bd1747b5d4fd7f0d03a"
+    },
+    {
+      "ts": "2026-11-11T08:33:21Z",
+      "git_sha": "69f6bfeb8c9f8352ce5f67a1ba334b6b870154f9"
+    },
+    {
+      "ts": "2026-11-11T08:54:48Z",
+      "git_sha": "24146ca0ad3f8fae76f4c7e51d6c9359b19d3dc7"
+    },
+    {
+      "ts": "2026-11-11T11:20:03Z",
+      "git_sha": "1db35f947fcce94d9b87e83a4cf727ab4cd8061f"
+    },
+    {
+      "ts": "2026-11-11T15:39:29Z",
+      "git_sha": "e6595942ac7b5c8f3667f0b44042bf141b691176"
+    },
+    {
+      "ts": "2026-11-11T16:02:59Z",
+      "git_sha": "5340ea5c6321ab056ad989aae2f80737a31c868e"
+    },
+    {
+      "ts": "2026-11-11T16:14:03Z",
+      "git_sha": "e135cb7d3b79a722896c16d0335c848394322f1e"
+    },
+    {
+      "ts": "2026-11-12T14:15:43Z",
+      "git_sha": "d388bf5c9abe256d3a3199f7a7c32b55d3b3aaf9"
+    },
+    {
+      "ts": "2026-11-13T15:04:46Z",
+      "git_sha": "b1d346871047e35a2a27e71593714e44a0c62522"
+    },
+    {
+      "ts": "2026-11-13T15:15:37Z",
+      "git_sha": "42f16c50126701113d6050c91457a692c3cc89c8"
+    },
+    {
+      "ts": "2026-11-13T21:51:28Z",
+      "git_sha": "dcfc51950c2452d4b82ff02526820c75b3ba8d5e"
+    },
+    {
+      "ts": "2026-11-13T21:57:21Z",
+      "git_sha": "c84ea56e3e87ca5b67efe066ad8d6b832618d049"
+    },
+    {
+      "ts": "2026-11-14T20:26:37Z",
+      "git_sha": "3432cbd5eca291d44939bf14cc6f38769ee00e0a"
+    },
+    {
+      "ts": "2026-11-14T20:39:51Z",
+      "git_sha": "bb017e01dfc0a57d320ba61ed74fd5c08e9148af"
+    },
+    {
+      "ts": "2026-11-14T22:37:48Z",
+      "git_sha": "406e1538c7224db6d409161a68a9fda8285daef7"
+    },
+    {
+      "ts": "2026-11-15T21:22:40Z",
+      "git_sha": "ea4b7ce54674625284d449f12a597dd7da4508fd"
+    },
+    {
+      "ts": "2026-11-16T09:56:36Z",
+      "git_sha": "63ceeee862f8330162f7394a1cb3e0c895ee95b6"
+    },
+    {
+      "ts": "2026-11-16T10:59:47Z",
+      "git_sha": "59b0324108b0dd82f8a359b2a19f417023a23c9e"
+    },
+    {
+      "ts": "2026-11-16T17:44:44Z",
+      "git_sha": "f529526837c55af83304e1a50db3f8d3191001d7"
+    },
+    {
+      "ts": "2026-11-16T18:29:46Z",
+      "git_sha": "1fcf7edf21eb2077bb6d2f550e49fcc9fc03ca40"
+    },
+    {
+      "ts": "2026-11-17T15:46:51Z",
+      "git_sha": "206f5c5aa95386e17fcc4fa8a330243a5cb02cf9"
+    },
+    {
+      "ts": "2026-11-17T15:55:49Z",
+      "git_sha": "a2c7db93949c24aae7e0b3f98bcb3e1d07dd22fb"
+    },
+    {
+      "ts": "2026-11-17T16:06:32Z",
+      "git_sha": "d735b188f114fc1144e495306f3bf38ed065b91a"
+    },
+    {
+      "ts": "2026-11-17T18:41:53Z",
+      "git_sha": "a708c61eb5951e5415fe5c9a73f09b012e306275"
+    },
+    {
+      "ts": "2026-11-17T18:49:15Z",
+      "git_sha": "5dd375ca454250f6aab5c1f86616dec43e0b40b8"
+    },
+    {
+      "ts": "2026-11-17T18:59:12Z",
+      "git_sha": "c19c55a00d98efe22408e3693c924101d9959a7c"
+    },
+    {
+      "ts": "2026-11-17T19:15:29Z",
+      "git_sha": "5ab82afc4cfea8aee0f3fd0a7598c94c4e314e19"
+    },
+    {
+      "ts": "2026-11-17T19:19:27Z",
+      "git_sha": "5ab82afc4cfea8aee0f3fd0a7598c94c4e314e19"
+    },
+    {
+      "ts": "2026-11-17T19:55:35Z",
+      "git_sha": "734fe1820d474e105de9c0f114461c227ae14bb3"
+    },
+    {
+      "ts": "2026-11-17T20:24:25Z",
+      "git_sha": "17a58dd5a07c078b2cea13812d05121f97e9c7b1"
+    }
+  ],
+  "populations": {
+    "long": {
+      "headline": {
+        "classes": {
+          "closed": 420,
+          "manual": 15,
+          "still_open": 4,
+          "unfilled": 52
+        },
+        "scored": 413,
+        "refusals": {
+          "no_bars": 6,
+          "split_in_window": 1,
+          "bars_end_early": 0,
+          "no_journal": 1,
+          "zero_risk": 0,
+          "no_fill_bar": 0
+        },
+        "refused_tickers": {
+          "no_bars": [
+            "XAGUSD",
+            "XAUUSD"
+          ],
+          "split_in_window": [
+            "CRWD"
+          ],
+          "bars_end_early": []
+        },
+        "unfilled_reasons": {
+          "expired": 1,
+          "invalidated": 7,
+          "risk_cap": 44
+        },
+        "would_fill": {
+          "v1": {
+            "yes": 42,
+            "no": 10,
+            "unknown": 0
+          },
+          "v2": {
+            "yes": 42,
+            "no": 10,
+            "unknown": 0
+          }
+        }
+      },
+      "earlier": {
+        "classes": {
+          "closed": 269,
+          "manual": 8,
+          "still_open": 0,
+          "unfilled": 9
+        },
+        "scored": 219,
+        "refusals": {
+          "no_bars": 0,
+          "split_in_window": 0,
+          "bars_end_early": 0,
+          "no_journal": 51,
+          "zero_risk": 0,
+          "no_fill_bar": 0
+        },
+        "refused_tickers": {
+          "no_bars": [],
+          "split_in_window": [],
+          "bars_end_early": []
+        },
+        "unfilled_reasons": {
+          "invalidated": 2,
+          "unknown": 7
+        },
+        "would_fill": {
+          "v1": {
+            "yes": 8,
+            "no": 1,
+            "unknown": 0
+          },
+          "v2": {
+            "yes": 2,
+            "no": 7,
+            "unknown": 0
+          }
+        }
+      }
+    },
+    "short": {
+      "headline": {
+        "classes": {
+          "closed": 93,
+          "manual": 2,
+          "still_open": 1,
+          "unfilled": 14
+        },
+        "scored": 91,
+        "refusals": {
+          "no_bars": 6,
+          "split_in_window": 0,
+          "bars_end_early": 0,
+          "no_journal": 0,
+          "zero_risk": 0,
+          "no_fill_bar": 0
+        },
+        "refused_tickers": {
+          "no_bars": [
+            "GC=F",
+            "XAGUSD",
+            "XAUUSD"
+          ],
+          "split_in_window": [],
+          "bars_end_early": []
+        },
+        "unfilled_reasons": {
+          "invalidated": 5,
+          "risk_cap": 9
+        },
+        "would_fill": {
+          "v1": {
+            "yes": 6,
+            "no": 4,
+            "unknown": 4
+          },
+          "v2": {
+            "yes": 6,
+            "no": 4,
+            "unknown": 4
+          }
+        }
+      },
+      "earlier": {
+        "classes": {
+          "closed": 132,
+          "manual": 11,
+          "still_open": 0,
+          "unfilled": 5
+        },
+        "scored": 120,
+        "refusals": {
+          "no_bars": 0,
+          "split_in_window": 2,
+          "bars_end_early": 0,
+          "no_journal": 12,
+          "zero_risk": 0,
+          "no_fill_bar": 0
+        },
+        "refused_tickers": {
+          "no_bars": [],
+          "split_in_window": [
+            "CRWD"
+          ],
+          "bars_end_early": []
+        },
+        "unfilled_reasons": {
+          "unknown": 5
+        },
+        "would_fill": {
+          "v1": {
+            "yes": 5,
+            "no": 0,
+            "unknown": 0
+          },
+          "v2": {
+            "yes": 5,
+            "no": 0,
+            "unknown": 0
+          }
+        }
+      }
+    }
+  },
+  "layer1": {
+    "long": {
+      "headline": {
+        "v1": {
+          "table": [
+            {
+              "key": "backtest",
+              "label": "Backtest of the plans live traded (zero cost)",
+              "total_r": -153.30130936857174,
+              "n": 412
+            },
+            {
+              "key": "entry",
+              "label": "+ entry effect (incl. intraday drift to the close)",
+              "total_r": 175.89830936857146,
+              "n": 412
+            },
+            {
+              "key": "exit",
+              "label": "+ exit effect",
+              "total_r": -20.697000000000003,
+              "n": 412
+            },
+            {
+              "key": "live_gross",
+              "label": "= Live, gross, scored trades",
+              "total_r": 1.900000000000004,
+              "n": 412
+            },
+            {
+              "key": "costs",
+              "label": "- modelled costs",
+              "total_r": 31.11418776534995,
+              "n": 412
+            },
+            {
+              "key": "live_net",
+              "label": "= Live, net, scored trades",
+              "total_r": -29.214187765349973,
+              "n": 412
+            },
+            {
+              "key": "backtest_no_fill",
+              "label": "+ backtest would not have filled (live net)",
+              "total_r": -1.0729689168587848,
+              "n": 1
+            },
+            {
+              "key": "manual",
+              "label": "+ manual closes (live net)",
+              "total_r": 0.14955217455837932,
+              "n": 14
+            },
+            {
+              "key": "refused",
+              "label": "+ not scoreable: bars refused (live net); 1 without live R (no journal R or zero risk), counted at 0R",
+              "total_r": -6.026958603131586,
+              "n": 8
+            },
+            {
+              "key": "book_net",
+              "label": "= Live book, net",
+              "total_r": -36.16456311078197,
+              "n": 435
+            }
+          ],
+          "selection": "Selection, counts only: matched 54 \u00b7 live-only 437 \u00b7 replay-only 18 \u00b7 outside the replay (strategy-sourced) 0 \u00b7 still open 4 \u00b7 unfilled 52",
+          "effects": {
+            "gap_net": {
+              "n": 412,
+              "weeks": 10,
+              "total": 124.0871,
+              "mean": 0.3012,
+              "largest_week_share": 0.3756,
+              "interval": [
+                -0.0626,
+                0.7089
+              ],
+              "thin": false
+            },
+            "entry": {
+              "n": 412,
+              "weeks": 10,
+              "total": 175.8983,
+              "mean": 0.4269,
+              "largest_week_share": 0.3263,
+              "interval": [
+                0.1551,
+                0.6993
+              ],
+              "thin": false
+            },
+            "exit": {
+              "n": 412,
+              "weeks": 10,
+              "total": -20.697,
+              "mean": -0.0502,
+              "largest_week_share": 0.2211,
+              "interval": [
+                -0.1819,
+                0.1138
+              ],
+              "thin": false
+            },
+            "costs": {
+              "n": 412,
+              "weeks": 10,
+              "total": -31.1142,
+              "mean": -0.0755,
+              "largest_week_share": 0.2131,
+              "interval": [
+                -0.0775,
+                -0.0737
+              ],
+              "thin": false
+            }
+          },
+          "cost_check": {
+            "zero_cost_backtest": -31.1142,
+            "equally_costed": 0.0
+          },
+          "confusion": {
+            "win": {
+              "win": 83,
+              "loss": 18,
+              "scratch": 3,
+              "timeout": 1
+            },
+            "loss": {
+              "win": 26,
+              "loss": 191,
+              "scratch": 5,
+              "timeout": 5
+            },
+            "scratch": {
+              "win": 18,
+              "loss": 44,
+              "scratch": 18,
+              "timeout": 1
+            },
+            "timeout": {
+              "win": 0,
+              "loss": 0,
+              "scratch": 0,
+              "timeout": 0
+            }
+          },
+          "tags": {
+            "same_day_exit": {
+              "n": 227,
+              "mean_exit_effect": -0.2652
+            },
+            "wick_missed": {
+              "n": 8,
+              "mean_exit_effect": 0.8454
+            },
+            "both_levels_bar": {
+              "n": 13,
+              "mean_exit_effect": 1.3367
+            },
+            "gap_through": {
+              "n": 41,
+              "mean_exit_effect": 0.5715
+            },
+            "exit_outside_rth": {
+              "n": 94,
+              "mean_exit_effect": -0.0883
+            },
+            "entry_outside_rth": {
+              "n": 94,
+              "mean_exit_effect": 0.0362
+            },
+            "first_15min": {
+              "n": 118,
+              "mean_exit_effect": 0.3518
+            },
+            "live_stop_moved": {
+              "n": 186,
+              "mean_exit_effect": 0.4315
+            },
+            "levels_edited": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "scaled_out": {
+              "n": 105,
+              "mean_exit_effect": 0.7742
+            },
+            "time_stop": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "earnings_in_window": {
+              "n": 28,
+              "mean_exit_effect": 0.4516
+            },
+            "short_gap_against": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "outcome_flip_live_better": {
+              "n": 18,
+              "mean_exit_effect": 2.8178
+            },
+            "outcome_flip_live_worse": {
+              "n": 26,
+              "mean_exit_effect": -3.2123
+            },
+            "entry_slip": {
+              "n": 6,
+              "mean_exit_effect": -0.254
+            },
+            "poll_fill": {
+              "n": 82,
+              "mean_exit_effect": 0.4973
+            }
+          },
+          "rebase": {
+            "n_filled": 412,
+            "n_no_fill": 1,
+            "n_rebased": 408,
+            "r_rebased_total": 1040.631,
+            "stop_shift_pct": {
+              "n": 412,
+              "median": 16.2549,
+              "p90": 240.7874
+            }
+          }
+        },
+        "v2": {
+          "table": [
+            {
+              "key": "backtest",
+              "label": "Backtest of the plans live traded (zero cost)",
+              "total_r": -146.13560416179973,
+              "n": 296
+            },
+            {
+              "key": "entry",
+              "label": "+ entry effect (incl. intraday drift to the close)",
+              "total_r": 320.19660416179954,
+              "n": 296
+            },
+            {
+              "key": "exit",
+              "label": "+ exit effect",
+              "total_r": -74.241,
+              "n": 296
+            },
+            {
+              "key": "live_gross",
+              "label": "= Live, gross, scored trades",
+              "total_r": 99.82,
+              "n": 296
+            },
+            {
+              "key": "costs",
+              "label": "- modelled costs",
+              "total_r": 22.296053567593958,
+              "n": 296
+            },
+            {
+              "key": "live_net",
+              "label": "= Live, net, scored trades",
+              "total_r": 77.52394643240605,
+              "n": 296
+            },
+            {
+              "key": "backtest_no_fill",
+              "label": "+ backtest would not have filled (live net)",
+              "total_r": -107.81110311461482,
+              "n": 117
+            },
+            {
+              "key": "manual",
+              "label": "+ manual closes (live net)",
+              "total_r": 0.14955217455837932,
+              "n": 14
+            },
+            {
+              "key": "refused",
+              "label": "+ not scoreable: bars refused (live net); 1 without live R (no journal R or zero risk), counted at 0R",
+              "total_r": -6.026958603131586,
+              "n": 8
+            },
+            {
+              "key": "book_net",
+              "label": "= Live book, net",
+              "total_r": -36.16456311078197,
+              "n": 435
+            }
+          ],
+          "selection": "Selection, counts only: matched 54 \u00b7 live-only 437 \u00b7 replay-only 18 \u00b7 outside the replay (strategy-sourced) 0 \u00b7 still open 4 \u00b7 unfilled 52",
+          "effects": {
+            "gap_net": {
+              "n": 296,
+              "weeks": 10,
+              "total": 223.6596,
+              "mean": 0.7556,
+              "largest_week_share": 0.2926,
+              "interval": [
+                0.4521,
+                1.0166
+              ],
+              "thin": false
+            },
+            "entry": {
+              "n": 296,
+              "weeks": 10,
+              "total": 320.1966,
+              "mean": 1.0817,
+              "largest_week_share": 0.3014,
+              "interval": [
+                0.7594,
+                1.3731
+              ],
+              "thin": false
+            },
+            "exit": {
+              "n": 296,
+              "weeks": 10,
+              "total": -74.241,
+              "mean": -0.2508,
+              "largest_week_share": 0.3323,
+              "interval": [
+                -0.5794,
+                0.094
+              ],
+              "thin": false
+            },
+            "costs": {
+              "n": 296,
+              "weeks": 10,
+              "total": -22.2961,
+              "mean": -0.0753,
+              "largest_week_share": 0.2183,
+              "interval": [
+                -0.0771,
+                -0.0732
+              ],
+              "thin": false
+            }
+          },
+          "cost_check": {
+            "zero_cost_backtest": -22.2961,
+            "equally_costed": 0.0
+          },
+          "confusion": {
+            "win": {
+              "win": 83,
+              "loss": 18,
+              "scratch": 3,
+              "timeout": 1
+            },
+            "loss": {
+              "win": 26,
+              "loss": 191,
+              "scratch": 5,
+              "timeout": 5
+            },
+            "scratch": {
+              "win": 18,
+              "loss": 44,
+              "scratch": 18,
+              "timeout": 1
+            },
+            "timeout": {
+              "win": 0,
+              "loss": 0,
+              "scratch": 0,
+              "timeout": 0
+            }
+          },
+          "tags": {
+            "same_day_exit": {
+              "n": 227,
+              "mean_exit_effect": 0.1509
+            },
+            "wick_missed": {
+              "n": 8,
+              "mean_exit_effect": 0.7927
+            },
+            "both_levels_bar": {
+              "n": 13,
+              "mean_exit_effect": 1.3367
+            },
+            "gap_through": {
+              "n": 41,
+              "mean_exit_effect": 0.5336
+            },
+            "exit_outside_rth": {
+              "n": 94,
+              "mean_exit_effect": 0.6849
+            },
+            "entry_outside_rth": {
+              "n": 94,
+              "mean_exit_effect": 0.2386
+            },
+            "first_15min": {
+              "n": 118,
+              "mean_exit_effect": 0.5234
+            },
+            "live_stop_moved": {
+              "n": 186,
+              "mean_exit_effect": 0.4591
+            },
+            "levels_edited": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "scaled_out": {
+              "n": 105,
+              "mean_exit_effect": 0.4436
+            },
+            "time_stop": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "earnings_in_window": {
+              "n": 28,
+              "mean_exit_effect": 0.7041
+            },
+            "short_gap_against": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "outcome_flip_live_better": {
+              "n": 18,
+              "mean_exit_effect": 3.1722
+            },
+            "outcome_flip_live_worse": {
+              "n": 26,
+              "mean_exit_effect": -3.5983
+            },
+            "entry_slip": {
+              "n": 6,
+              "mean_exit_effect": -0.2942
+            },
+            "poll_fill": {
+              "n": 82,
+              "mean_exit_effect": 0.3793
+            }
+          },
+          "rebase": {
+            "n_filled": 296,
+            "n_no_fill": 117,
+            "n_rebased": 293,
+            "r_rebased_total": -75.861,
+            "stop_shift_pct": {
+              "n": 296,
+              "median": 52.1527,
+              "p90": 323.2914
+            }
+          }
+        }
+      },
+      "earlier": {
+        "v1": {
+          "table": [
+            {
+              "key": "backtest",
+              "label": "Backtest of the plans live traded (zero cost)",
+              "total_r": -6.3144255472390896,
+              "n": 213
+            },
+            {
+              "key": "entry",
+              "label": "+ entry effect (incl. intraday drift to the close)",
+              "total_r": 16.091425547239076,
+              "n": 213
+            },
+            {
+              "key": "exit",
+              "label": "+ exit effect",
+              "total_r": -50.632434938538694,
+              "n": 213
+            },
+            {
+              "key": "live_gross",
+              "label": "= Live, gross, scored trades",
+              "total_r": -40.855434938538686,
+              "n": 213
+            },
+            {
+              "key": "costs",
+              "label": "- modelled costs",
+              "total_r": 13.376081536684651,
+              "n": 213
+            },
+            {
+              "key": "live_net",
+              "label": "= Live, net, scored trades",
+              "total_r": -54.23151647522332,
+              "n": 213
+            },
+            {
+              "key": "backtest_no_fill",
+              "label": "+ backtest would not have filled (live net)",
+              "total_r": -2.3810183126661792,
+              "n": 6
+            },
+            {
+              "key": "manual",
+              "label": "+ manual closes (live net)",
+              "total_r": 17.79038243439256,
+              "n": 7
+            },
+            {
+              "key": "refused",
+              "label": "+ not scoreable: bars refused (live net); 51 without live R (no journal R or zero risk), counted at 0R",
+              "total_r": 0.0,
+              "n": 51
+            },
+            {
+              "key": "book_net",
+              "label": "= Live book, net",
+              "total_r": -38.82215235349693,
+              "n": 277
+            }
+          ],
+          "selection": "Selection, counts only: matched 26 \u00b7 live-only 260 \u00b7 replay-only 80 \u00b7 outside the replay (strategy-sourced) 0 \u00b7 still open 0 \u00b7 unfilled 9",
+          "effects": {
+            "gap_net": {
+              "n": 213,
+              "weeks": 8,
+              "total": -47.9171,
+              "mean": -0.225,
+              "largest_week_share": 0.5321,
+              "interval": [
+                -0.4425,
+                -0.0011
+              ],
+              "thin": false
+            },
+            "entry": {
+              "n": 213,
+              "weeks": 8,
+              "total": 16.0914,
+              "mean": 0.0755,
+              "largest_week_share": 0.4623,
+              "interval": [
+                -0.0767,
+                0.2512
+              ],
+              "thin": false
+            },
+            "exit": {
+              "n": 213,
+              "weeks": 8,
+              "total": -50.6324,
+              "mean": -0.2377,
+              "largest_week_share": 0.7273,
+              "interval": [
+                -0.573,
+                0.0237
+              ],
+              "thin": false
+            },
+            "costs": {
+              "n": 213,
+              "weeks": 8,
+              "total": -13.3761,
+              "mean": -0.0628,
+              "largest_week_share": 0.3526,
+              "interval": [
+                -0.0641,
+                -0.0613
+              ],
+              "thin": false
+            }
+          },
+          "cost_check": {
+            "zero_cost_backtest": -13.3761,
+            "equally_costed": 0.0
+          },
+          "confusion": {
+            "win": {
+              "win": 81,
+              "loss": 39,
+              "scratch": 0,
+              "timeout": 0
+            },
+            "loss": {
+              "win": 18,
+              "loss": 62,
+              "scratch": 2,
+              "timeout": 0
+            },
+            "scratch": {
+              "win": 4,
+              "loss": 7,
+              "scratch": 6,
+              "timeout": 0
+            },
+            "timeout": {
+              "win": 0,
+              "loss": 0,
+              "scratch": 0,
+              "timeout": 0
+            }
+          },
+          "tags": {
+            "same_day_exit": {
+              "n": 145,
+              "mean_exit_effect": -0.0114
+            },
+            "wick_missed": {
+              "n": 1,
+              "mean_exit_effect": 0.0
+            },
+            "both_levels_bar": {
+              "n": 3,
+              "mean_exit_effect": 0.8958
+            },
+            "gap_through": {
+              "n": 18,
+              "mean_exit_effect": -1.9095
+            },
+            "exit_outside_rth": {
+              "n": 67,
+              "mean_exit_effect": -0.2033
+            },
+            "entry_outside_rth": {
+              "n": 47,
+              "mean_exit_effect": 0.2687
+            },
+            "first_15min": {
+              "n": 28,
+              "mean_exit_effect": 0.1562
+            },
+            "live_stop_moved": {
+              "n": 125,
+              "mean_exit_effect": 0.1764
+            },
+            "levels_edited": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "scaled_out": {
+              "n": 99,
+              "mean_exit_effect": 0.2257
+            },
+            "time_stop": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "earnings_in_window": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "short_gap_against": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "outcome_flip_live_better": {
+              "n": 39,
+              "mean_exit_effect": 1.5011
+            },
+            "outcome_flip_live_worse": {
+              "n": 18,
+              "mean_exit_effect": -3.0712
+            },
+            "entry_slip": {
+              "n": 7,
+              "mean_exit_effect": -0.1545
+            },
+            "poll_fill": {
+              "n": 50,
+              "mean_exit_effect": -0.9276
+            }
+          },
+          "rebase": {
+            "n_filled": 213,
+            "n_no_fill": 6,
+            "n_rebased": 199,
+            "r_rebased_total": 121.599,
+            "stop_shift_pct": {
+              "n": 213,
+              "median": 0.0,
+              "p90": 168.5186
+            }
+          }
+        },
+        "v2": {
+          "table": [
+            {
+              "key": "backtest",
+              "label": "Backtest of the plans live traded (zero cost)",
+              "total_r": -41.691869719972544,
+              "n": 182
+            },
+            {
+              "key": "entry",
+              "label": "+ entry effect (incl. intraday drift to the close)",
+              "total_r": 246.4318697199725,
+              "n": 182
+            },
+            {
+              "key": "exit",
+              "label": "+ exit effect",
+              "total_r": -231.7780577368499,
+              "n": 182
+            },
+            {
+              "key": "live_gross",
+              "label": "= Live, gross, scored trades",
+              "total_r": -27.038057736849893,
+              "n": 182
+            },
+            {
+              "key": "costs",
+              "label": "- modelled costs",
+              "total_r": 11.400729995164609,
+              "n": 182
+            },
+            {
+              "key": "live_net",
+              "label": "= Live, net, scored trades",
+              "total_r": -38.43878773201445,
+              "n": 182
+            },
+            {
+              "key": "backtest_no_fill",
+              "label": "+ backtest would not have filled (live net)",
+              "total_r": -18.17374705587504,
+              "n": 37
+            },
+            {
+              "key": "manual",
+              "label": "+ manual closes (live net)",
+              "total_r": 17.79038243439256,
+              "n": 7
+            },
+            {
+              "key": "refused",
+              "label": "+ not scoreable: bars refused (live net); 51 without live R (no journal R or zero risk), counted at 0R",
+              "total_r": 0.0,
+              "n": 51
+            },
+            {
+              "key": "book_net",
+              "label": "= Live book, net",
+              "total_r": -38.82215235349693,
+              "n": 277
+            }
+          ],
+          "selection": "Selection, counts only: matched 26 \u00b7 live-only 260 \u00b7 replay-only 80 \u00b7 outside the replay (strategy-sourced) 0 \u00b7 still open 0 \u00b7 unfilled 9",
+          "effects": {
+            "gap_net": {
+              "n": 182,
+              "weeks": 8,
+              "total": 3.2531,
+              "mean": 0.0179,
+              "largest_week_share": 0.3469,
+              "interval": [
+                -0.285,
+                0.295
+              ],
+              "thin": false
+            },
+            "entry": {
+              "n": 182,
+              "weeks": 8,
+              "total": 246.4319,
+              "mean": 1.354,
+              "largest_week_share": 0.5263,
+              "interval": [
+                0.3238,
+                1.8379
+              ],
+              "thin": false
+            },
+            "exit": {
+              "n": 182,
+              "weeks": 8,
+              "total": -231.7781,
+              "mean": -1.2735,
+              "largest_week_share": 0.4968,
+              "interval": [
+                -1.7157,
+                -0.2092
+              ],
+              "thin": false
+            },
+            "costs": {
+              "n": 182,
+              "weeks": 8,
+              "total": -11.4007,
+              "mean": -0.0626,
+              "largest_week_share": 0.3451,
+              "interval": [
+                -0.0641,
+                -0.0611
+              ],
+              "thin": false
+            }
+          },
+          "cost_check": {
+            "zero_cost_backtest": -11.4007,
+            "equally_costed": 0.0
+          },
+          "confusion": {
+            "win": {
+              "win": 81,
+              "loss": 39,
+              "scratch": 0,
+              "timeout": 0
+            },
+            "loss": {
+              "win": 18,
+              "loss": 62,
+              "scratch": 2,
+              "timeout": 0
+            },
+            "scratch": {
+              "win": 4,
+              "loss": 7,
+              "scratch": 6,
+              "timeout": 0
+            },
+            "timeout": {
+              "win": 0,
+              "loss": 0,
+              "scratch": 0,
+              "timeout": 0
+            }
+          },
+          "tags": {
+            "same_day_exit": {
+              "n": 145,
+              "mean_exit_effect": -0.7783
+            },
+            "wick_missed": {
+              "n": 1,
+              "mean_exit_effect": 0.055
+            },
+            "both_levels_bar": {
+              "n": 3,
+              "mean_exit_effect": 0.8958
+            },
+            "gap_through": {
+              "n": 18,
+              "mean_exit_effect": -4.0157
+            },
+            "exit_outside_rth": {
+              "n": 67,
+              "mean_exit_effect": -0.5311
+            },
+            "entry_outside_rth": {
+              "n": 47,
+              "mean_exit_effect": 0.0345
+            },
+            "first_15min": {
+              "n": 28,
+              "mean_exit_effect": 0.1135
+            },
+            "live_stop_moved": {
+              "n": 125,
+              "mean_exit_effect": -0.505
+            },
+            "levels_edited": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "scaled_out": {
+              "n": 99,
+              "mean_exit_effect": -0.4346
+            },
+            "time_stop": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "earnings_in_window": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "short_gap_against": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "outcome_flip_live_better": {
+              "n": 39,
+              "mean_exit_effect": 1.7382
+            },
+            "outcome_flip_live_worse": {
+              "n": 18,
+              "mean_exit_effect": -5.0636
+            },
+            "entry_slip": {
+              "n": 7,
+              "mean_exit_effect": 0.0995
+            },
+            "poll_fill": {
+              "n": 50,
+              "mean_exit_effect": -1.8238
+            }
+          },
+          "rebase": {
+            "n_filled": 182,
+            "n_no_fill": 37,
+            "n_rebased": 170,
+            "r_rebased_total": 1.055,
+            "stop_shift_pct": {
+              "n": 182,
+              "median": 72.3127,
+              "p90": 348.1617
+            }
+          }
+        }
+      }
+    },
+    "short": {
+      "headline": {
+        "v1": {
+          "table": [
+            {
+              "key": "backtest",
+              "label": "Backtest of the plans live traded (zero cost)",
+              "total_r": 27.597071722077228,
+              "n": 88
+            },
+            {
+              "key": "entry",
+              "label": "+ entry effect (incl. intraday drift to the close)",
+              "total_r": 15.391928277922764,
+              "n": 88
+            },
+            {
+              "key": "exit",
+              "label": "+ exit effect",
+              "total_r": -28.579,
+              "n": 88
+            },
+            {
+              "key": "live_gross",
+              "label": "= Live, gross, scored trades",
+              "total_r": 14.40999999999999,
+              "n": 88
+            },
+            {
+              "key": "costs",
+              "label": "- modelled costs",
+              "total_r": 6.53545576901259,
+              "n": 88
+            },
+            {
+              "key": "live_net",
+              "label": "= Live, net, scored trades",
+              "total_r": 7.874544230987412,
+              "n": 88
+            },
+            {
+              "key": "backtest_no_fill",
+              "label": "+ backtest would not have filled (live net)",
+              "total_r": -2.2238121115623466,
+              "n": 3
+            },
+            {
+              "key": "manual",
+              "label": "+ manual closes (live net)",
+              "total_r": 2.352684694274173,
+              "n": 2
+            },
+            {
+              "key": "refused",
+              "label": "+ not scoreable: bars refused (live net)",
+              "total_r": -0.14228101984301178,
+              "n": 2
+            },
+            {
+              "key": "book_net",
+              "label": "= Live book, net",
+              "total_r": 7.8611357938562225,
+              "n": 95
+            }
+          ],
+          "selection": "Selection, counts only: matched 10 \u00b7 live-only 100 \u00b7 replay-only 5 \u00b7 outside the replay (strategy-sourced) 0 \u00b7 still open 1 \u00b7 unfilled 14",
+          "effects": {
+            "gap_net": {
+              "n": 88,
+              "weeks": 9,
+              "total": -19.7225,
+              "mean": -0.2241,
+              "largest_week_share": 0.2902,
+              "interval": [
+                -1.1174,
+                0.8765
+              ],
+              "thin": false
+            },
+            "entry": {
+              "n": 88,
+              "weeks": 9,
+              "total": 15.3919,
+              "mean": 0.1749,
+              "largest_week_share": 0.3211,
+              "interval": [
+                -0.4243,
+                0.6437
+              ],
+              "thin": false
+            },
+            "exit": {
+              "n": 88,
+              "weeks": 9,
+              "total": -28.579,
+              "mean": -0.3248,
+              "largest_week_share": 0.4574,
+              "interval": [
+                -0.8972,
+                0.4037
+              ],
+              "thin": false
+            },
+            "costs": {
+              "n": 88,
+              "weeks": 9,
+              "total": -6.5355,
+              "mean": -0.0743,
+              "largest_week_share": 0.3222,
+              "interval": [
+                -0.0754,
+                -0.0712
+              ],
+              "thin": false
+            }
+          },
+          "cost_check": {
+            "zero_cost_backtest": -6.5355,
+            "equally_costed": 0.0
+          },
+          "confusion": {
+            "win": {
+              "win": 22,
+              "loss": 4,
+              "scratch": 1,
+              "timeout": 0
+            },
+            "loss": {
+              "win": 10,
+              "loss": 35,
+              "scratch": 2,
+              "timeout": 0
+            },
+            "scratch": {
+              "win": 3,
+              "loss": 9,
+              "scratch": 4,
+              "timeout": 1
+            },
+            "timeout": {
+              "win": 0,
+              "loss": 0,
+              "scratch": 0,
+              "timeout": 0
+            }
+          },
+          "tags": {
+            "same_day_exit": {
+              "n": 58,
+              "mean_exit_effect": -0.3273
+            },
+            "wick_missed": {
+              "n": 1,
+              "mean_exit_effect": 2.502
+            },
+            "both_levels_bar": {
+              "n": 3,
+              "mean_exit_effect": 1.3333
+            },
+            "gap_through": {
+              "n": 8,
+              "mean_exit_effect": 0.6781
+            },
+            "exit_outside_rth": {
+              "n": 23,
+              "mean_exit_effect": -0.4532
+            },
+            "entry_outside_rth": {
+              "n": 26,
+              "mean_exit_effect": -0.0813
+            },
+            "first_15min": {
+              "n": 22,
+              "mean_exit_effect": 0.0796
+            },
+            "live_stop_moved": {
+              "n": 44,
+              "mean_exit_effect": 0.2755
+            },
+            "levels_edited": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "scaled_out": {
+              "n": 27,
+              "mean_exit_effect": 0.4786
+            },
+            "time_stop": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "earnings_in_window": {
+              "n": 8,
+              "mean_exit_effect": -0.9093
+            },
+            "short_gap_against": {
+              "n": 1,
+              "mean_exit_effect": 0.983
+            },
+            "outcome_flip_live_better": {
+              "n": 4,
+              "mean_exit_effect": 3.12
+            },
+            "outcome_flip_live_worse": {
+              "n": 10,
+              "mean_exit_effect": -3.2095
+            },
+            "entry_slip": {
+              "n": 10,
+              "mean_exit_effect": 0.5668
+            },
+            "poll_fill": {
+              "n": 24,
+              "mean_exit_effect": -0.1654
+            }
+          },
+          "rebase": {
+            "n_filled": 88,
+            "n_no_fill": 3,
+            "n_rebased": 88,
+            "r_rebased_total": 163.449,
+            "stop_shift_pct": {
+              "n": 88,
+              "median": 34.0996,
+              "p90": 225.1917
+            }
+          }
+        },
+        "v2": {
+          "table": [
+            {
+              "key": "backtest",
+              "label": "Backtest of the plans live traded (zero cost)",
+              "total_r": 51.412606146837625,
+              "n": 75
+            },
+            {
+              "key": "entry",
+              "label": "+ entry effect (incl. intraday drift to the close)",
+              "total_r": 30.063393853162406,
+              "n": 75
+            },
+            {
+              "key": "exit",
+              "label": "+ exit effect",
+              "total_r": -49.86599999999999,
+              "n": 75
+            },
+            {
+              "key": "live_gross",
+              "label": "= Live, gross, scored trades",
+              "total_r": 31.609999999999992,
+              "n": 75
+            },
+            {
+              "key": "costs",
+              "label": "- modelled costs",
+              "total_r": 5.604491233306543,
+              "n": 75
+            },
+            {
+              "key": "live_net",
+              "label": "= Live, net, scored trades",
+              "total_r": 26.005508766693456,
+              "n": 75
+            },
+            {
+              "key": "backtest_no_fill",
+              "label": "+ backtest would not have filled (live net)",
+              "total_r": -20.354776647268398,
+              "n": 16
+            },
+            {
+              "key": "manual",
+              "label": "+ manual closes (live net)",
+              "total_r": 2.352684694274173,
+              "n": 2
+            },
+            {
+              "key": "refused",
+              "label": "+ not scoreable: bars refused (live net)",
+              "total_r": -0.14228101984301178,
+              "n": 2
+            },
+            {
+              "key": "book_net",
+              "label": "= Live book, net",
+              "total_r": 7.8611357938562225,
+              "n": 95
+            }
+          ],
+          "selection": "Selection, counts only: matched 10 \u00b7 live-only 100 \u00b7 replay-only 5 \u00b7 outside the replay (strategy-sourced) 0 \u00b7 still open 1 \u00b7 unfilled 14",
+          "effects": {
+            "gap_net": {
+              "n": 75,
+              "weeks": 9,
+              "total": -25.4071,
+              "mean": -0.3388,
+              "largest_week_share": 0.3121,
+              "interval": [
+                -1.1427,
+                0.6798
+              ],
+              "thin": false
+            },
+            "entry": {
+              "n": 75,
+              "weeks": 9,
+              "total": 30.0634,
+              "mean": 0.4008,
+              "largest_week_share": 0.2652,
+              "interval": [
+                -0.05,
+                0.875
+              ],
+              "thin": false
+            },
+            "exit": {
+              "n": 75,
+              "weeks": 9,
+              "total": -49.866,
+              "mean": -0.6649,
+              "largest_week_share": 0.5978,
+              "interval": [
+                -1.355,
+                0.111
+              ],
+              "thin": false
+            },
+            "costs": {
+              "n": 75,
+              "weeks": 9,
+              "total": -5.6045,
+              "mean": -0.0747,
+              "largest_week_share": 0.3079,
+              "interval": [
+                -0.0755,
+                -0.0729
+              ],
+              "thin": false
+            }
+          },
+          "cost_check": {
+            "zero_cost_backtest": -5.6045,
+            "equally_costed": 0.0
+          },
+          "confusion": {
+            "win": {
+              "win": 22,
+              "loss": 4,
+              "scratch": 1,
+              "timeout": 0
+            },
+            "loss": {
+              "win": 10,
+              "loss": 35,
+              "scratch": 2,
+              "timeout": 0
+            },
+            "scratch": {
+              "win": 3,
+              "loss": 9,
+              "scratch": 4,
+              "timeout": 1
+            },
+            "timeout": {
+              "win": 0,
+              "loss": 0,
+              "scratch": 0,
+              "timeout": 0
+            }
+          },
+          "tags": {
+            "same_day_exit": {
+              "n": 58,
+              "mean_exit_effect": -0.065
+            },
+            "wick_missed": {
+              "n": 1,
+              "mean_exit_effect": 0.606
+            },
+            "both_levels_bar": {
+              "n": 3,
+              "mean_exit_effect": 1.345
+            },
+            "gap_through": {
+              "n": 8,
+              "mean_exit_effect": 0.14
+            },
+            "exit_outside_rth": {
+              "n": 23,
+              "mean_exit_effect": -0.258
+            },
+            "entry_outside_rth": {
+              "n": 26,
+              "mean_exit_effect": -0.0039
+            },
+            "first_15min": {
+              "n": 22,
+              "mean_exit_effect": 0.2528
+            },
+            "live_stop_moved": {
+              "n": 44,
+              "mean_exit_effect": -0.1866
+            },
+            "levels_edited": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "scaled_out": {
+              "n": 27,
+              "mean_exit_effect": -0.3458
+            },
+            "time_stop": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "earnings_in_window": {
+              "n": 8,
+              "mean_exit_effect": -1.0521
+            },
+            "short_gap_against": {
+              "n": 1,
+              "mean_exit_effect": 0.983
+            },
+            "outcome_flip_live_better": {
+              "n": 4,
+              "mean_exit_effect": 3.4715
+            },
+            "outcome_flip_live_worse": {
+              "n": 10,
+              "mean_exit_effect": -3.5024
+            },
+            "entry_slip": {
+              "n": 10,
+              "mean_exit_effect": 1.0529
+            },
+            "poll_fill": {
+              "n": 24,
+              "mean_exit_effect": -0.8591
+            }
+          },
+          "rebase": {
+            "n_filled": 75,
+            "n_no_fill": 16,
+            "n_rebased": 75,
+            "r_rebased_total": 19.195,
+            "stop_shift_pct": {
+              "n": 75,
+              "median": 46.7786,
+              "p90": 309.0802
+            }
+          }
+        }
+      },
+      "earlier": {
+        "v1": {
+          "table": [
+            {
+              "key": "backtest",
+              "label": "Backtest of the plans live traded (zero cost)",
+              "total_r": -56.375016182242746,
+              "n": 118
+            },
+            {
+              "key": "entry",
+              "label": "+ entry effect (incl. intraday drift to the close)",
+              "total_r": 1.9450161822427456,
+              "n": 118
+            },
+            {
+              "key": "exit",
+              "label": "+ exit effect",
+              "total_r": 17.30773068008505,
+              "n": 118
+            },
+            {
+              "key": "live_gross",
+              "label": "= Live, gross, scored trades",
+              "total_r": -37.12226931991496,
+              "n": 118
+            },
+            {
+              "key": "costs",
+              "label": "- modelled costs",
+              "total_r": 7.402057903916337,
+              "n": 118
+            },
+            {
+              "key": "live_net",
+              "label": "= Live, net, scored trades",
+              "total_r": -44.52432722383131,
+              "n": 118
+            },
+            {
+              "key": "backtest_no_fill",
+              "label": "+ backtest would not have filled (live net)",
+              "total_r": 0.9995284518630588,
+              "n": 2
+            },
+            {
+              "key": "manual",
+              "label": "+ manual closes (live net)",
+              "total_r": 9.302511972075962,
+              "n": 9
+            },
+            {
+              "key": "refused",
+              "label": "+ not scoreable: bars refused (live net); 12 without live R (no journal R or zero risk), counted at 0R",
+              "total_r": 1.7354561653905705,
+              "n": 14
+            },
+            {
+              "key": "book_net",
+              "label": "= Live book, net",
+              "total_r": -32.48683063450171,
+              "n": 143
+            }
+          ],
+          "selection": "Selection, counts only: matched 2 \u00b7 live-only 146 \u00b7 replay-only 21 \u00b7 outside the replay (strategy-sourced) 0 \u00b7 still open 0 \u00b7 unfilled 5",
+          "effects": {
+            "gap_net": {
+              "n": 118,
+              "weeks": 8,
+              "total": 11.8507,
+              "mean": 0.1004,
+              "largest_week_share": 0.3002,
+              "interval": [
+                -0.4408,
+                0.4598
+              ],
+              "thin": false
+            },
+            "entry": {
+              "n": 118,
+              "weeks": 8,
+              "total": 1.945,
+              "mean": 0.0165,
+              "largest_week_share": 0.3139,
+              "interval": [
+                -0.211,
+                0.2225
+              ],
+              "thin": false
+            },
+            "exit": {
+              "n": 118,
+              "weeks": 8,
+              "total": 17.3077,
+              "mean": 0.1467,
+              "largest_week_share": 0.3159,
+              "interval": [
+                -0.2367,
+                0.3785
+              ],
+              "thin": false
+            },
+            "costs": {
+              "n": 118,
+              "weeks": 8,
+              "total": -7.4021,
+              "mean": -0.0627,
+              "largest_week_share": 0.4929,
+              "interval": [
+                -0.0671,
+                -0.061
+              ],
+              "thin": false
+            }
+          },
+          "cost_check": {
+            "zero_cost_backtest": -7.4021,
+            "equally_costed": 0.0
+          },
+          "confusion": {
+            "win": {
+              "win": 24,
+              "loss": 35,
+              "scratch": 0,
+              "timeout": 0
+            },
+            "loss": {
+              "win": 10,
+              "loss": 47,
+              "scratch": 2,
+              "timeout": 0
+            },
+            "scratch": {
+              "win": 0,
+              "loss": 1,
+              "scratch": 1,
+              "timeout": 0
+            },
+            "timeout": {
+              "win": 0,
+              "loss": 0,
+              "scratch": 0,
+              "timeout": 0
+            }
+          },
+          "tags": {
+            "same_day_exit": {
+              "n": 93,
+              "mean_exit_effect": 0.1247
+            },
+            "wick_missed": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "both_levels_bar": {
+              "n": 4,
+              "mean_exit_effect": 0.1546
+            },
+            "gap_through": {
+              "n": 7,
+              "mean_exit_effect": 1.4881
+            },
+            "exit_outside_rth": {
+              "n": 38,
+              "mean_exit_effect": -0.1944
+            },
+            "entry_outside_rth": {
+              "n": 33,
+              "mean_exit_effect": 0.0209
+            },
+            "first_15min": {
+              "n": 10,
+              "mean_exit_effect": 0.03
+            },
+            "live_stop_moved": {
+              "n": 64,
+              "mean_exit_effect": 0.556
+            },
+            "levels_edited": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "scaled_out": {
+              "n": 57,
+              "mean_exit_effect": 0.5714
+            },
+            "time_stop": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "earnings_in_window": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "short_gap_against": {
+              "n": 8,
+              "mean_exit_effect": 1.4356
+            },
+            "outcome_flip_live_better": {
+              "n": 35,
+              "mean_exit_effect": 1.5147
+            },
+            "outcome_flip_live_worse": {
+              "n": 10,
+              "mean_exit_effect": -1.9114
+            },
+            "entry_slip": {
+              "n": 4,
+              "mean_exit_effect": 1.0346
+            },
+            "poll_fill": {
+              "n": 20,
+              "mean_exit_effect": -0.33
+            }
+          },
+          "rebase": {
+            "n_filled": 118,
+            "n_no_fill": 2,
+            "n_rebased": 111,
+            "r_rebased_total": 7.89,
+            "stop_shift_pct": {
+              "n": 118,
+              "median": -2.4503,
+              "p90": 109.1757
+            }
+          }
+        },
+        "v2": {
+          "table": [
+            {
+              "key": "backtest",
+              "label": "Backtest of the plans live traded (zero cost)",
+              "total_r": -67.88939143388257,
+              "n": 83
+            },
+            {
+              "key": "entry",
+              "label": "+ entry effect (incl. intraday drift to the close)",
+              "total_r": 16.388391433882596,
+              "n": 83
+            },
+            {
+              "key": "exit",
+              "label": "+ exit effect",
+              "total_r": 30.58052644895452,
+              "n": 83
+            },
+            {
+              "key": "live_gross",
+              "label": "= Live, gross, scored trades",
+              "total_r": -20.920473551045486,
+              "n": 83
+            },
+            {
+              "key": "costs",
+              "label": "- modelled costs",
+              "total_r": 5.213896287998958,
+              "n": 83
+            },
+            {
+              "key": "live_net",
+              "label": "= Live, net, scored trades",
+              "total_r": -26.134369839044442,
+              "n": 83
+            },
+            {
+              "key": "backtest_no_fill",
+              "label": "+ backtest would not have filled (live net)",
+              "total_r": -17.39042893292378,
+              "n": 37
+            },
+            {
+              "key": "manual",
+              "label": "+ manual closes (live net)",
+              "total_r": 9.302511972075962,
+              "n": 9
+            },
+            {
+              "key": "refused",
+              "label": "+ not scoreable: bars refused (live net); 12 without live R (no journal R or zero risk), counted at 0R",
+              "total_r": 1.7354561653905705,
+              "n": 14
+            },
+            {
+              "key": "book_net",
+              "label": "= Live book, net",
+              "total_r": -32.48683063450171,
+              "n": 143
+            }
+          ],
+          "selection": "Selection, counts only: matched 2 \u00b7 live-only 146 \u00b7 replay-only 21 \u00b7 outside the replay (strategy-sourced) 0 \u00b7 still open 0 \u00b7 unfilled 5",
+          "effects": {
+            "gap_net": {
+              "n": 83,
+              "weeks": 7,
+              "total": 41.755,
+              "mean": 0.5031,
+              "largest_week_share": 0.6015,
+              "interval": [
+                -0.0945,
+                0.7045
+              ],
+              "thin": true
+            },
+            "entry": {
+              "n": 83,
+              "weeks": 7,
+              "total": 16.3884,
+              "mean": 0.1975,
+              "largest_week_share": 0.3617,
+              "interval": [
+                0.0981,
+                0.3468
+              ],
+              "thin": true
+            },
+            "exit": {
+              "n": 83,
+              "weeks": 7,
+              "total": 30.5805,
+              "mean": 0.3684,
+              "largest_week_share": 0.6665,
+              "interval": [
+                -0.2325,
+                0.6232
+              ],
+              "thin": true
+            },
+            "costs": {
+              "n": 83,
+              "weeks": 7,
+              "total": -5.2139,
+              "mean": -0.0628,
+              "largest_week_share": 0.5019,
+              "interval": [
+                -0.0665,
+                -0.0613
+              ],
+              "thin": true
+            }
+          },
+          "cost_check": {
+            "zero_cost_backtest": -5.2139,
+            "equally_costed": 0.0
+          },
+          "confusion": {
+            "win": {
+              "win": 24,
+              "loss": 35,
+              "scratch": 0,
+              "timeout": 0
+            },
+            "loss": {
+              "win": 10,
+              "loss": 47,
+              "scratch": 2,
+              "timeout": 0
+            },
+            "scratch": {
+              "win": 0,
+              "loss": 1,
+              "scratch": 1,
+              "timeout": 0
+            },
+            "timeout": {
+              "win": 0,
+              "loss": 0,
+              "scratch": 0,
+              "timeout": 0
+            }
+          },
+          "tags": {
+            "same_day_exit": {
+              "n": 93,
+              "mean_exit_effect": 0.9083
+            },
+            "wick_missed": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "both_levels_bar": {
+              "n": 4,
+              "mean_exit_effect": 0.1546
+            },
+            "gap_through": {
+              "n": 7,
+              "mean_exit_effect": 2.1044
+            },
+            "exit_outside_rth": {
+              "n": 38,
+              "mean_exit_effect": 0.3467
+            },
+            "entry_outside_rth": {
+              "n": 33,
+              "mean_exit_effect": 0.328
+            },
+            "first_15min": {
+              "n": 10,
+              "mean_exit_effect": 0.054
+            },
+            "live_stop_moved": {
+              "n": 64,
+              "mean_exit_effect": 1.3371
+            },
+            "levels_edited": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "scaled_out": {
+              "n": 57,
+              "mean_exit_effect": 1.4394
+            },
+            "time_stop": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "earnings_in_window": {
+              "n": 0,
+              "mean_exit_effect": null
+            },
+            "short_gap_against": {
+              "n": 8,
+              "mean_exit_effect": 2.0688
+            },
+            "outcome_flip_live_better": {
+              "n": 35,
+              "mean_exit_effect": 2.5211
+            },
+            "outcome_flip_live_worse": {
+              "n": 10,
+              "mean_exit_effect": -1.7228
+            },
+            "entry_slip": {
+              "n": 4,
+              "mean_exit_effect": 3.4411
+            },
+            "poll_fill": {
+              "n": 20,
+              "mean_exit_effect": 0.3173
+            }
+          },
+          "rebase": {
+            "n_filled": 83,
+            "n_no_fill": 37,
+            "n_rebased": 76,
+            "r_rebased_total": -12.495,
+            "stop_shift_pct": {
+              "n": 83,
+              "median": 7.2078,
+              "p90": 175.0832
+            }
+          }
+        }
+      }
+    }
+  },
+  "slip": {
+    "long": {
+      "headline": {
+        "entry_slip_bps": {
+          "n": 413,
+          "median": 0.0,
+          "p90": 0.0
+        },
+        "entry_slip_r": {
+          "n": 413,
+          "median": 0.0,
+          "p90": 0.0
+        },
+        "poll_fill_bps": {
+          "n": 332,
+          "median": 0.0,
+          "p90": 30.3209
+        },
+        "poll_fill_r": {
+          "n": 332,
+          "median": 0.0,
+          "p90": 0.1757
+        },
+        "gap_r": {
+          "n": 41,
+          "median": 0.251,
+          "p90": 2.4855
+        },
+        "gap_pct": {
+          "n": 41,
+          "median": 0.4223,
+          "p90": 4.3361
+        },
+        "exit_vs_open_r": {
+          "n": 41,
+          "median": 0.4267,
+          "p90": 1.8669
+        },
+        "exit_vs_stop_r": {
+          "n": 41,
+          "median": 2.2956,
+          "p90": 6.1252
+        }
+      },
+      "earlier": {
+        "entry_slip_bps": {
+          "n": 219,
+          "median": 0.0,
+          "p90": 0.0
+        },
+        "entry_slip_r": {
+          "n": 219,
+          "median": 0.0,
+          "p90": 0.0
+        },
+        "poll_fill_bps": {
+          "n": 82,
+          "median": 4.7916,
+          "p90": 418.4568
+        },
+        "poll_fill_r": {
+          "n": 82,
+          "median": 0.0219,
+          "p90": 1.5165
+        },
+        "gap_r": {
+          "n": 18,
+          "median": 1.678,
+          "p90": 3.0587
+        },
+        "gap_pct": {
+          "n": 18,
+          "median": 4.4991,
+          "p90": 6.7124
+        },
+        "exit_vs_open_r": {
+          "n": 18,
+          "median": -3.9209,
+          "p90": -0.1825
+        },
+        "exit_vs_stop_r": {
+          "n": 18,
+          "median": -0.1772,
+          "p90": 3.4548
+        }
+      }
+    },
+    "short": {
+      "headline": {
+        "entry_slip_bps": {
+          "n": 91,
+          "median": 0.0,
+          "p90": 9.2724
+        },
+        "entry_slip_r": {
+          "n": 91,
+          "median": 0.0,
+          "p90": 0.0503
+        },
+        "poll_fill_bps": {
+          "n": 74,
+          "median": 0.0,
+          "p90": 34.3429
+        },
+        "poll_fill_r": {
+          "n": 74,
+          "median": 0.0,
+          "p90": 0.1972
+        },
+        "gap_r": {
+          "n": 8,
+          "median": 2.8124,
+          "p90": 3.7702
+        },
+        "gap_pct": {
+          "n": 8,
+          "median": -5.2732,
+          "p90": -1.4302
+        },
+        "exit_vs_open_r": {
+          "n": 8,
+          "median": 0.8083,
+          "p90": 1.9053
+        },
+        "exit_vs_stop_r": {
+          "n": 8,
+          "median": 4.4081,
+          "p90": 6.6146
+        }
+      },
+      "earlier": {
+        "entry_slip_bps": {
+          "n": 120,
+          "median": 0.0,
+          "p90": 0.0
+        },
+        "entry_slip_r": {
+          "n": 120,
+          "median": 0.0,
+          "p90": 0.0
+        },
+        "poll_fill_bps": {
+          "n": 36,
+          "median": 15.0764,
+          "p90": 147.9736
+        },
+        "poll_fill_r": {
+          "n": 36,
+          "median": 0.0554,
+          "p90": 0.7357
+        },
+        "gap_r": {
+          "n": 7,
+          "median": -1.4572,
+          "p90": -0.8464
+        },
+        "gap_pct": {
+          "n": 7,
+          "median": 4.4991,
+          "p90": 4.6593
+        },
+        "exit_vs_open_r": {
+          "n": 7,
+          "median": 1.7747,
+          "p90": 2.1289
+        },
+        "exit_vs_stop_r": {
+          "n": 7,
+          "median": 0.96,
+          "p90": 1.8414
+        }
+      }
+    }
+  },
+  "live_by_ledger": {
+    "long": {
+      "headline": {
+        "main": {
+          "n": 434,
+          "weeks": 10,
+          "total": -36.1646,
+          "mean": -0.0833,
+          "largest_week_share": 0.4377,
+          "interval": null,
+          "thin": false
+        }
+      },
+      "earlier": {
+        "main": {
+          "n": 226,
+          "weeks": 8,
+          "total": -38.8222,
+          "mean": -0.1718,
+          "largest_week_share": 0.5916,
+          "interval": null,
+          "thin": false
+        }
+      }
+    },
+    "short": {
+      "headline": {
+        "main": {
+          "n": 95,
+          "weeks": 10,
+          "total": 7.8611,
+          "mean": 0.0827,
+          "largest_week_share": 0.2862,
+          "interval": null,
+          "thin": false
+        }
+      },
+      "earlier": {
+        "main": {
+          "n": 131,
+          "weeks": 8,
+          "total": -32.4868,
+          "mean": -0.248,
+          "largest_week_share": 0.5358,
+          "interval": null,
+          "thin": false
+        }
+      }
+    }
+  },
+  "selection": {
+    "long": {
+      "headline": {
+        "matched": 54,
+        "level_diffs": {
+          "entry_pct": {
+            "n": 54,
+            "median": -0.023,
+            "p90": 0.8106
+          },
+          "stop_ratio": {
+            "n": 54,
+            "median": 0.9976,
+            "p90": 1.0586
+          },
+          "target_ratio": {
+            "n": 54,
+            "median": 0.9942,
+            "p90": 1.0873
+          }
+        },
+        "live_only": {
+          "n": 437,
+          "by_bucket": {
+            "open_to_1030": 100,
+            "mid_day": 205,
+            "last_hour": 22,
+            "outside_session": 109,
+            "created_at": 1
+          },
+          "unexplained": 109,
+          "live_r_net": -33.1151,
+          "live_r_n": 385,
+          "unexplained_share": 0.2494
+        },
+        "replay_only": {
+          "n": 18,
+          "by_reason": {
+            "gate_rejection": 0,
+            "open_position": 0,
+            "unexplained": 18
+          },
+          "by_gate": {}
+        },
+        "outside_replay": 0
+      },
+      "earlier": {
+        "matched": 26,
+        "level_diffs": {
+          "entry_pct": {
+            "n": 26,
+            "median": -0.1274,
+            "p90": 5.6268
+          },
+          "stop_ratio": {
+            "n": 26,
+            "median": 0.8334,
+            "p90": 0.9066
+          },
+          "target_ratio": {
+            "n": 26,
+            "median": 1.2789,
+            "p90": 4.6153
+          }
+        },
+        "live_only": {
+          "n": 260,
+          "by_bucket": {
+            "open_to_1030": 49,
+            "mid_day": 104,
+            "last_hour": 15,
+            "outside_session": 56,
+            "created_at": 36
+          },
+          "unexplained": 56,
+          "live_r_net": -37.572,
+          "live_r_n": 207,
+          "unexplained_share": 0.2154
+        },
+        "replay_only": {
+          "n": 80,
+          "by_reason": {
+            "gate_rejection": 0,
+            "open_position": 5,
+            "unexplained": 75
+          },
+          "by_gate": {}
+        },
+        "outside_replay": 0
+      }
+    },
+    "short": {
+      "headline": {
+        "matched": 10,
+        "level_diffs": {
+          "entry_pct": {
+            "n": 10,
+            "median": -0.3838,
+            "p90": 0.9975
+          },
+          "stop_ratio": {
+            "n": 10,
+            "median": 1.0024,
+            "p90": 1.0446
+          },
+          "target_ratio": {
+            "n": 10,
+            "median": 0.9862,
+            "p90": 1.0271
+          }
+        },
+        "live_only": {
+          "n": 100,
+          "by_bucket": {
+            "open_to_1030": 28,
+            "mid_day": 37,
+            "last_hour": 3,
+            "outside_session": 32,
+            "created_at": 0
+          },
+          "unexplained": 32,
+          "live_r_net": 7.9874,
+          "live_r_n": 85,
+          "unexplained_share": 0.32
+        },
+        "replay_only": {
+          "n": 5,
+          "by_reason": {
+            "gate_rejection": 1,
+            "open_position": 0,
+            "unexplained": 4
+          },
+          "by_gate": {
+            "rs": 1
+          }
+        },
+        "outside_replay": 0
+      },
+      "earlier": {
+        "matched": 2,
+        "level_diffs": {
+          "entry_pct": {
+            "n": 2,
+            "median": 0.0342,
+            "p90": 2.7062
+          },
+          "stop_ratio": {
+            "n": 2,
+            "median": 0.5961,
+            "p90": 0.6518
+          },
+          "target_ratio": {
+            "n": 2,
+            "median": 4.2581,
+            "p90": 4.6556
+          }
+        },
+        "live_only": {
+          "n": 146,
+          "by_bucket": {
+            "open_to_1030": 21,
+            "mid_day": 68,
+            "last_hour": 8,
+            "outside_session": 25,
+            "created_at": 24
+          },
+          "unexplained": 25,
+          "live_r_net": -33.0793,
+          "live_r_n": 129,
+          "unexplained_share": 0.1712
+        },
+        "replay_only": {
+          "n": 21,
+          "by_reason": {
+            "gate_rejection": 0,
+            "open_position": 2,
+            "unexplained": 19
+          },
+          "by_gate": {}
+        },
+        "outside_replay": 0
+      }
+    }
+  },
+  "cells": 200
+}
