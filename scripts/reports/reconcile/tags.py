@@ -1,4 +1,4 @@
-"""v232 mechanism tags (spec ### Layer 1, Mechanism tags).
+"""v232 mechanism tags and slip distributions (spec ### Layer 1, Mechanism tags).
 
 Descriptive cut-offs, frozen by the spec (Claude's call 9). Every rule is one entry
 of RULES, so the classifier stays table-driven (complexity < 15 per function).
@@ -11,18 +11,21 @@ from typing import Callable
 
 from swingbot.core.analytics.metrics import close_reason_text
 
-from . import sessions
+from . import records, sessions
 
 TAGS = ("same_day_exit", "wick_missed", "both_levels_bar", "gap_through",
         "exit_outside_rth", "entry_outside_rth", "first_15min", "live_stop_moved",
         "levels_edited", "scaled_out", "time_stop", "earnings_in_window",
-        "short_gap_against", "outcome_flip_live_better", "outcome_flip_live_worse")
+        "short_gap_against", "outcome_flip_live_better", "outcome_flip_live_worse",
+        "entry_slip", "poll_fill")
 SLIP_TAG_R = 0.05
 SHORT_GAP_PCT = 0.03
 FIRST_MINUTES = 15
 LEVEL_TOLERANCE = 0.005
 TIME_REASONS = ("timeout", "time_exit", "stall", "hold")
 STOP_MARKERS = ("be_armed_session", "runner_floor_session")
+_LEVELS = (("runner_be", "working_stop"), ("trail", "working_stop"), ("tp2", "tp2"),
+           ("tp1", "tp1"), ("target", "tp1"), ("stop", "stop"), ("loss", "stop"))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -173,8 +176,58 @@ RULES: dict[str, Callable[[TagInput], bool]] = {
     "short_gap_against": _short_gap,
     "outcome_flip_live_better": lambda t: (t.live_class, t.exit_only_class) == ("win", "loss"),
     "outcome_flip_live_worse": lambda t: (t.live_class, t.exit_only_class) == ("loss", "win"),
+    "entry_slip": lambda t: abs(entry_slip(t)[1]) > SLIP_TAG_R,
+    "poll_fill": lambda t: _poll_tag(t),
 }
 
 
 def tags_for(t: TagInput) -> tuple[str, ...]:
     return tuple(name for name in TAGS if RULES[name](t))
+
+
+def _exit_price(trade: dict) -> float | None:
+    legs = [leg for leg in trade.get("legs") or [] if leg.get("exit_price") is not None]
+    price = legs[-1]["exit_price"] if legs else trade.get("exit_price")
+    return None if price is None else float(price)
+
+
+def _poll_tag(t) -> bool:
+    measured = poll_fill(t)
+    return measured is not None and abs(measured[1]) > SLIP_TAG_R
+
+
+def gap_detail(t: TagInput) -> dict | None:
+    k = _gap_bar(t)
+    exit_price = _exit_price(t.rec.trade)
+    if k is None or exit_price is None:
+        return None
+    sign, opened, prior = _sign(t), _bar(t, k)[0], _bar(t, k - 1)[3]
+    stop = float(t.rec.plan["stop_loss"])
+    return {"gap_r": sign * (opened - prior) / t.live_risk,
+            "gap_pct": (opened / prior - 1.0) * 100.0,
+            "exit_vs_open_r": sign * (exit_price - opened) / t.live_risk,
+            "exit_vs_stop_r": sign * (exit_price - stop) / t.live_risk}
+
+
+def entry_slip(t: TagInput) -> tuple[float, float]:
+    plan, _ = records.rehydrate(t.rec.plan)
+    planned = float(plan.entry_price if plan.entry_price is not None else plan.trigger_price)
+    adverse = _sign(t) * (float(t.rec.trade["entry"]) - planned)
+    return adverse / planned * 1e4, adverse / t.live_risk
+
+
+def _level(reason: str, plan: dict) -> float | None:
+    key = next((level for word, level in _LEVELS if word in reason), None)
+    if key == "stop":
+        key = "working_stop" if plan.get("working_stop") is not None else "stop_loss"
+    value = plan.get(key) if key else None
+    return None if value is None else float(value)
+
+
+def poll_fill(t: TagInput) -> tuple[float, float] | None:
+    level = _level(close_reason_text(t.rec.trade), t.rec.plan)
+    exit_price = _exit_price(t.rec.trade)
+    if level is None or exit_price is None:
+        return None
+    adverse = _sign(t) * (level - exit_price)
+    return adverse / level * 1e4, adverse / t.live_risk

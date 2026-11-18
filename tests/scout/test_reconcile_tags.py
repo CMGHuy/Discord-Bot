@@ -112,3 +112,67 @@ def test_earnings_falls_back_to_the_journal_features():
     rec = records.LiveRecord("P1", "AAA", "bullish", t.rec.plan, t.rec.trade,
                              {**t.rec.journal, "risk_features": {"days_to_earnings": 0}})
     assert "earnings_in_window" in tags.tags_for(dataclasses.replace(t, rec=rec))
+
+
+POSITIVE.update({
+    "entry_slip": dict(trade={"entry": 100.3}),
+    "poll_fill": dict(trade={"exit_price": 103.7}),
+})
+
+
+def test_all_seventeen_tags_have_a_rule_and_a_positive_fixture():
+    assert len(tags.TAGS) == 17 and tags.TAGS[-2:] == ("entry_slip", "poll_fill")
+    assert set(tags.RULES) == set(tags.TAGS) == set(POSITIVE)
+
+
+@pytest.mark.parametrize("tag", ["entry_slip", "poll_fill"])
+def test_the_slip_tags_fire_past_the_cut_off_only(tag):
+    assert tag in tags.tags_for(_t(**POSITIVE[tag]))
+    assert tag not in tags.tags_for(_t())        # 0.05 / 2.05 = 0.024R slip, 0R poll
+
+
+def test_gap_detail_sizes_a_long_gap():
+    gap = tags.gap_detail(_t(rows={3: (104.6, 104.8, 104.0, 104.2)}))
+    risk = 2.05
+    assert gap["gap_r"] == pytest.approx(4.1 / risk)
+    assert gap["gap_pct"] == pytest.approx((104.6 / 100.5 - 1) * 100)
+    assert gap["exit_vs_open_r"] == pytest.approx(-0.6 / risk)
+    assert gap["exit_vs_stop_r"] == pytest.approx(6.0 / risk)
+    assert tags.gap_detail(_t()) is None
+
+
+def test_gap_detail_signs_a_short_gap_against_the_position():
+    gap = tags.gap_detail(_t("bearish", rows={2: (102.5, 103.0, 102.0, 102.6)},
+                             trade={"exit_price": 102.5}))
+    assert gap["gap_r"] == pytest.approx(-(102.5 - 99.5) / 2.05)
+    assert gap["exit_vs_stop_r"] == pytest.approx(-(102.5 - 102.0) / 2.05)
+
+
+@pytest.mark.parametrize("direction,plan,fill,expected_bps,risk", [
+    ("bullish", {}, 100.3, 30.0, 2.3),
+    ("bearish", {}, 99.7, 30.0, 2.3),
+    ("bullish", {"entry_type": "stop_entry", "entry_price": 101.4, "trigger_price": 101.0},
+     101.2, 0.2 / 101.0 * 1e4, 3.2),
+])
+def test_entry_slip_is_adverse_positive_against_the_planned_entry(direction, plan, fill,
+                                                                  expected_bps, risk):
+    bps, r = tags.entry_slip(_t(direction, plan=plan, trade={"entry": fill}))
+    assert bps == pytest.approx(expected_bps)
+    assert r == pytest.approx(expected_bps / 1e4 * (101.0 if plan else 100.0) / risk)
+
+
+@pytest.mark.parametrize("plan,trade,expected", [
+    ({}, {"exit_price": 103.7}, (0.3 / 104.0 * 1e4, 0.3 / 2.05)),
+    ({"working_stop": 100.05}, {"close_reason": "stop", "exit_price": 99.95},
+     (0.1 / 100.05 * 1e4, 0.1 / 2.05)),
+    ({"working_stop": 100.05}, {"legs": LEGS[:1] + [{**LEGS[1], "exit_price": 100.0}]},
+     (0.05 / 100.05 * 1e4, 0.05 / 2.05)),
+    ({}, {"close_reason": "manual", "exit_price": 101.0}, None),
+    ({}, {"close_reason": "timeout", "exit_price": 101.0}, None),
+])
+def test_poll_fill_measures_the_exit_against_the_level_it_hit(plan, trade, expected):
+    got = tags.poll_fill(_t(plan=plan, trade=trade))
+    if expected is None:
+        assert got is None
+    else:
+        assert got == pytest.approx(expected)
