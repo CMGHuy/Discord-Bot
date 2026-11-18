@@ -11,7 +11,10 @@ every other ticker j eligible at t, in the same trend state, in the same ATR%
 tercile of t's eligible cross-section, with no raw event at t. Market-scope
 ideas draw from the same ticker's trailing sessions instead. Market scope:
 the same ticker's TRAILING_DAYS sessions before t, embargoed CAP bars around
-every raw event, so no null bar postdates its event.
+every raw event, so no null bar postdates its event. Level entry: the event's
+depth on the null ticker's own Open and ATR14[t-1], unfilled picks replaced
+on the child stream; avoid mode's control arm is the same draw with the
+control flag required of j.
 
 Stage 3 (race, per null ticker): null bars raced on their own frame with
 their own ATR14 and scattered back to their events.
@@ -27,11 +30,15 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 from swingbot.core.backtesting.screen import null
+
+if TYPE_CHECKING:
+    from swingbot.core.backtesting.screen.ideas import Idea
 
 NULL_VERSION = "v2"
 STAGES = ("panel", "draw", "race")
@@ -417,3 +424,152 @@ def draw_market_scope(panels: Mapping[str, TickerPanel], booked: Mapping, *, ide
     for ticker in sorted(booked):
         _draw_market_ticker(tally, panels[ticker], booked[ticker], idea=idea, cap=cap, k=k)
     return tally.result()
+
+
+def level_fill(bar_row, depth: float, direction: str) -> float:
+    """One null bar's resting-order fill from its ``level_bars`` row (Open,
+    High, Low, ATR14[t-1]): Open +/- depth x ATR when the bar reaches it (v1
+    ``null._null_fills``); NaN when unreached or the ATR is not finite and > 0."""
+    if direction not in ("long", "short"):
+        raise ValueError(f"unknown direction {direction!r}; expected 'long' or 'short'")
+    o, h, l, a = (float(v) for v in bar_row)
+    if not (np.isfinite(a) and a > 0):
+        return float("nan")
+    if direction == "short":
+        level = o - depth * a
+        return level if l <= level else float("nan")
+    level = o + depth * a
+    return level if h >= level else float("nan")
+
+
+def _depth_lookup(booked: Mapping, depths: Mapping) -> dict:
+    """{(ticker, own position): depth}; one depth per booked event, in order."""
+    out = {}
+    for ticker, positions in booked.items():
+        positions = np.asarray(positions, dtype=int)
+        values = np.asarray(depths.get(ticker, ()), dtype=float)
+        if values.shape != positions.shape:
+            raise ValueError(f"{ticker}: a level draw needs one depth per booked event "
+                             f"({values.size} for {positions.size})")
+        out.update(zip(((ticker, p) for p in positions.tolist()), values.tolist()))
+    return out
+
+
+def _fill_at(xs: CrossSection, panels: Mapping, row: int, col: int, d: float,
+             direction: str) -> float:
+    bars = panels[xs.tickers[col]].level_bars
+    if bars is None:
+        raise ValueError(f"{xs.tickers[col]}: a level draw needs level_bars (keep_bars=True)")
+    return level_fill(bars[xs.pos[row, col]], d, direction)
+
+
+def _level_slots(xs, panels, row, pool, first, d, child, direction):
+    """Filled (columns, fills) sorted by column: the first picks, then
+    replacements from the rest of the pool in ``child.permutation`` order
+    (v1 ``null._level_group``)."""
+    m = len(first)
+    cols, fills = [], []
+
+    def take(candidates) -> None:
+        for j in candidates:
+            if len(cols) == m:
+                return
+            f = _fill_at(xs, panels, row, j, d, direction)
+            if np.isfinite(f):
+                cols.append(j)
+                fills.append(f)
+
+    take(first.tolist())
+    rest = np.setdiff1d(pool, first)
+    if len(cols) < m and rest.size:
+        take(child.permutation(rest).tolist())
+    order = np.argsort(np.asarray(cols, dtype=int), kind="stable")
+    return np.asarray(cols, dtype=int)[order], np.asarray(fills, dtype=float)[order]
+
+
+def _level_event(tally: _Tally, xs, panels, row, col, pos, d, rng, child, *,
+                 direction: str, k: int) -> bool:
+    """One level event's slots; True when its pool is under the floor."""
+    ticker = xs.tickers[col]
+    pool = ticker_pool(xs, row, col)
+    if pool.size < null.MIN_CANDIDATES:
+        tally.dropped[ticker] += 1
+        return True
+    m = min(k, pool.size)
+    tally.count_slots(m)
+    first = rng.choice(pool, size=m, replace=False)
+    cols, fills = _level_slots(xs, panels, row, pool, first, d, child, direction)
+    blank = m - cols.size
+    tally.count_unfilled(blank)
+    if cols.size == 0:
+        tally.dropped[ticker] += 1
+    day = xs.dates[row]
+    tally.add(_records(ticker, pos, day, [xs.tickers[j] for j in cols], xs.pos[row, cols], fills))
+    tally.add(_records(ticker, pos, day, [""] * blank, np.full(blank, -1)))
+    return False
+
+
+def draw_ticker_level(xs: CrossSection, panels: Mapping[str, TickerPanel], booked: Mapping,
+                      depths: Mapping, *, idea: str, direction: str,
+                      k: int = null.K) -> DrawResult:
+    """Stage 2, level entry: the event's depth on each null ticker's own Open
+    and ATR14[t-1]; an unfilled pick is replaced from the rest of the date's
+    pool; a slot still unfilled is a blank row (null_ticker "", null_pos -1)."""
+    lookup = _depth_lookup(booked, depths)
+    tally = _Tally()
+    for row, events in sorted(_events_by_row(xs, booked).items()):
+        seed = date_seed(idea, xs.dates[row])
+        rng, child = np.random.default_rng(seed), np.random.default_rng(null.child_seed(seed))
+        starved = False
+        for col, pos in events:
+            d = lookup[(xs.tickers[col], pos)]
+            starved |= _level_event(tally, xs, panels, row, col, pos, d, rng, child,
+                                    direction=direction, k=k)
+        tally.mark_date(xs.dates[row], starved)
+    return tally.result()
+
+
+def _control_seed(idea: str, day) -> list:
+    return null.null_seed(f"{_v2_name(idea)}:control", pd.Timestamp(day).strftime("%Y-%m-%d"))
+
+
+def draw_control(xs: CrossSection, booked: Mapping, *, idea: str,
+                 k: int = null.K) -> DrawResult:
+    """Avoid mode's control arm: the ticker-scope draw with the control flag
+    required of every null ticker, on its own stream ``idea:v2:control``. Never
+    refused; an event under the floor is counted in ``dropped`` (v1 below_floor)."""
+    tally = _Tally()
+    for row, events in sorted(_events_by_row(xs, booked).items()):
+        day = xs.dates[row]
+        rng = np.random.default_rng(_control_seed(idea, day))
+        starved = False
+        for col, pos in events:
+            pool = ticker_pool(xs, row, col, require_control=True)
+            if pool.size < null.MIN_CANDIDATES:
+                tally.dropped[xs.tickers[col]] += 1
+                starved = True
+                continue
+            pick = np.sort(rng.choice(pool, size=min(k, pool.size), replace=False))
+            tally.count_slots(pick.size)
+            tally.add(_records(xs.tickers[col], pos, day, [xs.tickers[j] for j in pick],
+                               xs.pos[row, pick]))
+        tally.mark_date(day, starved)
+    return tally.result()
+
+
+def draw(xs: CrossSection | None, panels: Mapping[str, TickerPanel], booked: Mapping, *,
+         idea: Idea, depths: Mapping | None = None) -> DrawResult:
+    """Stage 2 for one idea -- market scope, level entry or the ticker-scope
+    next-open draw -- then the SCOPE_MISMATCH / NULL_STARVED refusal, so a
+    starved pool stops the run before any race."""
+    if idea.scope == "market":
+        result = draw_market_scope(panels, booked, idea=idea.name, cap=idea.time_cap_bars)
+    elif idea.entry == "level":
+        if depths is None:
+            raise ValueError(f"{idea.name}: a level draw needs one depth per booked event")
+        result = draw_ticker_level(xs, panels, booked, depths, idea=idea.name,
+                                   direction=idea.direction)
+    else:
+        result = draw_ticker_scope(xs, booked, idea=idea.name)
+    check_starvation(result, idea.scope)
+    return result
