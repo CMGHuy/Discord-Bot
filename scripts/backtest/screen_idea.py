@@ -341,13 +341,15 @@ def _avoid_context(idea: Idea, df: pd.DataFrame) -> dict:
             "bottom": states["bottom"].to_numpy(dtype=float)}
 
 
-def ticker_context(idea: Idea, df: pd.DataFrame, spans, context: Mapping | None = None) -> dict:
+def ticker_context(idea: Idea, df: pd.DataFrame, spans, context: Mapping | None = None,
+                   *, event_start: str = EVENT_START) -> dict:
     """Per-ticker inputs every screen path shares: raw events, membership, warm-up, ATR14 and the null's trend state (v182: moved out of screen_ticker so --count-only reads the same ones).
-    v214: an avoid idea's raw events come from its states(df), whose masks and bottom follow the edge keys."""
+    v214: an avoid idea's raw events come from its states(df), whose masks and bottom follow the edge keys.
+    v230: event_start moves the first event bar (placebo harness)."""
     atr = indicators.atr(df)
     sma200 = indicators.sma(df["Close"], 200)
     member = null.member_mask(df.index, spans)
-    warm = race.warm_mask(atr, sma200) & (df.index >= pd.Timestamp(EVENT_START))
+    warm = race.warm_mask(atr, sma200) & (df.index >= pd.Timestamp(event_start))
     avoid = _avoid_context(idea, df)
     raw = avoid.pop("raw") if avoid else np.asarray(raw_events(idea, df, context), dtype=bool)
     return {"raw": raw,
@@ -423,9 +425,9 @@ def _avoid_arm(idea: Idea, ticker: str, df: pd.DataFrame, ctx: dict, costs: dict
 
 def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
                   slippage_bps=None, commission=None,
-                  context: Mapping | None = None) -> TickerScreen:
+                  context: Mapping | None = None, event_start: str = EVENT_START) -> TickerScreen:
     costs = {"slippage_bps": slippage_bps, "commission": commission}
-    ctx = ticker_context(idea, df, spans, context)
+    ctx = ticker_context(idea, df, spans, context, event_start=event_start)
     kept, counts, draw = _books(idea, ticker, df, ctx, costs)
     fwd = {h: forward.forward_atr(df, ctx["atr"], h, direction=idea.direction)
            for h in forward.HORIZONS}
@@ -446,15 +448,15 @@ def screen_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans, *,
         **_level_report(idea, ticker, df, ctx, costs, kept, draw))
 
 
-def _spy_calendar(cache_dir, end: str) -> pd.DataFrame:
-    """SPY sessions in [CONTEXT_START, end]: the calendar every context file
+def _spy_calendar(cache_dir, end: str, start: str = CONTEXT_START) -> pd.DataFrame:
+    """SPY sessions in [start, end]: the calendar every context file
     must cover (v174 load check 3)."""
     path = Path(cache_dir) / "SPY.csv"
     if not path.is_file():
         raise screen_context.ContextError(f"SPY calendar {path} is missing")
-    calendar = load_frame(path, CONTEXT_START, end)
+    calendar = load_frame(path, start, end)
     if calendar is None:
-        raise screen_context.ContextError(f"SPY calendar has no bar in {CONTEXT_START}..{end}")
+        raise screen_context.ContextError(f"SPY calendar has no bar in {start}..{end}")
     return calendar
 
 
@@ -473,28 +475,29 @@ _KIND_CHECKS: dict[str, Callable] = {"z": _check_z, "level": _check_level}
 
 
 def _context_frame(cache_dir, ticker: str, sessions: pd.DatetimeIndex, end: str,
-                   kind: str = "z"):
+                   kind: str = "z", start: str = CONTEXT_START):
     """One context CSV through the v174 load checks, the raw index first
     (load_frame silently repairs tz, order and duplicates)."""
     path = Path(cache_dir) / f"{ticker}.csv"
     record = screen_context.file_record(path)
     raw = pd.read_csv(path, parse_dates=["Date"], index_col="Date")
     screen_context.check_raw_index(raw.index, ticker)
-    frame = load_frame(path, CONTEXT_START, end)
+    frame = load_frame(path, start, end)
     if frame is None:
-        raise screen_context.ContextError(f"{ticker}: no bar in {CONTEXT_START}..{end}")
+        raise screen_context.ContextError(f"{ticker}: no bar in {start}..{end}")
     screen_context.check_contiguous(frame.index, sessions, ticker)
     _KIND_CHECKS[kind](frame, sessions, ticker)
     return frame, record
 
 
 def load_context(cache_dir, tickers: tuple[str, ...], *, end: str = WINDOW_END,
-                 kind: str = "z") -> screen_context.ContextData:
-    """Every context frame an idea names, checked, from CONTEXT_START to end."""
-    calendar = _spy_calendar(cache_dir, end)
+                 kind: str = "z", context_start: str = CONTEXT_START) -> screen_context.ContextData:
+    """Every context frame an idea names, checked, from context_start to end."""
+    calendar = _spy_calendar(cache_dir, end, start=context_start)
     frames, records = {}, {}
     for ticker in tickers:
-        frames[ticker], records[ticker] = _context_frame(cache_dir, ticker, calendar.index, end, kind)
+        frames[ticker], records[ticker] = _context_frame(
+            cache_dir, ticker, calendar.index, end, kind, start=context_start)
     return screen_context.ContextData(frames=frames, calendar=calendar, records=records)
 
 
@@ -576,7 +579,8 @@ def _open_checkpoint(directory: Path | None, manifest: dict, out) -> _Checkpoint
     return _Checkpoint(directory)
 
 
-def _screen_or_resume(idea, ticker, universe, cache_dir, start, end, context, checkpoint):
+def _screen_or_resume(idea, ticker, universe, cache_dir, start, end, context, checkpoint,
+                      event_start=EVENT_START):
     resumed = checkpoint.load(ticker)
     if resumed is not None:
         return resumed
@@ -584,7 +588,7 @@ def _screen_or_resume(idea, ticker, universe, cache_dir, start, end, context, ch
     if df is None:
         return _EMPTY
     screen = screen_ticker(idea, ticker, df, universe.intervals.get(ticker, []),
-                           context=context)
+                           context=context, event_start=event_start)
     checkpoint.save(screen)
     return screen
 
@@ -610,21 +614,22 @@ def _screen_guarded(idea: Idea, ticker: str, skipped: Counter, out, call):
 def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
                     start: str = WINDOW_START, end: str = WINDOW_END,
                     tickers=None, out=print, context: Mapping | None = None,
-                    checkpoint_dir: Path | None = None):
+                    checkpoint_dir: Path | None = None, event_start: str = EVENT_START):
     """Every cached member, one at a time, with flushed percent progress.
     ``context`` (v174) is handed unchanged to every screen_ticker call.
     ``checkpoint_dir`` (v211) persists each finished ticker and resumes from it."""
     context = _universe_context(idea, cache_dir, end, context)
     names = universe.cached if tickers is None else [t for t in tickers if t in universe.cached]
-    checkpoint = _open_checkpoint(checkpoint_dir,
-                                  _checkpoint_manifest(idea, start, end, names, context,
-                                                      universe.intervals), out)
+    manifest = _checkpoint_manifest(idea, start, end, names, context, universe.intervals)
+    if event_start != EVENT_START:
+        manifest["event_start"] = event_start
+    checkpoint = _open_checkpoint(checkpoint_dir, manifest, out)
     screens, skipped = [], Counter()
     for i, ticker in enumerate(names, start=1):
         result = _screen_guarded(
             idea, ticker, skipped, out,
             lambda: _screen_or_resume(idea, ticker, universe, cache_dir, start, end,
-                                      context, checkpoint))
+                                      context, checkpoint, event_start))
         if result is _EMPTY:
             skipped["empty_frame"] += 1
         elif result is not None:
@@ -649,7 +654,7 @@ def count_ticker(idea: Idea, ticker: str, df: pd.DataFrame, spans,
     null draw, with a race-free exit bound (every trade lasts the full cap).
     Nothing is raced; no R is computed. v211: ``event_dates`` lists the ISO
     signal date of every counted event, ascending."""
-    ctx = ticker_context(idea, df, spans, context)
+    ctx = ticker_context(idea, df, spans, context, event_start=event_start)
     cap = idea.time_cap_bars
     cand, counts = race.candidate_events(ctx["raw"], ctx["member"], ctx["warm"], cap,
                                          entry=idea.entry)

@@ -49,6 +49,7 @@ ALLOW = {
     "scripts/backtest/measure_v113.py": "v113 measurement; its holdout end is frozen",
     "scripts/backtest/run_confluence_validation.py": "plan Task 41 one-shot confluence VALIDATION run; spent",
     "scripts/backtest/screen_idea.py": "v140 Stage -2 screen; its window is part of the pre-registration",
+    "scripts/backtest/screen_placebo.py": "v230 null placebo; uses pre-registered window constants, takes no --instrument",
     "scripts/backtest/screen_trail_calibration.py": "synthetic A/A calibration; reads no cache, takes no window; '2010-01-04' is a frame label, not a replay window",
 }
 
