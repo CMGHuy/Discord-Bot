@@ -56,6 +56,7 @@ from swingbot.core.backtesting.screen import forward, indicators, null, race, tr
 from swingbot.core.backtesting.instrument import stats  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea  # noqa: E402
 from swingbot.core.backtesting.screen.errors import IdeaError  # noqa: E402
+from swingbot.core.backtesting.screen import null_v2, screen_v2, v2_report  # noqa: E402
 from swingbot.core.backtesting.screen import context as screen_context  # noqa: E402
 from swingbot.core.backtesting.screen import context as pit  # noqa: E402
 from swingbot.core.backtesting.screen import descriptive, diagnostics  # noqa: E402
@@ -640,6 +641,112 @@ def screen_universe(idea: Idea, universe: Universe, cache_dir, *,
     return screens, skipped
 
 
+def _dead_context(df: pd.DataFrame, context, error: str) -> dict:
+    """v230: an avoid ticker whose states(df) raised -- no event, never in a pool."""
+    off = np.zeros(len(df), dtype=bool)
+    return {"raw": off, "member": off, "warm": off, "atr": indicators.atr(df),
+            "trend": null.trend_state(df, indicators.sma(df["Close"], 200)), "levels": None,
+            "context": context, "control_condition": off, "condition": off,
+            "bottom": np.full(len(df), np.nan), "idea_error": error}
+
+
+def _v2_context(idea: Idea, universe: Universe, context, event_start: str, out):
+    """The v2 per-ticker context: ticker_context, an avoid idea error caught as v1 does."""
+    def build(name: str, df: pd.DataFrame) -> dict:
+        try:
+            return ticker_context(idea, df, universe.intervals.get(name, []), context,
+                                  event_start=event_start)
+        except _guarded_errors(idea) as exc:
+            out(f"[{idea.name}] {name}: idea error: {exc}", flush=True)
+            return _dead_context(df, context, str(exc))
+    return build
+
+
+def _avoid_extras(df: pd.DataFrame, ctx: dict) -> dict:
+    """v214 read-outs from the pre-draw book; overnight is kept to the drawn events later."""
+    population = ctx["member"] & ctx["warm"]
+    pos = np.asarray(ctx["book"].event_pos, dtype=int)
+    opens = df["Open"].to_numpy(dtype=float)
+    hit = pos[opens[pos + 1] >= ctx["bottom"][pos]] if len(pos) else pos
+    return {"excluded": int((ctx["condition"] & population).sum()),
+            "population": int(population.sum()),
+            "overnight_dates": [df.index[p + 1].strftime("%Y-%m-%d") for p in hit]}
+
+
+def _v2_extras(idea: Idea):
+    """The event-side blocks that read no null: rank, overlap, the avoid read-outs."""
+    def extras(name: str, df: pd.DataFrame, ctx: dict) -> dict:
+        if "idea_error" in ctx:
+            return {"idea_error": ctx["idea_error"]}
+        fwd = {h: forward.forward_atr(df, ctx["atr"], h, direction=idea.direction)
+               for h in forward.HORIZONS}
+        out = {"rank": _rank_frame(df.index, ctx["raw"], ctx["member"] & ctx["warm"], fwd),
+               "overlap": _overlap(idea, df, ctx)}
+        if idea.mode == "avoid":
+            out["avoid"] = _avoid_extras(df, ctx)
+        return out
+    return extras
+
+
+def _v2_avoid(t) -> dict | None:
+    a = t.extras.get("avoid")
+    if a is None:
+        return None
+    overnight = set(a["overnight_dates"])
+    return {"control": t.avoid_control or [],
+            "below_floor": int(t.counters.get("control_below_floor", 0)),
+            "kept": len(t.events), "excluded": a["excluded"], "population": a["population"],
+            "overnight": sum(row["entry_date"] in overnight for row in t.events)}
+
+
+def _v2_screen(t) -> TickerScreen:
+    """v230: a screen_v2.V2Ticker as the TickerScreen summarise reads; the v1-null
+    blocks stay None (v2_report.OMITTED_V2_BLOCKS)."""
+    return TickerScreen(ticker=t.ticker, counters=Counter(t.counters), events=t.events,
+                        null_outcomes=t.null_outcomes, excess=t.excess, rank=t.extras["rank"],
+                        null_timeout_r=t.null_timeout_r, null_slots=t.null_slots,
+                        null_unfilled=t.null_unfilled, depths=t.depths,
+                        overlap=t.extras.get("overlap"), avoid=_v2_avoid(t))
+
+
+def _v2_collect(found, n_events: int) -> tuple[list, Counter]:
+    """TickerScreens, with empty frames and idea-error tickers counted as v1 counts them."""
+    screens, skipped = [], Counter()
+    for t in found:
+        if "idea_error" in t.extras:
+            skipped["idea_error"] += 1
+            skipped[f"idea_error:{t.ticker}"] = 1
+        else:
+            screens.append(_v2_screen(t))
+    if n_events > len(found):
+        skipped["empty_frame"] = n_events - len(found)
+    return screens, skipped
+
+
+def screen_universe_v2(idea: Idea, universe: Universe, cache_dir, *,
+                       start: str = WINDOW_START, end: str = WINDOW_END, tickers=None,
+                       out=print, context: Mapping | None = None,
+                       checkpoint_dir: Path | None = None,
+                       event_start: str = EVENT_START) -> tuple[list, Counter]:
+    """v230 A2: the v2 screen. Every cached member is in the pool (the cross-section);
+    ``tickers`` restricts the event book only. Raises null_v2.NullRefusal before any race."""
+    context = _universe_context(idea, cache_dir, end, context)
+    names = list(universe.cached)
+    events = names if tickers is None else [t for t in tickers if t in universe.cached]
+    manifest = _checkpoint_manifest(idea, start, end, names, context, universe.intervals)
+    if event_start != EVENT_START:
+        manifest["event_start"] = event_start
+    inputs = screen_v2.V2Inputs(
+        load=lambda t: load_frame(Path(cache_dir) / f"{t}.csv", start, end),
+        context=_v2_context(idea, universe, context, event_start, out),
+        extras=_v2_extras(idea))
+    found = screen_v2.run_v2(idea, names, inputs,
+                             costs={"slippage_bps": None, "commission": None},
+                             checkpoint_dir=checkpoint_dir, manifest=manifest, out=out,
+                             event_tickers=None if tickers is None else events)
+    return _v2_collect(found, len(events))
+
+
 def _count_depths(idea: Idea, df: pd.DataFrame, ctx: dict, booked: np.ndarray):
     """Level ideas: each booked event's fill depth in ATR14[t-1], from the
     function the real run fills with (race.level_fills); None for next_open."""
@@ -860,6 +967,15 @@ def run_count(args) -> int:
 
 RESULTS_DIR =ROOT / "docs" / "superpowers" / "results"
 INSTRUMENT = "screen-v1"
+#: v230 A4: the screen runs the v2 null; "v1" only through the tests' screen_null_v1 fixture.
+NULL_VERSION = "v2"
+INSTRUMENT_V2 = "screen-v2"
+SECTOR_MAP = Path(config.DATA_DIR) / "universe" / "sp500_pit.json"
+
+
+def instrument() -> str:
+    """The ledger instrument of this run's null (v230 A4)."""
+    return INSTRUMENT_V2 if NULL_VERSION == "v2" else INSTRUMENT
 
 #: v214 G1: the closed screens a sign flip alone would clear (calibration only, never re-run)
 CALIBRATION_IDS = ("screen-high52w", "screen-gap_volume", "screen-sweep_reclaim_bos",
@@ -1344,12 +1460,22 @@ def _render_trade(idea, run) -> str:
             "fills at the open; stop first on a bar touching both; " + costs)
 
 
+def _null_line(idea, run) -> list:
+    """v230 A4: a v2 doc names its null version and scope; a v1 head is unchanged."""
+    if run.get("null", "v1") == "v1":
+        return []
+    return [f"**Null:** {run['null']}, scope `{idea.scope}`; K = {null.K} per event, floor "
+            f"{null.MIN_CANDIDATES}; seed `null_seed(idea + \":v2\", date)` (ticker scope) or "
+            "`null_seed(idea + \":v2\", ticker)` (market scope); see \"Null v2\" below.", ""]
+
+
 def _render_head(idea, v, run) -> list:
     params = ", ".join(f"{key}={value}" for key, value in idea.params.items())
     return [
         f"# v140 screen: `{idea.name}` -> {v.verdict}", "",
-        f"**Ledger id:** `{run['ledger_id']}` (instrument `{INSTRUMENT}`); BH q = "
+        f"**Ledger id:** `{run['ledger_id']}` (instrument `{run.get('instrument', INSTRUMENT)}`); BH q = "
         f"{_fmt(run['q'], '.4f')} across the ledger (reported, never gating).", "",
+        *_null_line(idea, run),
         f"**Run:** {run['date']}; window {run['start']}..{run['end']}; "
         f"events count from {EVENT_START} (earlier bars only prime the indicators); the "
         f"year rule is {verdict.MIN_POSITIVE_YEARS} of {len(verdict.YEARS)} calendar years "
@@ -1736,6 +1862,8 @@ def render_results(idea, summary, universe, run) -> str:
     if idea.race_shape == "trail":
         sections.append(_render_trail(summary, run))
     sections += [_render_years(v), _render_drift(summary)]
+    if "v2" in summary:
+        sections.append(v2_report.render_v2(summary["v2"]))
     if "short" in summary:
         sections.append(_render_short_blocks(idea, summary, run))
     if "shock" in summary:
@@ -1823,7 +1951,7 @@ def hypothesis(idea) -> str:
 def ledger_row(idea, v, record: str, day: str) -> dict:
     return {"id": ledger_id(idea.name), "date": day,
             "hypothesis": hypothesis(idea),
-            "instrument": INSTRUMENT, "n": v.n,
+            "instrument": instrument(), "n": v.n,
             "exp_r": None if v.delta_exp_r is None else round(v.delta_exp_r, 4),
             "p": None if v.p is None else round(v.p, 4),
             "verdict": v.verdict, "record": record,
@@ -1834,7 +1962,8 @@ def _run_info(args, q) -> dict:
     return {"ledger_id": ledger_id(args.idea), "q": q, "date": args.date,
             "start": args.start, "end": args.end,
             "slippage_bps": base_slippage(None),
-            "commission": commission_r()}
+            "commission": commission_r(),
+            "null": NULL_VERSION, "instrument": instrument()}
 
 
 #: v211 (spec § Track 2): every short idea screened so far; the results doc
@@ -1900,17 +2029,27 @@ def _utf8_stdout() -> None:
             pass    # a capture stream that cannot be reconfigured is already safe
 
 
+def _v2_blocks(summary: dict, idea: Idea) -> dict:
+    """v230 A2: the v2 doc's meaning, cost, regime and sector blocks."""
+    return {**summary, "v2": v2_report.v2_summary(
+        summary["events"], scope=idea.scope, sectors=v2_report.load_sectors(SECTOR_MAP))}
+
+
 def _run_screens(args, idea: Idea, universe: Universe, data, spy) -> dict:
-    """The summary ``main`` publishes (screen, diagnostics, short blocks)."""
+    """The summary ``main`` publishes (screen, diagnostics, short blocks, v2 blocks)."""
     tickers = args.tickers.split(",") if args.tickers else None
-    screens, skipped = screen_universe(idea, universe, args.cache_dir, start=args.start,
-                                       end=args.end, tickers=tickers,
-                                       context=None if data is None else data.frames,
-                                       checkpoint_dir=args.checkpoint_dir)
+    screen = screen_universe if NULL_VERSION == "v1" else screen_universe_v2
+    screens, skipped = screen(idea, universe, args.cache_dir, start=args.start,
+                              end=args.end, tickers=tickers,
+                              context=None if data is None else data.frames,
+                              checkpoint_dir=args.checkpoint_dir)
     summary = with_diagnostics(summarise(screens, skipped, mode=idea.mode), screens, idea,
                                data, end=args.end)
     summary = with_short_blocks(summary, screens, idea, spy)
-    summary = with_shock_blocks(summary, screens, idea)
+    if NULL_VERSION == "v1":
+        summary = with_shock_blocks(summary, screens, idea)
+    else:
+        summary = _v2_blocks(summary, idea)
     return with_avoid_blocks(summary, screens, idea)
 
 
@@ -1937,8 +2076,12 @@ def main(argv=None) -> int:
         print(f"refused: {reason}", file=sys.stderr)
         return 2
     idea = IDEAS[args.idea]
-    return publish(args, idea, universe, _run_screens(args, idea, universe, data, spy),
-                   rows, data=data)
+    try:
+        summary = _run_screens(args, idea, universe, data, spy)
+    except null_v2.NullRefusal as exc:       # v230: SCOPE_MISMATCH / NULL_STARVED, before any race
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+    return publish(args, idea, universe, summary, rows, data=data)
 
 
 if __name__ == "__main__":

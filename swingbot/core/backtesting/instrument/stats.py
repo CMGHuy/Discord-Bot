@@ -123,7 +123,7 @@ LEDGER_FIELDS = ("id", "date", "hypothesis", "instrument", "n", "exp_r", "p",
 VERDICTS = ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE", "WITHDRAWN", "OPEN",
             "SCREEN-PASS", "SCREEN-FAIL", "SCREEN-UNDERPOWERED",
             "COST", "SAVED", "INCONCLUSIVE", "DESCRIPTION", "SCREEN-AVOID-PASS")
-INSTRUMENTS = ("v1", "v2", "screen-v1", "v3")
+INSTRUMENTS = ("v1", "v2", "screen-v1", "v3", "screen-v2")
 DESCRIPTION = "DESCRIPTION"
 #: v162 adds one OPTIONAL field: the bars a verdict was measured on. Rows
 #: written before v162 have none and mean yfinance (ledger_data_source); they

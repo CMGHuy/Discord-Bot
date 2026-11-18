@@ -18,6 +18,7 @@ import screen_idea  # noqa: E402
 import screen_placebo  # noqa: E402
 
 from swingbot.core.backtesting.screen import placebo  # noqa: E402
+from swingbot.core.backtesting.screen import null_v2  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS  # noqa: E402
 from swingbot.core.backtesting.screen.placebo import Cell  # noqa: E402
 from tests.backtesting.screen.helpers import random_walk  # noqa: E402
@@ -180,7 +181,7 @@ def test_main_refuses_a_null_without_a_runner(tmp_path, monkeypatch, capsys):
                         lambda *a: pytest.fail("built universes before refusing"))
     assert screen_placebo.main(_argv(tmp_path, "--null", "v2")) == 2
     error = capsys.readouterr().err
-    assert "refused" in error and "V234-8" in error
+    assert "refused: no v2 runner" in error
     assert not (tmp_path / "work").exists()
 
 
@@ -210,3 +211,125 @@ def test_render_doc_planted_edge_and_acceptance():
     assert "## Planted edge" in doc and "p_high20_planted" in doc
     assert "Verdict: **ACCEPT**" in doc and "| gbm-200/p_high20 | PASS |" in doc
     assert "## Stop gate 1" not in doc
+
+
+def _fake_rows(delta, *, r_event=0.1, n=320):
+    """n weekly events from 2011 with a constant Δ: half-width 0, the rule reads Δ alone."""
+    days = pd.bdate_range("2011-01-03", periods=n * 5)[::5]
+    return [{"ticker": "G000", "entry_date": d.strftime("%Y-%m-%d"), "r_event": r_event,
+             "r_null": r_event - delta} for d in days]
+
+
+def _fake_v2(deltas, *, gain=0.4, refuse=()):
+    """A v2 runner: Δ per trigger, +gain R on the planted universe only."""
+    def run(universe_dir, trigger, *, checkpoint_dir):
+        if trigger.name in refuse:
+            raise null_v2.NullRefusal(null_v2.NULL_STARVED, "9 of 12 event dates starved")
+        if trigger.name == "p_high20_planted":
+            g = gain if Path(universe_dir).name.startswith("planted-") else 0.0
+            return _fake_rows(g, r_event=0.1 + g)
+        return _fake_rows(deltas.get(trigger.name, 0.0))
+    return run
+
+
+def _v2_argv(tmp_path, *extra):
+    return _argv(tmp_path, "--null", "v2", "--triggers", "p_high20", "p_month_turn", *extra)
+
+
+def _last_line(capsys):
+    return capsys.readouterr().out.strip().splitlines()[-1]
+
+
+def _assert_doc_has(tmp_path, *needles):
+    doc = (tmp_path / "results" / "2026-11-20-v230-null-placebo.md").read_text(encoding="utf-8")
+    for needle in needles:
+        assert needle in doc, needle
+
+
+def test_v2_with_the_planted_check_accepts_and_a_restart_skips(tmp_path, monkeypatch, capsys):
+    monkeypatch.setitem(screen_placebo.RUNNERS, "v2", _fake_v2({}))
+    argv = _v2_argv(tmp_path, "--planted")
+    assert screen_placebo.main(argv) == 0
+    assert _last_line(capsys) == "acceptance: ACCEPT"
+    cells = screen_placebo.load_cells(tmp_path / "json" / "placebo-v2.json")
+    assert sorted(c.universe for c in cells) == ["gbm-3", "gbm-3", "shuffled-c1", "shuffled-c1"]
+    record = screen_placebo.load_planted(tmp_path / "json")
+    assert record["base"] == "gbm-3" and record["value"] == pytest.approx(0.4)
+    assert (record["cell"]["universe"], record["cell"]["null"]) == ("planted-gbm-3", "v2")
+    assert (tmp_path / "work" / "universes" / "planted-gbm-3" / placebo.PLANTED_FILE).is_file()
+    _assert_doc_has(tmp_path, "## Planted edge", "Verdict: **ACCEPT**",
+                    "| planted-gbm-3 | planted | 3 |", "planted on gbm, +0.5 ATR14 over 10 bars")
+    monkeypatch.setitem(screen_placebo.RUNNERS, "v2", lambda *a, **k: pytest.fail("re-ran"))
+    assert screen_placebo.main(argv) == 0
+    assert _last_line(capsys) == "acceptance: ACCEPT"
+
+
+def test_a_failing_v2_cell_stops(tmp_path, monkeypatch, capsys):
+    monkeypatch.setitem(screen_placebo.RUNNERS, "v2", _fake_v2({"p_month_turn": 0.05}))
+    assert screen_placebo.main(_v2_argv(tmp_path, "--planted")) == 0
+    assert _last_line(capsys) == "acceptance: STOP"
+
+
+def test_v2_cells_without_a_planted_check_read_enlarge(tmp_path, monkeypatch, capsys):
+    monkeypatch.setitem(screen_placebo.RUNNERS, "v2", _fake_v2({}))
+    assert screen_placebo.main(_v2_argv(tmp_path)) == 0
+    assert _last_line(capsys) == "acceptance: ENLARGE"
+
+
+def test_a_refused_cell_is_recorded_and_the_other_cells_still_run(tmp_path, monkeypatch,
+                                                                   capsys):
+    monkeypatch.setitem(screen_placebo.RUNNERS, "v2", _fake_v2({}, refuse=("p_month_turn",)))
+    assert screen_placebo.main(_v2_argv(tmp_path, "--planted")) == 2
+    out, err = capsys.readouterr()
+    assert "refused: gbm-3/p_month_turn: NULL_STARVED: 9 of 12" in err
+    assert "refused: shuffled-c1/p_month_turn: NULL_STARVED" in err
+    assert "acceptance:" not in out
+    cells = screen_placebo.load_cells(tmp_path / "json" / "placebo-v2.json")
+    assert sorted((c.universe, c.trigger) for c in cells) == [
+        ("gbm-3", "p_high20"), ("shuffled-c1", "p_high20")]
+    assert screen_placebo.load_planted(tmp_path / "json") is not None
+
+
+@pytest.mark.parametrize("extra", [("--planted",),
+                                   ("--null", "v2", "--planted", "--universes", "shuffled")])
+def test_planted_needs_v2_and_the_gbm_universe(tmp_path, capsys, extra):
+    assert screen_placebo.main(_argv(tmp_path, *extra)) == 2
+    assert "refused: --planted needs" in capsys.readouterr().err
+
+
+def _long_source(tmp_path):
+    """SPY plus three tickers, 1300 sessions: room for a trailing 252-session pool."""
+    src = tmp_path / "long"
+    src.mkdir()
+    for seed, ticker in enumerate(("SPY", "AAA", "BBB", "CCC"), start=1):
+        _write_csv(src / f"{ticker}.csv", random_walk(1300, seed=seed))
+    return src
+
+
+def test_run_cell_v2_races_a_market_trigger_and_refuses_a_starved_ticker_pool(tmp_path):
+    args = SimpleNamespace(source_cache=_long_source(tmp_path), work_dir=tmp_path / "work",
+                           universes=["gbm"], gbm_tickers=3, shuffled_copies=1)
+    gbm = screen_placebo.build_universes(args)["gbm-3"]
+    rows = screen_placebo.run_cell_v2(gbm, placebo.TRIGGERS["p_market_down"],
+                                      checkpoint_dir=tmp_path / "ck")
+    assert rows and {"ticker", "entry_date", "r_event", "r_null", "cost_null"} <= set(rows[0])
+    assert min(r["entry_date"] for r in rows) >= screen_idea.EVENT_START
+    saved = json.loads((tmp_path / "ck" / "panel" / "manifest.json").read_text(encoding="utf-8"))
+    assert (saved["null_version"], saved["scope"]) == ("v2", "market")
+    with pytest.raises(null_v2.NullRefusal, match="SCOPE_MISMATCH"):     # 2 peers < floor 5
+        screen_placebo.run_cell_v2(gbm, placebo.TRIGGERS["p_high20"],
+                                   checkpoint_dir=tmp_path / "ck2")
+
+
+def test_a_refused_run_leaves_stop_gate_2_pending_for_the_partner(tmp_path, monkeypatch,
+                                                                    capsys):
+    """Partner decision: a refusal is record-and-ask, never read as STOP or ENLARGE."""
+    monkeypatch.setitem(screen_placebo.RUNNERS, "v2", _fake_v2({}, refuse=("p_month_turn",)))
+    assert screen_placebo.main(_v2_argv(tmp_path, "--planted")) == 2
+    err = capsys.readouterr().err
+    assert "stop gate 2: PENDING" in err
+    doc = (tmp_path / "results" / "2026-11-20-v230-null-placebo.md").read_text(encoding="utf-8")
+    assert "Verdict: **PENDING**" in doc
+    assert "- gbm-3/p_month_turn: NULL_STARVED: 9 of 12 event dates starved" in doc
+    for verdict in ("ACCEPT", "STOP", "ENLARGE"):
+        assert f"Verdict: **{verdict}**" not in doc

@@ -21,7 +21,7 @@ def test_fields_and_vocabularies_are_the_plan_set():
                               "WITHDRAWN", "OPEN", "SCREEN-PASS", "SCREEN-FAIL",
                               "SCREEN-UNDERPOWERED", "COST", "SAVED", "INCONCLUSIVE",
                               "DESCRIPTION", "SCREEN-AVOID-PASS")
-    assert stats.INSTRUMENTS == ("v1", "v2", "screen-v1", "v3")
+    assert stats.INSTRUMENTS == ("v1", "v2", "screen-v1", "v3", "screen-v2")
 
 
 def test_ledger_path_is_the_committed_results_file():

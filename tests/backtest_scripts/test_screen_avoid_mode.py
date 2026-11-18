@@ -20,6 +20,8 @@ from swingbot.core.backtesting.screen.errors import IdeaError  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS, Idea  # noqa: E402
 from tests.backtesting.screen.helpers import random_walk  # noqa: E402
 
+pytestmark = pytest.mark.usefixtures("screen_null_v1")   # v230: these pin the v1 null
+
 ALWAYS = [("2000-01-01", "9999-12-31")]
 QUIET = {"out": lambda *a, **k: None}
 AVOID_KEYS = {"control", "below_floor", "kept", "excluded", "population", "overnight"}
