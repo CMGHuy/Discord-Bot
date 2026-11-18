@@ -17,7 +17,8 @@ on the child stream; avoid mode's control arm is the same draw with the
 control flag required of j.
 
 Stage 3 (race, per null ticker): null bars raced on their own frame with
-their own ATR14 and scattered back to their events.
+their own ATR14 and scattered back to their events. Rows keep the draw table's order; a blank level
+slot is never raced and reads "unfilled".
 
 v1's null.py is not edited; v2 imports its constants and masks.
 """
@@ -26,7 +27,7 @@ from __future__ import annotations
 import json
 import os
 import pickle
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,7 +36,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from swingbot.core.backtesting.screen import null
+from swingbot.core.backtesting.screen import forward, null, race as race_mod
 
 if TYPE_CHECKING:
     from swingbot.core.backtesting.screen.ideas import Idea
@@ -573,3 +574,114 @@ def draw(xs: CrossSection | None, panels: Mapping[str, TickerPanel], booked: Map
         result = draw_ticker_scope(xs, booked, idea=idea.name)
     check_starvation(result, idea.scope)
     return result
+
+
+#: Stage 3's outcome for a level slot that never filled; it is never raced.
+UNFILLED = "unfilled"
+_KEYS = ["event_ticker", "event_pos"]
+
+
+def _fwd_name(h: int) -> str:
+    return f"fwd_{h}"
+
+
+def _race_rows(part: pd.DataFrame, df: pd.DataFrame, atr, *, shape: str, cap: int,
+               direction: str, costs: Mapping, level_factor: float, horizons) -> pd.DataFrame:
+    """One null ticker's slots raced on its own frame and ATR14 (v1 matched_null tail)."""
+    pos = part["null_pos"].to_numpy(dtype=int)
+    fill = part["fill"].to_numpy(dtype=float)
+    level = np.isfinite(fill)
+    if level.any() and not level.all():
+        raise ValueError(f"{part['null_ticker'].iloc[0]}: level and next-open slots "
+                         "on one null ticker")
+    extra = {} if direction == "long" else {"direction": direction}
+    if level.all():
+        extra.update(fill=fill, level_factor=level_factor)
+    raced = race_mod.race_for(shape)(df, pos, cap, atr=atr, **costs, **extra)
+    out = part.assign(r=raced.r, gross_r=raced.gross_r, outcome=raced.outcome.astype(object))
+    for h in horizons:
+        out[_fwd_name(h)] = forward.forward_atr(df, atr, h, direction=direction)[pos]
+    return out
+
+
+def _blank_rows(part: pd.DataFrame, horizons) -> pd.DataFrame:
+    out = part.assign(r=np.nan, gross_r=np.nan, outcome=UNFILLED)
+    for h in horizons:
+        out[_fwd_name(h)] = np.nan
+    return out.astype({"outcome": object})
+
+
+def race_pass(table: pd.DataFrame, load: Callable, *, shape: str, cap: int, direction: str,
+              costs: Mapping, level_factor: float = race_mod.LEVEL_SLIPPAGE_FACTOR,
+              horizons=forward.HORIZONS, checkpoint: StageCheckpoint | None = None,
+              out=print) -> pd.DataFrame:
+    """Stage 3: every filled slot raced on its null ticker's own frame and
+    ATR14, one ticker's frame resident at a time, each finished ticker saved to
+    ``checkpoint``; blank level slots read UNFILLED. Rows keep their order."""
+    checkpoint = StageCheckpoint(None) if checkpoint is None else checkpoint
+    filled = table["null_pos"].to_numpy() >= 0
+    sub = table[filled]
+    groups = sub.groupby("null_ticker", sort=True).indices
+    kw = {"shape": shape, "cap": cap, "direction": direction, "costs": costs,
+          "level_factor": level_factor, "horizons": horizons}
+
+    def one(ticker: str) -> pd.DataFrame:
+        loaded = load(ticker)
+        if loaded is None:
+            raise ValueError(f"null ticker {ticker} has no frame to race on")
+        df, atr = loaded
+        return _race_rows(sub.iloc[groups[ticker]], df, atr, **kw)
+
+    raced = resumable_map(sorted(groups), one, checkpoint=checkpoint, out=out, label="race")
+    parts = [raced[t] for t in sorted(raced)]
+    if not filled.all():
+        parts.append(_blank_rows(table[~filled], horizons))
+    if not parts:
+        return _blank_rows(table, horizons)
+    return pd.concat(parts).loc[table.index]
+
+
+@dataclass(frozen=True)
+class EventNull:
+    """One event's null after stage 3: means over its filled slots."""
+    mean_r: float
+    mean_gross_r: float
+    outcomes: Counter
+    fwd: dict
+    timeout_r: tuple
+    slots: int
+    unfilled: int
+
+
+def _outcome_counters(filled: pd.DataFrame) -> dict:
+    counters: dict = defaultdict(Counter)
+    if not filled.empty:
+        for (t, p, outcome), n in filled.groupby(_KEYS)["outcome"].value_counts().items():
+            counters[(t, p)][outcome] = int(n)
+    return counters
+
+
+def _timeouts(filled: pd.DataFrame) -> dict:
+    out: dict = defaultdict(list)
+    hit = filled.loc[filled["outcome"] == "timeout", [*_KEYS, "r"]]
+    for t, p, r in hit.itertuples(index=False):
+        out[(t, p)].append(float(r))
+    return out
+
+
+def scatter(raced: pd.DataFrame) -> dict[tuple[str, int], EventNull]:
+    """Stage 3 back to events: one EventNull per (event ticker, event position)."""
+    if raced.empty:
+        return {}
+    fwd_cols = sorted((c for c in raced.columns if c.startswith("fwd_")),
+                      key=lambda c: int(c[4:]))
+    filled = raced[raced["null_pos"].to_numpy() >= 0]
+    slots = raced.groupby(_KEYS).size()
+    means = filled.groupby(_KEYS)[["r", "gross_r", *fwd_cols]].mean().reindex(slots.index)
+    n_filled = filled.groupby(_KEYS).size().reindex(slots.index, fill_value=0)
+    outcomes, timeouts = _outcome_counters(filled), _timeouts(filled)
+    return {(str(t), int(p)): EventNull(
+                float(m["r"]), float(m["gross_r"]), outcomes[(t, p)],
+                {int(c[4:]): float(m[c]) for c in fwd_cols}, tuple(timeouts[(t, p)]),
+                int(slots[(t, p)]), int(slots[(t, p)] - n_filled[(t, p)]))
+            for (t, p), m in means.iterrows()}
