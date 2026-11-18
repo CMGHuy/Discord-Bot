@@ -127,3 +127,54 @@ def fetch_bars(tickers, start: dt.date, end: dt.date, root: Path, *, provider,
 def load_bars(ticker: str, root: Path, kind: str = "raw") -> pd.DataFrame | None:
     with use_store(store_dir(root, kind)):
         return history_store.load(ticker, "daily")
+
+
+# --- refusals and the bars manifest (V232-4b) -------------------------------------
+
+SPLIT_DRIFT = 0.01
+REFUSALS = ("no_bars", "split_in_window", "bars_end_early")
+
+
+def _missing(frame) -> bool:
+    return frame is None or frame.empty
+
+
+def _window_ratio(raw: pd.DataFrame, split: pd.DataFrame, start: dt.date) -> pd.Series:
+    """split.Close / raw.Close on the bars both series hold dated on or after start."""
+    both = pd.concat([raw["Close"], split["Close"]], axis=1, keys=["raw", "split"],
+                     join="inner")
+    both = both[both.index >= pd.Timestamp(start)]
+    ratio = both["split"] / both["raw"]
+    return ratio[ratio.notna() & (ratio > 0) & (ratio != float("inf"))]
+
+
+def refusal(raw, split, *, start: dt.date, last_exit: dt.date | None) -> str | None:
+    """Why a ticker's bars cannot score its trades (REFUSALS order), or None."""
+    if _missing(raw) or _missing(split):
+        return "no_bars"
+    ratio = _window_ratio(raw, split, start)
+    if ratio.empty:
+        return "no_bars"
+    if float(ratio.max()) / float(ratio.min()) - 1.0 > SPLIT_DRIFT + 1e-12:
+        return "split_in_window"
+    if last_exit is not None and raw.index.max().date() < last_exit:
+        return "bars_end_early"
+    return None
+
+
+def _summary(path: Path) -> dict:
+    data = path.read_bytes()
+    manifest = json.loads(data)
+    statuses = [e.get("status") for e in manifest.get("tickers", {}).values()]
+    return {"sha256": hashlib.sha256(data).hexdigest(),
+            "start": manifest.get("start"), "end": manifest.get("end"),
+            "n_ok": statuses.count(OK), "n_empty": statuses.count(EMPTY)}
+
+
+def bars_manifest(root: Path) -> dict:
+    """Per kind: the manifest's SHA-256, window and counts -- no ticker names."""
+    out = {}
+    for kind in KINDS:
+        path = _manifest_path(store_dir(root, kind))
+        out[kind] = _summary(path) if path.is_file() else None
+    return out

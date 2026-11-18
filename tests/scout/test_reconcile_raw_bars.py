@@ -118,3 +118,73 @@ def test_a_store_fetched_for_another_window_is_refused(tmp_path):
     with pytest.raises(ValueError, match="new --bars-root"):
         raw_bars.fetch_bars(["AAA"], START, date(2026, 10, 30), tmp_path, provider=provider,
                             out=lambda _: None)
+
+
+# --- v232-4b: refusals and the bars manifest --------------------------------------
+
+def test_bars_manifest_hashes_each_manifest_and_names_no_ticker(tmp_path):
+    assert raw_bars.bars_manifest(tmp_path) == {"raw": None, "split": None}
+    provider = FakeProvider(_both("AAA", [100.0]))
+    raw_bars.fetch_bars(["AAA", "ZZZ"], START, END, tmp_path, provider=provider,
+                        out=lambda _: None)
+    got = raw_bars.bars_manifest(tmp_path)
+    path = tmp_path / "raw" / "daily" / "_manifest.json"
+    assert got["raw"] == {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                          "start": "2026-09-01", "end": "2026-09-30", "n_ok": 1, "n_empty": 1}
+    assert "AAA" not in repr(got) and "ZZZ" not in repr(got)
+
+
+def test_the_refusal_vocabulary_is_frozen():
+    assert raw_bars.REFUSALS == ("no_bars", "split_in_window", "bars_end_early")
+    assert raw_bars.SPLIT_DRIFT == 0.01
+
+
+CLOSES = [100.0 + i for i in range(10)]          # 2026-09-01 .. 2026-09-14
+
+
+def test_no_bars_when_either_series_is_missing_or_ends_before_the_window():
+    assert raw_bars.refusal(None, _frame(CLOSES), start=START, last_exit=None) == "no_bars"
+    assert raw_bars.refusal(_frame(CLOSES), None, start=START, last_exit=None) == "no_bars"
+    empty = _frame(CLOSES).iloc[0:0]
+    assert raw_bars.refusal(empty, _frame(CLOSES), start=START, last_exit=None) == "no_bars"
+    early = _frame(CLOSES, start="2026-08-03")
+    assert raw_bars.refusal(early, early, start=START, last_exit=None) == "no_bars"
+
+
+def test_a_split_after_the_window_is_a_constant_ratio_and_usable():
+    raw, split = _frame(CLOSES), _frame([c / 4 for c in CLOSES])
+    assert raw_bars.refusal(raw, split, start=START, last_exit=date(2026, 9, 14)) is None
+
+
+def test_a_split_inside_the_window_is_refused():
+    split = _frame([c / 2 if i < 5 else c for i, c in enumerate(CLOSES)])
+    assert raw_bars.refusal(_frame(CLOSES), split, start=START,
+                            last_exit=None) == "split_in_window"
+
+
+def test_a_split_before_the_window_start_is_not_in_the_window():
+    split = _frame([c / 2 if i < 3 else c for i, c in enumerate(CLOSES)])
+    assert raw_bars.refusal(_frame(CLOSES), split, start=date(2026, 9, 4),
+                            last_exit=None) is None
+
+
+def test_drift_at_the_cut_off_is_usable_and_above_it_refused():
+    at = _frame([c * (1.01 if i == 9 else 1.0) for i, c in enumerate(CLOSES)])
+    above = _frame([c * (1.0101 if i == 9 else 1.0) for i, c in enumerate(CLOSES)])
+    raw = _frame(CLOSES)
+    assert raw_bars.refusal(raw, at, start=START, last_exit=None) is None
+    assert raw_bars.refusal(raw, above, start=START, last_exit=None) == "split_in_window"
+
+
+def test_a_split_wins_over_short_bars():
+    split = _frame([c / 2 if i < 5 else c for i, c in enumerate(CLOSES)])
+    assert raw_bars.refusal(_frame(CLOSES), split, start=START,
+                            last_exit=date(2026, 12, 1)) == "split_in_window"
+
+
+def test_bars_that_end_before_the_last_live_exit_are_refused():
+    raw = _frame(CLOSES)
+    assert raw_bars.refusal(raw, raw, start=START,
+                            last_exit=date(2026, 9, 15)) == "bars_end_early"
+    assert raw_bars.refusal(raw, raw, start=START, last_exit=date(2026, 9, 14)) is None
+    assert raw_bars.refusal(raw, raw, start=START, last_exit=None) is None
