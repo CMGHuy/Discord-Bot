@@ -25,10 +25,11 @@ from alpaca.data.enums import Adjustment
 
 from swingbot.core.marketdata import history_store
 from swingbot.core.marketdata.data_store import safe_symbol
+from swingbot.core.marketdata.providers.alpaca_provider import AlpacaMiss
 
 KINDS = ("raw", "split")
 ADJUSTMENTS = {"raw": Adjustment.RAW, "split": Adjustment.SPLIT}
-OK, EMPTY = "ok", "empty"
+OK, EMPTY, UNSERVED = "ok", "empty", "unserved"
 
 
 def store_dir(root: Path, kind: str) -> Path:
@@ -96,8 +97,11 @@ def _write_manifest(store: Path, manifest: dict) -> None:
 
 
 def _fetch_one(provider, ticker: str, start, end, kind: str, store: Path) -> dict:
-    got = provider.daily_bars_between([ticker], start, end,
-                                      adjustment=ADJUSTMENTS[kind]).get(ticker)
+    try:
+        got = provider.daily_bars_between([ticker], start, end,
+                                          adjustment=ADJUSTMENTS[kind]).get(ticker)
+    except AlpacaMiss:
+        return {"status": UNSERVED}     # the provider cannot serve it: layer 1 refuses no_bars
     if got is None or got.empty:
         return {"status": EMPTY}
     return {"status": OK, "sha256": write_frame(store, ticker, got), "rows": int(len(got)),
@@ -168,7 +172,8 @@ def _summary(path: Path) -> dict:
     statuses = [e.get("status") for e in manifest.get("tickers", {}).values()]
     return {"sha256": hashlib.sha256(data).hexdigest(),
             "start": manifest.get("start"), "end": manifest.get("end"),
-            "n_ok": statuses.count(OK), "n_empty": statuses.count(EMPTY)}
+            "n_ok": statuses.count(OK), "n_empty": statuses.count(EMPTY),
+            "n_unserved": statuses.count(UNSERVED)}
 
 
 def bars_manifest(root: Path) -> dict:

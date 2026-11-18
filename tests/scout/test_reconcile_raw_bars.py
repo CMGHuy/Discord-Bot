@@ -130,7 +130,8 @@ def test_bars_manifest_hashes_each_manifest_and_names_no_ticker(tmp_path):
     got = raw_bars.bars_manifest(tmp_path)
     path = tmp_path / "raw" / "daily" / "_manifest.json"
     assert got["raw"] == {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                          "start": "2026-09-01", "end": "2026-09-30", "n_ok": 1, "n_empty": 1}
+                          "start": "2026-09-01", "end": "2026-09-30", "n_ok": 1, "n_empty": 1,
+                          "n_unserved": 0}
     assert "AAA" not in repr(got) and "ZZZ" not in repr(got)
 
 
@@ -188,3 +189,55 @@ def test_bars_that_end_before_the_last_live_exit_are_refused():
                             last_exit=date(2026, 9, 15)) == "bars_end_early"
     assert raw_bars.refusal(raw, raw, start=START, last_exit=date(2026, 9, 14)) is None
     assert raw_bars.refusal(raw, raw, start=START, last_exit=None) is None
+
+
+# --- a ticker the provider cannot serve (AlpacaMiss) --------------------------------
+
+from swingbot.core.marketdata.providers.alpaca_provider import AlpacaMiss  # noqa: E402
+
+
+class MissingProvider(FakeProvider):
+    """Raises AlpacaMiss for one ticker, serves the rest."""
+
+    def __init__(self, frames, missing="GC=F", error=AlpacaMiss):
+        super().__init__(frames)
+        self.missing, self.error = missing, error
+
+    def daily_bars_between(self, tickers, start, end, *, adjustment):
+        if self.missing in tickers:
+            raise self.error(f"invalid symbol: {self.missing}")
+        return super().daily_bars_between(tickers, start, end, adjustment=adjustment)
+
+
+def test_an_alpaca_miss_is_recorded_unserved_and_the_run_continues(tmp_path):
+    frames = _both("AAA", [100.0, 101.0])
+    got = raw_bars.fetch_bars(["AAA", "GC=F"], START, END, tmp_path,
+                              provider=MissingProvider(frames), out=lambda _: None)
+    for kind in raw_bars.KINDS:
+        assert got[kind]["tickers"]["GC=F"] == {"status": "unserved"}
+        assert got[kind]["tickers"]["AAA"]["status"] == "ok"
+        assert raw_bars.load_bars("GC=F", tmp_path, kind) is None
+    assert raw_bars.load_bars("AAA", tmp_path, "raw") is not None
+    assert raw_bars.refusal(raw_bars.load_bars("GC=F", tmp_path, "raw"),
+                            raw_bars.load_bars("GC=F", tmp_path, "split"),
+                            start=START, last_exit=None) == "no_bars"
+
+
+def test_another_exception_still_propagates(tmp_path):
+    provider = MissingProvider({}, error=lambda message: RuntimeError("boom"))
+    with pytest.raises(RuntimeError, match="boom"):
+        raw_bars.fetch_bars(["GC=F"], START, END, tmp_path, provider=provider,
+                            out=lambda _: None)
+
+
+def test_a_restart_does_not_retry_an_unserved_ticker_and_the_manifest_works(tmp_path):
+    frames = _both("AAA", [100.0])
+    raw_bars.fetch_bars(["AAA", "GC=F"], START, END, tmp_path,
+                        provider=MissingProvider(frames), out=lambda _: None)
+    again = MissingProvider(frames)
+    raw_bars.fetch_bars(["AAA", "GC=F"], START, END, tmp_path, provider=again,
+                        out=lambda _: None)
+    assert again.calls == []
+    got = raw_bars.bars_manifest(tmp_path)["raw"]
+    assert (got["n_ok"], got["n_empty"], got["n_unserved"]) == (1, 0, 1)
+    assert "GC=F" not in repr(got)
