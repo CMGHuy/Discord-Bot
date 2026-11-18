@@ -149,7 +149,7 @@ git commit -m "refactor(edge): name the 90-bar correlation window DEFAULT_WINDOW
   - `FIGURE_RE = re.compile(r"^<!-- figure:([a-z0-9-]+) -->$", re.M)`
   - Module-private, used by V235-2b: `_SLUG_RE`, `_VERSION_RE`.
 
-Anchor algorithm (index Global Constraints, final): lowercase; drop every character outside `[a-z0-9 _-]`; runs of whitespace become `-`; collapse repeated `-`; strip leading/trailing `-`; empty becomes `section`; a repeat within one chapter gets `-2`, `-3`, …. Headings are `##` and `###` only (the page anchors rendered `h2`/`h3` in this order, V235-11); a `#` heading or `####` is not a section; a closing `##` sequence needs a space before it (CommonMark), so `C#` keeps its `#`.
+Anchor algorithm (index Global Constraints, final): lowercase; drop every character outside `[a-z0-9 _-]`; runs of whitespace become `-`; collapse repeated `-`; strip leading/trailing `-`; empty becomes `section`; a repeat within one chapter gets `-2`, `-3`, …. Headings are `##` and `###` only (the page anchors rendered `h2`/`h3` in this order, V236-3); a `#` heading or `####` is not a section; a closing `##` sequence needs a space before it (CommonMark), so `C#` keeps its `#`.
 
 - [ ] **Step 1: Write the failing tests**
 

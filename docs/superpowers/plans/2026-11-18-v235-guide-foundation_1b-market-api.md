@@ -416,7 +416,7 @@ git commit -m "feat(guide): market placeholders -- families, horizons, gates, al
 
 **Interfaces:**
 - Consumes: `chapters.load_chapters` (V235-2b), `chapters.extract_headings`, `chapters.GuideFormatError`, `chapters.Chapter`, `chapters.guide_dir` (V235-2); `placeholders.resolve`, `placeholders.UnknownPlaceholder` (V235-3b; full registry from V235-4); `api_v1.ApiError(code, message, status)`, `api_v1.api_v1` blueprint, `api_v1.auth.require_auth`.
-- Produces (final; the frontend models in V235-9 mirror this JSON):
+- Produces (final; the frontend models in V236-1 mirror this JSON):
   - `GET /api/v1/guide` → `{"chapters": [{"slug": str, "title": str, "order": int, "reviewed_for": str, "headings": [{"level": int, "text": str, "anchor": str}]}]}`, chapters by `order`; headings come from the **resolved** body (a heading with a placeholder carries its live text and anchor).
   - `GET /api/v1/guide/<slug>` → `{"slug": str, "title": str, "reviewed_for": str, "markdown": str}`, placeholders resolved.
   - Errors: unknown slug → 404 `not_found`; unknown placeholder → 500 `guide_placeholder` (the name is logged at ERROR, never returned or echoed as raw `{{…}}`); a malformed chapter file → 500 `guide_invalid`.

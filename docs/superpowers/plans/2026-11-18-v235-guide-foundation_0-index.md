@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V235-7" -A 400 <part file>`); never read a part whole.
 
-**Bump:** ui minor, bot patch
+**Bump:** bot patch
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 **Spec:** v215 — [2026-11-06-v215-guide-page.md](../specs/2026-11-06-v215-guide-page.md), Plan A ("Foundation") of its `## Delivery: one spec, three plans` table only.
@@ -92,7 +92,7 @@ Playwright (layout check only).
 
 ## Global Constraints
 
-- `**Bump:**` ui minor, bot patch. `VERSION.json` is ui 1.44.1 / bot 2.19.2 today; the numbers are computed at `/close-out`, never in a task.
+- `**Bump:**` bot patch (the ui minor moved to v236 with the page). `VERSION.json` is ui 1.44.1 / bot 2.19.2 today; the numbers are computed at `/close-out`, never in a task.
 - No change to trading behaviour. The only `swingbot/core` edit is the correlation window constant, behaviour-preserving (existing `tests/edge/test_edge_correlation.py` stays green unchanged).
 - Placeholders: only names in the registry resolve; no expressions, no generic `config.<KEY>` access. An unknown name raises `UnknownPlaceholder` at load/resolve time; the API logs the name and returns 500 `guide_placeholder`, never the raw `{{…}}` text.
 - Every performance figure (ExpR, win rate, badge, alerts per week) renders with its provenance label: source (backtest window, validation, or live paper book), N, run date, costs included or not, "before tax". A badge never renders without its N and date.
@@ -104,29 +104,24 @@ Playwright (layout check only).
 - Anchor algorithm (backend and fixture, final): lowercase; drop every character outside `[a-z0-9 _-]`; runs of whitespace become `-`; collapse repeated `-`; strip leading/trailing `-`; empty becomes `section`; a repeat within one chapter gets `-2`, `-3`, ….
 - Every function at cyclomatic complexity < 15 (`scripts/dev/complexity_gate.py`).
 - Login in any browser check uses `.env`'s `ADMIN_USERNAME`/`ADMIN_PASSWORD`, loaded inside the script and never printed.
-- Per-task verification is the narrow run (`python scripts/dev/testrun.py file <test>`, `cd frontend && npx ng test --watch=false --include <spec>`); only V235-18 runs the full suite.
+- Per-task verification is the narrow run (`python scripts/dev/testrun.py file <test>`, `cd frontend && npx ng test --watch=false --include <spec>`); only V235-9 runs the full suite.
 - New backend tests land in existing suites (`admin`, `admin-core`, `tooling`, `edge`); no new `tests/` directory.
 
 ## Parallelisation
 
-Two streams can run side by side once V235-2 is merged: **backend/freshness** (V235-1, V235-3..V235-8) and **frontend** (V235-9..V235-13). They share no files; the contract between them is the JSON shape in the ledger (V235-5) and the anchor fixture (V235-6).
+One stream. The frontend half moved to plan v236 (see `## Handoff` item 9), so everything here is backend, tests and docs.
 
 Sequential edges and why:
 
 - V235-1 → V235-3: `correlation.window` reads `correlation.DEFAULT_WINDOW`.
-- V235-3 → V235-3b: the registry merges `live_risk.RISK_PLACEHOLDERS`.
 - V235-2 → V235-2b: `parse_chapter`/`load_chapters` extend `chapters.py`.
 - V235-2b → V235-3b, V235-5, V235-6, V235-7: all load chapters.
-- V235-2 → V235-3, V235-5, V235-6, V235-7: all import `chapters.py`.
+- V235-3 → V235-3b: the registry merges `live_risk.RISK_PLACEHOLDERS`.
 - V235-3b → V235-4: both modify `placeholders.py` (registry merge).
 - V235-4 → V235-5, V235-6: the API and the content test need the full whitelist.
-- V235-6 → V235-10: the anchor spec reads `guide-anchors.json`, created by V235-6.
 - V235-7 → V235-8: the `/close-out` rule names `scripts/dev/guide_sources.py`.
-- V235-9 → V235-11: the page uses `GuideStore`, models and `marked`.
-- V235-11 → V235-12 and V235-13: V235-12 edits `guide.ts` (same file); V235-13 imports `guide.routes.ts`. V235-12 and V235-13 touch disjoint files and may run in parallel.
-- V235-5, V235-6, V235-11 → V235-14..V235-16: chapters are checked by the content test and regenerate the anchor fixture; V235-15 adds a figure to the registry V235-11 creates.
-- V235-14 → V235-15 → V235-16: each regenerates `guide-anchors.json` (same file); the glossary links into chapters 1 and 3.
-- V235-17 after every UI and chapter task; V235-18 last.
+- V235-9 last.
+- Groups that may run side by side: {V235-1, V235-2}; {V235-6, V235-7} after V235-5.
 
 ## Task ledger
 
@@ -142,16 +137,7 @@ Sequential edges and why:
 | V235-6 | Content test and anchor fixture | 2 | sonnet | C `tests/admin/test_guide_content.py`, C `scripts/dev/guide_anchors.py`, C `frontend/src/app/workspaces/guide/guide-anchors.json`, C `tests/scripts/test_guide_anchors.py` | `guide_anchors.build(root: Path \| None = None) -> dict` shaped `{"chapters": {"<slug>": ["<anchor>", …]}}` (slugs sorted, anchors in document order); `guide_anchors.main(argv=None) -> int` (writes the fixture, 2-space indent, trailing newline; `--check` exits 1 on drift); `FIXTURE = Path("frontend/src/app/workspaces/guide/guide-anchors.json")`; content checks: placeholders resolve, sources and `path:symbol` exist, horizons all in `horizons.table`, `reviewed_for` ≤ bot version, no heading inside `<details>`, figure names in `guide-figures.ts`, strategies file set equals `registered_strategy_keys()` once `docs/guide/strategies/` holds any `.md`, no bare `N%` in orders 7–9 |
 | V235-7 | `guide_sources.py` diff helper | 2 | sonnet | C `scripts/dev/guide_sources.py`, C `tests/scripts/test_guide_sources.py` | `guide_sources.touched(paths: Iterable[str], chapters: list[Chapter]) -> list[tuple[Chapter, list[str]]]`; `changed_paths(rev_range: str) -> list[str]` (`git diff --name-only <base>..<head>`); `main(argv=None) -> int` (`python scripts/dev/guide_sources.py <base>..<head>` prints `NN-<slug>.md: <path>, …` per touched chapter, or `guide: no chapter sources touched`; exit 0; bad range exit 2); also scans `docs/guide/strategies/*.md` |
 | V235-8 | `/close-out` guide rule, CLAUDE.md and mirrors | 2 | sonnet | M `.claude/skills/close-out/SKILL.md`, M `.agents/skills/close-out/SKILL.md` (generated by `python scripts/dev/sync_codex.py`), M `docs/claude/document-lifecycle.md`, M `CLAUDE.md`, M `AGENTS.md`, M one existing `docs/claude/*.md` that receives lines moved out of `CLAUDE.md` (V235-8 picks the section owner; no new `docs/claude/` file), C `tests/hooks/test_guide_closeout_rule.py` | Step 5b text: run `guide_sources.py <base>..<head>`; a touched chapter gets its text updated where behaviour changed and `reviewed_for` bumped, or the close-out commit records `guide: no reader-visible change`; `CLAUDE.md` stays < 200 lines |
-| V235-9 | `marked`, API client, models and `GuideStore` | 3 | sonnet | M `frontend/package.json`, M `frontend/package-lock.json`, M `frontend/src/app/api/models.ts`, M `frontend/src/app/api/api-client.ts`, C `frontend/src/app/stores/guide.store.ts`, C `frontend/src/app/stores/guide.store.spec.ts` | models `GuideHeading {level: number; text: string; anchor: string}`, `GuideChapterSummary {slug; title; order: number; reviewed_for: string; headings: GuideHeading[]}`, `GuideIndex {chapters: GuideChapterSummary[]}`, `GuideChapter {slug; title; reviewed_for; markdown: string}`; `ApiClient.guide(): Observable<GuideIndex>`, `ApiClient.guideChapter(slug: string): Observable<GuideChapter>`; `GuideStore` (signalStore) state `{chapters: GuideChapterSummary[], bodies: Record<string, GuideChapter>, status: 'idle' \| 'loading' \| 'ready' \| 'error', error: string \| null, chapterStatus: Record<string, 'loading' \| 'ready' \| 'missing' \| 'error'>}`, methods `ensureLoaded(): Promise<void>`, `loadChapter(slug: string): void` |
-| V235-10 | `GuideLinkComponent` and the anchor spec | 3 | sonnet | C `frontend/src/app/ui/guide-link.ts`, C `frontend/src/app/ui/guide-link.spec.ts`, C `frontend/src/app/workspaces/guide/guide-anchors.spec.ts` | `parseGuideTarget(target: string): {slug: string; anchor: string \| null}`; `GuideLinkComponent` selector `sb-guide-link`, inputs `target = input.required<string>()`, `label = input<string>('Open the guide')`; renders a `?` link to `/insights/guide/<slug>` with `fragment` = anchor, `aria-label` = label, 44px hit area via `::after` (no row growth); the anchor spec checks every `sb-guide-link target="…"` literal in `frontend/src/app/**/*.ts` against `guide-anchors.json` |
-| V235-11 | Guide page: Markdown render, sanitiser, anchors, deep links, figures | 3 | sonnet | C `frontend/src/app/workspaces/guide/guide.routes.ts`, C `frontend/src/app/workspaces/guide/guide.ts`, C `frontend/src/app/workspaces/guide/guide-markdown.ts`, C `frontend/src/app/workspaces/guide/guide-figures.ts`, C `frontend/src/app/workspaces/guide/guide.spec.ts`, C `frontend/src/app/workspaces/guide/guide-markdown.spec.ts` | `guideRoutes: Routes` (children `''` → first chapter, `':slug'`); `Guide` component selector `sb-guide`; `type GuideSegment = {kind: 'md'; html: string} \| {kind: 'figure'; name: string}`; `renderGuideSegments(markdown: string): GuideSegment[]` (splits on `<!-- figure:<name> -->`, `marked.parse` per Markdown segment); `applyHeadingAnchors(container: HTMLElement, headings: GuideHeading[]): void`; `GUIDE_FIGURES: Record<string, Type<unknown>>` (empty until V235-15); freshness stamp "Reviewed for bot v<reviewed_for>"; footer notice line |
-| V235-12 | Guide page: table of contents at three widths and search | 3 | sonnet | M `frontend/src/app/workspaces/guide/guide.ts`, M `frontend/src/app/workspaces/guide/guide.spec.ts`, C `frontend/src/app/workspaces/guide/guide-search.ts`, C `frontend/src/app/workspaces/guide/guide-search.spec.ts` | `GuideSearchEntry {slug; chapterTitle; anchor: string \| null; text: string}`; `buildGuideSearchIndex(chapters: GuideChapterSummary[], bodies: Record<string, GuideChapter>): GuideSearchEntry[]`; `searchGuide(entries: GuideSearchEntry[], query: string, limit?: number): GuideSearchEntry[]`; TOC: sticky rail ≥ 1024, `Drawer` 640–1023, chapter picker < 640; empty state "No section matches “<query>”" |
-| V235-13 | Routes, nav and the four hard-coded Insights specs | 3 | sonnet | M `frontend/src/app/app.routes.ts`, M `frontend/src/app/app.routes.spec.ts`, M `frontend/src/app/shell/nav.ts`, M `frontend/src/app/shell/nav.spec.ts`, M `frontend/src/app/shell/more-sheet.spec.ts`, M `frontend/src/app/shell/breadcrumb.spec.ts` | route `insights/guide` (title `Guide`, subtitle `How the bot finds, builds, sizes and closes trades`, `canMatch: [authGuard]`, `loadChildren` → `guideRoutes`); nav section `{ path: '/insights/guide', label: 'Guide' }` after Reports |
-| V235-14 | Chapter 1: What the bot is (and isn't) | 4 | sonnet | C `docs/guide/01-what-it-is.md`, M `frontend/src/app/workspaces/guide/guide-anchors.json` | slug `what-it-is`, order 1; anchors include `the-notice` (the full education-not-advice notice) and `swing-horizons` (`{{horizons.table}}`) |
-| V235-15 | Chapter 3: the pipeline and its diagram | 4 | sonnet | C `docs/guide/03-pipeline.md`, C `frontend/src/app/workspaces/guide/pipeline-diagram.ts`, C `frontend/src/app/workspaces/guide/pipeline-diagram.spec.ts`, M `frontend/src/app/workspaces/guide/guide-figures.ts`, M `frontend/src/app/workspaces/guide/guide-anchors.json` | slug `pipeline`, order 3; `GuidePipelineDiagram` selector `sb-guide-pipeline-diagram` (inline SVG, theme tokens, boxes link to `/insights/guide/<slug>` only when that slug is in `GuideStore.chapters()`); `GUIDE_FIGURES.pipeline` |
-| V235-16 | Chapter 12: Glossary | 4 | sonnet | C `docs/guide/12-glossary.md`, M `frontend/src/app/workspaces/guide/guide-anchors.json` | slug `glossary`, order 12; one `###` heading per term (one anchor each) |
-| V235-17 | Layout check at three widths | 4 | sonnet | C `scripts/dev/guide_layout_check.py`, C `tests/scripts/test_guide_layout_check.py`, C `docs/superpowers/results/2026-11-18-v235-guide-layout.md` | `guide_layout_check.main(argv=None) -> int` (Playwright; widths 390, 820, 1440; checks no horizontal overflow, TOC mode per width, hit targets ≥ 44px on 390/820, deep-link scroll); screenshots under `logs/v235-layout/` |
-| V235-18 | Full-suite verification | 4 | haiku | none (run only; CI) | push, then watch the CI run green (`0 failed`, `0 xfailed`), frontend `frontend-test` job included |
+| V235-9 | Full-suite verification | 2 | haiku | none (run only; CI) | push, then watch the CI run green (`0 failed`, `0 xfailed`) |
 
 ## Parts
 
@@ -159,9 +145,7 @@ Sequential edges and why:
 |---|---|---|---|
 | 1 | `2026-11-18-v235-guide-foundation_1-backend.md` | V235-1, V235-2, V235-2b, V235-3, V235-3b | correlation constant, loader, risk placeholders, registry and resolver |
 | 1b | `2026-11-18-v235-guide-foundation_1b-market-api.md` | V235-4, V235-5 | market placeholders, API and access rows |
-| 2 | `2026-11-18-v235-guide-foundation_2-freshness.md` | V235-6..V235-8 | content test and anchor fixture, `guide_sources.py`, `/close-out` rule with CLAUDE.md/AGENTS.md mirrors |
-| 3 | `2026-11-18-v235-guide-foundation_3-frontend.md` | V235-9..V235-13 | `marked`, client and store, `GuideLinkComponent` and anchor spec, page render, TOC and search, routes and nav |
-| 4 | `2026-11-18-v235-guide-foundation_4-chapters.md` | V235-14..V235-18 | chapters 1, 3 (with diagram), 12, layout check, full-suite verification |
+| 2 | `2026-11-18-v235-guide-foundation_2-freshness.md` | V235-6..V235-9 | content test and anchor fixture, `guide_sources.py`, `/close-out` rule with CLAUDE.md/AGENTS.md mirrors |
 
 ## Handoff
 
@@ -169,16 +153,17 @@ Controller decisions, 2026-11-18 (binding on every part writer):
 
 1. **Front matter**: promote PyYAML to a pinned runtime dependency in `requirements.txt` (`PyYAML==6.0.3`, moved out of the "Test-only dependencies" block) and parse with `yaml.safe_load`; no hand parser (V235-2).
 2. **Module paths**: use the real paths from the brief (`swingbot/core/market/levels.py`, `swingbot/core/market/levels_lifecycle.py`, `swingbot/core/market/mtf.py`, `swingbot/core/market/strategy_types.py`, …), never the spec's shortened ones, in code and in chapter `sources:`.
-3. **`marked`**: added to `frontend/package.json` at an exact version with `package-lock.json` updated (`npm install marked@<x.y.z> --save-exact`); rendered HTML goes through Angular's sanitiser per the spec (V235-9, V235-11).
+3. **`marked`**: added to `frontend/package.json` at an exact version with `package-lock.json` updated (`npm install marked@<x.y.z> --save-exact`); rendered HTML goes through Angular's sanitiser per the spec (V236-1, V236-3).
 4. **CLAUDE.md is at 199 lines**: the one-line guide rule forces moving existing CLAUDE.md content into the matching `docs/claude/*.md` (pointer left behind), with `AGENTS.md` mirrored and `python scripts/dev/sync_codex.py` run, all in one commit (V235-8).
 5. **Registered strategy keys and placeholders**: resolved from the brief. Registered keys = sorted union of `strategy.STRATEGY_FUNCS` and `STRATEGY_GATES` keys (checked 2026-11-18: 11 and 16 keys, 3 only in the first, 8 only in the second; cards for masked ones read "masked — research only" in Plan B). Gap-sizing names come from `swingbot/core/planning/gap_sizing.py` (`LOOKBACK = 250`, `MIN_UP_GAPS = 60`, `MIN_DOWN_GAPS = 60`, `RULE_GAP = "gap_p99"`); V235-3 reads that module before writing `sizing.gap`. Extracting the two `window: int = 90` defaults into `DEFAULT_WINDOW` is a behaviour-preserving refactor (V235-1). V235-3 reads `edge/correlation.py` (58 lines) for what `correlation.sector_fallback` describes.
 6. **Versions**: `VERSION.json` is ui 1.44.1 / bot 2.19.2; the spec header is stale. Bump levels stand (ui minor, bot patch); chapters carry `reviewed_for: 2.19.2`.
-7. **UI**: every UI task covers mobile, tablet and desktop; V235-13 updates the four hard-coded Insights specs (`app.routes.spec.ts`, `shell/nav.spec.ts`, `shell/more-sheet.spec.ts`, `shell/breadcrumb.spec.ts`); V235-5 adds the `access_expectations.py` rows (`/guide`, `/guide/<slug>` in `_VIEWER_GET`; `SAMPLE_PATHS` maps `f"{V1}/guide/<slug>"` to `f"{V1}/guide/what-it-is"`).
-8. **Verification**: the plan ends with one full-suite task (V235-18), run by CI after the push per CLAUDE.md.
+7. **UI**: every UI task covers mobile, tablet and desktop; V236-7 updates the four hard-coded Insights specs (`app.routes.spec.ts`, `shell/nav.spec.ts`, `shell/more-sheet.spec.ts`, `shell/breadcrumb.spec.ts`); V235-5 adds the `access_expectations.py` rows (`/guide`, `/guide/<slug>` in `_VIEWER_GET`; `SAMPLE_PATHS` maps `f"{V1}/guide/<slug>"` to `f"{V1}/guide/what-it-is"`).
+8. **Verification**: the plan ends with one full-suite task (V235-9), run by CI after the push per CLAUDE.md.
+9. **Split (partner, 2026-11-18)**: the frontend tasks needed two `b` splits, past the 20-task cap. The partner chose to split the plan: v235 keeps backend + freshness (V235-1..V235-8, full suite V235-9); the page, nav, chapters 1/3/12 and the layout check moved to **plan v236** (`2026-11-18-v236-guide-page_0-index.md`), which depends on v235 being merged. Old ids V235-9..V235-18 map to V236-1..V236-12 (V235-11 → V236-3/V236-4, V235-12 → V236-5/V236-6). References in this plan to those ids now name the V236 ids. Decisions 3 and 7 apply to v236.
 
 Plan-writer decisions (index, 2026-11-18), for the controller to check:
 
 - **The pipeline diagram is an Angular component, not a served `.svg` file.** Angular's sanitiser strips inline `<svg>` and an `<img>` SVG cannot read the app's theme tokens, so the "checked-in SVG using theme tokens" lives as the inline-SVG template of `pipeline-diagram.ts` (precedent `ui/plan-lifecycle-diagram.ts`). Chapter Markdown places it with a line `<!-- figure:pipeline -->`; the page splits on that marker and renders the registered component between Markdown segments. No `docs/guide/assets/` directory.
-- **Anchors are applied after sanitising.** Angular's sanitiser drops `id`, so the page sets `id` on rendered `h2`/`h3` in order from the API's heading list (V235-11); the content test forbids headings inside `<details>` so the two orders always agree.
+- **Anchors are applied after sanitising.** Angular's sanitiser drops `id`, so the page sets `id` on rendered `h2`/`h3` in order from the API's heading list (V236-3); the content test forbids headings inside `<details>` so the two orders always agree.
 - **Placeholders resolve per request; chapter files cache per process.** Live values (alerts per week) would otherwise freeze until a restart; the spec's "cached per process" is honoured for the files.
 - **Plan B/C checks are wired now but vacuous.** The strategies file-set check activates once `docs/guide/strategies/` holds any `.md`; the bare-`N%` check runs over orders 7–9, absent in Plan A.

@@ -10,7 +10,7 @@ Tasks: V235-6 (content test and anchor fixture), V235-7 (`guide_sources.py`), V2
 Two decisions this part makes inside the ledger's contracts:
 
 - **Anchors come from the raw chapter body, and headings may not hold placeholders.** The API builds headings from the *resolved* body (V235-5); resolving every placeholder in a script would read the live book (`alerts.per_week`). The content test forbids `{{…}}` in a `##`/`###` line, so raw and resolved anchors are always equal and `guide_anchors.py` never touches the database.
-- **Checks that need Plan B/C content are vacuous until it exists**, and each check is proved to fire by a unit test on a synthetic chapter in the same module: the strategies file set (once `docs/guide/strategies/` holds any `.md`), bare `N%` (orders 7–9), and "some chapter renders `{{horizons.table}}`" (once any chapter exists; V235-14 adds it).
+- **Checks that need Plan B/C content are vacuous until it exists**, and each check is proved to fire by a unit test on a synthetic chapter in the same module: the strategies file set (once `docs/guide/strategies/` holds any `.md`), bare `N%` (orders 7–9), and "some chapter renders `{{horizons.table}}`" (once any chapter exists; V236-8 adds it).
 
 # Phase 1 — Freshness gate
 
@@ -25,8 +25,8 @@ Two decisions this part makes inside the ledger's contracts:
 
 **Interfaces:**
 - Consumes: `chapters.Chapter`, `GuideFormatError`, `extract_headings`, `split_source`, `FIGURE_RE`, `guide_dir` (V235-2), `load_chapters` (V235-2b); `placeholders.resolve`, `names_in`, `UnknownPlaceholder` (`str()` = `unknown guide placeholder: <name>`), `PLACEHOLDER_RE` (V235-3b); `live_market._load_trades`, `registered_strategy_keys()`, `strategy_file_slug()`; `horizons.table` rows render as ``| `<key>` | …`` (V235-4).
-- Produces: `guide_anchors.FIXTURE` (repo-relative), `build(root=None) -> dict` (`{"chapters": {slug: [anchor, …]}}`, slugs sorted), `render(data) -> str`, `main(argv=None) -> int` (`--check` exits 1 on drift or a missing fixture; `--guide-dir`, `--out`; malformed chapter exits 2). V235-10 reads the fixture; V235-14..16 regenerate it.
-- `figure_names()` reads the keys of the `GUIDE_FIGURES = { … }` literal in `guide-figures.ts` (V235-11); absent file = empty set (no figure before V235-15).
+- Produces: `guide_anchors.FIXTURE` (repo-relative), `build(root=None) -> dict` (`{"chapters": {slug: [anchor, …]}}`, slugs sorted), `render(data) -> str`, `main(argv=None) -> int` (`--check` exits 1 on drift or a missing fixture; `--guide-dir`, `--out`; malformed chapter exits 2). V236-2 reads the fixture; V236-8..16 regenerate it.
+- `figure_names()` reads the keys of the `GUIDE_FIGURES = { … }` literal in `guide-figures.ts` (V236-3); absent file = empty set (no figure before V236-9).
 
 - [ ] **Step 1: Write the failing script tests**
 
@@ -471,7 +471,7 @@ def test_bare_percent_is_caught_only_in_chapters_7_to_9():
 - [ ] **Step 6: Run the content test**
 
 Run: `python scripts/dev/testrun.py file tests/admin/test_guide_content.py`
-Expected: PASS (`0 failed`); real-guide cases are vacuous until V235-14. A database connection means `_no_live_book` misses its patch target: fix it, never skip.
+Expected: PASS (`0 failed`); real-guide cases are vacuous until V236-8. A database connection means `_no_live_book` misses its patch target: fix it, never skip.
 
 Run: `python scripts/dev/guide_anchors.py --check`
 Expected: `guide_anchors: fixture is current`, exit 0.
@@ -975,4 +975,20 @@ git add .claude/skills/close-out/SKILL.md .agents/skills/close-out/SKILL.md \
   CLAUDE.md AGENTS.md tests/hooks/test_guide_closeout_rule.py
 git commit -m "docs(close-out): guide freshness check in Step 5b; CLAUDE.md line moved to working-conventions (v235 V235-8)"
 ```
+
+### Task V235-9: Full-suite verification
+
+**Model:** haiku — run-only task; no code.
+
+**Files:** none (run only).
+
+- [ ] **Step 1: Push the branch and watch CI**
+
+Push the implementation branch; CI runs one job per suite from `tests/suites.toml`. Never run the full suite locally (CLAUDE.md).
+
+Expected: every job green, `0 failed` and `0 xfailed`. A failing test is fixed and re-run alone (`python scripts/dev/testrun.py file <test>`), then pushed again until CI is green.
+
+- [ ] **Step 2: Record the result**
+
+Add a line to the index `## Handoff`: CI run id, date, green. Then `/close-out` (bump: bot patch).
 
