@@ -449,3 +449,29 @@ def simulate_exit_v2(df, signal_index: int, plan: TradePlanV2, instrument: Instr
     max_holding_days = _hold_cap_bars(plan, max_holding_days)
     entry = _entry_for(plan, touch_fill)
     return entry(df, signal_index, plan, instrument, scale_out, max_holding_days)
+
+
+def simulate_exit_v2_from_fill(df, fill_index: int, fill_price: float, plan: TradePlanV2,
+                               instrument: InstrumentSpec, *, scale_out: bool,
+                               fill_bar_check: bool = False,
+                               max_holding_days: int | None = None,
+                               indicator_df: pd.DataFrame | None = None) -> ExitResult:
+    """v232: the v2 exit walk from a fill that already happened (bar ``fill_index``
+    at ``fill_price``), for a live trade's own fill.
+
+    The same hold-cap resolution as simulate_exit_v2. ``fill_bar_check`` runs
+    fill_bar_exit first, exactly as every v2 entry's _filled does (the v173
+    override_fidelity.engine_path precedent); then walk_v2 from the bar after
+    the fill. Live-replay reconciliation passes False: the fill day is the day
+    the daily walk never sees. ``indicator_df`` is handed to walk_v2 unchanged.
+    """
+    fills.require_supported(instrument.fill_model)
+    if max_holding_days is None:
+        max_holding_days = HORIZONS[plan.horizon_key]["max_holding_days"]
+    cap = _hold_cap_bars(plan, max_holding_days)
+    if fill_bar_check:
+        early = fill_bar_exit(df, fill_index, fill_price, plan, instrument)
+        if early is not None:
+            return early
+    return walk_v2(df, fill_index, fill_price, plan, cap, instrument,
+                   scale_out=scale_out, indicator_df=indicator_df)
