@@ -176,7 +176,8 @@ def _block_md(block: dict, title: str, m: str) -> list[str]:
 
 def _head_md(report: dict) -> list[str]:
     m = report["meta"]
-    bars = {k: f"{v['sha256'][:12]} ({v['n_ok']} ok, {v['n_empty']} empty)" if v else "none"
+    bars = {k: f"{v['sha256'][:12]} ({v['n_ok']} ok, {v['n_empty']} empty, "
+               f"{v.get('n_unserved', 0)} unserved)" if v else "none"
             for k, v in m.get("bars", {}).items()}
     deploys = ", ".join(f"{d['ts']} {d['git_sha']}" for d in report["deploys"])
     out = [f"# {report['title']}", "", f"> {report['caveat']}", "", "## How to read this", ""]

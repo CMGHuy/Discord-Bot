@@ -87,3 +87,12 @@ def test_a_heading_with_backtest_r_by_ticker_is_a_leak():
     assert render.leaks(REPORT, MD + "\n## Backtest R by ticker\n")
     assert render.leaks(REPORT, MD + "\n| Strategy | exit effect |\n|---|---|\n")
     assert render.leaks(REPORT, MD + "\n## Live net R by ticker\n") == []
+
+
+def test_the_run_line_counts_unserved_bars_too():
+    bars = {"raw": {"sha256": "a" * 64, "start": "x", "end": "y", "n_ok": 85, "n_empty": 2,
+                    "n_unserved": 1},
+            "split": {"sha256": "b" * 64, "start": "x", "end": "y", "n_ok": 85, "n_empty": 2}}
+    md = render.render_markdown({**REPORT, "meta": {**META, "bars": bars}})
+    assert f"{'a' * 12} (85 ok, 2 empty, 1 unserved)" in md
+    assert f"{'b' * 12} (85 ok, 2 empty, 0 unserved)" in md     # a summary without the count
