@@ -147,3 +147,44 @@ def row_for(rec, bars, *, frictions: dict, start: dt.date | None = None,
     if row["klass"] == "still_open":
         return TradeRow(**row)
     return TradeRow(**_closed(rec, bars, row, frictions, start, last_exit))
+
+
+PROGRESS_EVERY = 25
+
+
+def _last_exits(export) -> dict[str, dt.date]:
+    latest: dict[str, dt.date] = {}
+    for rec in export.records:
+        day = _exit_day(rec)
+        if day is not None and (rec.ticker not in latest or day > latest[rec.ticker]):
+            latest[rec.ticker] = day
+    return latest
+
+
+def _memo(bars):
+    cache: dict = {}
+
+    def get(ticker: str):
+        if ticker not in cache:
+            cache[ticker] = bars(ticker)
+        return cache[ticker]
+    return get
+
+
+def run_layer1(export, bars, checkpoint, *, frictions: dict, start: dt.date,
+               out=print) -> list[TradeRow]:
+    """Score every exported plan once, appending each row; a restart skips finished plans."""
+    cached, last_exits = _memo(bars), _last_exits(export)
+    total = len(export.records)
+    done = checkpoint.done()
+    todo = [rec for rec in export.records if rec.plan_id not in done]
+    out(f"layer 1: {total - len(todo)}/{total} trades already scored, {len(todo)} to go")
+    for n, rec in enumerate(todo, 1):
+        row = row_for(rec, cached, frictions=frictions, start=start,
+                      last_exit=last_exits.get(rec.ticker))
+        checkpoint.append(rec.plan_id, row.to_dict())
+        if n % PROGRESS_EVERY == 0 or n == len(todo):
+            finished = total - len(todo) + n
+            out(f"layer 1: {finished}/{total} trades ({100.0 * finished / total:.0f}%)")
+    by_plan = {d["plan_id"]: TradeRow.from_dict(d) for d in checkpoint.rows()}
+    return [by_plan[rec.plan_id] for rec in export.records if rec.plan_id in by_plan]

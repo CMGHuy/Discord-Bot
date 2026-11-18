@@ -158,3 +158,112 @@ def test_a_row_survives_a_json_round_trip():
     again = layer1_run.TradeRow.from_dict(json.loads(json.dumps(row.to_dict())))
     assert again == row and isinstance(again.tags, tuple)
 
+
+from reconcile import checkpoint  # noqa: E402
+
+def test_the_checkpoint_appends_and_reads_back(tmp_path):
+    ck = checkpoint.JsonlCheckpoint(tmp_path / "sub" / "rows.jsonl")
+    assert ck.done() == set() and ck.rows() == []
+    ck.append("P1", {"a": 1})
+    ck.append("P2", {"a": 2})
+    ck.append("P1", {"a": 3})
+    assert ck.done() == {"P1", "P2"} and ck.rows() == [{"a": 3}, {"a": 2}]
+    assert ck.path.read_bytes().endswith(b"\n")
+
+
+def test_the_checkpoint_drops_a_torn_last_line_on_open(tmp_path):
+    path = tmp_path / "rows.jsonl"
+    path.write_text('{"key": "P1", "row": {"a": 1}}\n{"key": "P2", "ro', encoding="utf-8")
+    ck = checkpoint.JsonlCheckpoint(path)
+    assert ck.done() == {"P1"}
+    ck.append("P2", {"a": 2})
+    assert [json.loads(x)["key"] for x in path.read_text(encoding="utf-8").splitlines()] == [
+        "P1", "P2"]
+
+
+def test_a_malformed_middle_line_raises(tmp_path):
+    path = tmp_path / "rows.jsonl"
+    path.write_text('{"key": "P1", "row": {}}\nnot json\n{"key": "P2", "row": {}}\n',
+                    encoding="utf-8")
+    with pytest.raises(ValueError, match="line 2"):
+        checkpoint.JsonlCheckpoint(path).done()
+
+
+def test_the_checkpoint_refuses_nan(tmp_path):
+    with pytest.raises(ValueError):
+        checkpoint.JsonlCheckpoint(tmp_path / "rows.jsonl").append("P1", {"r": float("nan")})
+
+
+def _export(*recs):
+    return records.Export(records=tuple(recs), rejections=(), watchlist=(), deploys=())
+
+
+def _book():
+    return _export(_rec("P1", "AAA"), _rec("P2", "BBB", "bearish"),
+                   _rec("P3", "AAA", klass="unfilled"), _rec("P4", "CCC"))
+
+
+class Counting:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, ticker):
+        self.calls.append(ticker)
+        return _bars(ticker)
+
+
+def _run(path, export=None, bars=None, out=None):
+    return layer1_run.run_layer1(export or _book(), bars or _bars,
+                                 checkpoint.JsonlCheckpoint(path), frictions=FRICTIONS,
+                                 start=START, out=(out.append if out is not None else print))
+
+
+def test_run_layer1_returns_rows_in_export_order_and_checkpoints_each(tmp_path):
+    path = tmp_path / "trade-rows.jsonl"
+    rows = _run(path)
+    assert [r.plan_id for r in rows] == ["P1", "P2", "P3", "P4"]
+    assert checkpoint.JsonlCheckpoint(path).done() == {"P1", "P2", "P3", "P4"}
+    assert [r.scored for r in rows] == [True, True, False, False]
+    assert rows[3].refusal == "split_in_window"
+
+
+def test_bars_load_once_per_ticker(tmp_path):
+    bars = Counting()
+    _run(tmp_path / "rows.jsonl", bars=bars)
+    assert sorted(bars.calls) == ["AAA", "BBB", "CCC"]
+
+
+def test_a_restart_skips_finished_trades_and_returns_equal_rows(tmp_path):
+    path = tmp_path / "rows.jsonl"
+    first = _run(path)
+    bars = Counting()
+    assert _run(path, bars=bars) == first
+    assert bars.calls == []
+
+
+def test_a_torn_last_line_is_rescored(tmp_path):
+    path = tmp_path / "rows.jsonl"
+    first = _run(path)
+    data = path.read_bytes()
+    last = data.rstrip(b"\n").rsplit(b"\n", 1)[-1]
+    path.write_bytes(data[:len(data) - 1 - len(last) // 2])          # killed mid-line
+    bars = Counting()
+    assert _run(path, bars=bars) == first
+    assert bars.calls == ["CCC"]                                      # only P4 again
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 4 and all(json.loads(line) for line in lines)
+
+
+def test_a_refusal_follows_the_tickers_latest_exit(tmp_path):
+    early = _rec("Q1", "DDD")
+    early = dataclasses.replace(early, trade={**early.trade,
+                                              "closed_at": "2026-10-06T19:00:00+00:00"})
+    rows = _run(tmp_path / "rows.jsonl", export=_export(early, _rec("Q2", "DDD")))
+    assert [r.refusal for r in rows] == ["bars_end_early", "bars_end_early"]
+
+
+def test_progress_reports_the_percent_done(tmp_path):
+    out = []
+    _run(tmp_path / "rows.jsonl", out=out)
+    assert "4 to go" in out[0] and out[-1].endswith("4/4 trades (100%)")
+
