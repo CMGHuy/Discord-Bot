@@ -648,7 +648,7 @@ git commit -m "feat(guide): plan, level and throttle rule placeholders (v237 V23
 | 3 | Relative strength, long arm | `RS_GATE`, `RS_LEADER_PERCENTILE` | `RS_GATE` on **and** leader percentile > 0 | `edge/rs_gate.py:38` (0 disables the long arm, `rs_gate.py:5`) |
 | 4 | Relative strength, short arm | `RS_GATE`, `RS_LAGGARD_PERCENTILE` | `RS_GATE` on **and** laggard percentile > 0 | `rs_gate.py:45` |
 | 5 | Dead-cat bounce veto | `DEAD_CAT_BOUNCE_VETO` | flag on | `scanning/analyze.py:69` |
-| 6 | Earnings blackout | `EARNINGS_BLACKOUT_SESSIONS` | > 0 | `edge/gates.py:65` |
+| 6 | Earnings blackout | `EARNINGS_BLACKOUT_SESSIONS` | never: `in_earnings_blackout` (`edge/gates.py:65`) has no caller in the live scan, so the row reads "measured, not used" whatever the setting | `edge/gates.py:65` |
 | 7 | Pullback volume dry-up | `PULLBACK_DRYUP_SCOPE`, `PULLBACK_DRYUP_MAX_RATIO` | scope ≠ `off` **and** ratio > 0 | `reachability.py:47` |
 | 8 | Headroom to the first target | `HEADROOM_SCOPE`, `HEADROOM_MIN_R` | scope ≠ `off` **and** min R > 0 | `reachability.py:69` |
 | 9 | S/R minimum level touches | `SR_MIN_LEVEL_TOUCHES` | > 0 | `entry_filters.py:893` |
@@ -749,12 +749,16 @@ def test_at_schema_defaults_only_the_rs_short_arm_is_applied():
         "| Relative strength, short arm | `RS_GATE`, `RS_LAGGARD_PERCENTILE` | on, 25 | applied |")
 
 
+def test_earnings_blackout_is_never_applied(monkeypatch):
+    monkeypatch.setattr(config, "EARNINGS_BLACKOUT_SESSIONS", 2)
+    assert _row("Earnings blackout").endswith(f"| {ls.NOT_USED} |")
+
+
 @pytest.mark.parametrize("label, changes", [
     ("Market regime gate", {"REGIME_GATES_ENABLED": True}),
     ("Adjacent-horizon alignment", {"MTF_ADJACENT_GATE": True}),
     ("Relative strength, long arm", {"RS_LEADER_PERCENTILE": 80.0}),
     ("Dead-cat bounce veto", {"DEAD_CAT_BOUNCE_VETO": True}),
-    ("Earnings blackout", {"EARNINGS_BLACKOUT_SESSIONS": 2}),
     ("Pullback volume dry-up", {"PULLBACK_DRYUP_SCOPE": "strategy", "PULLBACK_DRYUP_MAX_RATIO": 0.6}),
     ("Headroom to the first target", {"HEADROOM_SCOPE": "confluence", "HEADROOM_MIN_R": 1.0}),
     ("S/R minimum level touches", {"SR_MIN_LEVEL_TOUCHES": 2}),
@@ -877,8 +881,8 @@ SWITCH_ROWS: tuple[SwitchRow, ...] = (
     SwitchRow("Relative strength, short arm", ("RS_GATE", "RS_LAGGARD_PERCENTILE"),
               _both(_on("RS_GATE"), _above("RS_LAGGARD_PERCENTILE", 0))),
     SwitchRow("Dead-cat bounce veto", ("DEAD_CAT_BOUNCE_VETO",), _on("DEAD_CAT_BOUNCE_VETO")),
-    SwitchRow("Earnings blackout", ("EARNINGS_BLACKOUT_SESSIONS",),
-              _above("EARNINGS_BLACKOUT_SESSIONS", 0)),
+    # in_earnings_blackout has no caller in the live scan: never "applied" (controller, 2026-11-18).
+    SwitchRow("Earnings blackout", ("EARNINGS_BLACKOUT_SESSIONS",), lambda: False),
     SwitchRow("Pullback volume dry-up", ("PULLBACK_DRYUP_SCOPE", "PULLBACK_DRYUP_MAX_RATIO"),
               _both(_not("PULLBACK_DRYUP_SCOPE", "off"), _above("PULLBACK_DRYUP_MAX_RATIO", 0))),
     SwitchRow("Headroom to the first target", ("HEADROOM_SCOPE", "HEADROOM_MIN_R"),
