@@ -19,6 +19,8 @@ from swingbot.core.backtesting.screen import verdict  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS  # noqa: E402
 from tests.backtesting.screen.helpers import random_walk  # noqa: E402
 
+pytestmark = pytest.mark.usefixtures("screen_null_v1")   # v230: these pin the v1 null
+
 IDEA = IDEAS["turn_of_month"]
 
 

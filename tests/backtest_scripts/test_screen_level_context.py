@@ -21,6 +21,8 @@ from swingbot.core.backtesting.screen import ideas as ideas_pkg  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import CONTEXT_KINDS, IDEAS, Idea  # noqa: E402
 from tests.backtesting.screen.helpers import frame, random_walk  # noqa: E402
 
+pytestmark = pytest.mark.usefixtures("screen_null_v1")   # v230: these pin the v1 null
+
 CONTEXT_FROM = "2009-06-01"
 LEVEL = ("BREADTH_ATR1", "^VIX")
 SHOCK_PARAMS = {"breadth": "BREADTH_ATR1", "vix": "^VIX", "enter": 0.40,

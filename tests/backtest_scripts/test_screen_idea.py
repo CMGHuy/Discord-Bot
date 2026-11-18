@@ -17,6 +17,8 @@ from swingbot.core.backtesting.screen import forward, null, race, trail, verdict
 from swingbot.core.backtesting.screen.ideas import IDEAS  # noqa: E402
 from tests.backtesting.screen.helpers import random_walk  # noqa: E402
 
+pytestmark = pytest.mark.usefixtures("screen_null_v1")   # v230: these pin the v1 null
+
 ALWAYS = [("2000-01-01", "9999-12-31")]
 
 

@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "backtest"))
@@ -22,6 +23,8 @@ from swingbot.core.backtesting.screen.ideas import IDEAS  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import _shock_breakdown as sb  # noqa: E402
 from tests.backtest_scripts.test_screen_level_context import (  # noqa: E402,F401
     _fake_level_idea, _level_argv, _level_cache, level_registered)
+
+pytestmark = pytest.mark.usefixtures("screen_null_v1")   # v230: these pin the v1 null
 
 GOLDEN = Path(__file__).with_name("golden") / "count_only_range_breakdown_close.md"
 ALWAYS = [("2000-01-01", "9999-12-31")]
