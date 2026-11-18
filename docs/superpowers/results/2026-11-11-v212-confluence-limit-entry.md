@@ -29,6 +29,8 @@ Everything frozen is in the pre-registration record above: the rule, the grid `f
 | f0.667 | 38630 | 36957 | 20939 |
 
 
+**D range reached (frozen reporting item):** f0.333 2.00–2.64%; f0.5 2.00–3.54%; f0.667 2.00–5.41%. Gap-stopped fills at census: f0.333 2259; f0.5 3442; f0.667 4124.
+
 ## Stage 0 (paired MDE)
 
 **Stage 0: UNDERPOWERED**
@@ -84,6 +86,20 @@ The `Edge:` line predicted ExpR up, fewer trades and fewer noise stop-outs on fi
 All three looks are `NO-LIFT` with no p-value (the chain ended before any ExpR was scored): BH q = n/a for `v212-f0.333`, `v212-f0.5` and `v212-f0.667`, across 16 ledger p-values.
 
 The ledger rows carry instrument `v2`, the driver's stamp; the plan's scratch check expected `v1`. The pre-registration does not name an instrument.
+
+## Panel review
+
+Run 2026-11-18 (quant-researcher, veteran-trader, risk-manager), pre-close-out. No BLOCKING finding.
+
+- quant-researcher 1, veteran-trader 1: the dropped keys (reference `not_triggered`) are, by the code path (`exit_sim_v2.py:313-324`), days the next open gapped at or through the clamped stop, where a live market plan is cancelled but a resting limit still fills. The counts live only in the git-ignored row dumps. -- applied: stated here; this gap-day population (the arm's adverse tail and its best case) was never scored, because the paired design excludes it.
+- quant-researcher 2: re-derived on the registered N, f0.667 MDE would be about 0.119R, still above 0.10R, so the wording gap does not change the verdict. -- applied (reviewer's figure, assumes the same ΔR variance and design effect).
+- quant-researcher 3: D range missing from Stage −1. -- applied above.
+- quant-researcher 4, veteran-trader 3: the closure is on power, not on any measured ExpR, fill rate or gap statistic; the three NO-LIFT ledger rows are not evidence against the mechanism, and f0.333 and f0.5 were powered. -- applied: read the closed row as "closed on power, budget intact".
+- quant-researcher 5: the ledger rows were not the driver's output verbatim. -- applied: the driver printed rows (with `stage_verdict`, instrument `v2`); they were appended through `preregistration_ledger.py`, which adds `data_source` and drops `stage_verdict`, after the driver's verdict mapping was corrected in `c1e5f2c9`.
+- risk-manager 5, veteran-trader 2: no risk fact was measured (disclosures not computed: gap-fill mean R, worst gap R, dollar P&L, notional-cut share). -- applied: stated here.
+- risk-manager 2, veteran-trader 6: a gap-through-stop fill is booked near 0R and the realised loss from L is only a disclosure; flat slippage on gap fills is likely optimistic. -- rejected: nothing was scored, so it cannot move this verdict; a reopening reads `gap_stop_r_from_limit` as primary.
+- risk-manager 1, veteran-trader 5: the live half of the rule (`_step_limit` gap fill at the open, `heat_at_fill`) was never built, and `CONFLUENCE_LIMIT_ENTRY_F` is an ordinary admin field up to 0.9. -- rejected for this close-out, flagged for the partner: it needs a guard that refuses f > 0 or removal of the field, as a separate task.
+- risk-manager 3, 4, 6, veteran-trader 4, quant-researcher 6: pre-existing replay heat accounting, unverified `cluster_fn` wiring, stops under the 1.75% floor, partial fills, and the cause in the fill code. -- rejected: out of scope for a Stage 0 close and none was reached.
 
 ## Evidence files
 
