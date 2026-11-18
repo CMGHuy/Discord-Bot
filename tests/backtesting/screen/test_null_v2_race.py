@@ -172,6 +172,30 @@ def test_scatter_of_nothing_is_empty():
     assert null_v2.scatter(_raced([])) == {}
 
 
+def test_scatter_forward_means_exclude_infinities_without_dropping_slots():
+    raced = _raced([
+        ("AAA", 300, 250, 1.0, 1.1, "target", 0.5),
+        ("AAA", 300, 251, -1.0, -0.9, "stop", np.inf),
+        ("AAA", 300, 252, 0.6, 0.7, "timeout", -np.inf),
+        ("AAA", 300, 253, 0.2, 0.3, "timeout", 1.5),
+        ("BBB", 40, 10, 0.4, 0.5, "timeout", np.inf),
+        ("BBB", 40, 11, 0.4, 0.5, "timeout", -np.inf),
+        ("BBB", 40, 12, 0.4, 0.5, "timeout", np.nan)])
+    raced["fwd_20"] = [np.inf, 2.0, 4.0, np.nan, np.nan, np.inf, -np.inf]
+    original = raced.copy(deep=True)
+    got = null_v2.scatter(raced)
+    a, b = got[("AAA", 300)], got[("BBB", 40)]
+    assert a.fwd == {5: 1.0, 20: 3.0}
+    assert np.isnan(b.fwd[5]) and np.isnan(b.fwd[20])
+    assert a.mean_r == pytest.approx(0.2)
+    assert a.mean_gross_r == pytest.approx(0.3)
+    assert a.outcomes == Counter({"target": 1, "stop": 1, "timeout": 2})
+    assert (a.slots, a.unfilled, a.timeout_r) == (4, 0, (0.6, 0.2))
+    assert b.mean_r == pytest.approx(0.4)
+    assert (b.slots, b.unfilled, b.outcomes) == (3, 0, Counter({"timeout": 3}))
+    pd.testing.assert_frame_equal(raced, original)
+
+
 def test_race_then_scatter_gives_each_event_the_mean_of_its_raced_slots():
     raced = _race(_table(NEXT_OPEN))
     got = null_v2.scatter(raced)

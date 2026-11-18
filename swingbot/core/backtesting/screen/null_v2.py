@@ -675,7 +675,8 @@ def scatter(raced: pd.DataFrame) -> dict[tuple[str, int], EventNull]:
         return {}
     fwd_cols = sorted((c for c in raced.columns if c.startswith("fwd_")),
                       key=lambda c: int(c[4:]))
-    filled = raced[raced["null_pos"].to_numpy() >= 0]
+    filled = raced[raced["null_pos"].to_numpy() >= 0].copy()
+    filled[fwd_cols] = filled[fwd_cols].where(np.isfinite(filled[fwd_cols]))
     slots = raced.groupby(_KEYS).size()
     means = filled.groupby(_KEYS)[["r", "gross_r", *fwd_cols]].mean().reindex(slots.index)
     n_filled = filled.groupby(_KEYS).size().reindex(slots.index, fill_value=0)
