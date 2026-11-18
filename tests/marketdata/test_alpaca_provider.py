@@ -389,3 +389,24 @@ def test_answers_make_one_snapshot_call():
     prov = ap.AlpacaProvider("k", "s", "iex", client=c, now=lambda: _PRE)
     prov.latest_quote_answers(["AAPL", "MSFT"], 300)
     assert len(c.requests) == 1 and str(c.requests[0].feed.value) == "iex"
+
+
+# --- v232: a requested adjustment for the reconciliation's raw bars ------------------
+
+@pytest.mark.parametrize("adjustment, wire", [(ap.Adjustment.RAW, "raw"),
+                                              (ap.Adjustment.SPLIT, "split")])
+def test_daily_bars_between_passes_a_requested_adjustment(adjustment, wire):
+    from datetime import date
+    c = FakeClient(bars=_barset(["AAPL"]))
+    out = _prov(c).daily_bars_between(["AAPL"], date(2026, 9, 20), date(2026, 9, 25),
+                                      adjustment=adjustment)
+    assert str(c.requests[0].adjustment.value) == wire
+    assert str(c.requests[0].feed.value) == "sip"
+    assert list(out["AAPL"].columns) == ["Open", "High", "Low", "Close", "Volume"]
+
+
+def test_the_other_bar_paths_stay_fully_adjusted():
+    c = FakeClient(bars=_barset(["AAPL"]))
+    _prov(c).daily_bars(["AAPL"], "1y")
+    _prov(c).intraday_bars("AAPL", "1h")
+    assert [str(r.adjustment.value) for r in c.requests] == ["all", "all"]
