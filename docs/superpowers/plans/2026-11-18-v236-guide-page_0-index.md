@@ -116,9 +116,9 @@ Sequential edges and why:
 - V236-5 → V236-6b: V236-6b wires `buildGuideSearchIndex` / `searchGuide` / `snippetFor` into the page.
 - V236-4 → V236-7: the app route mounts `guideRoutes`.
 - V236-3 → V236-9: V236-9 adds `pipeline` to `GUIDE_FIGURES` (V235-6's content test checks every figure marker against that file).
-- V236-8 → V236-9 → V236-10: all three regenerate and modify `guide-anchors.json`; one at a time.
-- V236-6, V236-6b, V236-7, V236-8, V236-9, V236-10 → V236-11: the layout check needs the full page, the route and all three chapters.
-- V236-11 → V236-12: last.
+- V236-8 → V236-9 → V236-9b → V236-10: chapter tasks regenerate `guide-anchors.json` and append to `test_guide_chapter_text.py` one at a time; V236-9b names the figure V236-9 registers (the content test fails otherwise).
+- V236-6, V236-6b, V236-7, V236-8, V236-9, V236-9b, V236-10 → V236-11: the layout check needs the full page, the route and all three chapters.
+- V236-11 → V236-11b → V236-12: 11b runs the script 11 writes; the full suite is last.
 
 Groups that may run side by side (disjoint files, no contract between them):
 
@@ -138,11 +138,13 @@ Groups that may run side by side (disjoint files, no contract between them):
 | V236-6 | Contents rail, drawer and picker | 2 | sonnet | M `frontend/src/app/workspaces/guide/guide.ts`, M `frontend/src/app/workspaces/guide/guide.spec.ts` | DOM the layout check reads: `nav.guide-rail` (≥ 1024, sticky), `button.guide-contents` + `sb-drawer` (640–1023), `sb-select.guide-picker` (< 640) |
 | V236-6b | Search wired into the page | 2 | sonnet | M `frontend/src/app/workspaces/guide/guide.ts`, M `frontend/src/app/workspaces/guide/guide.spec.ts` | `.guide-search`, `a.guide-result`, `p.guide-no-match` (`No section matches “<query>”`); typing a non-blank query loads chapter bodies not yet requested (never re-fetches a chapter that has a status) |
 | V236-7 | Routes, nav and the four hard-coded Insights specs | 2 | sonnet | M `frontend/src/app/app.routes.ts`, M `frontend/src/app/app.routes.spec.ts`, M `frontend/src/app/shell/nav.ts`, M `frontend/src/app/shell/nav.spec.ts`, M `frontend/src/app/shell/more-sheet.spec.ts`, M `frontend/src/app/shell/breadcrumb.spec.ts`, M `frontend/src/app/shell/palette/palette-items.spec.ts` | route `insights/guide` (title `Guide`, subtitle `How the bot finds, builds, sizes and closes trades`, `canMatch: [authGuard]`, `loadChildren` → `guideRoutes`); nav section `{ path: '/insights/guide', label: 'Guide' }` after Reports |
-| V236-8 | Chapter 1: What the bot is (and isn't) | 3 | sonnet | C `docs/guide/01-what-it-is.md`, M `frontend/src/app/workspaces/guide/guide-anchors.json` | slug `what-it-is`, order 1; anchors include `the-notice` (the full education-not-advice notice) and `swing-horizons` (`{{horizons.table}}`) |
-| V236-9 | Chapter 3: the pipeline and its diagram | 3 | sonnet | C `docs/guide/03-pipeline.md`, C `frontend/src/app/workspaces/guide/pipeline-diagram.ts`, C `frontend/src/app/workspaces/guide/pipeline-diagram.spec.ts`, M `frontend/src/app/workspaces/guide/guide-figures.ts`, M `frontend/src/app/workspaces/guide/guide-anchors.json` | slug `pipeline`, order 3; `GuidePipelineDiagram` selector `sb-guide-pipeline-diagram` (inline SVG, theme tokens, boxes link to `/insights/guide/<slug>` only when that slug is in `GuideStore.chapters()`); `GUIDE_FIGURES.pipeline` |
-| V236-10 | Chapter 12: Glossary | 3 | sonnet | C `docs/guide/12-glossary.md`, M `frontend/src/app/workspaces/guide/guide-anchors.json` | slug `glossary`, order 12; one `###` heading per term (one anchor each) |
-| V236-11 | Layout check at three widths | 3 | sonnet | C `scripts/dev/guide_layout_check.py`, C `tests/scripts/test_guide_layout_check.py`, C `docs/superpowers/results/2026-11-18-v236-guide-layout.md` | `guide_layout_check.main(argv=None) -> int` (Playwright; widths 390, 820, 1440; checks no horizontal overflow, TOC mode per width, hit targets ≥ 44px on 390/820, deep-link scroll); screenshots under `logs/v236-layout/` |
-| V236-12 | Full-suite verification | 3 | haiku | none (run only; CI) | push, then watch the CI run green (`0 failed`, `0 xfailed`), frontend `frontend-test` job included |
+| V236-8 | Chapter 1: What the bot is (and isn't) | 3 | sonnet | C `docs/guide/01-what-it-is.md`, M `frontend/src/app/workspaces/guide/guide-anchors.json`, C `tests/admin/test_guide_chapter_text.py` | slug `what-it-is`, order 1; anchors include `the-notice` (the full education-not-advice notice) and `swing-horizons` (`{{horizons.table}}`) |
+| V236-9 | Pipeline diagram component and figure entry | 3 | sonnet | C `frontend/src/app/workspaces/guide/pipeline-diagram.ts`, C `frontend/src/app/workspaces/guide/pipeline-diagram.spec.ts`, M `frontend/src/app/workspaces/guide/guide-figures.ts` | slug `pipeline`, order 3; `GuidePipelineDiagram` selector `sb-guide-pipeline-diagram` (inline SVG, theme tokens, boxes link to `/insights/guide/<slug>` only when that slug is in `GuideStore.chapters()`); `GUIDE_FIGURES.pipeline` |
+| V236-9b | Chapter 3: the pipeline | 3 | sonnet | C `docs/guide/03-pipeline.md`, M `tests/admin/test_guide_chapter_text.py`, M `frontend/src/app/workspaces/guide/guide-anchors.json` | slug `pipeline`, order 3; `<!-- figure:pipeline -->` (needs V236-9 registry entry first) |
+| V236-10 | Chapter 12: Glossary | 3 | sonnet | C `docs/guide/12-glossary.md`, M `frontend/src/app/workspaces/guide/guide-anchors.json`, M `tests/admin/test_guide_chapter_text.py` | slug `glossary`, order 12; one `###` heading per term (one anchor each) |
+| V236-11 | Layout check at three widths | 3b | sonnet | C `scripts/dev/guide_layout_check.py`, C `tests/scripts/test_guide_layout_check.py` | `guide_layout_check.main(argv=None) -> int` (Playwright; widths 390, 820, 1440; checks no horizontal overflow, TOC mode per width, hit targets ≥ 44px on 390/820, deep-link scroll); screenshots under `logs/v236-layout/` |
+| V236-11b | Layout-audit routes and local run of both checks | 3b | sonnet | M `frontend/scripts/layout-audit-lib.mjs`, M `frontend/scripts/layout-audit-lib.test.mjs`, C `docs/superpowers/results/2026-11-18-v236-guide-layout.md` | `ROUTES` gains `/insights/guide` and `/insights/guide/pipeline` (count 32 → 34); result note records both checks at 390/820/1440 |
+| V236-12 | Full-suite verification | 3b | haiku | none (run only; CI) | push, then watch the CI run green (`0 failed`, `0 xfailed`), frontend `frontend-test` job included |
 
 ## Parts
 
@@ -150,7 +152,8 @@ Groups that may run side by side (disjoint files, no contract between them):
 |---|---|---|---|
 | 1 | `2026-11-18-v236-guide-page_1-client-page.md` | V236-1..V236-4 | `marked`, client and store, `GuideLinkComponent` and anchor spec, Markdown helpers and figure registry, routes and page |
 | 2 | `2026-11-18-v236-guide-page_2-contents-nav.md` | V236-5, V236-6, V236-6b, V236-7 | search module, TOC at three widths, search wired in, app route, nav and the Insights specs |
-| 3 | `2026-11-18-v236-guide-page_3-chapters.md` | V236-8..V236-12 | chapters 1, 3 (with diagram) and 12, layout check, CI full suite |
+| 3 | `2026-11-18-v236-guide-page_3-chapters.md` | V236-8, V236-9, V236-9b, V236-10 | chapters 1, 3 (diagram, then text) and 12 |
+| 3b | `2026-11-18-v236-guide-page_3b-layout.md` | V236-11, V236-11b, V236-12 | layout check, layout-audit routes, CI full suite |
 
 ## Handoff
 
@@ -168,3 +171,4 @@ Binding on every part writer (controller and partner decisions, 2026-11-18):
 10. **Part 1 is partly on disk**: `_1-client-page.md` holds V236-1 and V236-2 complete; append V236-3 and V236-4 there.
 11. **Verification**: per-task narrow runs only; V236-12 is the one full-suite task, run by CI after the push.
 9. **Part 2 split (2026-11-18)**: V236-6 came to ~20.4 KB, so search wiring moved to V236-6b (runs after V236-6; same files). V236-7 also edits `shell/palette/palette-items.spec.ts` (its RAIL/route lists hard-code the Insights sections).
+10. **Part 3 split (2026-11-18)**: V236-9 → V236-9b (diagram, then chapter text) and V236-11 → V236-11b (script, then layout-audit routes + local run); V236-11..12 live in `_3b-layout.md` (1500-line cap). V236-11b adds the two guide routes to `frontend/scripts/layout-audit-lib.mjs` (that file requires new routes in the same change). `guide-anchors.json` is listed as `Regenerate:` in tasks because v235 creates it.
