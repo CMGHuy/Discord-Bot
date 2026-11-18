@@ -107,3 +107,152 @@ def test_bar_position():
 ])
 def test_outcome_class_keeps_engine_and_journal_labels(outcome, r, expected):
     assert layer1.outcome_class(outcome, r) == expected
+
+
+from swingbot.core.backtesting.instrument.contract import V2_FILLS, ZERO_COSTS, resolve  # noqa: E402
+from swingbot.core.planning import exit_sim, exit_sim_v2  # noqa: E402
+from swingbot.core.planning.exit_sim import ExitResult  # noqa: E402
+
+F = (100.0, 100.6, 99.6, 100.0)
+D1 = (100.0, 100.8, 99.6, 100.5)            # 2026-10-06: issue and live fill session
+LONG_ROWS = {
+    "win": [F, D1, (100.5, 101.0, 100.0, 100.8), (100.8, 104.5, 100.5, 104.0)]
+           + [(104.0, 104.4, 103.6, 104.0)] * 6,
+    "loss": [F, D1, (100.5, 100.9, 99.9, 100.2), (100.0, 100.3, 97.5, 97.8)]
+            + [(97.8, 98.2, 97.4, 97.8)] * 6,
+    "scratch": [F, D1, (100.5, 102.5, 100.4, 102.0), (101.5, 101.8, 100.0, 100.5)]
+               + [(100.5, 100.9, 100.1, 100.5)] * 6,
+    "timeout": [F, (100.0, 100.5, 99.9, 100.2)] + [(100.2, 100.5, 99.9, 100.2)] * 8,
+}
+
+
+def _mirror(rows):
+    """A long fixture reflected around 100: a short with the same path."""
+    return [(200 - o, 200 - lo, 200 - hi, 200 - c) for o, hi, lo, c in rows]
+
+
+def _bars(outcome, direction="bullish"):
+    rows = LONG_ROWS[outcome]
+    return make_ohlcv(rows if direction == "bullish" else _mirror(rows), start=START)
+
+
+@pytest.mark.parametrize("direction", ["bullish", "bearish"])
+@pytest.mark.parametrize("outcome", ["win", "loss", "scratch", "timeout"])
+def test_each_outcome_long_and_short_telescopes(direction, outcome):
+    rec = _rec(direction, **({"hold_cap_bars": 3} if outcome == "timeout" else {}))
+    live = layer1.r_live(rec)
+    for model in layer1.FILL_MODELS:
+        v = layer1.score(rec, _bars(outcome, direction), model)
+        if model == "v1":
+            assert v.exit_only_outcome == outcome and v.exit_only_class == outcome
+        eff = layer1.effects(live, v)
+        assert live - v.r_as_backtest == pytest.approx(eff["exit"] + eff["entry"])
+
+
+def test_as_backtest_is_converted_to_the_live_unit_with_the_rebased_figure_beside_it():
+    v = layer1.score(_rec(), _bars("win"), "v1")
+    assert v.r_exit_only == pytest.approx(3.8 / 2.2, abs=1e-3)
+    assert v.r_rebased == pytest.approx(1.4, abs=1e-3)            # entry at the 10-06 close, 100.5
+    assert v.r_as_backtest == pytest.approx(1.4 * 2.5 / 2.2, abs=1e-3)
+    assert v.stop_shift_pct == pytest.approx((2.5 / 2.2 - 1) * 100)
+    assert v.backtest_no_fill is False
+
+
+def test_the_rebased_figure_equals_the_live_unit_when_the_entries_match():
+    v = layer1.score(_rec(trade_kw={"entry": 100.5}), _bars("win"), "v1")
+    assert v.r_as_backtest == pytest.approx(v.r_rebased)
+    assert v.stop_shift_pct == pytest.approx(0.0)
+
+
+def test_v1_values_match_the_engines():
+    rec, df = _rec(), _bars("loss")
+    v = layer1.score(rec, df, "v1")
+    plan, _ = records.rehydrate(rec.plan)
+    assert v.r_rebased == exit_sim.simulate_exit(df, 1, plan, scale_out=False).r_total
+    plan, _ = records.rehydrate(rec.plan)
+    assert v.r_exit_only == exit_sim.simulate_exit_from_fill(
+        df, 1, 100.2, plan, scale_out=False, fill_bar_check=False).r_total
+
+
+def test_exit_only_starts_the_bar_after_the_fill():
+    rows = list(LONG_ROWS["win"])
+    rows[1] = (100.0, 100.8, 97.0, 100.5)          # the fill day's wick runs through the stop
+    v = layer1.score(_rec(), make_ohlcv(rows, start=START), "v1")
+    assert v.exit_only_outcome == "win"
+
+
+def test_v2_values_are_gross():
+    assert layer1.GROSS_V2.cost_model == ZERO_COSTS
+    assert layer1.GROSS_V2.fill_model == V2_FILLS
+    rec, df = _rec(), _bars("win")
+    v = layer1.score(rec, df, "v2")
+    plan, _ = records.rehydrate(rec.plan)
+    gross = exit_sim_v2.simulate_exit_v2_from_fill(df, 1, 100.2, plan, layer1.GROSS_V2,
+                                                   scale_out=False, fill_bar_check=False)
+    plan, _ = records.rehydrate(rec.plan)
+    costed = exit_sim_v2.simulate_exit_v2_from_fill(df, 1, 100.2, plan, resolve("v2"),
+                                                    scale_out=False, fill_bar_check=False)
+    assert v.r_exit_only == gross.r_total
+    assert costed.r_total < gross.r_total
+    plan, _ = records.rehydrate(rec.plan)
+    assert v.r_rebased == exit_sim_v2.simulate_exit_v2(
+        df, 1, plan, layer1.GROSS_V2, scale_out=False).r_total
+
+
+def test_scale_out_follows_tp1_fraction():
+    rec, df = _rec(tp1_fraction=0.5, tp2=108.0), _bars("win")
+    plan, _ = records.rehydrate(rec.plan)
+    expected = exit_sim.simulate_exit(df, 1, plan, scale_out=True).r_total
+    assert layer1.score(rec, df, "v1").r_rebased == expected
+
+
+def test_a_trigger_the_backtest_never_reaches_is_a_backtest_no_fill():
+    rec = _rec(entry_type="stop_entry", trigger_price=106.0, entry_price=None)
+    v = layer1.score(rec, _bars("win"), "v1")
+    assert v.backtest_no_fill is True
+    assert (v.r_as_backtest, v.r_rebased, v.stop_shift_pct) == (None, None, None)
+    eff = layer1.effects(0.3, v)
+    assert eff["entry"] is None and eff["exit"] == pytest.approx(0.3 - v.r_exit_only)
+
+
+def test_a_gap_through_stop_scratch_counts_as_no_fill():
+    gap = ExitResult(outcome="scratch", runner_outcome=None, entry_index=2, exit_index=2,
+                     entry_price=97.0, r_total=0.0,
+                     legs=[{"fraction": 1.0, "exit_price": 97.0, "r": 0.0,
+                            "reason": "gap_through_stop"}])
+    assert layer1._no_fill(gap) is True
+    clean = ExitResult(outcome="scratch", runner_outcome=None, entry_index=2, exit_index=4,
+                       entry_price=100.0, r_total=0.0,
+                       legs=[{"fraction": 1.0, "exit_price": 100.0, "r": 0.0,
+                              "reason": "breakeven_stop"}])
+    assert layer1._no_fill(clean) is False
+
+
+@pytest.mark.parametrize("trade_kw,plan_kw,what", [
+    ({"opened_at": "2026-10-20T15:00:00+00:00"}, {}, "fill"),
+    ({}, {"issued_at": "2026-09-28T15:00:00+00:00"}, "signal"),
+])
+def test_a_missing_bar_raises(trade_kw, plan_kw, what):
+    with pytest.raises(ValueError, match=what):
+        layer1.score(_rec(trade_kw=trade_kw, **plan_kw), _bars("win"), "v1")
+
+
+def test_an_unknown_fill_model_raises():
+    with pytest.raises(ValueError, match="fill model"):
+        layer1.score(_rec(), _bars("win"), "v3")
+
+
+def test_score_never_mutates_the_exported_plan_doc():
+    rec = _rec(tp1_fraction=0.5, tp2=108.0)
+    before = dict(rec.plan)
+    layer1.score(rec, _bars("win"), "v1")
+    layer1.score(rec, _bars("win"), "v2")
+    assert rec.plan == before
+
+
+def test_would_fill_is_a_bare_boolean():
+    df = _bars("win")
+    never = _rec(entry_type="stop_entry", trigger_price=106.0, entry_price=None)
+    assert layer1.would_fill(never, df, "v1") is False
+    assert layer1.would_fill(_rec(), df, "v1") is True
+    assert layer1.would_fill(_rec(issued_at="2026-09-28T15:00:00+00:00"), df, "v2") is None
