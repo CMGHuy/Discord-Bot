@@ -67,7 +67,7 @@ def _common(rec) -> dict:
     trade = rec.trade
     entry_day = (sessions.ny_time(trade["opened_at"]).date() if trade
                  else sessions.issue_session(stamp))
-    return dict(trade_id=trade.get("id") if trade else None, plan_id=rec.plan_id,
+    return dict(trade_id=trade.get("trade_id") if trade else None, plan_id=rec.plan_id,
                 ticker=rec.ticker, strategy=rec.plan.get("strategy"),
                 horizon_key=rec.plan.get("horizon_key"), ledger=records.ledger_of(rec),
                 side=rec.side, era=records.era_of(rec), klass=records.class_of(rec),

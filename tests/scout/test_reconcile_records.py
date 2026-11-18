@@ -63,6 +63,33 @@ def test_load_export_reads_every_kind_and_fingerprints(tmp_path):
     assert [len(v) for v in prints.values()] == [64]
 
 
+def test_a_production_shaped_record_loads_and_rehydrates(tmp_path):
+    # Production docs lack every promoted column (schema.py); the export merges
+    # them back. The doc below has none of them but what that merge supplies.
+    doc = _plan_doc()
+    for key in ("plan_id", "ticker", "strategy", "horizon_key", "created_at", "status"):
+        doc.pop(key, None)
+    plan = {"plan_id": "P9", "ticker": "AAA", "strategy": "RSI", "horizon_key": "2w",
+            "status": "CLOSED", "created_at": "2026-10-06T15:00:00+00:00",
+            "valid_session": None, **doc}
+    trade = {"trade_id": "T9", "ticker": "AAA", "strategy": "RSI", "horizon": "2w",
+             "direction": "bullish", "status": "win", "opened_at": "2026-10-06T15:01:00+00:00",
+             "closed_at": "2026-10-08T17:00:00+00:00", "entry": 100.2, "stop_loss": 98.0,
+             "plan_id": "P9", "exit_price": 104.0, "legs": []}
+    journal = {"trade_id": "T9", "strategy": "RSI", "outcome": "win", "closed_at": None,
+               "created_at": "2026-10-08T17:00:00+00:00", "r_realized": 1.73}
+    path = _write(tmp_path, [{"kind": "plan", "plan": plan, "trade": trade, "journal": journal},
+                             {"kind": "plan", "plan": {**plan, "plan_id": "P8"},
+                              "trade": None, "journal": None}])
+    export = records.load_export(path)
+    assert [r.plan_id for r in export.records] == ["P9", "P8"]
+    assert records.class_of(export.records[0]) == "closed"
+    assert records.class_of(export.records[1]) == "unfilled"
+    assert records.era_of(export.records[1]) in ("headline", "earlier")
+    rehydrated, _ = records.rehydrate(export.records[0].plan)
+    assert rehydrated.plan_id == "P9" and rehydrated.status == PlanStatus.PENDING
+
+
 def test_an_unknown_kind_names_its_line(tmp_path):
     path = _write(tmp_path, [{"kind": "watchlist", "ticker": "A", "added_at": "x"}, {"kind": "row"}])
     with pytest.raises(ValueError, match="line 2"):

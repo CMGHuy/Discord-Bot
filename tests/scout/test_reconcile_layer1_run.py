@@ -59,12 +59,12 @@ def _rec(plan_id="P1", ticker="AAA", direction="bullish", klass="closed", **plan
                 issued_at="2026-10-06T15:00:00+00:00")
     plan.update(plan_kw)
     doc = plan_to_dict(TradePlanV2(**plan))
-    trade = {"id": f"T-{plan_id}", "plan_id": plan_id, "ticker": ticker, "direction": direction,
+    trade = {"trade_id": f"T-{plan_id}", "plan_id": plan_id, "ticker": ticker, "direction": direction,
              "entry": 100.2 if long else 99.8, "stop_loss": doc["stop_loss"],
              "take_profit": doc["tp1"], "opened_at": "2026-10-06T15:01:00+00:00",
              "closed_at": "2026-10-08T17:00:00+00:00", "exit_price": 104.0 if long else 96.0,
              "close_reason": "tp1", "legs": [], "ledger": "weak"}
-    journal = {"trade_id": trade["id"], "outcome": "win", "r_realized": 1.727}
+    journal = {"trade_id": trade["trade_id"], "outcome": "win", "r_realized": 1.727}
     if klass == "manual":
         trade["close_reason"] = "manual"
     if klass == "still_open":
@@ -95,6 +95,12 @@ def test_a_scored_row_carries_both_fill_models_and_telescopes():
     assert (row.ledger, row.side, row.era, row.stamp_source) == ("weak", "long", "headline",
                                                                  "issued_at")
     assert row.entry_slip is not None and row.poll_fill is not None
+
+
+def test_a_row_names_the_trade_by_the_exported_trade_id_column():
+    # Production trade docs carry no "id": the export merges the trade_id column in.
+    assert _row(_rec()).trade_id == "T-P1"
+    assert _row(_rec(klass="unfilled")).trade_id is None
 
 
 def test_a_short_is_scored_on_its_mirrored_bars():

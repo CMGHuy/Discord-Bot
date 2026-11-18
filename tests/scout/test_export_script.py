@@ -317,10 +317,50 @@ def test_reconcile_is_json_lines_not_a_second_copy(source):
 
 def test_reconcile_plan_lines_join_trade_and_journal_docs(source):
     body = reconcile_body(source)
-    assert "'plan'::text AS kind, p.doc AS plan, t.doc AS trade, j.doc AS journal" in body
+    assert "'plan'::text AS kind," in body
+    assert all(f" AS {alias}" in body for alias in ("plan", "trade", "journal"))
     assert "LEFT JOIN trades t ON t.doc->>'plan_id' = p.plan_id" in body
     assert "LEFT JOIN journal_entries j ON j.trade_id = t.trade_id" in body
     assert "WHERE p.created_at >= (:'since')::timestamptz" in body
+
+
+def _merge_of(body: str, alias: str) -> str:
+    """The SQL expression emitted AS <alias> in the reconcile plan select: the
+    select lists one aliased expression per line, from `AS kind` to FROM plans."""
+    select = body[body.index("'plan'::text AS kind"):body.index("FROM plans p")]
+    lines = [line.strip() for line in select.splitlines()]
+    out = []
+    for line in lines[lines.index(f"-- {alias}") + 1:]:
+        if line.startswith("--"):
+            break
+        out.append(line)
+    return " ".join(out)
+
+
+PLAN_COLUMNS = ("plan_id", "ticker", "strategy", "horizon_key", "status", "created_at",
+                "valid_session")
+TRADE_COLUMNS = ("trade_id", "ticker", "strategy", "horizon", "direction", "status",
+                 "opened_at", "closed_at", "entry", "stop_loss")
+JOURNAL_COLUMNS = ("trade_id", "strategy", "outcome", "closed_at", "created_at")
+
+
+@pytest.mark.parametrize("alias, alias_of, columns", [
+    ("plan", "p", PLAN_COLUMNS), ("trade", "t", TRADE_COLUMNS),
+    ("journal", "j", JOURNAL_COLUMNS)])
+def test_reconcile_merges_the_identity_columns_into_each_doc(source, alias, alias_of, columns):
+    # The docs do not hold the columns promoted out of them (schema.py), so the
+    # export puts them back; the doc is the right operand, so a doc value wins.
+    expr = _merge_of(reconcile_body(source), alias)
+    for column in columns:
+        assert f"'{column}', {alias_of}.{column}" in expr
+    assert f"|| {alias_of}.doc" in expr
+
+
+@pytest.mark.parametrize("alias, alias_of, key", [("trade", "t", "trade_id"),
+                                                  ("journal", "j", "trade_id")])
+def test_reconcile_keeps_a_missing_left_join_row_null(source, alias, alias_of, key):
+    expr = _merge_of(reconcile_body(source), alias)
+    assert f"CASE WHEN {alias_of}.{key} IS NULL THEN NULL ELSE" in expr
 
 
 def test_reconcile_rejection_and_watchlist_lines(source):

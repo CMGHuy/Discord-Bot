@@ -20,7 +20,10 @@
 #             unaligned tuples only (-A -t), each line built by row_to_json and
 #             tagged with "kind": plan (plan doc + trade doc + journal doc, one
 #             line per plan-trade pair), rejection (gate_rejections), watchlist
-#             (the whole table); then each line of backups/deploys.jsonl wrapped
+#             (the whole table); the three docs carry the identity columns the
+#             tables promoted out of them (plan_id, trade_id, ...), the doc's
+#             own value winning on a clash and a missing trade/journal staying
+#             null; then each line of backups/deploys.jsonl wrapped
 #             as {"kind":"deploy","entry":...}. The since date (YYYY-MM-DD)
 #             reaches SQL only as the psql variable :'since'.
 #
@@ -168,7 +171,13 @@ export_reconcile() {
 SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;
 SET TIME ZONE 'UTC';
 SELECT row_to_json(x) FROM (
-  SELECT 'plan'::text AS kind, p.doc AS plan, t.doc AS trade, j.doc AS journal
+  SELECT 'plan'::text AS kind,
+  -- plan
+  jsonb_build_object('plan_id', p.plan_id, 'ticker', p.ticker, 'strategy', p.strategy, 'horizon_key', p.horizon_key, 'status', p.status, 'created_at', p.created_at, 'valid_session', p.valid_session) || p.doc AS plan,
+  -- trade
+  CASE WHEN t.trade_id IS NULL THEN NULL ELSE jsonb_build_object('trade_id', t.trade_id, 'ticker', t.ticker, 'strategy', t.strategy, 'horizon', t.horizon, 'direction', t.direction, 'status', t.status, 'opened_at', t.opened_at, 'closed_at', t.closed_at, 'entry', t.entry, 'stop_loss', t.stop_loss) || t.doc END AS trade,
+  -- journal
+  CASE WHEN j.trade_id IS NULL THEN NULL ELSE jsonb_build_object('trade_id', j.trade_id, 'strategy', j.strategy, 'outcome', j.outcome, 'closed_at', j.closed_at, 'created_at', j.created_at) || j.doc END AS journal
   FROM plans p
   LEFT JOIN trades t ON t.doc->>'plan_id' = p.plan_id
   LEFT JOIN journal_entries j ON j.trade_id = t.trade_id
