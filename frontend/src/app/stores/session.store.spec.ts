@@ -12,7 +12,7 @@ import {
   errorInterceptor,
   loadingInterceptor,
 } from '../api/interceptors';
-import { SessionStore } from './session.store';
+import { SessionStore, arrivalUrl } from './session.store';
 
 /* NG28 — session state.
  *
@@ -281,6 +281,18 @@ describe('SessionStore', () => {
 
       expect(store.takeRedirect()).toBe('/trades/abc');
       expect(store.takeRedirect()).toBeNull();
+    });
+
+    it('keeps the fragment of a deep link to a heading (v236)', async () => {
+      await bootFrom('/insights/guide/glossary#r-multiple');
+
+      expect(store.takeRedirect()).toBe('/insights/guide/glossary#r-multiple');
+    });
+
+    it('reads the arrival URL whole: path, query and fragment', () => {
+      expect(arrivalUrl({ pathname: '/insights/guide/glossary', search: '', hash: '#r-multiple' }))
+        .toBe('/insights/guide/glossary#r-multiple');
+      expect(arrivalUrl({ pathname: '/risk', search: '?tab=a', hash: '' })).toBe('/risk?tab=a');
     });
 
     it('captures it even for a visitor who is already signed in', async () => {
