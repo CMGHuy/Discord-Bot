@@ -1,0 +1,119 @@
+"""v236 V236-8..V236-10: what chapters 1, 3 and 12 must keep saying (spec v215).
+
+The generic checks (placeholders, sources, headings, figures, anchor fixture)
+live in test_guide_content.py; this module pins each chapter's own promises.
+"""
+from __future__ import annotations
+
+import re
+
+import pytest
+
+from swingbot.admin.guide import chapters, live_market, placeholders
+
+#: Spec v215 § What the reader gets: the twelve chapter slugs.
+SPEC_SLUGS = frozenset({
+    "what-it-is", "reading-an-alert", "pipeline", "levels", "strategies", "gates",
+    "trade-plan", "sizing-risk", "after-the-alert", "measuring-edge", "admin-tour", "glossary"})
+_GUIDE_LINK = re.compile(r"\]\(/insights/guide/([a-z0-9-]+)(?:#([a-z0-9_-]+))?\)")
+_SELF_LINK = re.compile(r"\]\(#([a-z0-9_-]+)\)")
+
+
+@pytest.fixture(autouse=True)
+def _no_live_book(monkeypatch):
+    """alerts.per_week would read the database."""
+    monkeypatch.setattr(live_market, "_load_trades", lambda: [])
+
+
+def _by_slug() -> dict[str, chapters.Chapter]:
+    return {chapter.slug: chapter for chapter in chapters.load_chapters()}
+
+
+def _chapter(slug: str) -> chapters.Chapter:
+    found = _by_slug().get(slug)
+    assert found is not None, f"docs/guide has no chapter '{slug}'"
+    return found
+
+
+def _anchors(chapter: chapters.Chapter) -> list[str]:
+    return [heading.anchor for heading in chapter.headings]
+
+
+def _section(body: str, heading: str) -> str:
+    """The text under one `## heading`, up to the next `## `."""
+    return body.split(f"## {heading}\n", 1)[1].split("\n## ", 1)[0]
+
+
+def _link_problems(loaded: dict[str, chapters.Chapter]) -> list[str]:
+    problems = []
+    for chapter in loaded.values():
+        name = chapter.path.name
+        for slug, anchor in _GUIDE_LINK.findall(chapter.body):
+            if slug not in SPEC_SLUGS:
+                problems.append(f"{name}: /insights/guide/{slug} is not a guide chapter")
+            elif anchor and slug in loaded and anchor not in _anchors(loaded[slug]):
+                problems.append(f"{name}: #{anchor} is not a heading of {slug}")
+        problems += [f"{name}: #{anchor} is not a heading of this chapter"
+                     for anchor in _SELF_LINK.findall(chapter.body)
+                     if anchor not in _anchors(chapter)]
+    return problems
+
+
+# --- chapter 1: what-it-is ---------------------------------------------------
+
+def test_chapter_1_header_and_plain_words_callout():
+    chapter = _chapter("what-it-is")
+    assert (chapter.order, chapter.title) == (1, "What the bot is (and isn't)")
+    assert chapter.path.name == "01-what-it-is.md"
+    assert chapter.body.startswith("> **In plain words**")
+
+
+def test_chapter_1_sections_in_order():
+    assert _anchors(_chapter("what-it-is")) == [
+        "what-it-does", "what-it-does-not-do", "swing-horizons", "what-an-alert-is",
+        "where-alerts-appear", "the-notice"]
+
+
+def test_chapter_1_says_paper_only_and_that_the_demo_is_not_live():
+    section = _section(_chapter("what-it-is").body, "What it does not do")
+    assert "It never places an order." in section
+    assert "A demo account is not a live account" in section
+    assert "nothing is sent to eToro today" in section
+
+
+def test_chapter_1_carries_the_full_notice():
+    notice = _section(_chapter("what-it-is").body, "The notice")
+    for phrase in ("This guide is education about a paper-trading tool",
+                   "Alerts are not recommendations tailored to you",
+                   "A suggested size is a default, not advice",
+                   "Past results do not predict future ones"):
+        assert phrase in notice, phrase
+
+
+def test_chapter_1_horizons_come_from_the_live_table():
+    section = _section(_chapter("what-it-is").body, "Swing horizons")
+    assert "{{horizons.table}}" in section
+    rendered = placeholders.resolve(section)
+    assert "| Horizon | Swing | Longest hold | Status |" in rendered
+    assert "{{" not in rendered
+
+
+# --- every chapter -----------------------------------------------------------
+
+def test_internal_links_name_a_guide_chapter_and_a_real_anchor():
+    """Anchors are checked for chapters that exist; V236-10 also requires the chapter."""
+    assert _link_problems(_by_slug()) == []
+
+
+def test_link_checker_reports_a_bad_slug_and_a_missing_anchor(tmp_path):
+    (tmp_path / "01-what-it-is.md").write_text(
+        "---\ntitle: T\nslug: what-it-is\norder: 1\nreviewed_for: 2.19.2\nsources: []\n---\n"
+        "> **In plain words** x.\n\n## Real\n\n[a](/insights/guide/nowhere) [b](#ghost) "
+        "[c](/insights/guide/what-it-is#real) [d](/insights/guide/what-it-is#gone)\n",
+        encoding="utf-8")
+    loaded = {c.slug: c for c in chapters.load_chapters(tmp_path)}
+    assert _link_problems(loaded) == [
+        "01-what-it-is.md: /insights/guide/nowhere is not a guide chapter",
+        "01-what-it-is.md: #gone is not a heading of what-it-is",
+        "01-what-it-is.md: #ghost is not a heading of this chapter",
+    ]
