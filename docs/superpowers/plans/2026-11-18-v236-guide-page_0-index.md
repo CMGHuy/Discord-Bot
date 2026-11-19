@@ -157,6 +157,8 @@ Groups that may run side by side (disjoint files, no contract between them):
 
 ## Handoff
 
+**v235 panel advisories (2026-11-19):** before writing chapter prose that uses a placeholder, read `implemented/2026-11-18-v235-guide-foundation_0-index.md` § Panel review — 15 wording/placeholder advisories (e.g. `MAX_RISK_AMOUNT_ABSOLUTE` renders `$0` when disabled; `alerts.per_week` counts both ledgers).
+
 Binding on every part writer (controller and partner decisions, 2026-11-18):
 
 1. **Origin.** Plan v235's frontend tasks moved here at the 20-task cap (partner, 2026-11-18; v235 `## Handoff` item 9). Old ids map V235-9 → V236-1, V235-10 → V236-2, V235-11 → V236-3 + V236-4, V235-12 → V236-5 + V236-6, V235-13..V235-18 → V236-7..V236-12. Drafts written against the old ids must be renamed (e.g. V235-13 → V236-7, V235-15 → V236-9, V235-17 → V236-11). **V235-5..V235-8 stay v235 ids** (API, fixture, `guide_sources.py`, close-out rule) and are cited as such.

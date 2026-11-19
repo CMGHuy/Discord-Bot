@@ -167,3 +167,24 @@ Plan-writer decisions (index, 2026-11-18), for the controller to check:
 - **Anchors are applied after sanitising.** Angular's sanitiser drops `id`, so the page sets `id` on rendered `h2`/`h3` in order from the API's heading list (V236-3); the content test forbids headings inside `<details>` so the two orders always agree.
 - **Placeholders resolve per request; chapter files cache per process.** Live values (alerts per week) would otherwise freeze until a restart; the spec's "cached per process" is honoured for the files.
 - **Plan B/C checks are wired now but vacuous.** The strategies file-set check activates once `docs/guide/strategies/` holds any `.md`; the bare-`N%` check runs over orders 7–9, absent in Plan A.
+
+## Panel review (pre-close-out, 2026-11-19)
+
+Range `bc265140..5edb5fe5`. No BLOCKING; every ADVISORY is carried to the chapter
+prose and placeholder work of v236 / Plans B and C (none ships prose here).
+
+- technical-analyst: `CLUSTER_TOLERANCE_PCT` (`live_market.py:136`) is only the tight 1.5% pass, not the looser second pass (`levels.py:507`) -- prose must say which -- carried
+- technical-analyst: `levels.families` lists 12 flat families; prose must not count EMA/VWAP/AVWAP as independent confirmations -- carried
+- technical-analyst: horizons/gates read at call time, no lookahead -- clean
+- risk-manager: `MAX_RISK_AMOUNT_ABSOLUTE` renders `$0` when the cap is disabled (`live_risk.py:91`, `config.py:669-676`); render "disabled" before any chapter uses it -- carried
+- risk-manager: gap table covers plain gap sizing only, not the ATR-band path (`gap_sizing.py:173-184`) -- carried
+- risk-manager: the 2% appears as `RISK_PER_TRADE_PCT`, `.max` and `sizing.risk_ceiling`; prose states dollar risk and which bound binds -- carried
+- risk-manager: per-horizon stop caps may bind tighter than `MAX_STOP_LOSS_PCT` (`sizing.py:50-60`) -- carried
+- risk-manager: heat caps are computed from each open plan's current stop; prose must say so -- carried
+- risk-manager: `sizing.kelly_cap` prose conditional on `POSITION_SIZING_MODE` -- carried
+- financial-advisor: `alerts.per_week` counts both ledgers (controller ruling: weak-ledger strategy alerts post too); name the population in the label -- carried
+- financial-advisor: show the busiest of the 8 weeks beside the mean -- carried
+- financial-advisor: `provenance_label` needs `unit` and `ledger`/`tier` before the first performance figure ships (`placeholders.py:77-80`) -- carried
+- financial-advisor: turnover / short-term tax drag stated in Plan C prose -- carried
+- financial-advisor: content test that every performance placeholder routes through `provenance_label` -- carried
+- financial-advisor: `alerts.per_week` "as of" is the render date; show latest `opened_at` -- carried
