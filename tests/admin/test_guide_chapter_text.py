@@ -117,3 +117,55 @@ def test_link_checker_reports_a_bad_slug_and_a_missing_anchor(tmp_path):
         "01-what-it-is.md: #gone is not a heading of what-it-is",
         "01-what-it-is.md: #ghost is not a heading of this chapter",
     ]
+
+
+# --- chapter 3: pipeline -----------------------------------------------------
+
+PIPELINE_ANCHORS = [
+    "watchlist", "price-data", "levels-from-every-method", "duplicate-merge",
+    "setups-and-strategy-signals", "confluence-scenarios", "strategy-signals", "gates",
+    "plan-construction", "sizing-and-caps", "alert", "monitoring", "close"]
+
+
+def test_chapter_3_header_and_plain_words_callout():
+    chapter = _chapter("pipeline")
+    assert (chapter.order, chapter.title) == (3, "The scan pipeline, end to end")
+    assert chapter.body.startswith("> **In plain words**")
+
+
+def test_chapter_3_walks_the_pipeline_in_order():
+    assert _anchors(_chapter("pipeline")) == PIPELINE_ANCHORS
+
+
+def test_chapter_3_places_the_diagram_once_before_the_first_stage():
+    body = _chapter("pipeline").body
+    assert chapters.FIGURE_RE.findall(body) == ["pipeline"]
+    assert body.index("<!-- figure:pipeline -->") < body.index("## Watchlist")
+
+
+def test_chapter_3_takes_every_rule_number_from_a_placeholder():
+    names = set(placeholders.names_in(_chapter("pipeline").body))
+    assert {"levels.families", "CLUSTER_TOLERANCE_PCT", "MAX_STOP_LOSS_PCT", "CLAMP_STOP_TO_HARD_CAP",
+            "RISK_PER_TRADE_PCT", "MAX_RISK_AMOUNT_ABSOLUTE", "POSITION_SIZING_MODE",
+            "PORTFOLIO_HEAT_CAP_PCT", "CORRELATED_HEAT_CAP_PCT"} <= names
+    rendered = placeholders.resolve(_section(_chapter("pipeline").body, "Sizing and caps"))
+    assert "{{" not in rendered and "%" in rendered
+
+
+def test_chapter_3_names_the_three_sizing_outcomes():
+    section = _section(_chapter("pipeline").body, "Sizing and caps")
+    for outcome in ("**rejected**", "**clamped**", "**size-0 alert**", "`plan rejected (`"):
+        assert outcome in section, outcome
+
+
+def test_chapter_3_sources_cover_every_stage():
+    paths = {entry.partition(":")[0] for entry in _chapter("pipeline").sources}
+    assert {
+        "swingbot/core/scanning/scan_run.py", "swingbot/core/scanning/fetch.py",
+        "swingbot/core/market/levels.py", "swingbot/core/scanning/dedup.py",
+        "swingbot/core/scanning/strategy_pass.py", "swingbot/core/scanning/analyze.py",
+        "swingbot/core/scanning/gating.py", "swingbot/core/planning/builders.py",
+        "swingbot/core/planning/account.py", "swingbot/core/edge/heat.py",
+        "swingbot/core/edge/correlation.py", "swingbot/core/scanning/alert_embeds.py",
+        "swingbot/core/tracking/performance.py", "swingbot/core/planning/plan_engine.py",
+        "frontend/src/app/workspaces/guide/pipeline-diagram.ts"} <= paths

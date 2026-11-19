@@ -1,5 +1,20 @@
 {
   "chapters": {
+    "pipeline": [
+      "watchlist",
+      "price-data",
+      "levels-from-every-method",
+      "duplicate-merge",
+      "setups-and-strategy-signals",
+      "confluence-scenarios",
+      "strategy-signals",
+      "gates",
+      "plan-construction",
+      "sizing-and-caps",
+      "alert",
+      "monitoring",
+      "close"
+    ],
     "what-it-is": [
       "what-it-does",
       "what-it-does-not-do",
