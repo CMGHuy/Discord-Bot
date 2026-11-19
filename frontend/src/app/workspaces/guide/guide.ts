@@ -11,10 +11,11 @@ import { GuideStore } from '../../stores/guide.store';
 import { Async } from '../../ui/async';
 import { ViewportService } from '../../ui/breakpoints';
 import { Button } from '../../ui/button';
-import { Select, SelectOption } from '../../ui/form-controls';
+import { Select, SelectOption, TextInput } from '../../ui/form-controls';
 import { Drawer, Panel } from '../../ui/layout';
 import { Page } from '../../ui/page';
 import { GUIDE_FIGURES } from './guide-figures';
+import { GuideSearchEntry, buildGuideSearchIndex, searchGuide, snippetFor } from './guide-search';
 import { applyHeadingAnchors, internalGuideUrl, renderGuideSegments, scrollToAnchor } from './guide-markdown';
 
 /** The one-line notice on every guide page (spec v215 § Risks). */
@@ -32,7 +33,7 @@ export const GUIDE_NOTICE = 'Education about a paper-trading tool, not advice: a
   selector: 'sb-guide',
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
-  imports: [Async, Button, Drawer, NgComponentOutlet, NgTemplateOutlet, Page, Panel, RouterLink, Select],
+  imports: [Async, Button, Drawer, NgComponentOutlet, NgTemplateOutlet, Page, Panel, RouterLink, Select, TextInput],
   template: `
     <sb-page [heading]="chapter()?.title ?? null">
       <div page-primary class="guide-layout">
@@ -40,18 +41,21 @@ export const GUIDE_NOTICE = 'Education about a paper-trading tool, not advice: a
           <div class="guide-bar">
             <sb-select class="guide-picker" ariaLabel="Chapter" [options]="chapterOptions()"
                        [value]="activeSlug() ?? ''" (valueChange)="goTo($event)" />
+            <ng-container *ngTemplateOutlet="search" />
           </div>
         } @else if (tocMode() === 'drawer') {
           <div class="guide-bar">
             <button sb-button type="button" class="guide-contents" (click)="drawerOpen.set(true)">Contents</button>
           </div>
           <sb-drawer [open]="drawerOpen()" heading="Contents" (closed)="drawerOpen.set(false)">
+            <ng-container *ngTemplateOutlet="search" />
             <ng-container *ngTemplateOutlet="contents" />
           </sb-drawer>
         }
         <div class="guide-body">
           @if (tocMode() === 'rail') {
             <nav class="guide-rail" aria-label="Guide contents">
+              <ng-container *ngTemplateOutlet="search" />
               <ng-container *ngTemplateOutlet="contents" />
             </nav>
           }
@@ -76,6 +80,28 @@ export const GUIDE_NOTICE = 'Education about a paper-trading tool, not advice: a
         </div>
       </div>
     </sb-page>
+
+    <ng-template #search>
+      <div class="guide-search" role="search">
+        <sb-text-input type="search" ariaLabel="Search the guide" placeholder="Search the guide"
+                       [value]="query()" (valueChange)="query.set($event)" />
+        @if (searching()) {
+          @if (results().length) {
+            <ul class="guide-results">
+              @for (hit of results(); track hit.slug + '#' + hit.anchor) {
+                <li><a class="guide-result" [routerLink]="['/insights/guide', hit.slug]"
+                       [fragment]="hit.anchor ?? undefined" (click)="picked()">
+                  <span class="result-title">{{ labelFor(hit) }}</span>
+                  <span class="result-text">{{ snippet(hit.text) }}</span>
+                </a></li>
+              }
+            </ul>
+          } @else {
+            <p class="guide-no-match">No section matches “{{ query().trim() }}”</p>
+          }
+        }
+      </div>
+    </ng-template>
 
     <ng-template #contents>
       <ol class="guide-toc">
@@ -128,6 +154,12 @@ export const GUIDE_NOTICE = 'Education about a paper-trading tool, not advice: a
     sb-guide .toc-heading { color: var(--text-secondary); font-size: var(--text-table); }
     sb-guide .toc-heading.sub { padding-left: var(--space-10); }
     sb-guide .toc-chapter[aria-current='page'] { color: var(--accent); font-weight: 600; }
+    sb-guide .guide-bar .guide-search { flex: 1 1 16rem; min-width: 0; }
+    sb-guide .guide-search { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+    sb-guide .guide-search sb-text-input { display: block; }
+    sb-guide .guide-results { list-style: none; margin: 0; padding: 0; }
+    sb-guide .guide-result { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: var(--hit-min); padding: var(--space-6) 0; border-bottom: 1px solid var(--border); color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+    sb-guide .result-text, sb-guide .guide-no-match { margin: 0; color: var(--text-muted); font-size: var(--text-table); }
   `,
 })
 export class Guide {
@@ -148,6 +180,11 @@ export class Guide {
   protected readonly drawerOpen = signal(false);
   protected readonly chapterOptions = computed<SelectOption[]>(() =>
     this.store.chapters().map((c) => ({ value: c.slug, label: c.title })));
+  protected readonly query = signal('');
+  protected readonly searching = computed(() => this.query().trim() !== '');
+  private readonly searchIndex = computed(() =>
+    buildGuideSearchIndex(this.store.chapters(), this.store.bodies()));
+  protected readonly results = computed(() => searchGuide(this.searchIndex(), this.query()));
 
   protected readonly activeSlug = computed(() => this.slug() || this.store.firstSlug());
   protected readonly chapter = computed(() =>
@@ -190,6 +227,18 @@ export class Guide {
       applyHeadingAnchors(host, chapter.headings, `/insights/guide/${chapter.slug}`);
       this.scrollToFragment(host, chapter.slug, this.fragment());
     });
+    // Search intent: the first non-blank query fetches every body never
+    // requested, so text search covers the whole guide. Keyed on
+    // `searching`, not the text, and skipping any slug with a status, so a
+    // missing or failed chapter is not re-fetched per keystroke.
+    effect(() => {
+      if (!this.searching()) return;
+      const slugs = this.store.chapters().map((c) => c.slug);
+      untracked(() => {
+        const known = this.store.chapterStatus();
+        slugs.filter((slug) => known[slug] === undefined).forEach((slug) => this.store.loadChapter(slug));
+      });
+    });
   }
 
   protected figure(name: string): Type<unknown> | null {
@@ -207,10 +256,22 @@ export class Guide {
     if (slug && slug !== this.activeSlug()) void this.router.navigate(['/insights/guide', slug]);
   }
 
-  /** A contents link was followed: close the drawer so the chapter is what
-   *  the reader sees next, and let the fragment scroll again. */
+  /** A result's label: its heading, or the chapter title for a chapter hit. */
+  protected labelFor(hit: GuideSearchEntry): string {
+    const chapter = this.store.chapters().find((c) => c.slug === hit.slug);
+    return chapter?.headings.find((h) => h.anchor === hit.anchor)?.text ?? hit.chapterTitle;
+  }
+
+  protected snippet(text: string): string {
+    return snippetFor(text, this.query());
+  }
+
+  /** A contents or result link was followed: close the drawer and the
+   *  result list so the chapter is what the reader sees next, and let the
+   *  fragment scroll again. */
   protected picked(): void {
     this.drawerOpen.set(false);
+    this.query.set('');
     this.scrolledTo = null;
   }
 

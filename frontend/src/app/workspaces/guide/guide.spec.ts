@@ -202,3 +202,97 @@ describe('Guide page: contents at three widths', () => {
     expect(navigate).toHaveBeenCalledWith(['/insights/guide', 'glossary']);
   });
 });
+
+const GLOSSARY = { slug: 'glossary', title: 'Glossary', reviewed_for: '2.19.1', markdown: '### R multiple\n\nOne R is the risk.' };
+
+function typeQuery(el: HTMLElement, text: string): void {
+  const field = el.querySelector<HTMLInputElement>('.guide-search input')!;
+  field.value = text;
+  field.dispatchEvent(new Event('input'));
+}
+
+describe('Guide page: search', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('places the field in the rail, the drawer or under the picker by width', async () => {
+    let { el } = await openGuide('what-it-is');
+    expect(el.querySelectorAll('.guide-search')).toHaveLength(1);
+    expect(el.querySelector('nav.guide-rail .guide-search')).not.toBeNull();
+
+    installDialogPolyfill();
+    const tablet = await openGuide('what-it-is', { width: 'tablet' });
+    expect(tablet.el.querySelector('.guide-search')).toBeNull();
+    tablet.el.querySelector<HTMLButtonElement>('button.guide-contents')!.click();
+    await settle(tablet.fixture);
+    expect(tablet.el.querySelector('sb-drawer .guide-search')).not.toBeNull();
+
+    ({ el } = await openGuide('what-it-is', { width: 'phone' }));
+    expect(el.querySelector('.guide-bar .guide-search')).not.toBeNull();
+  });
+
+  it('loads nothing more until the reader searches, then finds a heading', async () => {
+    const { el, fixture, http } = await openGuide('what-it-is');
+    http.expectNone('/api/v1/guide/glossary');
+    typeQuery(el, 'horizons');
+    await settle(fixture);
+    http.expectOne('/api/v1/guide/glossary').flush(GLOSSARY);
+    await settle(fixture);
+    const hit = el.querySelector<HTMLAnchorElement>('a.guide-result')!;
+    expect(hit.getAttribute('href')).toBe('/insights/guide/what-it-is#swing-horizons');
+    expect(hit.querySelector('.result-title')!.textContent!.trim()).toBe('Swing horizons');
+  });
+
+  it('searches the text of the chapters it fetched for the query', async () => {
+    const { el, fixture, http } = await openGuide('what-it-is');
+    typeQuery(el, 'risk');
+    await settle(fixture);
+    http.expectOne('/api/v1/guide/glossary').flush(GLOSSARY);
+    await settle(fixture);
+    expect([...el.querySelectorAll('a.guide-result')].map((a) => a.getAttribute('href')))
+      .toEqual(['/insights/guide/glossary#r-multiple']);
+    expect(el.querySelector('a.guide-result .result-text')!.textContent).toContain('One R is the risk.');
+  });
+
+  it('says so when nothing matches', async () => {
+    const { el, fixture, http } = await openGuide('what-it-is');
+    typeQuery(el, 'zzz');
+    await settle(fixture);
+    http.expectOne('/api/v1/guide/glossary').flush(GLOSSARY);
+    await settle(fixture);
+    expect(el.querySelector('a.guide-result')).toBeNull();
+    expect(el.querySelector('.guide-no-match')!.textContent!.trim()).toBe('No section matches “zzz”');
+  });
+
+  it('shows neither results nor the empty state for a blank query', async () => {
+    const { el, fixture } = await openGuide('what-it-is');
+    typeQuery(el, '   ');
+    await settle(fixture);
+    expect(el.querySelector('.guide-results')).toBeNull();
+    expect(el.querySelector('.guide-no-match')).toBeNull();
+  });
+
+  it('does not re-fetch a missing chapter on the next keystroke', async () => {
+    const { el, fixture, http } = await openGuide('what-it-is');
+    typeQuery(el, 'r');
+    await settle(fixture);
+    http.expectOne('/api/v1/guide/glossary')
+      .flush({ error: { code: 'not_found', message: 'none' } }, { status: 404, statusText: 'x' });
+    await settle(fixture);
+    typeQuery(el, 'ri');
+    await settle(fixture);
+    http.expectNone('/api/v1/guide/glossary');
+  });
+
+  it('clears the query once a result is followed', async () => {
+    const { el, fixture, http } = await openGuide('what-it-is');
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    typeQuery(el, 'horizons');
+    await settle(fixture);
+    http.expectOne('/api/v1/guide/glossary').flush(GLOSSARY);
+    await settle(fixture);
+    el.querySelector<HTMLAnchorElement>('a.guide-result')!.click();
+    await settle(fixture);
+    expect(el.querySelector('a.guide-result')).toBeNull();
+    expect(el.querySelector<HTMLInputElement>('.guide-search input')!.value).toBe('');
+  });
+});
