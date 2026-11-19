@@ -1,9 +1,10 @@
 """Correlation-aware exposure: three 'different' trades that are 0.9-
-correlated are one trade at 3x size. Positions whose 90-day daily-returns
-correlation with a candidate exceeds THRESHOLD count their heat against
-the candidate's cluster budget (CORRELATED_HEAT_CAP_PCT). When price
-history is too thin to correlate, same-sector membership (universe file
-tags, E13) is the conservative fallback."""
+correlated are one trade at 3x size. Positions whose daily-returns
+correlation over the last DEFAULT_WINDOW bars with a candidate exceeds
+DEFAULT_THRESHOLD count their heat against the candidate's cluster budget
+(CORRELATED_HEAT_CAP_PCT). When price history is too thin to correlate
+(fewer than MIN_OVERLAP_BARS overlapping returns), same-sector membership
+(universe file tags, E13) is the conservative fallback."""
 from __future__ import annotations
 
 import pandas as pd
@@ -13,9 +14,11 @@ from swingbot.core.edge.heat import trade_risk_pct
 
 MIN_OVERLAP_BARS = 30
 DEFAULT_THRESHOLD = 0.75
+DEFAULT_WINDOW = 90   # daily returns per side; the guide quotes it (v235)
 
 
-def returns_corr(df_a: pd.DataFrame, df_b: pd.DataFrame, window: int = 90) -> float | None:
+def returns_corr(df_a: pd.DataFrame, df_b: pd.DataFrame,
+                 window: int = DEFAULT_WINDOW) -> float | None:
     ra = df_a["Close"].pct_change().dropna().tail(window)
     rb = df_b["Close"].pct_change().dropna().tail(window)
     joined = pd.concat([ra, rb], axis=1, join="inner").dropna()
@@ -25,7 +28,7 @@ def returns_corr(df_a: pd.DataFrame, df_b: pd.DataFrame, window: int = 90) -> fl
 
 
 def cluster_exposure(open_trades: list, candidate_ticker: str,
-                     dfs: dict, balance: float, *, window: int = 90,
+                     dfs: dict, balance: float, *, window: int = DEFAULT_WINDOW,
                      threshold: float = DEFAULT_THRESHOLD,
                      sectors: dict | None = None) -> dict:
     cand_df = dfs.get(candidate_ticker)

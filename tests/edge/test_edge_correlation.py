@@ -1,7 +1,10 @@
+import inspect
+
 import numpy as np
 import pytest
 
 from tests.conftest import make_ohlcv
+from swingbot.core.edge import correlation
 from swingbot.core.edge.correlation import cluster_exposure, returns_corr
 
 
@@ -46,3 +49,28 @@ def test_sector_fallback_when_data_thin():
                            sectors={"AAA": "Information Technology",
                                     "CAND": "Information Technology"})
     assert exp["cluster"] == ["AAA"]                 # same sector counted
+
+
+def test_default_window_is_a_named_constant_of_ninety():
+    assert correlation.DEFAULT_WINDOW == 90
+
+
+def test_both_signatures_default_to_the_constant():
+    rc = inspect.signature(correlation.returns_corr).parameters["window"].default
+    ce = inspect.signature(correlation.cluster_exposure).parameters["window"].default
+    assert rc == correlation.DEFAULT_WINDOW
+    assert ce == correlation.DEFAULT_WINDOW
+
+
+def test_default_window_matches_the_explicit_ninety():
+    a, b = _walk(1, n=300), _walk(2, n=300)
+    assert correlation.returns_corr(a, b) == correlation.returns_corr(a, b, window=90)
+
+
+def test_window_change_through_the_constant_is_read_at_definition_only(monkeypatch):
+    # The default is bound when the function is defined: patching the constant
+    # later does not change a call that omits `window` (same as a literal 90).
+    a, b = _walk(1, n=300), _walk(2, n=300)
+    before = correlation.returns_corr(a, b)
+    monkeypatch.setattr(correlation, "DEFAULT_WINDOW", 40)
+    assert correlation.returns_corr(a, b) == before
