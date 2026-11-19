@@ -59,7 +59,12 @@ _OVERFLOW_JS = """() => {
 }"""
 _VISIBLE_JS = "(sel) => { const el = document.querySelector(sel); return !!el && el.getClientRects().length > 0; }"
 _POSITION_JS = "(sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).position : null; }"
-_TOP_JS = "(id) => { const el = document.getElementById(id); return el ? el.getBoundingClientRect().top : null; }"
+_TOP_JS = """(id) => {
+  const el = document.getElementById(id);
+  const page = document.scrollingElement;
+  return el ? { top: el.getBoundingClientRect().top,
+                atEnd: page.scrollTop + window.innerHeight >= page.scrollHeight - 2 } : null;
+}"""
 
 
 # --- verdicts (pure) ---------------------------------------------------------
@@ -88,9 +93,13 @@ def target_problems(width: int, page: str, targets: list[dict]) -> list[str]:
             for t in targets if min(t["w"], t["h"]) < MIN_TARGET_PX]
 
 
-def deep_link_problems(width: int, link: str, top: float | None, height: int = HEIGHT) -> list[str]:
+def deep_link_problems(width: int, link: str, top: float | None, height: int = HEIGHT,
+                       at_end: bool = False) -> list[str]:
+    """A heading in the last screenful cannot scroll higher than the page's end: that is fine."""
     if top is None:
         return [f"{width}px {link}: heading not found"]
+    if at_end and 0 <= top <= height:
+        return []
     if not 0 <= top <= height / 2:
         return [f"{width}px {link}: heading at {top:.0f}px, not scrolled into the top half"]
     return []
@@ -119,9 +128,15 @@ def _shown(page, selector: str, timeout_ms: int = 15_000) -> bool:
     return True
 
 
+OPEN_ATTEMPTS = 2   # a single-process dev admin stalls now and then; a real defect fails both times
+
+
 def _open(page, base: str, path: str) -> bool:
-    page.goto(f"{base}/insights/guide{'/' + path if path else ''}", wait_until="domcontentloaded")
-    return _shown(page, "article.guide-chapter .md", 30_000)
+    for _ in range(OPEN_ATTEMPTS):
+        page.goto(f"{base}/insights/guide{'/' + path if path else ''}", wait_until="domcontentloaded")
+        if _shown(page, "article.guide-chapter .md", 30_000):
+            return True
+    return False
 
 
 def _page_problems(page, base: str, width: int, path: str) -> list[str]:
@@ -148,9 +163,9 @@ def _contents_problems(page, width: int) -> list[str]:
     return problems
 
 
-def _deep_link_top(page, base: str, link: str) -> float | None:
+def _deep_link_top(page, base: str, link: str) -> dict | None:
     slug, anchor = link.split("#", 1)
-    if not _open(page, base, f"{slug}#{anchor}") or not _shown(page, f"[id='{anchor}']"):
+    if not _open(page, base, f"{slug}#{anchor}") or not _shown(page, f"[id='{anchor}']", 30_000):
         return None
     page.wait_for_timeout(500)   # the page scrolls after its body renders
     return page.evaluate(_TOP_JS, anchor)
@@ -164,7 +179,8 @@ def check_width(page, base: str, width: int, out: Path) -> dict:
     problems += _contents_problems(page, width)
     page.screenshot(path=str(out / f"guide@{width}.png"))
     for link in DEEP_LINKS:
-        problems += deep_link_problems(width, link, _deep_link_top(page, base, link))
+        found = _deep_link_top(page, base, link)
+        problems += deep_link_problems(width, link, found and found["top"], at_end=bool(found and found["atEnd"]))
     return {"width": width, "problems": problems}
 
 

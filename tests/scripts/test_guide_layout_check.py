@@ -54,6 +54,13 @@ def test_deep_link_must_land_in_the_top_half():
     assert glc.deep_link_problems(390, "x#y", -5.0)[0].endswith("not scrolled into the top half")
 
 
+def test_a_heading_in_the_last_screenful_may_sit_lower_when_the_page_cannot_scroll_further():
+    assert glc.deep_link_problems(820, "what-it-is#the-notice", 525.0, at_end=True) == []
+    assert glc.deep_link_problems(820, "what-it-is#the-notice", 525.0, at_end=False) == [
+        "820px what-it-is#the-notice: heading at 525px, not scrolled into the top half"]
+    assert glc.deep_link_problems(820, "x#y", 3000.0, at_end=True)[0].endswith("top half")
+
+
 def test_report_lists_each_width_and_every_problem():
     text = glc.render_report([{"width": 390, "problems": []},
                               {"width": 820, "problems": ["820px pipeline: x"]}],
