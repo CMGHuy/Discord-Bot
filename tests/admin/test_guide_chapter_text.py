@@ -169,3 +169,54 @@ def test_chapter_3_sources_cover_every_stage():
         "swingbot/core/edge/correlation.py", "swingbot/core/scanning/alert_embeds.py",
         "swingbot/core/tracking/performance.py", "swingbot/core/planning/plan_engine.py",
         "frontend/src/app/workspaces/guide/pipeline-diagram.ts"} <= paths
+
+
+# --- chapter 12: glossary ----------------------------------------------------
+
+GLOSSARY_GROUPS = ["the-bot-and-its-alerts", "levels-and-setups", "inside-a-trade-plan",
+                   "risk-and-sizing", "measuring-results", "about-this-guide"]
+#: Anchors chapters 1 and 3 link to (part 3 header of plan v236).
+GLOSSARY_LINKED = {
+    "alert", "trade-plan", "paper-trade", "horizon", "long-and-short", "confidence",
+    "watchlist-and-universe", "level", "level-family", "confluence", "scenario", "strategy",
+    "completed-bar", "gate", "market-regime", "relative-strength", "stop", "tp1-and-tp2", "runner",
+    "scale-out", "reward-to-risk-rr", "stop-distance-cap", "risk-per-trade", "dollar-risk-cap",
+    "portfolio-heat", "correlated-heat", "size-0-alert", "gap-through-the-stop", "r-multiple", "badge"}
+
+
+def test_glossary_header_and_plain_words_callout():
+    chapter = _chapter("glossary")
+    assert (chapter.order, chapter.title, chapter.path.name) == (12, "Glossary", "12-glossary.md")
+    assert chapter.body.startswith("> **In plain words**")
+
+
+def test_glossary_groups_terms_one_heading_each():
+    headings = _chapter("glossary").headings
+    assert [h.anchor for h in headings if h.level == 2] == GLOSSARY_GROUPS
+    terms = [h.text.lower() for h in headings if h.level == 3]
+    assert len(terms) >= 45
+    assert len(set(terms)) == len(terms), "a term is defined twice"
+
+
+def test_glossary_defines_every_term_the_guide_links_to():
+    assert GLOSSARY_LINKED <= set(_anchors(_chapter("glossary")))
+    linked = {anchor for chapter in _by_slug().values()
+              for slug, anchor in _GUIDE_LINK.findall(chapter.body) if slug == "glossary" and anchor}
+    assert linked <= set(_anchors(_chapter("glossary")))
+
+
+def test_every_linked_chapter_is_written():
+    """From V236-10 on, prose links only to chapters that exist (no dead links)."""
+    loaded = _by_slug()
+    dead = sorted({f"{c.path.name} -> {slug}" for c in loaded.values()
+                   for slug, _anchor in _GUIDE_LINK.findall(c.body) if slug not in loaded})
+    assert dead == []
+    assert _link_problems(loaded) == []
+
+
+def test_glossary_risk_numbers_come_from_placeholders():
+    body = _chapter("glossary").body
+    assert {"MAX_STOP_LOSS_PCT", "RISK_PER_TRADE_PCT", "RISK_PER_TRADE_PCT.max", "MAX_RISK_AMOUNT_ABSOLUTE",
+            "PORTFOLIO_HEAT_CAP_PCT", "CORRELATED_HEAT_CAP_PCT", "correlation.threshold",
+            "correlation.window", "CLUSTER_TOLERANCE_PCT"} <= set(placeholders.names_in(body))
+    assert "{{" not in placeholders.resolve(body)
