@@ -16,6 +16,7 @@ import re
 from types import MappingProxyType
 from typing import Callable, Mapping
 
+from swingbot.admin.guide.live_market import MARKET_PLACEHOLDERS
 from swingbot.admin.guide.live_risk import RISK_PLACEHOLDERS
 
 PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}")
@@ -43,7 +44,7 @@ def _merge(*tables: Mapping[str, Callable[[], str]]) -> Mapping[str, Callable[[]
     return MappingProxyType(merged)
 
 
-PLACEHOLDERS: Mapping[str, Callable[[], str]] = _merge(RISK_PLACEHOLDERS)
+PLACEHOLDERS: Mapping[str, Callable[[], str]] = _merge(RISK_PLACEHOLDERS, MARKET_PLACEHOLDERS)
 
 
 def names_in(markdown: str) -> list[str]:
