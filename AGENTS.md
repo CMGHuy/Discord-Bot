@@ -505,6 +505,12 @@ symbol, rule, command, trap) aligns that skill before it counts as done
 (`close-out` Step 5b; `document-lifecycle.md` § Implemented plans keep the
 skills aligned).
 
+A plan whose diff touches a path in a guide chapter's `sources:`
+(`docs/guide/`) updates that chapter where behaviour changed and sets its
+`reviewed_for` to the new bot version, or records
+`guide: no reader-visible change` in the close-out commit; `close-out` Step 5b
+lists the chapters with `python scripts/dev/guide_sources.py <base>..<head>`.
+
 A plan's `**Goal:**` is an explanatory paragraph block, not one sentence: why the
 work exists, what changes once shipped, how it works, what it leaves alone, how
 success is measured (`docs/claude/document-conventions.md`).

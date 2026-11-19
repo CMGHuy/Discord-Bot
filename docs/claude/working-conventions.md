@@ -21,6 +21,9 @@ This file is session hygiene: commits, shared state, and versioning.
   (gitignored). Update both when completing plan tasks — both have drifted
   before (tasks marked done that weren't), so verify against `git log` and
   actual files before trusting either.
+- **README.md is only an index** — read the one topic file it points at
+  rather than the README itself. `tail` `.superpowers/sdd/progress.md`, never
+  `cat` it: it grows with every plan run (moved here from `CLAUDE.md`, v235).
 - **Concurrent Claude sessions share this working tree.** Stage specific files,
   never `git add -A`; commit generated artifacts (especially the registry)
   immediately — uncommitted generated state has been silently wiped by another

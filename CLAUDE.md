@@ -79,8 +79,7 @@ v192). Detail: `edge-priorities.md`, `backtest-methodology.md` § Stage −2.
   `logs/`); Glob and plain `grep -r` do not** — scope Glob by hand
   (`swingbot/**/*.py`), prefer `git grep -n` for symbols. Never edit
   `.claude/worktrees/` from a main-tree session.
-- **README.md is only an index** — read the one topic file it points at.
-  `tail` `.superpowers/sdd/progress.md`, never `cat` it.
+- **README.md is only an index; `tail` `.superpowers/sdd/progress.md`, never `cat` it** — `working-conventions.md`.
 - **`swingbot/core/` is eleven packages, no flat modules** — map:
   `architecture.md`.
 - **Read a `docs/claude/` file by section, not whole:** `python scripts/dev/doc_section.py <doc> [<heading> ...]` (no heading lists them; exit code 2 means read the file).
@@ -159,6 +158,7 @@ From v146, **specs carry a `Panel:` line** (1–3 expert role skills under
 plan's existing `.claude/worktrees/` worktree if `git worktree list` shows one
 (resume at its first uncommitted task); otherwise create it, named per
 `document-lifecycle.md`. Implementing on `main` only when told so explicitly. **Standing permission: run `/close-out` yourself once every task is merged**, no waiting for the partner (`document-lifecycle.md`). **An implemented plan that changes anything a skill or agent cites (path, symbol, rule, command, trap) aligns that skill before it counts as done** (`/close-out` Step 5b; `document-lifecycle.md` § Implemented plans keep the skills aligned).
+**A plan whose diff touches a guide chapter's `sources:` updates that chapter and its `reviewed_for`, or its close-out commit records `guide: no reader-visible change`** (`/close-out` Step 5b runs `scripts/dev/guide_sources.py`).
 
 ## Keep every function under complexity 15
 

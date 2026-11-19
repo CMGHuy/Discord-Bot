@@ -164,6 +164,17 @@ everything the merged diff changed, fixes each affected skill in its own
 (`sync_codex.py`, `AGENTS.md`) in that same commit. When no skill is affected, the move
 commit says `skills: none affected`, so a skipped check is visible.
 
+**The guide is held to the same rule (v235, spec v215).** Every chapter under
+`docs/guide/` (and every strategy card under `docs/guide/strategies/`) lists
+the code it describes in `sources:`. `/close-out` Step 5b runs
+`python scripts/dev/guide_sources.py <base>..<head>`; each chapter it names is
+updated where reader-visible behaviour changed, with `reviewed_for` set to the
+new bot version and `python scripts/dev/guide_anchors.py` re-run when a
+heading moved, or the move commit records `guide: no reader-visible change`.
+The content test (`tests/admin/test_guide_content.py`) already fails CI on a
+removed symbol, strategy or horizon; this rule is the backstop for prose that
+still compiles but is now wrong.
+
 ## Worktrees are named after the plan
 
 **A worktree created to execute a plan takes the plan's file stem**, so the

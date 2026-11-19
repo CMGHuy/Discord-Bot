@@ -53,6 +53,16 @@ diff changed; fix stale ones in a `docs(skills): align <skill> with vN` commit
 with its Codex mirror, or write `skills: none affected` in the move commit
 (`document-lifecycle.md` § Implemented plans keep the skills aligned).
 
+**Guide check (v235).** Run `python scripts/dev/guide_sources.py <merge>^1..<merge>`
+over the plan's merge commit (or `<base>..<head>` of its commits). For each
+chapter or strategy card it names, update the text where reader-visible
+behaviour changed and set its `reviewed_for` to the bot version `VERSION.json`
+now carries (re-run `python scripts/dev/guide_anchors.py` if a heading
+changed), in a `docs(guide): align <chapter> with vN` commit; or, when nothing
+a reader sees changed, write `guide: no reader-visible change` in the move
+commit. `guide: no chapter sources touched` needs neither
+(`document-lifecycle.md` § Implemented plans keep the skills aligned).
+
 ## Step 6 — Move the document
 
 `git mv` the plan — and any spec it was built from, if nothing else live
