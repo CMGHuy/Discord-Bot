@@ -133,10 +133,13 @@ They bind every part writer and implementer.
 8. **`LADDER-UNAVAILABLE`** for an idea whose `context` series is absent
    from `data/market_data_pit/daily` (UUP, `^VIX`, `BREADTH_ATR1` today): a
    refusal before any outcome is read, no ledger row, no shot spent.
-9. **No ladder run on a real idea.** There is no valid `screen-v2`
-   `SCREEN-PASS` input today and the spec requires no run in Plan 2; the plan
+9. **No ladder run on a real idea.** The spec requires no run in Plan 2
+   (since the 2026-11-19 ruling, `screen-v1` passes such as uptrend_pullback
+   and turtle_soup are valid inputs, but running them is out of scope); the plan
    builds and tests the instruments on fixtures only. The first real rung is
    a later, separate dispatch to `backtest-runner`, one rung per chunk.
+- 2026-11-19: index committed (61b419fa). **Partner ruling:** the ladder also accepts `screen-v1` SCREEN-PASS rows: `INPUT_INSTRUMENTS = ("screen-v1", "screen-v2")`; a v1 input is flagged biased-null in its results doc and ledger DESCRIPTION. Part writers for V238-9..17 apply this.
+- 2026-11-19: Part 1 written (V238-1..3b). Writer split V238-2 -> V238-2b (engines) and V238-3 -> V238-3b (measure_arms flag); ledger rows added, contracts unchanged (V238-7 still consumes `check_r_basis`/`R_BASIS_REFUSAL` from V238-3). Writer's calls: `check_basis` refuses both `net` and `gross` under a non-v1 instrument (v2/v3 `r_total` is already costed); under any requested basis Turtle Soup books through `net_basis` and its sidecar logs the booked R (under `None` it stays on `tsr.net_r`); `--r-basis` with a population knob is refused (`refused:r-basis-population`). Next: part 2.
 
 ## Global Constraints
 
@@ -247,8 +250,10 @@ Final; v231's plan cites these by name.
 - **One rung per invocation**; rung N reads `<work-dir>/rung<N-1>-events.json`
   (rung 1's events for rungs 2–4) and writes `<work-dir>/rung<N>-events.json`.
 - **Ladder input:** a `SCREEN-PASS` row `screen-<name>` or `screen2-<name>`
-  whose instrument is in `ladder.INPUT_INSTRUMENTS = ("screen-v2",)` (the
-  spec's input; widened only by a partner ruling, one constant).
+  whose instrument is in `ladder.INPUT_INSTRUMENTS = ("screen-v1", "screen-v2")`
+  (partner ruling 2026-11-19, widening the spec's `screen-v2`-only input; see
+  `## Handoff`). A `screen-v1` input is flagged "biased null (v230 placebo)"
+  in its results doc and its `ladder-v1` ledger row's DESCRIPTION.
 - **Membership check** prints and records the members missing from the store
   (count and names); only a missing context series refuses.
 - **The research page** keeps its default: new verdicts render neutral
@@ -286,8 +291,10 @@ join at V238-17. At most 2 implementers at once (session rule).
 | ID | Title | Part | Model | Files (C create, M modify) | Symbols for later tasks |
 |---|---|---|---|---|---|
 | V238-1 | Shared net-R function for arm rows | 1 | sonnet | M `swingbot/core/edge/frictions.py`, M `tests/edge/test_edge_frictions.py` | `frictions.net_r_legs(entry, stop_loss, direction, legs, *, days) -> float`; `frictions.NET_R_SIDES: dict[str, str]` |
-| V238-2 | Arm engines book on a requested R basis | 1 | opus | C `swingbot/core/backtesting/arms/net_basis.py`, M `swingbot/core/backtesting/arms/engine.py`, M `swingbot/core/backtesting/arms/confluence_engine.py`, M `swingbot/core/backtesting/arms/strategy_engine.py`, C `tests/backtesting/arms/test_net_basis.py` | `net_basis.R_BASES = ("net", "gross")`; `net_basis.holding_days(df, result) -> int`; `net_basis.check_basis(r_basis, *, instrument) -> None`; `net_basis.booked_r(plan, result, df, *, r_basis) -> float`; `get_engine(engine_id, *, instrument=None, r_basis=None)`; `run_arm(ticker, df, engine_ids, horizons, signal_window, delta, *, instrument=None, r_basis=None)`; `ConfluenceEngine(instrument=None, r_basis=None)`; `StrategyEngine(instrument=None, r_basis=None)` |
-| V238-3 | r_basis stamp, refusal token and producer flag | 1 | sonnet | M `swingbot/core/backtesting/arms/provenance.py`, M `tests/backtesting/arms/test_provenance.py`, M `scripts/backtest/measure_arms.py`, C `tests/backtest_scripts/test_measure_arms_r_basis.py` | `provenance.R_BASIS_KEY`; `provenance.R_BASES`; `provenance.R_BASIS_REFUSAL = "refused:r-basis"` (last in `REFUSAL_TOKENS`); `build_stamp(..., r_basis=None)`; `check_r_basis(blob, *, required="net") -> str \| None`; `produce(..., r_basis=None)`; CLI `--r-basis {net,gross}` |
+| V238-2 | Shared net-R basis module | 1 | opus | C `swingbot/core/backtesting/arms/net_basis.py`, C `tests/backtesting/arms/test_net_basis.py` | `net_basis.R_BASES = ("net", "gross")`; `net_basis.holding_days(df, result) -> int`; `net_basis.check_basis(r_basis, *, instrument) -> None` (refuses both bases under a non-v1 instrument); `net_basis.booked_r(plan, result, df, *, r_basis) -> float` |
+| V238-2b | Arm engines book on a requested R basis | 1 | opus | M `swingbot/core/backtesting/arms/engine.py`, M `swingbot/core/backtesting/arms/confluence_engine.py`, M `swingbot/core/backtesting/arms/strategy_engine.py`, C `tests/backtesting/arms/test_net_basis_engines.py` | `get_engine(engine_id, *, instrument=None, r_basis=None)`; `run_arm(ticker, df, engine_ids, horizons, signal_window, delta, *, instrument=None, r_basis=None)`; `ConfluenceEngine(instrument=None, r_basis=None)`; `StrategyEngine(instrument=None, r_basis=None)` |
+| V238-3 | r_basis stamp and refusal token | 1 | sonnet | M `swingbot/core/backtesting/arms/provenance.py`, M `tests/backtesting/arms/test_provenance.py` | `provenance.R_BASIS_KEY`; `provenance.R_BASES`; `provenance.R_BASIS_REFUSAL = "refused:r-basis"` (last in `REFUSAL_TOKENS`); `build_stamp(..., r_basis=None)`; `check_r_basis(blob, *, required="net") -> str \| None` |
+| V238-3b | measure_arms --r-basis producer flag | 1 | sonnet | M `scripts/backtest/measure_arms.py`, C `tests/backtest_scripts/test_measure_arms_r_basis.py` | `produce(..., r_basis=None)` (raises `ValueError` with a population knob); CLI `--r-basis {net,gross}`; `refused:r-basis-population` (exit 1, before any compute) |
 | V238-4 | Additive split and clauses 1–2 | 2 | opus | C `swingbot/core/backtesting/acceptance_additive.py`, C `tests/backtesting/test_acceptance_additive.py` | `ADDITIVE_VERSION = 1`; `ADDITIVE_GATE_MISUSE = "ADDITIVE_GATE_MISUSE"`; `CLAUSES = ("own_expectancy", "win_rate_above_breakeven", "book_net_gain", "stability")`; `@dataclass(frozen=True) AdditiveSplit(added: tuple, displaced: tuple, misuse: str \| None)`; `split_additive(baseline, component) -> AdditiveSplit`; `added_bootstrap(added, statistic, *, n_resamples, seed) -> np.ndarray`; `clause_own_expectancy(added, *, n_resamples=BOOTSTRAP_RESAMPLES, seed=42) -> ClauseResult`; `realised_breakeven(rows) -> float \| None` (fraction); `clause_win_rate_above_breakeven(added, *, n_resamples=..., seed=42) -> ClauseResult` (value and threshold in percent) |
 | V238-5 | Additive clauses 3–4: book net gain and stability | 2 | opus | M `swingbot/core/backtesting/acceptance_additive.py`, C `tests/backtesting/test_acceptance_additive_book.py` | `TOLERANCE_SHARE = 0.10`; `FOLD_YEARS = ("2021", "2022", "2023")`; `FOLD_FLOOR_R = -0.10`; `FOLD_MIN_N = 30`; `FOLDS_POSITIVE = 2`; `clause_book_net_gain(baseline, component, split, *, n_resamples=..., seed=42) -> ClauseResult` (`SKIPPED` when `split.displaced` is empty); `clause_stability(folds: list[dict]) -> ClauseResult` (folds in `validate_component.load_folds` shape) |
 | V238-6 | Additive Stage 0 MDE, disclosures and evaluate_additive | 2 | opus | M `swingbot/core/backtesting/acceptance_additive.py`, C `tests/backtesting/test_acceptance_additive_evaluate.py` | `STAGE_CLAUSES = {"selection": CLAUSES[:3], "walkforward": CLAUSES[3:], "validation": CLAUSES}`; `class AdditiveMisuse(ValueError)` (`.reason`); `mde_own_expectancy(*, n, sd_r, power=0.80, alpha=ALPHA) -> float \| None`; `stage0_refusal(*, n, expected_r, sd_r) -> str \| None`; `disclosures(added, baseline) -> dict` (keys `max_drawdown_r`, `longest_losing_streak`, `top5_week_share`, `signals_per_day_p95`, `signals_per_day_max`, `same_week_corr`); `render_disclosures(d) -> list[str]`; `evaluate_additive(baseline, component, *, stage, folds=None, n_resamples=..., seed=42) -> AcceptanceResult` (`cluster="week"`, `version=ADDITIVE_VERSION`; raises `AdditiveMisuse`) |
