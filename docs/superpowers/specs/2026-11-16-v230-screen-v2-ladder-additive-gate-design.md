@@ -448,7 +448,11 @@ v92.
    the v1 measurement, the three-stage v2 null and `SCOPE`, the fifth
    clause, the batch re-screen, methodology docs and the `screen` skill.
 2. **Plan 2 — ladder and additive gate** (Parts B and C). It starts after
-   Plan 1's null lands, because the ladder's rung 1 uses it.
+   Plan 1's null lands, because the ladder's rung 1 uses it. Written
+   2026-11-19 as plan **v238**
+   (`plans/2026-11-19-v238-replication-ladder-additive-gate_0-index.md`);
+   rung 1 runs on the v1 null (stop gate 2 = STOP) and the ladder also
+   accepts `screen-v1` passes, flagged biased-null (partner, 2026-11-19).
 
 ## Found while briefing Plan 1 (2026-11-16)
 
