@@ -471,8 +471,8 @@ earlier exempt).
 
 Never hard-code a `ui`/`bot` version in a plan, and give it no `Version:` line.
 `Bump:` states the level only: `bot patch`, `ui minor`, `none`. Numbers resolve
-at close-out from the then-current `VERSION.json`, because any number predicted
-in advance is wrong once another plan releases first.
+at close-out from the then-current `VERSION.json` (a predicted number goes wrong
+once another plan releases first).
 
 **Versioning is two independent lines, `ui` and `bot`; the test for a bump is an
 observable difference, not diff size.** No bump for documentation, tests, CI, or
@@ -481,38 +481,30 @@ commit, made last once green: `release(bot): 1.2.0 -- summary`, with the matchin
 `ui_updated` / `bot_updated` stamp (UTC, `YYYY-MM-DD HH-MM-SS`). **Then** run
 `python scripts/dev/build_version_matrix.py` and commit
 `swingbot/admin/version_history.json` in a second commit repeating the release
-summary and version (regenerating before the bump is committed records a
-`"working tree"` placeholder). A green run before the bump cannot catch a missing
-regeneration: re-run
-`python scripts/dev/testrun.py file tests/scripts/test_build_version_matrix.py`
-after bumping.
+summary and version (regenerating earlier records a `"working tree"` placeholder). A green run before the bump misses a missing regeneration:
+re-run `testrun.py file tests/scripts/test_build_version_matrix.py` after bumping.
 
 No plan file may exceed 1500 lines. Split it into more `_N` parts (lettered
-`_2a`/`_2b`), never compress a task or split one across files, and afterwards
-confirm the `^### Task` sequence has no gap. From v197 a task is ≤ 20 KB
-(split: `<id>`/`<id>b`), a plan ≤ 20 tasks (`SCOPE`). A plan never runs the full suite; CI does. After pushing, watch
-the run (`gh run watch`), fix failing tests alone until green. Per task: one narrow
-test file. Detail: `document-conventions.md`.
+`_2a`/`_2b`), never compress a task or split one across files; confirm the
+`^### Task` sequence has no gap. From v197 a task is ≤ 20 KB
+(split: `<id>`/`<id>b`), a plan ≤ 20 tasks (`SCOPE`). A plan never runs the full suite; CI does: after pushing, watch
+(`gh run watch`) and fix failures alone. Per task: one narrow test file.
+Detail: `document-conventions.md`.
 
 "Implement plan vN" with nothing more means: in a worktree. Reuse the plan's
-existing `.claude/worktrees/` worktree if one exists, else create it; implement
-on `main` only when told so explicitly.
+existing `.claude/worktrees/` worktree, else create it; `main` only when told so.
 
 Standing permission: once every task of a plan is merged, run `close-out`
-yourself, no waiting for the partner (`docs/claude/document-lifecycle.md`).
-An implemented plan that changes anything a skill or agent cites (path,
-symbol, rule, command, trap) aligns that skill before it counts as done
-(`close-out` Step 5b; `document-lifecycle.md` § Implemented plans keep the
-skills aligned).
+yourself, no waiting for the partner. A plan that changes anything a skill or
+agent cites (path, symbol, rule, command, trap) aligns that skill first
+(`close-out` Step 5b; `document-lifecycle.md`).
 
-A plan whose diff touches a path in a guide chapter's `sources:`
-(`docs/guide/`) updates that chapter where behaviour changed and sets its
-`reviewed_for` to the new bot version, or records
-`guide: no reader-visible change` in the close-out commit; `close-out` Step 5b
-lists the chapters with `python scripts/dev/guide_sources.py <base>..<head>`.
+A diff touching a guide chapter's `sources:` (`docs/guide/`) updates that chapter
+and its `reviewed_for`, or records `guide: no reader-visible change` in the
+close-out commit; `python scripts/dev/guide_sources.py <base>..<head>` lists them.
 
-A plan's `**Goal:**` is an explanatory paragraph block, not one sentence: why the
-work exists, what changes once shipped, how it works, what it leaves alone, how
+A plan's `**Goal:**` is a paragraph block, not one sentence: why the work
+exists, what changes once shipped, how it works, what it leaves alone, how
 success is measured (`docs/claude/document-conventions.md`).
 
 Write specs and plans directly on `main` and commit them once finished: no
