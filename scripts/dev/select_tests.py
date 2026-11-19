@@ -297,6 +297,10 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
                       "tests/hooks/test_role_skills.py",
                       "tests/hooks/test_doc_sections.py",
                       "tests/dev/test_doc_section.py")),
+    # v236: chapters are read by the guide loader and content tests.
+    ("docs/guide/", ("tests/admin/test_guide_chapters.py",
+                     "tests/admin/test_guide_chapter_text.py",
+                     "tests/admin/test_guide_content.py")),
     # The backup runbook is parsed for the commands it documents.
     ("docs/deploy/DEPLOY_HETZNER.md", ("tests/scripts/test_backup_db.py",)),
     # v221: the restore runbook's three-way comparison is pinned by a doc test.
