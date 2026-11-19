@@ -25,7 +25,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from swingbot.admin.guide.chapters import (Chapter, GuideFormatError,  # noqa: E402
-                                           guide_dir, load_chapters, split_source)
+                                           _split_front_matter, guide_dir, load_chapters,
+                                           split_source)
 
 NONE_TOUCHED = "guide: no chapter sources touched"
 
@@ -58,10 +59,12 @@ def touched(paths: Iterable[str], chapters) -> list[tuple[Chapter, list[str]]]:
 
 
 def _card_sources(path: Path) -> tuple[str, ...]:
-    text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
-    if not text.startswith("---\n") or "\n---" not in text[3:]:
-        raise GuideFormatError(f"{path.name}: front matter must sit between two '---' lines")
-    meta = yaml.safe_load(text[4:].split("\n---", 1)[0]) or {}
+    try:
+        text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise GuideFormatError(f"{path.name}: unreadable ({exc})") from exc
+    raw, _body = _split_front_matter(text, path)
+    meta = yaml.safe_load(raw) or {}
     sources = meta.get("sources", []) if isinstance(meta, dict) else None
     if not isinstance(sources, list):
         raise GuideFormatError(f"{path.name}: 'sources' must be a list")

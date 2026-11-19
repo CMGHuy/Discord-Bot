@@ -78,6 +78,29 @@ def test_malformed_card_is_a_format_error(tmp_path, text):
         gs.load_cards(tmp_path)
 
 
+def test_card_fence_is_a_whole_line_not_a_prefix(tmp_path):
+    folder = tmp_path / "strategies"
+    folder.mkdir()
+    card = folder / "rsi.md"
+    card.write_text("---\nsources: []\n----\nBody.\n", encoding="utf-8")   # '----' is no fence
+    with pytest.raises(GuideFormatError, match="rsi.md"):
+        gs.load_cards(tmp_path)
+    card.write_text("---\nsources:\n  - a.py\n---\nBody.\n\n---\n\nMore.\n", encoding="utf-8")
+    assert gs.load_cards(tmp_path)[0].sources == ("a.py",)   # a body rule is fine
+
+
+def test_unreadable_card_is_a_format_error_and_main_exits_2(tmp_path, monkeypatch, capsys):
+    folder = tmp_path / "strategies"
+    folder.mkdir()
+    (folder / "rsi.md").write_bytes(b"---\nsources: []\n---\n\xff\xfe\n")
+    with pytest.raises(GuideFormatError, match="rsi.md"):
+        gs.load_cards(tmp_path)
+    monkeypatch.setattr(gs, "changed_paths", lambda rev_range: [])
+    assert gs.main(["main..HEAD", "--guide-dir", str(tmp_path)]) == 2
+    err = capsys.readouterr().err
+    assert "rsi.md" in err and len(err.strip().splitlines()) == 1
+
+
 def test_main_prints_chapters_then_cards(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(gs, "changed_paths", lambda rev_range: [
         "swingbot/config.py", "swingbot/core/market/strategy.py", "docs/notes.md"])
