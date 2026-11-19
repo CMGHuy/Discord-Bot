@@ -28,6 +28,7 @@ describe('crumbsFor (v202: Destination / Section)', () => {
   it.each([
     ['/trades/calendar', 'Calendar', ['Trades', 'Calendar']],
     ['/insights/analytics', 'Analytics', ['Insights', 'Analytics']],
+    ['/insights/guide', 'Guide', ['Insights', 'Guide']],
     ['/system/versions', 'Versions', ['System', 'Versions']],
     ['/system?tab=logs', 'System', ['System', 'Health']],
   ])('never reads the section of %s as a detail page', (url, title, expected) => {
@@ -43,6 +44,14 @@ describe('crumbsFor (v202: Destination / Section)', () => {
     expect(crumbsFor('/watchlist/NVDA', 'NVDA', 'Ticker detail')).toEqual([
       { label: 'Watchlist', link: '/watchlist' },
       { label: 'NVDA', link: null },
+    ]);
+  });
+
+  it('reads a guide chapter as a detail of the Guide section, linking back to it (v236)', () => {
+    expect(crumbsFor('/insights/guide/glossary', 'Glossary', 'Guide')).toEqual([
+      { label: 'Insights', link: null },
+      { label: 'Guide', link: '/insights/guide' },
+      { label: 'Glossary', link: null },
     ]);
   });
 

@@ -24,7 +24,7 @@ const trade = (id: string, symbol: string, status: string, created_at: string | 
 const labels = (items: readonly PaletteItem[]) => items.map((item) => item.label);
 /** The nav model's pages in rail order: each section, or a single page. */
 const RAIL = ['Dashboard', 'Watchlist', 'Book', 'Calendar', 'Risk',
-  'Analytics', 'Research', 'Reports', 'Health', 'Versions'];
+  'Analytics', 'Research', 'Reports', 'Guide', 'Health', 'Versions'];
 
 describe('palette items (v195 §3.1)', () => {
   it('lists every page of the nav model, in rail order, then the workspace tabs', () => {
@@ -40,7 +40,7 @@ describe('palette items (v195 §3.1)', () => {
   it('routes every page to a path of the nav model, never a pre-v202 one', () => {
     expect(pageItems().filter((item) => !item.queryParams).map((item) => item.route)).toEqual([
       '/dashboard', '/watchlist', '/trades', '/trades/calendar', '/risk',
-      '/insights/analytics', '/insights/research', '/insights/reports', '/system', '/system/versions',
+      '/insights/analytics', '/insights/research', '/insights/reports', '/insights/guide', '/system', '/system/versions',
     ]);
   });
 

@@ -150,6 +150,13 @@ export const routes: Routes = [
     data: { subtitle: 'What the measurements say about entries and gates' },
     loadChildren: () => import('./workspaces/reports/reports.routes').then((m) => m.reportsRoutes),
   },
+  // v236 (spec v215): the guidebook. One lazy parent holds the chapter
+  // store; its children are the bare section ('', first chapter) and ':slug'.
+  {
+    path: 'insights/guide', canMatch: [authGuard], title: 'Guide',
+    data: { subtitle: 'How the bot finds, builds, sizes and closes trades' },
+    loadChildren: () => import('./workspaces/guide/guide.routes').then((m) => m.guideRoutes),
+  },
   {
     path: 'ui',
     canMatch: [authGuard],
