@@ -218,6 +218,8 @@ const NOT_CONTROL_ROWS = new Set([
   'head', 'meta', 'cell', 'count', 'figures', 'tags',
   'jobhead', // a chip beside a timestamp
   'leg', // v194 B3: a "Leg N of M" label beside its info glyph -- text, not controls
+  'guide-bar', // v236: the Guide's phone picker / tablet Contents button -- one control alone in its row, nothing to bottom-align
+  'toc-heading', // v236: a text link row in the Guide's contents list, not a control row
   // The calendar's month stepper: two buttons with the month LABEL
   // between them. The row sits inside an sb-control-row already; its
   // middle child is running text, and bottom-aligning that text

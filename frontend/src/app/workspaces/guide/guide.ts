@@ -1,15 +1,18 @@
-import { NgComponentOutlet } from '@angular/common';
+import { NgComponentOutlet, NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy, Component, ElementRef, Type, ViewEncapsulation,
-  afterRenderEffect, computed, effect, inject, input, untracked, viewChild,
+  afterRenderEffect, computed, effect, inject, input, signal, untracked, viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { RouteTitleService } from '../../routing/route-title.service';
 import { GuideStore } from '../../stores/guide.store';
 import { Async } from '../../ui/async';
-import { Panel } from '../../ui/layout';
+import { ViewportService } from '../../ui/breakpoints';
+import { Button } from '../../ui/button';
+import { Select, SelectOption } from '../../ui/form-controls';
+import { Drawer, Panel } from '../../ui/layout';
 import { Page } from '../../ui/page';
 import { GUIDE_FIGURES } from './guide-figures';
 import { applyHeadingAnchors, internalGuideUrl, renderGuideSegments, scrollToAnchor } from './guide-markdown';
@@ -29,28 +32,69 @@ export const GUIDE_NOTICE = 'Education about a paper-trading tool, not advice: a
   selector: 'sb-guide',
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
-  imports: [Async, NgComponentOutlet, Page, Panel],
+  imports: [Async, Button, Drawer, NgComponentOutlet, NgTemplateOutlet, Page, Panel, RouterLink, Select],
   template: `
     <sb-page [heading]="chapter()?.title ?? null">
       <div page-primary class="guide-layout">
-        <sb-panel class="guide-panel">
-          <sb-async [loading]="loading()" [error]="error()" [empty]="empty()" emptyReason="no-data-yet"
-                    [emptyTitle]="emptyTitle()" [staleAsOf]="null" shape="panel" (retry)="retry()">
-            <article #article class="guide-chapter" (click)="onContentClick($event)">
-              <p class="guide-stamp">Reviewed for bot v{{ chapter()?.reviewed_for }}</p>
-              @for (segment of segments(); track $index) {
-                @if (segment.kind === 'md') {
-                  <div class="md" [innerHTML]="segment.html"></div>
-                } @else {
-                  <ng-container *ngComponentOutlet="figure(segment.name)" />
-                }
-              }
-            </article>
-          </sb-async>
-        </sb-panel>
-        <p class="guide-notice">{{ notice }}</p>
+        @if (tocMode() === 'picker') {
+          <div class="guide-bar">
+            <sb-select class="guide-picker" ariaLabel="Chapter" [options]="chapterOptions()"
+                       [value]="activeSlug() ?? ''" (valueChange)="goTo($event)" />
+          </div>
+        } @else if (tocMode() === 'drawer') {
+          <div class="guide-bar">
+            <button sb-button type="button" class="guide-contents" (click)="drawerOpen.set(true)">Contents</button>
+          </div>
+          <sb-drawer [open]="drawerOpen()" heading="Contents" (closed)="drawerOpen.set(false)">
+            <ng-container *ngTemplateOutlet="contents" />
+          </sb-drawer>
+        }
+        <div class="guide-body">
+          @if (tocMode() === 'rail') {
+            <nav class="guide-rail" aria-label="Guide contents">
+              <ng-container *ngTemplateOutlet="contents" />
+            </nav>
+          }
+          <div class="guide-main">
+            <sb-panel class="guide-panel">
+              <sb-async [loading]="loading()" [error]="error()" [empty]="empty()" emptyReason="no-data-yet"
+                        [emptyTitle]="emptyTitle()" [staleAsOf]="null" shape="panel" (retry)="retry()">
+                <article #article class="guide-chapter" (click)="onContentClick($event)">
+                  <p class="guide-stamp">Reviewed for bot v{{ chapter()?.reviewed_for }}</p>
+                  @for (segment of segments(); track $index) {
+                    @if (segment.kind === 'md') {
+                      <div class="md" [innerHTML]="segment.html"></div>
+                    } @else {
+                      <ng-container *ngComponentOutlet="figure(segment.name)" />
+                    }
+                  }
+                </article>
+              </sb-async>
+            </sb-panel>
+            <p class="guide-notice">{{ notice }}</p>
+          </div>
+        </div>
       </div>
     </sb-page>
+
+    <ng-template #contents>
+      <ol class="guide-toc">
+        @for (c of store.chapters(); track c.slug) {
+          <li>
+            <a class="toc-chapter" [routerLink]="['/insights/guide', c.slug]" (click)="picked()"
+               [attr.aria-current]="c.slug === activeSlug() ? 'page' : null">{{ c.title }}</a>
+            @if (c.slug === activeSlug() && c.headings.length) {
+              <ol class="toc-headings">
+                @for (h of c.headings; track h.anchor) {
+                  <li><a class="toc-heading" [class.sub]="h.level === 3" [routerLink]="['/insights/guide', c.slug]"
+                         [fragment]="h.anchor" (click)="picked()">{{ h.text }}</a></li>
+                }
+              </ol>
+            }
+          </li>
+        }
+      </ol>
+    </ng-template>
   `,
   styles: `
     sb-guide .guide-layout { display: flex; flex-direction: column; gap: var(--space-14); min-width: 0; }
@@ -69,6 +113,21 @@ export const GUIDE_NOTICE = 'Education about a paper-trading tool, not advice: a
     sb-guide .md summary::before { content: '▸'; }
     sb-guide .md details[open] > summary::before { content: '▾'; }
     sb-guide .md .permalink { margin-left: var(--space-6); color: var(--text-faint); text-decoration: none; }
+    sb-guide .guide-bar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-10); min-width: 0; }
+    sb-guide .guide-picker { flex: 1 1 100%; min-width: 0; }
+    sb-guide .guide-picker .field, sb-guide .guide-picker select { width: 100%; max-width: 100%; }
+    sb-guide .guide-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-14); align-items: start; }
+    sb-guide .guide-main { display: flex; flex-direction: column; gap: var(--space-14); min-width: 0; }
+    @media (min-width: 1024px) {
+      sb-guide .guide-body { grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr); }
+      sb-guide .guide-rail { position: sticky; top: var(--space-14); max-height: calc(100dvh - 8rem); overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-10); }
+    }
+    sb-guide .guide-toc, sb-guide .toc-headings { list-style: none; margin: 0; padding: 0; }
+    sb-guide .toc-headings { padding-left: var(--space-10); }
+    sb-guide .toc-chapter, sb-guide .toc-heading { display: flex; align-items: center; min-height: var(--hit-min); color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+    sb-guide .toc-heading { color: var(--text-secondary); font-size: var(--text-table); }
+    sb-guide .toc-heading.sub { padding-left: var(--space-10); }
+    sb-guide .toc-chapter[aria-current='page'] { color: var(--accent); font-weight: 600; }
   `,
 })
 export class Guide {
@@ -82,6 +141,13 @@ export class Guide {
   private readonly article = viewChild<ElementRef<HTMLElement>>('article');
   private scrolledTo: string | null = null;
   protected readonly notice = GUIDE_NOTICE;
+  private readonly viewport = inject(ViewportService);
+  /** Contents per width: rail ≥ 1024, drawer 640–1023, picker < 640. */
+  protected readonly tocMode = computed<'rail' | 'drawer' | 'picker'>(() =>
+    this.viewport.isPhone() ? 'picker' : this.viewport.isNarrow() ? 'drawer' : 'rail');
+  protected readonly drawerOpen = signal(false);
+  protected readonly chapterOptions = computed<SelectOption[]>(() =>
+    this.store.chapters().map((c) => ({ value: c.slug, label: c.title })));
 
   protected readonly activeSlug = computed(() => this.slug() || this.store.firstSlug());
   protected readonly chapter = computed(() =>
@@ -134,6 +200,18 @@ export class Guide {
     void this.store.ensureLoaded();
     const slug = this.activeSlug();
     if (slug) this.store.loadChapter(slug);
+  }
+
+  /** The phone picker: open the chosen chapter. */
+  protected goTo(slug: string): void {
+    if (slug && slug !== this.activeSlug()) void this.router.navigate(['/insights/guide', slug]);
+  }
+
+  /** A contents link was followed: close the drawer so the chapter is what
+   *  the reader sees next, and let the fragment scroll again. */
+  protected picked(): void {
+    this.drawerOpen.set(false);
+    this.scrolledTo = null;
   }
 
   /** Chapter links are plain <a href> in sanitised HTML; send the in-app

@@ -1,6 +1,6 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
+import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router, provideRouter } from '@angular/router';
 import { BehaviorSubject } from 'rxjs';
@@ -10,6 +10,8 @@ import { authInterceptor, errorInterceptor, loadingInterceptor } from '../../api
 import { GuideIndex } from '../../api/models';
 import { RouteTitleService } from '../../routing/route-title.service';
 import { GuideStore } from '../../stores/guide.store';
+import { installDialogPolyfill } from '../../testing/dialog-polyfill';
+import { ViewportService } from '../../ui/breakpoints';
 import { GUIDE_NOTICE, Guide } from './guide';
 import { GUIDE_FIGURES } from './guide-figures';
 import { guideRoutes } from './guide.routes';
@@ -30,7 +32,14 @@ const BODY = [
 @Component({ selector: 'sb-test-figure', changeDetection: ChangeDetectionStrategy.OnPush, template: '<p class="test-figure">figure</p>' })
 class TestFigure {}
 
-async function openGuide(slug: string | undefined, opts: { fragment?: string | null; status?: number } = {}) {
+type Width = 'phone' | 'tablet' | 'desktop';
+const VIEWPORT = { phone: 'xs', tablet: 'sm', desktop: 'lg' } as const;
+/** ViewportService pinned to one width: sb-drawer and sb-panel read `viewport()`, the page reads the two flags. */
+const fakeViewport = (width: Width) => ({
+  viewport: signal(VIEWPORT[width]), isPhone: signal(width === 'phone'), isNarrow: signal(width !== 'desktop'),
+});
+
+async function openGuide(slug: string | undefined, opts: { fragment?: string | null; status?: number; width?: Width } = {}) {
   TestBed.resetTestingModule();
   const fragment = new BehaviorSubject<string | null>(opts.fragment ?? null);
   TestBed.configureTestingModule({ providers: [
@@ -38,6 +47,7 @@ async function openGuide(slug: string | undefined, opts: { fragment?: string | n
     provideHttpClient(withInterceptors([authInterceptor, errorInterceptor, loadingInterceptor])),
     provideHttpClientTesting(), GuideStore,
     { provide: ActivatedRoute, useValue: { fragment } },
+    { provide: ViewportService, useValue: fakeViewport(opts.width ?? 'desktop') },
   ] });
   const http = TestBed.inject(HttpTestingController);
   const fixture: ComponentFixture<Guide> = TestBed.createComponent(Guide);
@@ -131,5 +141,64 @@ describe('guideRoutes', () => {
 
   it('loads the Guide component for both children', async () => {
     for (const child of guideRoutes[0].children ?? []) expect(await child.loadComponent!()).toBe(Guide);
+  });
+});
+
+describe('Guide page: contents at three widths', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('desktop: a rail lists every chapter and the open chapter’s headings', async () => {
+    const { el } = await openGuide('what-it-is');
+    const rail = el.querySelector('nav.guide-rail')!;
+    expect([...rail.querySelectorAll('a.toc-chapter')].map((a) => a.getAttribute('href')))
+      .toEqual(['/insights/guide/what-it-is', '/insights/guide/glossary']);
+    expect(rail.querySelector('a[aria-current="page"]')!.textContent!.trim()).toBe('What the bot is (and isn’t)');
+    expect([...rail.querySelectorAll('a.toc-heading')].map((a) => a.getAttribute('href')))
+      .toEqual(['/insights/guide/what-it-is#swing-horizons', '/insights/guide/what-it-is#masked']);
+    expect(el.querySelector('button.guide-contents')).toBeNull();
+    expect(el.querySelector('sb-select.guide-picker')).toBeNull();
+  });
+
+  it('desktop: lists headings only for the open chapter', async () => {
+    const { el } = await openGuide('glossary');
+    expect([...el.querySelectorAll('nav.guide-rail a.toc-heading')].map((a) => a.getAttribute('href')))
+      .toEqual(['/insights/guide/glossary#r-multiple']);
+  });
+
+  it('tablet: a Contents button opens the drawer with the same list', async () => {
+    installDialogPolyfill();
+    const { el, fixture } = await openGuide('what-it-is', { width: 'tablet' });
+    expect(el.querySelector('nav.guide-rail')).toBeNull();
+    expect(el.querySelector('sb-select.guide-picker')).toBeNull();
+    expect(el.querySelectorAll('sb-drawer a.toc-chapter')).toHaveLength(0);
+    el.querySelector<HTMLButtonElement>('button.guide-contents')!.click();
+    await settle(fixture);
+    expect(el.querySelectorAll('sb-drawer a.toc-chapter')).toHaveLength(2);
+  });
+
+  it('tablet: following a contents link closes the drawer', async () => {
+    installDialogPolyfill();
+    const { el, fixture } = await openGuide('what-it-is', { width: 'tablet' });
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    el.querySelector<HTMLButtonElement>('button.guide-contents')!.click();
+    await settle(fixture);
+    el.querySelectorAll<HTMLAnchorElement>('sb-drawer a.toc-chapter')[1].click();
+    await settle(fixture);
+    expect(el.querySelectorAll('sb-drawer a.toc-chapter')).toHaveLength(0);
+  });
+
+  it('phone: a labelled chapter picker above the article navigates to the chosen chapter', async () => {
+    const { el, fixture } = await openGuide('what-it-is', { width: 'phone' });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    expect(el.querySelector('nav.guide-rail')).toBeNull();
+    expect(el.querySelector('button.guide-contents')).toBeNull();
+    const select = el.querySelector<HTMLSelectElement>('.guide-bar sb-select.guide-picker select')!;
+    expect(select.getAttribute('aria-label')).toBe('Chapter');
+    expect(select.value).toBe('what-it-is');
+    expect([...select.options].map((o) => o.value)).toEqual(['what-it-is', 'glossary']);
+    select.value = 'glossary';
+    select.dispatchEvent(new Event('change'));
+    await settle(fixture);
+    expect(navigate).toHaveBeenCalledWith(['/insights/guide', 'glossary']);
   });
 });
