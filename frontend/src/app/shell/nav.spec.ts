@@ -30,7 +30,7 @@ describe('NAV_ENTRIES (v202 §1)', () => {
     expect(sections).toEqual({
       '/dashboard': null, '/watchlist': null, '/risk': null,
       '/trades': [['/trades', 'Book'], ['/trades/calendar', 'Calendar']],
-      '/insights': [['/insights/analytics', 'Analytics'], ['/insights/research', 'Research'], ['/insights/reports', 'Reports']],
+      '/insights': [['/insights/analytics', 'Analytics'], ['/insights/research', 'Research'], ['/insights/reports', 'Reports'], ['/insights/guide', 'Guide']],
       '/system': [['/system', 'Health'], ['/system/versions', 'Versions']],
     });
   });
@@ -73,7 +73,7 @@ describe('NAV_ENTRIES (v202 §1)', () => {
   });
 
   it('names the section words of the second-segment rule', () => {
-    expect([...SECTION_WORDS].sort()).toEqual(['analytics', 'calendar', 'reports', 'research', 'versions']);
+    expect([...SECTION_WORDS].sort()).toEqual(['analytics', 'calendar', 'guide', 'reports', 'research', 'versions']);
   });
 });
 
@@ -138,6 +138,8 @@ describe('navEntryFor (v202 second-segment rule)', () => {
     ['/reports', ['Insights', 'Reports']],
     ['/insights', ['Insights', 'Analytics']],
     ['/insights/reports?tab=gates', ['Insights', 'Reports']],
+    ['/insights/guide', ['Insights', 'Guide']],
+    ['/insights/guide/glossary#r-multiple', ['Insights', 'Guide']],
     ['/system?tab=providers', ['System', 'Health']],
     ['/system/versions', ['System', 'Versions']],
     ['/versions', ['System', 'Versions']],
@@ -182,7 +184,7 @@ describe('destinationFor', () => {
 
 describe('isSectionUrl', () => {
   it.each(['/trades/calendar', '/trades/calendar/2026-10-01', '/insights/analytics',
-    '/insights/research?page=2', '/system/versions', '/calendar', '/versions'])('is true for %s', (url) => {
+    '/insights/guide', '/insights/guide/glossary', '/insights/research?page=2', '/system/versions', '/calendar', '/versions'])('is true for %s', (url) => {
     expect(isSectionUrl(url)).toBe(true);
   });
 
@@ -204,6 +206,8 @@ describe('breadcrumbFor (Destination / Section)', () => {
     ['/trades/812', 'NVDA #812', ['Trades', 'Book', 'NVDA #812']],
     ['/trades/calendar/2026-10-01', 'Calendar day', ['Trades', 'Calendar', 'Calendar day']],
     ['/watchlist/NVDA', 'NVDA', ['Watchlist', 'NVDA']],
+    ['/insights/guide', null, ['Insights', 'Guide']],
+    ['/insights/guide/glossary', 'Glossary', ['Insights', 'Guide', 'Glossary']],
   ])('reads %s (detail %j) as %j', (url, detail, expected) => {
     expect(breadcrumbFor(url, detail)).toEqual(expected);
   });

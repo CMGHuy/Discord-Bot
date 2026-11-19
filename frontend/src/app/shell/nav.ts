@@ -46,6 +46,7 @@ export const NAV_ENTRIES: readonly NavEntry[] = [
       { path: '/insights/analytics', label: 'Analytics' },
       { path: '/insights/research', label: 'Research' },
       { path: '/insights/reports', label: 'Reports' },
+      { path: '/insights/guide', label: 'Guide' },
     ],
   },
   {

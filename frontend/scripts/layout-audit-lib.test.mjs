@@ -97,8 +97,8 @@ const entry = (over = {}) => ({
   reason: 'canvas internals of a third-party chart', date: '2026-10-19', ...over,
 });
 
-test('ROUTES visits every destination, section and tab once, on the v202 paths only (32)', () => {
-  assert.equal(ROUTES.length, 32);
+test('ROUTES visits every destination, section and tab once, on the v202 paths only (34)', () => {
+  assert.equal(ROUTES.length, 34);
   assert.equal(new Set(ROUTES).size, ROUTES.length);
   assert.ok(ROUTES.every((route) => route.startsWith('/')));
   for (const tab of ['attribution', 'execution', 'edge', 'pipeline', 'tuning', 'partials', 'cancels', 'benchmark']) {
@@ -106,7 +106,7 @@ test('ROUTES visits every destination, section and tab once, on the v202 paths o
   }
   for (const route of ['/dashboard', '/trades', '/trades/:id', '/trades/:id?tab=journal', '/trades/calendar',
     '/trades/calendar/:date', '/trades/cancels', '/plans/:plan', '/insights/analytics', '/insights/research',
-    '/insights/reports', '/insights/reports?tab=gates', '/watchlist/:symbol', '/risk', '/system?tab=logs',
+    '/insights/reports', '/insights/reports?tab=gates', '/insights/guide', '/insights/guide/pipeline', '/watchlist/:symbol', '/risk', '/system?tab=logs',
     '/system?tab=scan', '/system?tab=providers', '/system/versions', '/ui']) {
     assert.ok(ROUTES.includes(route), route);
   }

@@ -42,6 +42,13 @@ interface SessionState {
   redirectTo: string | null;
 }
 
+/** The URL a visitor arrived on, kept whole: the fragment too, or a shared
+ *  link to a guide heading (`/insights/guide/glossary#r-multiple`) would land
+ *  at the top of its chapter after sign-in (v236). */
+export function arrivalUrl(loc: Pick<Location, 'pathname' | 'search' | 'hash'> = location): string {
+  return `${loc.pathname}${loc.search}${loc.hash}`;
+}
+
 /** What an identity answer says about the session. Fails closed: no role (or an
  *  anonymous answer) means no role. */
 function fromIdentity(identity: Identity): Pick<SessionState, 'status' | 'username' | 'role'> {
@@ -121,7 +128,7 @@ export const SessionStore = signalStore(
      *   against `/` and pass for the wrong reason. Production calls it with
      *   no argument.
      */
-    async boot(url = `${location.pathname}${location.search}`): Promise<void> {
+    async boot(url = arrivalUrl()): Promise<void> {
       // Capture the deep link FIRST -- see `redirectTo`. Anything that is
       // already the root or the login-equivalent is not worth remembering,
       // and remembering it would send every ordinary sign-in through a

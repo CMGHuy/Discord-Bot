@@ -41,6 +41,8 @@ import {
   FeedKindFamily,
   FeedPostsPage,
   GateCounterfactual,
+  GuideChapter,
+  GuideIndex,
   Health,
   Identity,
   Job,
@@ -400,6 +402,18 @@ export class ApiClient {
   /** The whole pre-registration ledger. Filtering and paging are client-side. */
   researchLedger(): Observable<ResearchLedger> {
     return this.http.get<ResearchLedger>(`${this.base}/research/ledger`);
+  }
+
+  /* -- guide ------------------------------------------------------------- */
+
+  /** The guide's chapters and headings, in reading order. */
+  guide(): Observable<GuideIndex> {
+    return this.http.get<GuideIndex>(`${this.base}/guide`);
+  }
+
+  /** One chapter, placeholders resolved. 404 `not_found` for an unknown slug. */
+  guideChapter(slug: string): Observable<GuideChapter> {
+    return this.http.get<GuideChapter>(`${this.base}/guide/${encodeURIComponent(slug)}`);
   }
 
   /* -- reports ----------------------------------------------------------- */

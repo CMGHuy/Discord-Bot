@@ -21,6 +21,7 @@
     "@angular/service-worker": "~21.2.21",
     "@ngrx/signals": "~21.1.0",
     "lightweight-charts": "^5.2.1",
+    "marked": "18.2.1",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },

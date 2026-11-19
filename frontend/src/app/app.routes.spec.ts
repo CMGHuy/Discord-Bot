@@ -123,6 +123,20 @@ describe('routing, authenticated', () => {
     expect(readFileSync(join(process.cwd(), 'src/app/app.routes.ts'), 'utf8'))
       .not.toContain('workspaces/stubs');
   });
+
+  it('serves the Guide at /insights/guide and /insights/guide/:slug from one lazy parent (v236)', async () => {
+    const route = routes.find((item) => item.path === 'insights/guide');
+    expect(route?.canMatch).toEqual([authGuard]);
+    const [parent, ...rest] = await route!.loadChildren!() as Routes;
+    expect(rest).toEqual([]);
+    expect(parent.children?.map((child) => child.path)).toEqual(['', ':slug']);
+    for (const child of parent.children ?? []) expect(await child.loadComponent!()).toBeDefined();
+  });
+
+  it('declares the Guide after Reports, so the Insights sections keep rail order', () => {
+    const at = (path: string) => routes.findIndex((r) => r.path === path);
+    expect(at('insights/guide')).toBe(at('insights/reports') + 1);
+  });
 });
 
 
@@ -130,7 +144,7 @@ describe('route data readiness contract', () => {
   const expected = [
     'dashboard', 'trades', 'trades/:id', 'plans/:id', 'insights/analytics', 'trades/calendar',
     'watchlist', 'watchlist/:symbol', 'risk', 'system', 'system/versions', 'insights/research',
-    'insights/reports',
+    'insights/reports', 'insights/guide',
   ] as const;
 
   it('keeps every authenticated workspace lazy, scoped, and resolver-backed', async () => {
@@ -275,6 +289,7 @@ describe('v202 section routes and redirects', () => {
     ['insights/analytics', 'Analytics', 'What already happened, measured'],
     ['insights/research', 'Research', 'Every pre-registration and its verdict'],
     ['insights/reports', 'Reports', 'What the measurements say about entries and gates'],
+    ['insights/guide', 'Guide', 'How the bot finds, builds, sizes and closes trades'],
     ['system/versions', 'Versions', "What's deployed, and when it changed"],
   ])('declares %s with its section title and the page subtitle unchanged', (path, title, subtitle) => {
     const route = routes.find((r) => r.path === path);

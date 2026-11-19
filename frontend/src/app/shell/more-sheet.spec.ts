@@ -19,7 +19,7 @@ describe('morePageGroups (v202 §3)', () => {
   it('lists the destinations the tab bar does not hold, each with its sections, in rail order', () => {
     expect(shape(morePageGroups())).toEqual([
       ['more-risk', 'Risk', [['Risk', '/risk']]],
-      ['more-insights', 'Insights', [['Analytics', '/insights/analytics'], ['Research', '/insights/research'], ['Reports', '/insights/reports']]],
+      ['more-insights', 'Insights', [['Analytics', '/insights/analytics'], ['Research', '/insights/research'], ['Reports', '/insights/reports'], ['Guide', '/insights/guide']]],
       ['more-system', 'System', [['Health', '/system'], ['Versions', '/system/versions']]],
     ]);
   });
@@ -74,7 +74,7 @@ describe('MoreSheet (v195 Phase 3)', () => {
     open();
     expect([...el.querySelectorAll('.group-label')].map((n) => n.textContent!.trim())).toEqual(['Risk', 'Insights']);
     expect([...el.querySelectorAll('a.page')].map((a) => a.getAttribute('href')))
-      .toEqual(['/risk', '/insights/analytics', '/insights/research', '/insights/reports']);
+      .toEqual(['/risk', '/insights/analytics', '/insights/research', '/insights/reports', '/insights/guide']);
   });
 
   it('renders nothing while closed, and ignores Escape then', () => {
@@ -99,7 +99,7 @@ describe('MoreSheet (v195 Phase 3)', () => {
       .toEqual(['Risk', 'Insights', 'System']);
     expect([...el.querySelectorAll('a.page')].map((a) => [a.textContent!.trim(), a.getAttribute('href')])).toEqual([
       ['Risk', '/risk'],
-      ['Analytics', '/insights/analytics'], ['Research', '/insights/research'], ['Reports', '/insights/reports'],
+      ['Analytics', '/insights/analytics'], ['Research', '/insights/research'], ['Reports', '/insights/reports'], ['Guide', '/insights/guide'],
       ['Health', '/system'], ['Versions', '/system/versions'],
     ]);
     for (const list of el.querySelectorAll('ul.pages')) {
