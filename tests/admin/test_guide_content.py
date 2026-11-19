@@ -168,6 +168,22 @@ def bare_percent_problems(chapters) -> list[str]:
     return problems
 
 
+_PCT_AFTER_PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}%")
+
+
+def double_percent_problems(chapters) -> list[str]:
+    """A `%` right after a {{name}} whose value already ends in `%` renders `2%%`."""
+    problems = []
+    for chapter in chapters:
+        for number, line in enumerate(chapter.body.split("\n"), start=1):
+            for match in _PCT_AFTER_PLACEHOLDER.finditer(line):
+                provider = placeholders.PLACEHOLDERS.get(match.group(1))
+                if provider is not None and provider().endswith("%"):
+                    problems.append(f"{chapter.path.name}:{number}: {{{{{match.group(1)}}}}} "
+                                    "already ends in % -- drop the extra %")
+    return problems
+
+
 REAL_CHECKS = {
     "placeholders": unresolved,
     "headings": heading_problems,
@@ -177,6 +193,7 @@ REAL_CHECKS = {
     "figures": lambda g: figure_problems(g, figure_names()),
     "strategy cards": lambda g: strategy_file_problems(guide_dir() / "strategies"),
     "bare percent": bare_percent_problems,
+    "double percent": double_percent_problems,
 }
 
 
@@ -270,8 +287,15 @@ def test_strategy_cards_are_vacuous_until_any_exist_then_must_match(tmp_path, mo
 
 
 def test_bare_percent_is_caught_only_in_chapters_7_to_9():
-    body = "Risk is 2% of the account.\nCap {{MAX_STOP_LOSS_PCT}}%.\n```\n50%\n```\nRatio 1.5 %.\n"
+    body = "Risk is 2% of the account.\nCap {{MAX_STOP_LOSS_PCT}}.\n```\n50%\n```\nRatio 1.5 %.\n"
     assert bare_percent_problems([_ch(body, order=8, slug="sizing-risk")]) == [
         "08-sizing-risk.md:1: bare number before % -- use a placeholder",
         "08-sizing-risk.md:6: bare number before % -- use a placeholder"]
     assert bare_percent_problems([_ch(body, order=6, slug="gates")]) == []
+
+
+def test_double_percent_flags_a_percent_after_a_percent_placeholder():
+    assert double_percent_problems([_ch("Cap {{MAX_STOP_LOSS_PCT}}%.")]) == [
+        "01-sample.md:1: {{MAX_STOP_LOSS_PCT}} already ends in % -- drop the extra %"]
+    assert double_percent_problems([_ch("Cap {{MAX_STOP_LOSS_PCT}}.")]) == []
+    assert double_percent_problems([_ch("Mode {{POSITION_SIZING_MODE}}%.")]) == []
