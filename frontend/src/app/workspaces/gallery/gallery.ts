@@ -53,6 +53,7 @@ import { PaginationComponent } from '../../ui/pagination';
 import { Page } from '../../ui/page';
 import { riskUnits } from '../../ui/risk-units';
 import { ExcursionEstimate } from '../../ui/excursion-estimate';
+import { GuideLinkComponent } from '../../ui/guide-link';
 import { PanelError } from '../../ui/panel-error';
 import { PanelGrid } from '../../ui/panel-grid';
 import { PanelHeader } from '../../ui/panel-header';
@@ -193,6 +194,7 @@ interface ContractRow {
     PaginationComponent,
     Page,
     ExcursionEstimate,
+    GuideLinkComponent,
     PanelError,
     PanelGrid,
     PanelHeader,
@@ -680,6 +682,9 @@ interface ContractRow {
       <sb-panel-header title="Sample panel" [n]="128" hint="Definition text for this metric." [tableable]="true" total="42 rows" />
       <sb-panel-error message="Request timed out" />
       <sb-share-bar label="Win / loss" [segments]="shareBarSegments" />
+    </sb-panel>
+    <sb-panel heading="Guide link (v236)">
+      <p>The "?" link points at a guide chapter heading: <sb-guide-link target="what-it-is" /></p>
     </sb-panel>
     <sb-panel heading="Excursion estimate marker (v228)">
       <sb-excursion-est />
