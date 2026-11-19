@@ -24,10 +24,8 @@ this step.
 
 Read `VERSION.json` — never a plan header, never memory, never an earlier
 task's note. Increment only the line named by the plan's `Bump:`; leave the
-other line untouched. `Bump: none` means no release commit at all — Step 4
-(the version-bump mechanics) does not apply, but proceed to Step 5 anyway:
-`Bump: none` is itself a prediction that Step 5 must check, not a reason to
-skip it.
+other line untouched. `Bump: none` means no release commit (skip Step 4), but
+Step 5 still applies: `Bump: none` is itself a prediction to check.
 
 ## Step 4 — Stamp, commit, then regenerate
 
@@ -48,20 +46,12 @@ ran, otherwise into Step 6's move commit.
 
 ## Step 5b — Align every skill the plan affected
 
-`git grep` the skills and agents for each path, symbol, rule and command the
-diff changed; fix stale ones in a `docs(skills): align <skill> with vN` commit
-with its Codex mirror, or write `skills: none affected` in the move commit
-(`document-lifecycle.md` § Implemented plans keep the skills aligned).
-
-**Guide check (v235).** Run `python scripts/dev/guide_sources.py <merge>^1..<merge>`
-over the plan's merge commit (or `<base>..<head>` of its commits). For each
-chapter or strategy card it names, update the text where reader-visible
-behaviour changed and set its `reviewed_for` to the bot version `VERSION.json`
-now carries (re-run `python scripts/dev/guide_anchors.py` if a heading
-changed), in a `docs(guide): align <chapter> with vN` commit; or, when nothing
-a reader sees changed, write `guide: no reader-visible change` in the move
-commit. `guide: no chapter sources touched` needs neither
-(`document-lifecycle.md` § Implemented plans keep the skills aligned).
+`git grep` skills and agents for each path, symbol, rule and command the diff
+changed; fix stale ones in a `docs(skills): align <skill> with vN` commit with
+its Codex mirror, or write `skills: none affected` in the move commit. Guide:
+run `python scripts/dev/guide_sources.py <base>..<head>`; update each chapter it
+names and set `reviewed_for`, or write `guide: no reader-visible change` in the
+move commit (`document-lifecycle.md` § Implemented plans keep the skills aligned).
 
 ## Step 6 — Move the document
 
