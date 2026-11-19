@@ -63,6 +63,7 @@ export const GUIDE_NOTICE = 'Education about a paper-trading tool, not advice: a
             <sb-panel class="guide-panel">
               <sb-async [loading]="loading()" [error]="error()" [empty]="empty()" emptyReason="no-data-yet"
                         [emptyTitle]="emptyTitle()" [staleAsOf]="null" shape="panel" (retry)="retry()">
+                <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
                 <article #article class="guide-chapter" (click)="onContentClick($event)">
                   <p class="guide-stamp">Reviewed for bot v{{ chapter()?.reviewed_for }}</p>
                   @for (segment of segments(); track $index) {
