@@ -42,7 +42,7 @@ def _loaded() -> tuple[Chapter, ...]:
     try:
         return _chapters()
     except _chapters_mod.GuideFormatError as exc:
-        log.error("guide chapter invalid: %s", exc)
+        log.error("guide chapter invalid: %s", exc, exc_info=True)
         raise ApiError("guide_invalid", "A guide chapter could not be read.", 500) from exc
 
 
@@ -50,7 +50,8 @@ def _resolved(chapter: Chapter, memo: dict[str, str] | None = None) -> str:
     try:
         return _placeholders.resolve(chapter.body, memo)
     except _placeholders.UnknownPlaceholder as exc:
-        log.error("guide placeholder %r unknown in chapter %s", exc.name, chapter.slug)
+        log.error("guide placeholder %r unknown in chapter %s", exc.name, chapter.slug,
+                  exc_info=True)
         raise ApiError("guide_placeholder",
                        f"Guide chapter {chapter.slug} could not be rendered.", 500) from exc
 
