@@ -35,6 +35,7 @@ export const TITLE_ALLOW: readonly TitleSite[] = [
   { file: 'ui/age-hint.ts', binding: "[attr.title]=\"'Price is ' + t.replace(' ago', '') + ' old'\"", kind: 'echo', note: 'restates the visible age' },
   { file: 'ui/bar-list.ts', binding: '[title]="row.label"', kind: 'echo', note: 'full text of a truncated bar label' },
   { file: 'ui/direction-arrow.ts', binding: '[title]="text"', kind: 'control-name', note: 'glyph name, same as its aria-label' },
+  { file: 'ui/guide-link.ts', binding: '[attr.title]="label()"', kind: 'control-name', note: 'the icon-only "?" link: names where it goes, beside its aria-label (v236)' },
   { file: 'ui/icon.ts', binding: "'[attr.title]': 'tip()'", kind: 'control-name', note: 'names an icon' },
   { file: 'ui/layout.ts', binding: '[attr.title]="tab.icon ? tab.label : null"', kind: 'control-name', note: 'icon-only tab, beside its aria-label' },
   { file: 'ui/matrix.ts', binding: '[attr.title]="cellTitle(row, col, r, c)"', kind: 'echo', note: 'row, column and value the cell colour encodes' },
