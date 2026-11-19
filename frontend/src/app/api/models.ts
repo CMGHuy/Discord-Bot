@@ -1226,6 +1226,41 @@ export interface ResearchLedger {
   instruments: string[];
 }
 
+/* -- guide (v235) ---------------------------------------------------------- */
+
+/** One `##`/`###` heading of a guide chapter. `anchor` is computed on the
+ *  server (the browser never derives one) and is the heading's deep link. */
+export interface GuideHeading {
+  level: number;
+  text: string;
+  anchor: string;
+}
+
+/** A chapter as the index lists it: enough for the table of contents and
+ *  heading search before its body is fetched. */
+export interface GuideChapterSummary {
+  slug: string;
+  title: string;
+  order: number;
+  /** The bot version the chapter was last reviewed for ("2.19.2"). */
+  reviewed_for: string;
+  headings: GuideHeading[];
+}
+
+/** `GET /api/v1/guide`, chapters already in reading order. */
+export interface GuideIndex {
+  chapters: GuideChapterSummary[];
+}
+
+/** `GET /api/v1/guide/<slug>`: the chapter's Markdown with every
+ *  `{{placeholder}}` already resolved to its live value. */
+export interface GuideChapter {
+  slug: string;
+  title: string;
+  reviewed_for: string;
+  markdown: string;
+}
+
 /* -- reports (v150) ----------------------------------------------------- */
 
 /** The envelope both `GET /reports/*` endpoints return. `not_run` is a
