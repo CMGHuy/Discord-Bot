@@ -2,7 +2,7 @@
 import pytest
 
 from swingbot import config
-from swingbot.admin.guide import live_risk
+from swingbot.admin.guide import live_risk, placeholders as ph
 
 RISK_NAMES = {
     "MAX_STOP_LOSS_PCT", "MIN_STOP_DISTANCE_PCT", "CLAMP_STOP_TO_HARD_CAP",
@@ -124,3 +124,108 @@ def test_no_sensitive_field_value_reaches_a_risk_placeholder(monkeypatch):
         assert f.attr not in live_risk.RISK_PLACEHOLDERS
     rendered = "\n".join(_risk(name) for name in sorted(RISK_NAMES))
     assert "SENTINEL-" not in rendered
+
+
+def _render(name: str) -> str:
+    return ph.resolve("{{" + name + "}}")
+
+
+# --- the registry ------------------------------------------------------------
+
+def test_every_risk_name_is_registered():
+    assert RISK_NAMES <= set(ph.PLACEHOLDERS)
+
+
+@pytest.mark.parametrize("name", sorted(RISK_NAMES))
+def test_resolve_renders_each_risk_name_like_the_table(name):
+    assert _render(name) == _risk(name)
+
+
+def test_registry_is_read_only():
+    with pytest.raises(TypeError):
+        ph.PLACEHOLDERS["DISCORD_TOKEN"] = lambda: "x"
+
+
+def test_merge_refuses_a_name_defined_twice():
+    with pytest.raises(ValueError, match="defined twice"):
+        ph._merge({"a": lambda: "1"}, {"a": lambda: "2"})
+
+
+# --- resolve -----------------------------------------------------------------
+
+def test_resolve_substitutes_every_occurrence(monkeypatch):
+    monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 2.0)
+    monkeypatch.setattr(config, "RISK_PER_TRADE_PCT", 1.0)
+    text = "Stop {{MAX_STOP_LOSS_PCT}}, risk {{ RISK_PER_TRADE_PCT }}, again {{MAX_STOP_LOSS_PCT}}."
+    assert ph.resolve(text) == "Stop 2%, risk 1%, again 2%."
+
+
+def test_resolve_reads_live_values_on_each_call(monkeypatch):
+    monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 2.0)
+    assert ph.resolve("{{MAX_STOP_LOSS_PCT}}") == "2%"
+    monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 1.5)
+    assert ph.resolve("{{MAX_STOP_LOSS_PCT}}") == "1.5%"
+
+
+def test_resolve_leaves_text_without_placeholders_alone():
+    assert ph.resolve("Plain {braces} and } stay.") == "Plain {braces} and } stay."
+    assert ph.resolve("") == ""
+
+
+def test_names_in_lists_well_formed_names_in_order():
+    assert ph.names_in("{{a.b}} x {{ C_D }} {{a.b}} {{bad name}}") == ["a.b", "C_D", "a.b"]
+
+
+@pytest.mark.parametrize("text, name", [
+    ("{{NOPE}}", "NOPE"),
+    ("ok {{MAX_STOP_LOSS_PCT}} then {{ nope.too }}", "nope.too"),
+    ("{{ MAX_STOP_LOSS_PCT + 1 }}", "MAX_STOP_LOSS_PCT + 1"),
+    ("{{config.MAX_STOP_LOSS_PCT}}", "config.MAX_STOP_LOSS_PCT"),
+    ("{{\nNOPE\n}}", "NOPE"),
+])
+def test_unknown_or_malformed_placeholder_raises(text, name):
+    with pytest.raises(ph.UnknownPlaceholder) as info:
+        ph.resolve(text)
+    assert info.value.name == name
+    assert str(info.value) == f"unknown guide placeholder: {name}"
+    assert isinstance(info.value, KeyError)
+
+
+def test_nothing_is_substituted_when_any_name_is_unknown(monkeypatch):
+    calls = []
+    monkeypatch.setitem(live_risk.RISK_PLACEHOLDERS, "MAX_STOP_LOSS_PCT",
+                        lambda: calls.append(1) or "2%")
+    monkeypatch.setattr(ph, "PLACEHOLDERS", ph._merge(live_risk.RISK_PLACEHOLDERS))
+    with pytest.raises(ph.UnknownPlaceholder):
+        ph.resolve("{{MAX_STOP_LOSS_PCT}} {{NOPE}}")
+    assert calls == []
+
+
+# --- secrets can never be reached --------------------------------------------
+
+@pytest.mark.parametrize("name", [
+    "DISCORD_TOKEN", "config.DISCORD_TOKEN", "ETORO_API_KEY", "ETORO_USER_KEY",
+    "ADMIN_PASSWORD", "DATABASE_URL", "config.ETORO_API_KEY", "__class__",
+])
+def test_secret_names_are_not_placeholders(name):
+    with pytest.raises(ph.UnknownPlaceholder):
+        ph.resolve("{{" + name + "}}")
+
+
+def test_no_sensitive_field_is_a_registered_name():
+    sensitive = {f.attr for f in config.FIELDS if f.sensitive} | {
+        f.key for f in config.FIELDS if f.sensitive}
+    assert sensitive
+    assert not sensitive & set(ph.PLACEHOLDERS)
+
+
+# --- provenance --------------------------------------------------------------
+
+def test_provenance_label_names_every_part_and_ends_before_tax():
+    label = ph.provenance_label(source="live paper book", n=12, run_date="2026-11-18",
+                                costs_included=False)
+    assert label == ("Source: live paper book; N = 12; as of 2026-11-18; "
+                     "costs not included; before tax")
+    with_costs = ph.provenance_label(source="backtest TRAIN 2015-2022", n=300,
+                                     run_date="2026-09-10", costs_included=True)
+    assert "costs included" in with_costs and with_costs.endswith("before tax")
