@@ -130,6 +130,8 @@ export const GUIDE_NOTICE = 'Education about a paper-trading tool, not advice: a
     sb-guide .md h3 { margin: var(--space-14) 0 var(--space-6); font-size: var(--text-body); font-weight: 600; scroll-margin-top: var(--space-20); }
     sb-guide .md p, sb-guide .md ul, sb-guide .md ol { margin: var(--space-8) 0; line-height: 1.55; }
     sb-guide .md a { color: var(--accent); }
+    sb-guide .md a { position: relative; }
+    sb-guide .md a::after { content: ''; position: absolute; top: 50%; left: 50%; width: max(100%, var(--hit-min)); height: max(100%, var(--hit-min)); transform: translate(-50%, -50%); }
     sb-guide .md blockquote { margin: var(--space-10) 0; padding: var(--space-8) var(--space-14); border-left: 2px solid var(--accent); background: var(--surface-raised); }
     sb-guide .md table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
     sb-guide .md th, sb-guide .md td { padding: var(--cell-pad-y) var(--cell-pad-x); border-bottom: 1px solid var(--border); text-align: left; }

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from '@angular/core';
@@ -294,5 +296,14 @@ describe('Guide page: search', () => {
     await settle(fixture);
     expect(el.querySelector('a.guide-result')).toBeNull();
     expect(el.querySelector<HTMLInputElement>('.guide-search input')!.value).toBe('');
+  });
+});
+
+describe('Guide page styles (source)', () => {
+  const source = readFileSync(join(process.cwd(), 'src/app/workspaces/guide/guide.ts'), 'utf8');
+
+  it('gives every link inside a chapter the shared hit area without growing its line (layout audit tap check, v236)', () => {
+    expect(source).toMatch(/sb-guide \.md a::after \{[^}]*width: max\(100%, var\(--hit-min\)\)[^}]*height: max\(100%, var\(--hit-min\)\)/);
+    expect(source).toMatch(/sb-guide \.md a \{ position: relative; \}/);
   });
 });
