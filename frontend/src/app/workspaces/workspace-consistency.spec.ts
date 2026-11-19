@@ -127,6 +127,7 @@ const PAGE_ROUTES = [
   'calendar/day/calendar-day.ts',
   'dashboard/dashboard.ts',
   'gallery/gallery.ts',
+  'guide/guide.ts',
   'plans/plan-detail.ts',
   'reports/reports.ts',
   'research/research.ts',
