@@ -93,14 +93,16 @@ SQLAlchemy==2.0.44
 psycopg[binary]==3.2.12
 alembic==1.16.5
 
+# Guide chapter front matter (swingbot/admin/guide/chapters.py, v235): parsed
+# with yaml.safe_load only. tests/dev/test_suites.py also reads
+# .github/workflows/deploy.yml with it; CI installs only this file.
+PyYAML==6.0.3
+
 # Test-only dependencies (not needed at bot runtime)
 pytest>=8.0
 # Parallel test execution. Opt-in via `pytest -n auto` (12 cores -> ~3min suite
 # drops well under a minute); deliberately NOT in pytest.ini addopts, see that file.
 pytest-xdist>=3.8
-# tests/dev/test_suites.py parses .github/workflows/deploy.yml with yaml.safe_load;
-# CI installs only this file, so an unpinned import there is a collection error.
-PyYAML==6.0.3
 
 # Static crash-class gate used by `python scripts/dev/testrun.py full`.
 pyflakes==3.4.0
