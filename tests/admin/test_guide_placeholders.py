@@ -229,3 +229,36 @@ def test_provenance_label_names_every_part_and_ends_before_tax():
     with_costs = ph.provenance_label(source="backtest TRAIN 2015-2022", n=300,
                                      run_date="2026-09-10", costs_included=True)
     assert "costs included" in with_costs and with_costs.endswith("before tax")
+
+
+# --- per-call memo (final review) --------------------------------------------
+
+def _counting(monkeypatch):
+    calls = []
+    table = dict(ph.PLACEHOLDERS)
+    table["version.bot"] = lambda: calls.append(1) or "9.9"
+    monkeypatch.setattr(ph, "PLACEHOLDERS", table)
+    return calls
+
+
+def test_resolve_memo_calls_each_provider_once(monkeypatch):
+    calls = _counting(monkeypatch)
+    memo: dict[str, str] = {}
+    assert ph.resolve("a {{version.bot}} b {{version.bot}}", memo) == "a 9.9 b 9.9"
+    assert ph.resolve("{{version.bot}}", memo) == "9.9"
+    assert len(calls) == 1 and memo == {"version.bot": "9.9"}
+
+
+def test_resolve_without_a_memo_stays_live(monkeypatch):
+    calls = _counting(monkeypatch)
+    ph.resolve("{{version.bot}}")
+    ph.resolve("{{version.bot}}")
+    assert len(calls) == 2
+
+
+def test_resolve_memo_still_rejects_unknown_names_first(monkeypatch):
+    _counting(monkeypatch)
+    memo: dict[str, str] = {}
+    with pytest.raises(ph.UnknownPlaceholder):
+        ph.resolve("{{version.bot}} {{DISCORD_TOKEN}}", memo)
+    assert memo == {}

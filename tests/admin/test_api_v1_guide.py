@@ -99,6 +99,18 @@ def test_placeholders_resolve_per_request_while_files_stay_cached(logged_in, gui
         "what-it-is"]
 
 
+def test_index_resolves_each_placeholder_once_across_chapters(logged_in, guide_root, monkeypatch):
+    from swingbot.admin.guide import placeholders
+    calls = []
+    table = dict(placeholders.PLACEHOLDERS)
+    table["version.bot"] = lambda: calls.append(1) or "9.9"
+    monkeypatch.setattr(placeholders, "PLACEHOLDERS", table)
+    _chapter(guide_root, 1, "what-it-is", "## One\nv {{version.bot}}\n")
+    _chapter(guide_root, 3, "pipeline", "## Two\nv {{version.bot}}\n")
+    assert len(logged_in.get("/api/v1/guide").get_json()["chapters"]) == 2
+    assert len(calls) == 1
+
+
 def test_unknown_slug_is_404(logged_in, guide_root):
     _chapter(guide_root, 1, "what-it-is", "Text\n")
     assert_error(logged_in.get("/api/v1/guide/nope"), "not_found", 404)

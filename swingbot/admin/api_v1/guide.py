@@ -46,17 +46,17 @@ def _loaded() -> tuple[Chapter, ...]:
         raise ApiError("guide_invalid", "A guide chapter could not be read.", 500) from exc
 
 
-def _resolved(chapter: Chapter) -> str:
+def _resolved(chapter: Chapter, memo: dict[str, str] | None = None) -> str:
     try:
-        return _placeholders.resolve(chapter.body)
+        return _placeholders.resolve(chapter.body, memo)
     except _placeholders.UnknownPlaceholder as exc:
         log.error("guide placeholder %r unknown in chapter %s", exc.name, chapter.slug)
         raise ApiError("guide_placeholder",
                        f"Guide chapter {chapter.slug} could not be rendered.", 500) from exc
 
 
-def _summary(chapter: Chapter) -> dict[str, Any]:
-    headings = _chapters_mod.extract_headings(_resolved(chapter))
+def _summary(chapter: Chapter, memo: dict[str, str]) -> dict[str, Any]:
+    headings = _chapters_mod.extract_headings(_resolved(chapter, memo))
     return {
         "slug": chapter.slug,
         "title": chapter.title,
@@ -69,7 +69,8 @@ def _summary(chapter: Chapter) -> dict[str, Any]:
 @api_v1.route("/guide", methods=["GET"])
 @require_auth
 def guide_index():
-    return jsonify({"chapters": [_summary(chapter) for chapter in _loaded()]})
+    memo: dict[str, str] = {}   # one request: each placeholder resolves once
+    return jsonify({"chapters": [_summary(chapter, memo) for chapter in _loaded()]})
 
 
 @api_v1.route("/guide/<slug>", methods=["GET"])

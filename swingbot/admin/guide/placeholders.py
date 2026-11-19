@@ -52,13 +52,26 @@ def names_in(markdown: str) -> list[str]:
     return [match.group(1) for match in PLACEHOLDER_RE.finditer(markdown)]
 
 
-def resolve(markdown: str) -> str:
-    """Fill every {{name}}; UnknownPlaceholder on the first name not whitelisted."""
+def resolve(markdown: str, memo: dict[str, str] | None = None) -> str:
+    """Fill every {{name}}; UnknownPlaceholder on the first name not whitelisted.
+
+    A caller-owned `memo` makes each name resolve at most once across the calls
+    that share it (one request); without it every call reads live values.
+    """
     for match in _ANY_BRACES_RE.finditer(markdown):
         name = match.group(1).strip()
         if name not in PLACEHOLDERS:
             raise UnknownPlaceholder(name)
-    return PLACEHOLDER_RE.sub(lambda match: PLACEHOLDERS[match.group(1)](), markdown)
+    if memo is None:
+        memo = {}
+
+    def value(match: re.Match) -> str:
+        name = match.group(1)
+        if name not in memo:
+            memo[name] = PLACEHOLDERS[name]()
+        return memo[name]
+
+    return PLACEHOLDER_RE.sub(value, markdown)
 
 
 def provenance_label(*, source: str, n: int, run_date: str, costs_included: bool) -> str:
