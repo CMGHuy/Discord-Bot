@@ -1,6 +1,7 @@
 """v237 V237-5: the strategies.cards placeholder (chapter 5's live cards)."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -151,3 +152,52 @@ def test_the_default_badge_reader_asks_for_the_strategy_source(monkeypatch):
                         or Badge("WEAK", 0, 0.0, 0.0))
     assert lst._badge("MACD").n == 0
     assert calls == [("strategy", "MACD")]
+
+
+# --- the real cards (v237 V237-7, V237-7b) ---------------------------------------------
+
+_ENTRY_MODULES = ("swingbot/core/market/entry_filters.py:",
+                  "swingbot/core/market/short_entries.py:",
+                  "swingbot/core/market/turtle_soup.py:")
+#: A performance figure on a card: figures come only from the registry badge.
+_FIGURE = re.compile(r"\d\s*%|[+-]\d+(?:\.\d+)?\s*R\b|\bN\s*=|\bExpR\b|\bwin rate\b", re.I)
+_BODY_MAX_BYTES = 1000
+
+
+def _is_live(key: str) -> bool:
+    live = strategy_types.live_horizons()
+    return any(strategy_types.admits(key, side, h)
+               for side in ("bullish", "bearish") for h in live)
+
+
+def _real_card(key: str) -> cards.StrategyCard:
+    path = cards.cards_dir() / f"{lm.strategy_file_slug(key)}.md"
+    assert path.is_file(), f"no card {path.name} for {key}"
+    return cards.parse_card(path)
+
+
+def test_every_live_strategy_has_a_real_card():
+    live_keys = [key for key in lm.registered_strategy_keys() if _is_live(key)]
+    assert len(live_keys) == 11
+    for key in live_keys:
+        assert _real_card(key).strategy == key
+
+
+def test_real_card_bodies_follow_the_shape():
+    found = cards.load_cards()
+    assert found, "docs/guide/strategies/ holds no card"
+    for card in found:
+        body, name = card.body, card.path.name
+        assert body.startswith("**Idea.** "), name
+        assert "\n\n**Entry rule.**\n\n- " in body, name
+        assert "\n\n**Where it fires.** " in body, name
+        assert (body.index("**Idea.**") < body.index("**Entry rule.**")
+                < body.index("**Where it fires.**")), name
+        assert not _FIGURE.search(body), f"{name}: a performance figure belongs to the badge"
+        assert len(body.encode("utf-8")) <= _BODY_MAX_BYTES, name
+
+
+def test_real_cards_cite_their_entry_function_and_the_mask():
+    for card in cards.load_cards():
+        assert any(s.startswith(_ENTRY_MODULES) for s in card.sources), card.path.name
+        assert "swingbot/core/market/strategy_types.py:admits" in card.sources, card.path.name
