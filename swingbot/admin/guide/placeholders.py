@@ -19,6 +19,7 @@ from typing import Callable, Mapping
 from swingbot.admin.guide.live_market import MARKET_PLACEHOLDERS
 from swingbot.admin.guide.live_risk import RISK_PLACEHOLDERS
 from swingbot.admin.guide.live_rules import RULE_PLACEHOLDERS
+from swingbot.admin.guide.live_strategies import STRATEGY_PLACEHOLDERS
 from swingbot.admin.guide.live_switches import SWITCH_PLACEHOLDERS
 
 PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}")
@@ -47,7 +48,8 @@ def _merge(*tables: Mapping[str, Callable[[], str]]) -> Mapping[str, Callable[[]
 
 
 PLACEHOLDERS: Mapping[str, Callable[[], str]] = _merge(
-    RISK_PLACEHOLDERS, MARKET_PLACEHOLDERS, RULE_PLACEHOLDERS, SWITCH_PLACEHOLDERS)
+    RISK_PLACEHOLDERS, MARKET_PLACEHOLDERS, RULE_PLACEHOLDERS, SWITCH_PLACEHOLDERS,
+    STRATEGY_PLACEHOLDERS)
 
 
 def names_in(markdown: str) -> list[str]:
