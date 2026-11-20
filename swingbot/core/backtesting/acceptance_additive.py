@@ -22,6 +22,7 @@ net of costs; that precondition is checked by the caller
 """
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 
 import numpy as np
@@ -31,7 +32,7 @@ from .acceptance import (
     _Z_POWER, expectancy_r, population_split, stratum_table, verdict_of, win_rate,
 )
 from .arms.pairing import index_by_key
-from .instrument.stats import week_cluster_bootstrap
+from .instrument.stats import iso_week_key, week_cluster_bootstrap
 
 ADDITIVE_VERSION = 1   # additive-procedure version, recorded in every results doc
 ADDITIVE_GATE_MISUSE = "ADDITIVE_GATE_MISUSE"
@@ -357,3 +358,89 @@ def evaluate_additive(baseline, component, *, stage: str, folds=None,
                             split={"added": len(split.added),
                                    "displaced": len(split.displaced)},
                             seed=seed, version=ADDITIVE_VERSION, cluster="week")
+
+
+# --- disclosures (never gating) -------------------------------------------------------
+
+def _ordered(rows) -> list:
+    return sorted(_closed(rows), key=lambda t: (str(t.entry_date)[:10], t.ticker))
+
+
+def _max_drawdown(rs) -> float:
+    peak = equity = worst = 0.0
+    for r in rs:
+        equity += r
+        peak = max(peak, equity)
+        worst = max(worst, peak - equity)
+    return float(worst)
+
+
+def _longest_losing_streak(rows) -> int:
+    best = run = 0
+    for trade in rows:
+        run = run + 1 if trade.outcome == "loss" else 0
+        best = max(best, run)
+    return best
+
+
+def _week_sums(rows) -> dict:
+    out = defaultdict(float)
+    for trade in _closed(rows):
+        out[iso_week_key(trade.entry_date)] += trade.r_multiple
+    return dict(out)
+
+
+def _top5_week_share(rows) -> float | None:
+    sums = _week_sums(rows)
+    total = sum(sums.values())
+    if total <= _EPS:
+        return None
+    return float(sum(sorted(sums.values(), reverse=True)[:5]) / total)
+
+
+def _signals_per_day(rows) -> tuple:
+    counts = list(Counter(str(t.entry_date)[:10] for t in rows).values())
+    if not counts:
+        return None, 0
+    return float(np.percentile(counts, 95)), int(max(counts))
+
+
+def _same_week_corr(added, baseline) -> float | None:
+    a, b = _week_sums(added), _week_sums(baseline)
+    weeks = sorted(set(a) & set(b))
+    if len(weeks) < 3:
+        return None
+    x = np.array([a[w] for w in weeks])
+    y = np.array([b[w] for w in weeks])
+    if np.std(x) == 0 or np.std(y) == 0:
+        return None
+    return float(np.corrcoef(x, y)[0, 1])
+
+
+def disclosures(added, baseline) -> dict:
+    """Spec Part C disclosures for the results doc. None of them gates."""
+    ordered = _ordered(added)
+    p95, peak = _signals_per_day(added)
+    return {"max_drawdown_r": _max_drawdown([t.r_multiple for t in ordered]),
+            "longest_losing_streak": _longest_losing_streak(ordered),
+            "top5_week_share": _top5_week_share(added),
+            "signals_per_day_p95": p95, "signals_per_day_max": peak,
+            "same_week_corr": _same_week_corr(added, baseline)}
+
+
+def _fmt(value, spec: str) -> str:
+    return "n/a" if value is None else format(value, spec)
+
+
+def render_disclosures(d: dict) -> list:
+    return [
+        "Disclosures (never gating):",
+        f"- Max drawdown of the added rows: {_fmt(d['max_drawdown_r'], '.2f')}R",
+        f"- Longest losing streak: {d['longest_losing_streak']}",
+        f"- Share of the added rows' total R from the five best weeks: "
+        f"{_fmt(d['top5_week_share'], '.1%')}",
+        f"- Signals per day: p95 {_fmt(d['signals_per_day_p95'], '.1f')}, "
+        f"max {d['signals_per_day_max']}",
+        f"- Same-week correlation of added R with the baseline book: "
+        f"{_fmt(d['same_week_corr'], '+.2f')}",
+    ]
