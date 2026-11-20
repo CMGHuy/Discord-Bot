@@ -27,8 +27,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from .acceptance import (
-    ALPHA, BOOTSTRAP_RESAMPLES, CLOSED, DECIDED, ClauseResult, expectancy_r,
-    population_split, win_rate,
+    ALPHA, BOOTSTRAP_RESAMPLES, CLOSED, DECIDED, AcceptanceResult, ClauseResult,
+    _Z_POWER, expectancy_r, population_split, stratum_table, verdict_of, win_rate,
 )
 from .arms.pairing import index_by_key
 from .instrument.stats import week_cluster_bootstrap
@@ -274,3 +274,86 @@ def clause_stability(folds: list) -> ClauseResult:
     return ClauseResult(CLAUSES[3], "PASS" if ok else "FAIL",
                         _stability_detail(rows, positive, thin, sunk),
                         float(positive), float(FOLDS_POSITIVE))
+
+
+# --- Stage 0: the frozen-effect MDE precheck ------------------------------------------
+
+#: Two-sided normal quantiles z(1 - alpha/2), tabulated (no scipy in the image).
+_Z_TWO_SIDED = {0.05: 1.9600, 0.01: 2.5758, 0.10: 1.6449}
+STAGE0_REFUSAL = "refused:additive-mde"
+
+
+def mde_own_expectancy(*, n: int, sd_r: float, power: float = 0.80,
+                       alpha: float = ALPHA) -> float | None:
+    """Smallest own net ExpR the gate's lower 95% bound detects at ``power``
+    with ``n`` added rows of per-row spread ``sd_r`` (frozen with the effect
+    in the pre-registration, never read from fold-train)."""
+    if sd_r is None or not np.isfinite(sd_r) or sd_r < 0:
+        raise ValueError(f"sd_r must be a finite number >= 0, got {sd_r!r}")
+    z_a, z_b = _Z_TWO_SIDED.get(alpha), _Z_POWER.get(power)
+    if z_a is None or z_b is None:
+        raise ValueError(f"no tabulated z for alpha={alpha}, power={power}")
+    if n <= 0:
+        return None
+    return float((z_a + z_b) * sd_r / np.sqrt(n))
+
+
+def stage0_refusal(*, n: int, expected_r: float, sd_r: float) -> str | None:
+    """None when the shot may be spent; else the refusal line (budget intact).
+    ``n`` is a count-only pass of added rows; no R is read here."""
+    if expected_r <= 0:
+        return (f"{STAGE0_REFUSAL} -- the frozen expected own ExpR {expected_r:+.4f}R "
+                f"is not positive; budget intact")
+    mde = mde_own_expectancy(n=n, sd_r=sd_r)
+    if mde is None:
+        return f"{STAGE0_REFUSAL} -- no added row to size (N={n}); budget intact"
+    if mde > expected_r + _EPS:
+        return (f"{STAGE0_REFUSAL} -- MDE {mde:.4f}R at N={n} exceeds the frozen "
+                f"expected own ExpR {expected_r:.4f}R; budget intact")
+    return None
+
+
+# --- the gate -------------------------------------------------------------------------
+
+STAGE_CLAUSES = {"selection": CLAUSES[:3], "walkforward": CLAUSES[3:],
+                 "validation": CLAUSES}
+
+
+class AdditiveMisuse(ValueError):
+    """The component does not only add rows: it belongs to v72 or v92."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _clause_runners(baseline, component, split, folds, kw: dict) -> dict:
+    return {
+        CLAUSES[0]: lambda: clause_own_expectancy(split.added, **kw),
+        CLAUSES[1]: lambda: clause_win_rate_above_breakeven(split.added, **kw),
+        CLAUSES[2]: lambda: clause_book_net_gain(baseline, component, split, **kw),
+        CLAUSES[3]: lambda: clause_stability(folds),
+    }
+
+
+def evaluate_additive(baseline, component, *, stage: str, folds=None,
+                      n_resamples: int = BOOTSTRAP_RESAMPLES,
+                      seed: int = 42) -> AcceptanceResult:
+    """The additive gate at one funnel stage. Every clause the stage reads
+    must PASS; clause 3's SKIPPED (no displacement) never blocks."""
+    if stage not in STAGE_CLAUSES:
+        raise ValueError(f"stage must be one of {tuple(STAGE_CLAUSES)}, got {stage!r}")
+    names = STAGE_CLAUSES[stage]
+    if CLAUSES[3] in names and folds is None:
+        raise ValueError(f"stage {stage!r} reads clause 4 and needs folds")
+    split = split_additive(baseline, component)
+    if split.misuse:
+        raise AdditiveMisuse(split.misuse)
+    runners = _clause_runners(baseline, component, split, folds,
+                              {"n_resamples": n_resamples, "seed": seed})
+    clauses = tuple(runners[name]() for name in names)
+    return AcceptanceResult(stage=stage, verdict=verdict_of(clauses), clauses=clauses,
+                            strata=stratum_table(baseline, component),
+                            split={"added": len(split.added),
+                                   "displaced": len(split.displaced)},
+                            seed=seed, version=ADDITIVE_VERSION, cluster="week")
