@@ -430,3 +430,53 @@ def test_chapter_5_resolves_and_links_only_written_chapters(_unmeasured_badges):
     assert glossary and glossary <= GLOSSARY_LINKED
     assert {slug for slug, _anchor in links} <= CH5_LINKABLE
     assert not _NO_PCT.search(re.sub(r"\{\{[^}]*\}\}", "", chapter.body))
+
+
+# --- chapter 6: gates (v237 V237-11, V237-11b) ------------------------------------------
+
+CH6_ANCHORS = ["what-a-gate-does", "gates-in-the-live-scan", "direction-and-horizon-masks",
+               "shared-entry-gates", "market-regime"]
+CH6_LINKABLE = CH5_LINKABLE | {"gates"}
+
+
+def test_chapter_6_header_and_plain_words_callout():
+    chapter = _chapter("gates")
+    assert (chapter.order, chapter.title) == (6, "Filters and gates")
+    assert chapter.path.name == "06-gates.md"
+    assert chapter.body.startswith("> **In plain words**")
+
+
+def test_chapter_6_sections_in_order():
+    assert _anchors(_chapter("gates")) == CH6_ANCHORS
+
+
+def test_chapter_6_masks_come_from_the_live_table():
+    section = _section(_chapter("gates").body, "Direction and horizon masks")
+    assert "{{gates.list}}" in section
+    assert "| Strategy | Long | Short | Status |" in placeholders.resolve(section)
+
+
+def test_chapter_6_live_scan_numbers_are_placeholders():
+    section = _section(_chapter("gates").body, "Gates in the live scan")
+    assert {"SIGNAL_CONFIRMATION_SCANS", "MIN_ALERT_CONFIDENCE_LEVEL"} <= set(
+        placeholders.names_in(section))
+
+
+def test_chapter_6_regime_is_a_score_and_its_gate_reads_the_switch_table():
+    section = _section(_chapter("gates").body, "Market regime")
+    assert "a score, not a gate" in section
+    assert "first row of the switch table" in section
+
+
+def test_chapter_6_never_types_a_switch_state():
+    assert not re.search(r"\b(?:is|are) (?:on|off)\b", _chapter("gates").body)
+
+
+def test_chapter_6_resolves_and_links_only_written_chapters():
+    chapter = _chapter("gates")
+    assert "{{" not in placeholders.resolve(chapter.body)
+    links = _GUIDE_LINK.findall(chapter.body)
+    glossary = {anchor for slug, anchor in links if slug == "glossary"}
+    assert glossary and glossary <= GLOSSARY_LINKED
+    assert {slug for slug, _anchor in links} <= CH6_LINKABLE
+    assert not _NO_PCT.search(re.sub(r"\{\{[^}]*\}\}", "", chapter.body))

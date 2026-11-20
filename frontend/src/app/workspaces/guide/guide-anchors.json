@@ -1,5 +1,12 @@
 {
   "chapters": {
+    "gates": [
+      "what-a-gate-does",
+      "gates-in-the-live-scan",
+      "direction-and-horizon-masks",
+      "shared-entry-gates",
+      "market-regime"
+    ],
     "glossary": [
       "the-bot-and-its-alerts",
       "alert",
