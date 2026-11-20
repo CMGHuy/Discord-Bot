@@ -13,12 +13,13 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 from swingbot.core.backtesting.acceptance import ALPHA, CLOSED, BOOTSTRAP_RESAMPLES, GEOMETRY_MAX_DROP_PCT, NON_INFERIORITY_R, VOLUME_MAX_CUT_PCT, ArmTrade, AcceptanceResult, ClauseResult, evaluate, delta_expectancy_r, WR_STATISTICS, mde_paired, mde_win_rate, project_target_n, render_json, render_markdown, win_rate_statistic  # noqa: E402
 from swingbot.core.backtesting.acceptance_harvest import HARVEST_VERSION, WIN_RATE_FLOOR_PP, evaluate_harvest, mde_expectancy_r  # noqa: E402
+from swingbot.core.backtesting import acceptance_additive as additive  # noqa: E402
 from swingbot.core.backtesting.acceptance import population_split  # noqa: E402
 from swingbot.core.backtesting.instrument import cli as instrument_cli, contract  # noqa: E402
 from swingbot.core.backtesting.arms.selection import SELECTED, evaluate_cell, select_cell, with_clause  # noqa: E402
 from swingbot.core.backtesting.arms import dryup_clauses, gap_reclaim_census, gap_reclaim_clauses, headroom_clauses, reachability  # noqa: E402
-from swingbot.core.backtesting.arms.pairing import changed_outcomes, overlap  # noqa: E402
-from swingbot.core.backtesting.arms.provenance import check_stamp  # noqa: E402
+from swingbot.core.backtesting.arms.pairing import DuplicateKeyError, changed_outcomes, overlap  # noqa: E402
+from swingbot.core.backtesting.arms.provenance import check_r_basis, check_stamp  # noqa: E402
 from swingbot.core.backtesting.backtest_wf import gate as gate_expectancy, gate_expectancy_harvest, gate_win_rate, win_rate_fold_row  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cache_dir_source  # noqa: E402
@@ -483,36 +484,189 @@ def stage_selection(args):
     return 0 if result.verdict == SELECTED else 1
 
 
-def main(argv=None):
+# --- v238: --gate additive (v230 spec Part C) ------------------------------------------
+
+_GATES = ("win_rate", "harvest", "additive")
+DISPLACEMENT_CAUSE = "not exposed by the replay"
+
+#: stage -> function name, resolved at call time so a monkeypatched stage is honoured.
+_STAGES = {"reachability": "stage_reachability", "mde": "stage_mde", "selection": "stage_selection",
+           "walkforward": "stage_walkforward", "validation": "stage_validation"}
+_ADDITIVE_STAGES = {"reachability": "stage_additive_reachability", "mde": "stage_additive_mde",
+                    "selection": "_additive_pending", "walkforward": "_additive_pending",
+                    "validation": "_additive_pending"}
+
+
+def _stage_runner(args):
+    """The stage callable for ``args.gate`` / ``args.stage``."""
+    table = _ADDITIVE_STAGES if args.gate == "additive" else _STAGES
+    return globals()[table[args.stage]]
+
+
+def _additive_pending(args):
+    print(f"refused:additive-stage-pending -- --gate additive --stage {args.stage} is not wired yet. "
+          "Budget intact.", file=sys.stderr)
+    return 1
+
+
+def _when(predicate, message):
+    return lambda args: message if predicate(args) else None
+
+
+def _additive(args):
+    return args.gate == "additive"
+
+
+_MECHANISM_ADDITIVE = ("--dryup-mechanism and --headroom-mechanism score v72 clause 6; "
+                       "the additive gate has no mechanism clause")
+
+#: First message wins; the first five entries are main's pre-v238 checks, verbatim, in order.
+_FLAG_CONFLICTS = (
+    _when(lambda a: a.dryup_mechanism and a.headroom_mechanism,
+          "--dryup-mechanism and --headroom-mechanism are different clause-6 readings; pass one"),
+    _when(lambda a: a.mechanism_json and a.gate == "harvest",
+          "--mechanism-json replaces v72 clause 6; the v92 harvest gate has no mechanism clause"),
+    _when(lambda a: a.dryup_mechanism and a.gate == "harvest",
+          "--dryup-mechanism scores v72 clause 6; the v92 harvest gate has no mechanism clause"),
+    _when(lambda a: _wr_statistic(a) != "standardised" and a.gate == "harvest",
+          "--wr-statistic selects the v72 win-rate clause-1 statistic; the v92 harvest gate has no win-rate clause"),
+    _gap_reclaim_conflict,
+    _when(lambda a: _additive(a) and a.gap_reclaim,
+          "--gap-reclaim scores the v72 win-rate funnel; the additive gate is a different gate"),
+    _when(lambda a: _additive(a) and a.mechanism_json,
+          "--mechanism-json replaces v72 clause 6; the additive gate has no mechanism clause"),
+    _when(lambda a: _additive(a) and (a.dryup_mechanism or a.headroom_mechanism), _MECHANISM_ADDITIVE),
+    _when(lambda a: _additive(a) and _wr_statistic(a) != "standardised",
+          "--wr-statistic selects the v72 win-rate clause-1 statistic; the additive gate judges win rate "
+          "against its own break-even"),
+    _when(lambda a: _additive(a) and a.train_effect_from_arms,
+          "--train-effect-from-arms reads a v72/v92 TRAIN effect; the additive gate freezes --expected-own-r"),
+    _when(lambda a: not _additive(a) and (a.expected_own_r is not None or a.expected_sd_r is not None),
+          "--expected-own-r and --expected-sd-r freeze the additive gate's Stage 0; pass --gate additive"),
+)
+
+
+def _flag_conflict(args):
+    for check in _FLAG_CONFLICTS:
+        message = check(args)
+        if message:
+            return message
+    return None
+
+
+def _additive_basis_gate(args):
+    """--gate additive only, under --bespoke-instrument too: both arms must be booked net."""
+    if not _additive(args):
+        return None
+    token = check_r_basis(json.loads(Path(args.arms).read_text()))
+    if token:
+        print(f"{token} -- the additive gate needs arms booked net (provenance r_basis = net; "
+              "measure_arms.py --r-basis net). Budget intact.", file=sys.stderr)
+        return 1
+    return None
+
+
+def _misuse_line(reason):
+    print(f"{reason} -- the additive gate takes a component that only adds rows; use --gate win_rate "
+          "(v72) or harvest (v92). Budget intact.", file=sys.stderr)
+    return 1
+
+
+def _additive_arms(args):
+    """(baseline, component, split) when the arms are add-only, else None after a refusal."""
+    baseline, component = load_arms(args.arms)
+    try:
+        split = additive.split_additive(baseline, component)
+    except DuplicateKeyError as error:
+        print(f"refused:duplicate-key -- {error}. Budget intact.", file=sys.stderr)
+        return None
+    if split.misuse:
+        _misuse_line(split.misuse)
+        return None
+    return baseline, component, split
+
+
+def _print_displaced(split):
+    for row in split.displaced:
+        print(f"displaced: {row.ticker} {row.strategy} {row.horizon_key} {row.entry_date} "
+              f"-- cause: {DISPLACEMENT_CAUSE}")
+
+
+def stage_additive_reachability(args):
+    """Stage -1 after the stamp and basis gates: the component must only add rows."""
+    arms = _additive_arms(args)
+    if arms is None:
+        return 1
+    baseline, component, split = arms
+    print(f"additive split: baseline N={len(baseline)} component N={len(component)} "
+          f"added={len(split.added)} displaced={len(split.displaced)}")
+    _print_displaced(split)
+    _dump(args.out_json, {"added": len(split.added), "displaced": len(split.displaced)})
+    print("REACHABLE -- the component only adds rows; Stage 0 may proceed.")
+    return 0
+
+
+def _refuse_unfrozen(why):
+    print(f"refused:additive-mde-unfrozen -- {why}. Budget intact.", file=sys.stderr)
+    return 1
+
+
+def stage_additive_mde(args):
+    """Stage 0: the frozen own ExpR against the MDE at the closed added-row count (no R read)."""
+    if args.expected_own_r is None or args.expected_sd_r is None:
+        return _refuse_unfrozen("Stage 0 reads --expected-own-r and --expected-sd-r, both frozen "
+                                "in the pre-registration")
+    arms = _additive_arms(args)
+    if arms is None:
+        return 1
+    n = _count(arms[2].added, CLOSED)
+    try:
+        mde = additive.mde_own_expectancy(n=n, sd_r=args.expected_sd_r)
+    except ValueError as error:
+        return _refuse_unfrozen(str(error))
+    shown = "n/a" if mde is None else f"{mde:.4f}R"
+    print(f"added N (closed)   : {n}\nfrozen own ExpR    : {args.expected_own_r:+.4f}R\n"
+          f"frozen sd          : {args.expected_sd_r:.4f}R\nMDE                : {shown}")
+    refusal = additive.stage0_refusal(n=n, expected_r=args.expected_own_r, sd_r=args.expected_sd_r)
+    if refusal:
+        print(refusal, file=sys.stderr)
+        return 1
+    print("RESOLVABLE -- the shot may proceed.")
+    return 0
+
+
+def _build_parser():
     parser = argparse.ArgumentParser(); parser.add_argument("--stage", required=True, choices=("reachability", "mde", "selection", "walkforward", "validation")); parser.add_argument("--arms", type=Path); parser.add_argument("--title", required=True); parser.add_argument("--window", required=True)
-    parser.add_argument("--permutation-p", type=float, default=None); parser.add_argument("--train-effect-pp", type=float, default=0.0); parser.add_argument("--train-effect-r", type=float, default=0.0); parser.add_argument("--observed-days", type=int, default=None); parser.add_argument("--target-days", type=int, default=730); parser.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES); parser.add_argument("--seed", type=int, default=42); parser.add_argument("--notes", default=None); parser.add_argument("--out-md", default=None); parser.add_argument("--out-json", default=None); parser.add_argument("--bespoke-instrument", default=None); parser.add_argument("--mde-method", choices=("paired", "unpaired"), default="paired"); parser.add_argument("--gate", choices=("win_rate", "harvest"), default="win_rate")
+    parser.add_argument("--permutation-p", type=float, default=None); parser.add_argument("--train-effect-pp", type=float, default=0.0); parser.add_argument("--train-effect-r", type=float, default=0.0); parser.add_argument("--observed-days", type=int, default=None); parser.add_argument("--target-days", type=int, default=730); parser.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES); parser.add_argument("--seed", type=int, default=42); parser.add_argument("--notes", default=None); parser.add_argument("--out-md", default=None); parser.add_argument("--out-json", default=None); parser.add_argument("--bespoke-instrument", default=None); parser.add_argument("--mde-method", choices=("paired", "unpaired"), default="paired"); parser.add_argument("--gate", choices=_GATES, default="win_rate")
     parser.add_argument("--wr-statistic", choices=tuple(WR_STATISTICS), default="standardised"); parser.add_argument("--train-effect-from-arms", action="store_true")
     parser.add_argument("--grid-arms", action="append", default=[])
     parser.add_argument("--mde-refused", action="append", type=float, default=[])
     parser.add_argument('--dryup-mechanism', action='store_true'); parser.add_argument('--headroom-mechanism', action='store_true'); parser.add_argument("--mechanism-json", default=None)
     parser.add_argument("--gap-reclaim", action="store_true", help="v192: score the gap-reclaim veto on its frozen strata (needs <arms stem>.gap_reclaim.json)")
+    parser.add_argument("--expected-own-r", type=float, default=None, help="v238 additive Stage 0: frozen expected own net ExpR (half the selected ladder rung's net mean R)")
+    parser.add_argument("--expected-sd-r", type=float, default=None, help="v238 additive Stage 0: frozen per-event net R standard deviation of that rung")
     cache_dir_source.add_args(parser)
     instrument_cli.add_instrument_arg(parser)
+    return parser
+
+
+def main(argv=None):
+    parser = _build_parser()
     args = parser.parse_args(argv)
     _instrument_gate(args)
     cache_dir_source.resolve(args)
-    if args.dryup_mechanism and args.headroom_mechanism:
-        parser.error("--dryup-mechanism and --headroom-mechanism are different clause-6 readings; pass one")
-    if args.mechanism_json and args.gate == "harvest":
-        parser.error("--mechanism-json replaces v72 clause 6; the v92 harvest gate has no mechanism clause")
-    if args.dryup_mechanism and args.gate == "harvest":
-        parser.error("--dryup-mechanism scores v72 clause 6; the v92 harvest gate has no mechanism clause")
-    if _wr_statistic(args) != "standardised" and args.gate == "harvest":
-        parser.error("--wr-statistic selects the v72 win-rate clause-1 statistic; the v92 harvest gate has no win-rate clause")
-    conflict = _gap_reclaim_conflict(args)
+    conflict = _flag_conflict(args)
     if conflict:
         parser.error(conflict)
     if args.stage == "selection":
-        return stage_selection(args)
+        return _stage_runner(args)(args)
     if args.arms is None:
         parser.error("--arms is required for non-selection stages")
     refused = _stamp_gate(args)
-    if refused is not None: return refused
-    return {"reachability": stage_reachability,"mde": stage_mde,"walkforward": stage_walkforward,"validation": stage_validation}[args.stage](args)
+    if refused is None:
+        refused = _additive_basis_gate(args)
+    if refused is not None:
+        return refused
+    return _stage_runner(args)(args)
 
 if __name__ == "__main__": raise SystemExit(main())
