@@ -9,7 +9,7 @@ import re
 
 import pytest
 
-from swingbot.admin.guide import chapters, live_market, placeholders
+from swingbot.admin.guide import chapters, live_market, live_risk, placeholders
 
 #: Spec v215 § What the reader gets: the twelve chapter slugs.
 SPEC_SLUGS = frozenset({
@@ -23,6 +23,18 @@ _SELF_LINK = re.compile(r"\]\(#([a-z0-9_-]+)\)")
 def _no_live_book(monkeypatch):
     """alerts.per_week would read the database."""
     monkeypatch.setattr(live_market, "_load_trades", lambda: [])
+
+
+#: The stored account row the sizer reads; live_risk._load_account would open the database.
+_ACCOUNT_ROW = {
+    "risk_pct": 1.0, "max_risk_amount_absolute": 100.0, "sizing_mode": "risk_pct",
+    "max_position_pct": 10.0, "max_position_value_absolute": 1000.0, "max_open_positions": 30,
+}
+
+
+@pytest.fixture(autouse=True)
+def _stored_account(monkeypatch):
+    monkeypatch.setattr(live_risk, "_load_account", lambda: dict(_ACCOUNT_ROW))
 
 
 def _by_slug() -> dict[str, chapters.Chapter]:

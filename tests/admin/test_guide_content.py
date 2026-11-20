@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from swingbot.admin.guide import live_market, placeholders
+from swingbot.admin.guide import live_market, live_risk, placeholders
 from swingbot.admin.guide.chapters import (FIGURE_RE, Chapter, extract_headings, guide_dir,
                                            load_chapters, split_source)
 from swingbot.core.market import strategy_types
@@ -33,6 +33,18 @@ _PCT_ORDERS = range(7, 10)   # Plan B chapters 7-9
 def _no_live_book(monkeypatch):
     """alerts.per_week would read the database."""
     monkeypatch.setattr(live_market, "_load_trades", lambda: [])
+
+
+#: The stored account row the sizer reads; live_risk._load_account would open the database.
+_ACCOUNT_ROW = {
+    "risk_pct": 1.0, "max_risk_amount_absolute": 100.0, "sizing_mode": "risk_pct",
+    "max_position_pct": 10.0, "max_position_value_absolute": 1000.0, "max_open_positions": 30,
+}
+
+
+@pytest.fixture(autouse=True)
+def _stored_account(monkeypatch):
+    monkeypatch.setattr(live_risk, "_load_account", lambda: dict(_ACCOUNT_ROW))
 
 
 @pytest.fixture(scope="module")

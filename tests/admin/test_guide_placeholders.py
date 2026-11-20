@@ -11,7 +11,24 @@ RISK_NAMES = {
     "POSITION_SIZING_MODE", "correlation.threshold", "correlation.window",
     "correlation.sector_fallback", "sizing.kelly_cap", "sizing.risk_floor",
     "sizing.risk_ceiling", "sizing.gap", "version.bot",
+    "MAX_POSITION_SIZE_PCT", "MAX_POSITION_VALUE_ABSOLUTE", "MAX_OPEN_POSITIONS",
 }
+
+#: The stored account row the sizer reads (account.load_account_config()).
+_ACCOUNT_ROW = {
+    "risk_pct": 1.0, "max_risk_amount_absolute": 100.0, "sizing_mode": "risk_pct",
+    "max_position_pct": 10.0, "max_position_value_absolute": 1000.0, "max_open_positions": 30,
+}
+
+
+@pytest.fixture(autouse=True)
+def _stored_account(monkeypatch):
+    """live_risk._load_account would read the database."""
+    monkeypatch.setattr(live_risk, "_load_account", lambda: dict(_ACCOUNT_ROW))
+
+
+def _row_with(monkeypatch, **values):
+    monkeypatch.setattr(live_risk, "_load_account", lambda: {**_ACCOUNT_ROW, **values})
 
 
 def _risk(name: str) -> str:
@@ -37,13 +54,9 @@ def test_every_risk_placeholder_renders_plain_text(name):
     ("MAX_STOP_LOSS_PCT", 2.0, "2%"),
     ("MAX_STOP_LOSS_PCT", 1.5, "1.5%"),
     ("MIN_STOP_DISTANCE_PCT", 1.75, "1.75%"),
-    ("RISK_PER_TRADE_PCT", 1.0, "1%"),
     ("PORTFOLIO_HEAT_CAP_PCT", 6.0, "6%"),
     ("CORRELATED_HEAT_CAP_PCT", 3.0, "3%"),
     ("SECTOR_HEAT_CAP_PCT", 2.5, "2.5%"),
-    ("MAX_RISK_AMOUNT_ABSOLUTE", 100.0, "$100"),
-    ("MAX_RISK_AMOUNT_ABSOLUTE", 62.5, "$62.50"),
-    ("MAX_RISK_AMOUNT_ABSOLUTE", 1500.0, "$1,500"),
     ("CLAMP_STOP_TO_HARD_CAP", True, "on"),
     ("CLAMP_STOP_TO_HARD_CAP", False, "off"),
 ])
@@ -63,7 +76,7 @@ def test_risk_per_trade_max_comes_from_the_field():
     ("unheard_of", "unheard_of (`unheard_of`)"),
 ])
 def test_sizing_mode_uses_the_option_label(monkeypatch, mode, text):
-    monkeypatch.setattr(config, "POSITION_SIZING_MODE", mode)
+    _row_with(monkeypatch, sizing_mode=mode)
     assert _risk("POSITION_SIZING_MODE") == text
 
 
@@ -114,6 +127,74 @@ def test_version_bot(monkeypatch):
     assert _risk("version.bot") == "9.8.7"
 
 
+# --- the stored account row ----------------------------------------------------
+
+@pytest.mark.parametrize("name, key, value, text", [
+    ("RISK_PER_TRADE_PCT", "risk_pct", 1.0, "1%"),
+    ("RISK_PER_TRADE_PCT", "risk_pct", 0.5, "0.5%"),
+    ("MAX_RISK_AMOUNT_ABSOLUTE", "max_risk_amount_absolute", 100.0, "$100"),
+    ("MAX_RISK_AMOUNT_ABSOLUTE", "max_risk_amount_absolute", 62.5, "$62.50"),
+    ("MAX_RISK_AMOUNT_ABSOLUTE", "max_risk_amount_absolute", 1500.0, "$1,500"),
+    ("MAX_POSITION_SIZE_PCT", "max_position_pct", 10.0, "10%"),
+    ("MAX_POSITION_SIZE_PCT", "max_position_pct", 0.1, "0.1%"),
+    ("MAX_POSITION_VALUE_ABSOLUTE", "max_position_value_absolute", 1000.0, "$1,000"),
+    ("MAX_OPEN_POSITIONS", "max_open_positions", 30, "30"),
+    ("MAX_OPEN_POSITIONS", "max_open_positions", 5, "5"),
+])
+def test_account_values_come_from_the_stored_row(monkeypatch, name, key, value, text):
+    _row_with(monkeypatch, **{key: value})
+    assert _risk(name) == text
+
+
+@pytest.mark.parametrize("name", [
+    "RISK_PER_TRADE_PCT", "MAX_RISK_AMOUNT_ABSOLUTE", "MAX_POSITION_SIZE_PCT",
+    "MAX_POSITION_VALUE_ABSOLUTE", "MAX_OPEN_POSITIONS"])
+def test_the_env_seed_is_not_what_renders(monkeypatch, name):
+    before = _risk(name)
+    monkeypatch.setattr(config, name, 1.99)
+    assert _risk(name) == before
+
+
+def test_sizing_mode_ignores_the_env_seed(monkeypatch):
+    monkeypatch.setattr(config, "POSITION_SIZING_MODE", "kelly")
+    assert _risk("POSITION_SIZING_MODE") == "Fixed risk % per trade (`risk_pct`)"
+
+
+def test_the_row_is_read_on_every_render(monkeypatch):
+    calls = []
+    monkeypatch.setattr(live_risk, "_load_account",
+                        lambda: calls.append(1) or dict(_ACCOUNT_ROW))
+    _risk("RISK_PER_TRADE_PCT")
+    _risk("RISK_PER_TRADE_PCT")
+    assert len(calls) == 2
+
+
+ACCOUNT_NAMES = ["RISK_PER_TRADE_PCT", "MAX_RISK_AMOUNT_ABSOLUTE", "POSITION_SIZING_MODE",
+                 "MAX_POSITION_SIZE_PCT", "MAX_POSITION_VALUE_ABSOLUTE", "MAX_OPEN_POSITIONS"]
+
+
+@pytest.mark.parametrize("name", ACCOUNT_NAMES)
+def test_an_unreadable_row_renders_not_available(monkeypatch, caplog, name):
+    def boom():
+        raise RuntimeError("database down")
+    monkeypatch.setattr(live_risk, "_load_account", boom)
+    assert _risk(name) == live_risk.UNAVAILABLE == "not available right now"
+    assert "database down" in caplog.text
+
+
+@pytest.mark.parametrize("name", ACCOUNT_NAMES)
+def test_a_row_without_the_key_renders_not_available(monkeypatch, name):
+    monkeypatch.setattr(live_risk, "_load_account", lambda: {})
+    assert _risk(name) == live_risk.UNAVAILABLE
+
+
+def test_heat_caps_and_the_risk_maximum_still_read_config(monkeypatch):
+    monkeypatch.setattr(config, "PORTFOLIO_HEAT_CAP_PCT", 7.0)
+    assert _risk("PORTFOLIO_HEAT_CAP_PCT") == "7%"
+    field = next(f for f in config.FIELDS if f.attr == "RISK_PER_TRADE_PCT")
+    assert _risk("RISK_PER_TRADE_PCT.max") == f"{float(field.max):g}%"
+
+
 # --- secrets -----------------------------------------------------------------
 
 def test_no_sensitive_field_value_reaches_a_risk_placeholder(monkeypatch):
@@ -155,7 +236,7 @@ def test_merge_refuses_a_name_defined_twice():
 
 def test_resolve_substitutes_every_occurrence(monkeypatch):
     monkeypatch.setattr(config, "MAX_STOP_LOSS_PCT", 2.0)
-    monkeypatch.setattr(config, "RISK_PER_TRADE_PCT", 1.0)
+    _row_with(monkeypatch, risk_pct=1.0)
     text = "Stop {{MAX_STOP_LOSS_PCT}}, risk {{ RISK_PER_TRADE_PCT }}, again {{MAX_STOP_LOSS_PCT}}."
     assert ph.resolve(text) == "Stop 2%, risk 1%, again 2%."
 
