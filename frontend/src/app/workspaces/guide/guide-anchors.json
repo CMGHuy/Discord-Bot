@@ -61,6 +61,13 @@
       "reviewed-for",
       "under-the-hood"
     ],
+    "levels": [
+      "the-next-level-idea",
+      "level-families",
+      "confluence-counts-families",
+      "bonus-confirmations",
+      "touch-break-and-the-four-states"
+    ],
     "pipeline": [
       "watchlist",
       "price-data",

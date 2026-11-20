@@ -263,3 +263,60 @@ def test_glossary_level_lifecycle_and_throttle_follow_the_code():
     assert "{{DD_THROTTLE_ENABLED}}" in _term("Drawdown throttle")
     assert "size of zero" in _term("Kill switch")
     assert "{{" not in placeholders.resolve(_term("Drawdown throttle"))
+
+
+# --- chapter 4: levels (v237 V237-9, V237-9b) ------------------------------------------
+
+CH4_ANCHORS = ["the-next-level-idea", "level-families", "confluence-counts-families",
+               "bonus-confirmations", "touch-break-and-the-four-states"]
+
+
+def test_chapter_4_header_and_plain_words_callout():
+    chapter = _chapter("levels")
+    assert (chapter.order, chapter.title) == (4, "Finding levels and setups")
+    assert chapter.path.name == "04-levels.md"
+    assert chapter.body.startswith("> **In plain words**")
+
+
+def test_chapter_4_sections_in_order():
+    assert _anchors(_chapter("levels")) == CH4_ANCHORS
+
+
+def test_chapter_4_families_come_from_the_live_list():
+    from swingbot.core.market.levels import ALL_STRATEGY_FAMILIES
+    section = _section(_chapter("levels").body, "Level families")
+    assert "{{levels.families}}" in section
+    rendered = placeholders.resolve(section)
+    assert all(f"- {family}" in rendered for family in ALL_STRATEGY_FAMILIES)
+    assert "chapter 5" in section          # families are kept apart from strategies
+
+
+def test_chapter_4_confluence_counts_families_with_live_numbers():
+    section = _section(_chapter("levels").body, "Confluence counts families")
+    assert {"CLUSTER_TOLERANCE_PCT", "CONFLUENCE_DEVIATION_PCT", "MIN_TARGET_CONFLUENCE_COUNT",
+            "MIN_ALERT_CONFIDENCE_LEVEL"} <= set(placeholders.names_in(section))
+    assert "counts once" in section
+
+
+def test_chapter_4_lifecycle_has_four_states_and_no_retest():
+    from swingbot.core.market import levels_lifecycle
+    body = _chapter("levels").body
+    section = _section(body, "Touch, break and the four states")
+    assert all(f"| {state} |" in section for state in levels_lifecycle.STATES)
+    assert {"levels.touch_atr", "levels.break_atr",
+            "LEVEL_LIFECYCLE_STOPS_ENABLED"} <= set(placeholders.names_in(section))
+    assert "retest" not in body.lower()
+
+
+def test_chapter_4_types_no_rule_number_before_a_percent_sign():
+    body = re.sub(r"\{\{[^}]*\}\}", "", _chapter("levels").body)
+    assert not re.search(r"(?<![\w.])\d+(?:\.\d+)?[ \t]?%", body)
+
+
+def test_chapter_4_resolves_and_links_only_written_chapters():
+    chapter = _chapter("levels")
+    assert "{{" not in placeholders.resolve(chapter.body)
+    links = _GUIDE_LINK.findall(chapter.body)
+    glossary = {anchor for slug, anchor in links if slug == "glossary"}
+    assert glossary and glossary <= GLOSSARY_LINKED
+    assert {slug for slug, _anchor in links} <= {"glossary", "pipeline", "what-it-is", "levels"}
