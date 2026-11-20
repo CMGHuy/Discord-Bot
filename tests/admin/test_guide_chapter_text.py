@@ -619,3 +619,66 @@ def test_chapter_7_close_table_lists_every_outcome():
         assert f"| {outcome} |" in section
     for reason in ("tp1_runner_be", "tp1_runner_trail", "tp1_runner_tp2"):
         assert f"`{reason}`" in section
+
+
+# --- chapter 8: sizing and risk (v237 V237-13, V237-13b) --------------------------------
+
+CH8_ANCHORS = ["three-limits-not-one", "how-the-share-count-is-found", "sizing-modes",
+               "gap-aware-sizing"]
+CH8_LINKABLE = CH7_LINKABLE | {"sizing-risk"}
+CH8_NOTICE = ("Education about a paper-trading tool, not advice: alerts are not tailored to you, "
+              "a suggested size is a default, and past results do not predict future ones.")
+
+
+def test_chapter_8_header_callout_and_notice():
+    chapter = _chapter("sizing-risk")
+    assert (chapter.order, chapter.title) == (8, "Sizing and risk")
+    assert chapter.path.name == "08-sizing-risk.md"
+    blocks = chapter.body.split("\n\n")
+    assert blocks[0].startswith("> **In plain words**")
+    assert blocks[1] == CH8_NOTICE
+
+
+def test_chapter_8_sections_in_order():
+    assert _anchors(_chapter("sizing-risk")) == CH8_ANCHORS
+
+
+@pytest.mark.parametrize("heading, names", [
+    ("Three limits, not one", {"stop.hard_cap", "MAX_STOP_LOSS_PCT", "RISK_PER_TRADE_PCT",
+                               "RISK_PER_TRADE_PCT.max", "MAX_RISK_AMOUNT_ABSOLUTE"}),
+    ("How the share count is found", {"MAX_POSITION_SIZE_PCT", "MAX_POSITION_VALUE_ABSOLUTE",
+                                      "sizing.risk_ceiling"}),
+    ("Sizing modes", {"POSITION_SIZING_MODE", "sizing.kelly_cap", "sizing.risk_floor"}),
+    ("Gap-aware sizing", {"sizing.gap"}),
+])
+def test_chapter_8_sizing_numbers_are_placeholders(heading, names):
+    assert names <= set(placeholders.names_in(_section(_chapter("sizing-risk").body, heading)))
+
+
+def test_chapter_8_limits_come_from_the_stored_account(monkeypatch):
+    monkeypatch.setattr(live_risk, "_load_account",
+                        lambda: {**_ACCOUNT_ROW, "risk_pct": 0.5, "max_risk_amount_absolute": 250.0})
+    rendered = placeholders.resolve(_section(_chapter("sizing-risk").body, "Three limits, not one"))
+    assert "0.5%" in rendered and "$250" in rendered
+
+
+def test_chapter_8_says_the_edge_modes_get_no_estimate_live():
+    section = _section(_chapter("sizing-risk").body, "Sizing modes")
+    assert "The alert path passes them no strategy record and no volatility reading" in section
+
+
+def test_chapter_8_says_the_risk_floor_can_raise_a_low_risk():
+    section = _section(_chapter("sizing-risk").body, "Sizing modes")
+    assert "even when the risk per trade is set lower" in section
+    assert "never raise it" not in section
+
+
+def test_chapter_8_resolves_and_links_only_written_chapters():
+    chapter = _chapter("sizing-risk")
+    rendered = placeholders.resolve(chapter.body)
+    assert "{{" not in rendered and "not available right now" not in rendered
+    links = _GUIDE_LINK.findall(chapter.body)
+    glossary = {anchor for slug, anchor in links if slug == "glossary"}
+    assert glossary and glossary <= GLOSSARY_LINKED
+    assert {slug for slug, _anchor in links} <= CH8_LINKABLE
+    assert not _NO_PCT.search(re.sub(r"\{\{[^}]*\}\}", "", chapter.body))

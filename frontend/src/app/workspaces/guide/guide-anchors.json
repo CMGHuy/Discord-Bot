@@ -98,6 +98,12 @@
       "monitoring",
       "close"
     ],
+    "sizing-risk": [
+      "three-limits-not-one",
+      "how-the-share-count-is-found",
+      "sizing-modes",
+      "gap-aware-sizing"
+    ],
     "strategies": [
       "strategies-are-not-level-families",
       "how-a-strategy-alert-is-sent",
