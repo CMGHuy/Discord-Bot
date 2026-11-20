@@ -321,7 +321,7 @@ def test_chapter_4_resolves_and_links_only_written_chapters():
     links = _GUIDE_LINK.findall(chapter.body)
     glossary = {anchor for slug, anchor in links if slug == "glossary"}
     assert glossary and glossary <= GLOSSARY_LINKED
-    assert {slug for slug, _anchor in links} <= {"glossary", "pipeline", "what-it-is", "levels"}
+    assert {slug for slug, _anchor in links} <= CH8_LINKABLE
 
 
 def test_chapter_4_alignment_reads_the_switch_not_a_hard_coded_state():
@@ -428,7 +428,7 @@ def test_chapter_5_resolves_and_links_only_written_chapters(_unmeasured_badges):
     links = _GUIDE_LINK.findall(chapter.body)
     glossary = {anchor for slug, anchor in links if slug == "glossary"}
     assert glossary and glossary <= GLOSSARY_LINKED
-    assert {slug for slug, _anchor in links} <= CH5_LINKABLE
+    assert {slug for slug, _anchor in links} <= CH8_LINKABLE
     assert not _NO_PCT.search(re.sub(r"\{\{[^}]*\}\}", "", chapter.body))
 
 
@@ -479,7 +479,7 @@ def test_chapter_6_resolves_and_links_only_written_chapters():
     links = _GUIDE_LINK.findall(chapter.body)
     glossary = {anchor for slug, anchor in links if slug == "glossary"}
     assert glossary and glossary <= GLOSSARY_LINKED
-    assert {slug for slug, _anchor in links} <= CH6_LINKABLE
+    assert {slug for slug, _anchor in links} <= CH8_LINKABLE
     assert not _NO_PCT.search(re.sub(r"\{\{[^}]*\}\}", "", chapter.body))
 
 
@@ -584,7 +584,7 @@ def test_chapter_7_resolves_and_links_only_written_chapters():
     links = _GUIDE_LINK.findall(chapter.body)
     glossary = {anchor for slug, anchor in links if slug == "glossary"}
     assert glossary and glossary <= GLOSSARY_LINKED
-    assert {slug for slug, _anchor in links} <= CH7_LINKABLE
+    assert {slug for slug, _anchor in links} <= CH8_LINKABLE
     assert not _NO_PCT.search(re.sub(r"\{\{[^}]*\}\}", "", chapter.body))
 
 
@@ -753,3 +753,36 @@ def test_glossary_drawdown_throttle_agrees_with_chapter_8():
 
 def test_glossary_size_0_alert_names_the_kill_switch():
     assert "kill switch" in _term("Size-0 alert")
+
+
+# --- v237 V237-14: chapters 4-8 link every chapter they name ---------------------------
+
+TRADING_CHAPTERS = ("levels", "strategies", "gates", "trade-plan", "sizing-risk")
+_PLAIN_CHAPTER = re.compile(r"(?<!\[)\bchapters? [4-8]\b", re.I)
+
+
+@pytest.mark.parametrize("slug", TRADING_CHAPTERS)
+def test_trading_chapters_link_every_chapter_they_name(slug):
+    assert _PLAIN_CHAPTER.findall(_chapter(slug).body) == []
+
+
+@pytest.mark.parametrize("slug", TRADING_CHAPTERS)
+def test_trading_chapter_links_land_on_real_headings(slug):
+    for target, anchor in _GUIDE_LINK.findall(_chapter(slug).body):
+        if anchor and target != "glossary":
+            assert anchor in _anchors(_chapter(target)), f"{slug} -> {target}#{anchor}"
+
+
+def test_chapter_links_point_where_the_text_says():
+    expected = {
+        "levels": {("strategies", "strategies-are-not-level-families"), ("trade-plan", "the-stop"),
+                   ("gates", "higher-horizon-alignment"), ("trade-plan", "the-stop-distance-cap-and-the-clamp")},
+        "strategies": {("levels", ""), ("gates", "market-regime"), ("gates", "relative-strength"),
+                       ("gates", "measured-not-used"), ("trade-plan", "targets-that-pay-for-the-risk"),
+                       ("gates", "")},
+        "gates": {("levels", "the-minimum-move"), ("trade-plan", "the-stop-distance-cap-and-the-clamp"),
+                  ("sizing-risk", "portfolio-and-correlated-heat")},
+        "trade-plan": {("sizing-risk", "how-the-share-count-is-found")},
+    }
+    for slug, links in expected.items():
+        assert links <= set(_GUIDE_LINK.findall(_chapter(slug).body)), slug

@@ -56,7 +56,7 @@ A [level family](/insights/guide/glossary#level-family) is one method of drawing
 
 {{levels.families}}
 
-Families are not the strategies of chapter 5. A family only draws prices; a strategy is an entry rule with its own measured record. A few names appear in both lists, such as VWAP, Volume Profile and Fibonacci, because the same idea can be used either way.
+Families are not the strategies of [chapter 5](/insights/guide/strategies#strategies-are-not-level-families). A family only draws prices; a strategy is an entry rule with its own measured record. A few names appear in both lists, such as VWAP, Volume Profile and Fibonacci, because the same idea can be used either way.
 
 <details><summary>Under the hood</summary>
 
@@ -100,7 +100,7 @@ A level is judged by what price has done to it, on finished bars only. That reco
 | delivered | the latest decisive event was a break: price went through |
 | decaying | touched and held, but not for a long time |
 
-The most recent event wins, so a level that broke and was later touched and held again is no longer delivered. Level-lifecycle stops are {{LEVEL_LIFECYCLE_STOPS_ENABLED}}: when on, a plan's [stop](/insights/guide/glossary#stop) moves beyond a tested level instead of sitting inside the noise around a fresh one, and the target is chosen again against the wider risk. The stop only ever widens, and never past the plan's stop ceiling. If no target then pays enough, the original stop and target are kept. Chapter 7 covers stops in full.
+The most recent event wins, so a level that broke and was later touched and held again is no longer delivered. Level-lifecycle stops are {{LEVEL_LIFECYCLE_STOPS_ENABLED}}: when on, a plan's [stop](/insights/guide/glossary#stop) moves beyond a tested level instead of sitting inside the noise around a fresh one, and the target is chosen again against the wider risk. The stop only ever widens, and never past the plan's stop ceiling. If no target then pays enough, the original stop and target are kept. [Chapter 7](/insights/guide/trade-plan#the-stop) covers stops in full.
 
 <details><summary>Under the hood</summary>
 
@@ -113,7 +113,7 @@ The most recent event wins, so a level that broke and was later touched and held
 Each horizon has its own trend, read from its fast and slow moving averages. Two checks compare a setup with a longer view:
 
 - **Higher-timeframe bias** ({{HTF_CONFLUENCE_ENABLED}}): a counter-trend setup is flagged on the alert and in the plan's quality score. It never removes an alert or lowers its confidence.
-- **Adjacent-horizon alignment**: drops a scenario when the next horizon up trends against it. The longest horizon is exempt, and so is a setup whose next horizon up has too little history to read a trend; neither is ever counted as agreement. Whether the live scan applies it is listed in chapter 6, read from its setting.
+- **Adjacent-horizon alignment**: drops a scenario when the next horizon up trends against it. The longest horizon is exempt, and so is a setup whose next horizon up has too little history to read a trend; neither is ever counted as agreement. Whether the live scan applies it is listed in [chapter 6](/insights/guide/gates#higher-horizon-alignment), read from its setting.
 
 <details><summary>Under the hood</summary>
 
@@ -136,7 +136,7 @@ A daily bar is final only after its session closes. Strategy signals read [compl
 A scenario is built only when it clears hard requirements, with no "close enough":
 
 - The first target is at least {{MIN_REWARD_PCT}} away from today's price. Longer horizons raise this floor from their own target scale; they never lower it.
-- When no ATR band is in force (the band replaces these two checks), the stop is at least {{MIN_STOP_DISTANCE_PCT}} from the entry, so ordinary noise does not reach it, and no further than the horizon's own stop limit. The tighter caps a plan must then meet are in chapter 7.
+- When no ATR band is in force (the band replaces these two checks), the stop is at least {{MIN_STOP_DISTANCE_PCT}} from the entry, so ordinary noise does not reach it, and no further than the horizon's own stop limit. The tighter caps a plan must then meet are in [chapter 7](/insights/guide/trade-plan#the-stop-distance-cap-and-the-clamp).
 - The first target pays at least {{MIN_RISK_REWARD_RATIO}} [reward to risk](/insights/guide/glossary#reward-to-risk-rr).
 
 <details><summary>Under the hood</summary>

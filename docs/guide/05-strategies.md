@@ -33,11 +33,11 @@ sources:
 
 The level families of [chapter 4](/insights/guide/levels#level-families) draw prices. A [strategy](/insights/guide/glossary#strategy) decides when to enter: its rule either fires on the last finished bar or it does not, and it has its own measured record, its [badge](/insights/guide/glossary#badge). A few names appear in both lists, such as VWAP, Volume Profile and Fibonacci, because the same idea can draw a level or time an entry; the two uses are measured separately.
 
-The bot has two ways to reach an alert. A level alert starts from support and resistance and is the path the [pipeline](/insights/guide/pipeline) and chapter 4 describe. A strategy alert starts from one of the rules on this page, and it has its own switch, described next.
+The bot has two ways to reach an alert. A level alert starts from support and resistance and is the path the [pipeline](/insights/guide/pipeline) and [chapter 4](/insights/guide/levels) describe. A strategy alert starts from one of the rules on this page, and it has its own switch, described next.
 
 <details><summary>Under the hood</summary>
 
-The registered strategies are the union of `strategy.STRATEGY_FUNCS` and `strategy_types.STRATEGY_GATES`; `entry_filters.ENTRY_FUNCS` maps each of them to its entry function. `entries_for(strategy, df, horizon_key)` runs that function, then applies the direction and horizon mask (`strategy_types.admits`) and the regime gate of chapter 6.
+The registered strategies are the union of `strategy.STRATEGY_FUNCS` and `strategy_types.STRATEGY_GATES`; `entry_filters.ENTRY_FUNCS` maps each of them to its entry function. `entries_for(strategy, df, horizon_key)` runs that function, then applies the direction and horizon mask (`strategy_types.admits`) and the regime gate of [chapter 6](/insights/guide/gates#market-regime).
 
 </details>
 
@@ -55,7 +55,7 @@ Shadow mode collects evidence without posting ([shadow mode](/insights/guide/glo
 
 Each scan the pass looks at every watchlist ticker on every live [horizon](/insights/guide/glossary#horizon), on finished daily bars only. During the session today's forming bar is dropped first, so a rule never fires on a bar that may still change (a [completed bar](/insights/guide/glossary#completed-bar)). One signal, meaning one ticker, strategy, horizon and bar, is stored once however many scans see it.
 
-Between the signal and the alert sit a few checks. A short is dropped when the stock is not weak enough against the market (relative strength, chapter 6). Two vetoes, pullback volume and headroom, act only while their settings switch them on (chapter 6). The plan must exist: with no stop or no target that pays for the risk there is no alert (chapter 7). A plan that keeps a stop wider than the usual cap must also size to a fixed dollar risk, or it is not stored.
+Between the signal and the alert sit a few checks. A short is dropped when the stock is not weak enough against the market (relative strength, [chapter 6](/insights/guide/gates#relative-strength)). Two vetoes, pullback volume and headroom, act only while their settings switch them on ([chapter 6](/insights/guide/gates#measured-not-used)). The plan must exist: with no stop or no target that pays for the risk there is no alert ([chapter 7](/insights/guide/trade-plan#targets-that-pay-for-the-risk)). A plan that keeps a stop wider than the usual cap must also size to a fixed dollar risk, or it is not stored.
 
 <details><summary>Under the hood</summary>
 
@@ -80,7 +80,7 @@ Many entry rules end with "the shared gates pass". These are five market-conditi
 - **Not panicking**: the ATR is not far above its own recent average.
 - **Real volume**: the bar's volume is not well below its recent average.
 
-The dip-buying RSI rule uses a looser trend test and skips the medium-term one. Every other gate is in chapter 6.
+The dip-buying RSI rule uses a looser trend test and skips the medium-term one. Every other gate is in [chapter 6](/insights/guide/gates).
 
 A badge is a measurement of the past, not a forecast. Read it with its [expectancy (ExpR)](/insights/guide/glossary#expectancy-expr), its window ([TRAIN and validation](/insights/guide/glossary#train-and-validation)) and its [provenance label](/insights/guide/glossary#provenance-label): a high win rate on a small N, or a TRAIN-window figure, says much less than it seems to.
 

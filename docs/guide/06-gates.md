@@ -46,18 +46,18 @@ Fewer alerts is a cost, not a goal. A gate that raises the win rate but lowers w
 
 A level setup from [chapter 4](/insights/guide/levels) must pass:
 
-- the level rules of chapter 4: minimum move, minimum stop distance, reward-to-risk and confluence count;
+- the level rules of [chapter 4](/insights/guide/levels#the-minimum-move): minimum move, minimum stop distance, reward-to-risk and confluence count;
 - confirmation: the same setup seen on {{SIGNAL_CONFIRMATION_SCANS}} consecutive scans before it alerts;
 - relative strength (below);
 - a confidence level of at least {{MIN_ALERT_CONFIDENCE_LEVEL}}, a score the [market regime](#market-regime) feeds;
-- a trade plan that can be built within the stop rules (chapter 7), then the portfolio limits (chapter 8);
+- a trade plan that can be built within the stop rules ([chapter 7](/insights/guide/trade-plan#the-stop-distance-cap-and-the-clamp)), then the portfolio limits ([chapter 8](/insights/guide/sizing-risk#portfolio-and-correlated-heat));
 - every row of the switch table at the end of this chapter that reads "applied".
 
 A strategy signal from [chapter 5](/insights/guide/strategies#how-a-strategy-alert-is-sent) must pass:
 
 - the [direction and horizon masks](#direction-and-horizon-masks) and the [shared entry gates](#shared-entry-gates) its rule uses;
 - for a short, relative strength;
-- a plan that can be built within the stop rules (chapter 7);
+- a plan that can be built within the stop rules ([chapter 7](/insights/guide/trade-plan#the-stop-distance-cap-and-the-clamp));
 - every row of the switch table that reads "applied".
 
 <details><summary>Under the hood</summary>

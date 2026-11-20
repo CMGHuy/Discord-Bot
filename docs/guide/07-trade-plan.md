@@ -114,7 +114,7 @@ Live, the cap is checked once more at the fill: a fill far enough past the trigg
 
 Once a plan is open, its stop only moves toward profit: to the entry after the break-even trigger, to the runner floor at TP1, then by the trail and the give-back stop. Each move takes the tighter of the old and the new stop, and the plan store refuses any write that would loosen the stop of an open plan.
 
-A stop is not a guaranteed exit price. A gap can open beyond it, and the loss is then worse than one [R](/insights/guide/glossary#r-multiple) ([gap through the stop](/insights/guide/glossary#gap-through-the-stop)). Risk and size are still computed to the stop (chapter 8).
+A stop is not a guaranteed exit price. A gap can open beyond it, and the loss is then worse than one [R](/insights/guide/glossary#r-multiple) ([gap through the stop](/insights/guide/glossary#gap-through-the-stop)). Risk and size are still computed to the stop ([chapter 8](/insights/guide/sizing-risk#how-the-share-count-is-found)).
 
 <details><summary>Under the hood</summary>
 
