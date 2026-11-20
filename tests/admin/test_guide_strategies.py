@@ -201,3 +201,31 @@ def test_real_cards_cite_their_entry_function_and_the_mask():
     for card in cards.load_cards():
         assert any(s.startswith(_ENTRY_MODULES) for s in card.sources), card.path.name
         assert "swingbot/core/market/strategy_types.py:admits" in card.sources, card.path.name
+
+
+def test_every_masked_strategy_has_a_real_card_that_says_so():
+    masked = [key for key in lm.registered_strategy_keys() if not _is_live(key)]
+    assert len(masked) == 8
+    for key in masked:
+        where = _real_card(key).body.split("**Where it fires.**", 1)[1]
+        assert "masked" in where, key
+
+
+def test_live_cards_never_call_themselves_masked():
+    for key in (k for k in lm.registered_strategy_keys() if _is_live(k)):
+        where = _real_card(key).body.split("**Where it fires.**", 1)[1].split("<details>")[0]
+        assert "masked" not in where.lower(), key
+
+
+def test_the_card_files_are_exactly_the_registered_keys():
+    stems = {path.stem for path in cards.cards_dir().glob("*.md")}
+    assert stems == {lm.strategy_file_slug(key) for key in lm.registered_strategy_keys()}
+
+
+def test_real_cards_render_for_every_registered_key(monkeypatch):
+    monkeypatch.setattr(lst, "_load_cards", cards.load_cards)
+    text = _render()
+    for card in cards.load_cards():
+        assert f"### {card.strategy}\n" in text
+        assert card.body in text
+    assert "{{" not in text
