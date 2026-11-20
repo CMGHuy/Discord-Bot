@@ -515,3 +515,71 @@ def test_chapter_6_names_the_built_but_unused_vetoes():
     assert "dead-cat bounce veto" in section and "headroom veto" in section
     assert "built but off by default" in section
     assert "whatever this list says" in section   # the table, not the prose, decides
+
+# --- chapter 7: trade plan (v237 V237-12, V237-12b) -------------------------------------
+
+CH7_ANCHORS = ["entry", "the-stop", "the-stop-distance-cap-and-the-clamp"]
+CH7_LINKABLE = CH6_LINKABLE | {"trade-plan"}
+
+
+def test_chapter_7_header_and_plain_words_callout():
+    chapter = _chapter("trade-plan")
+    assert (chapter.order, chapter.title) == (7, "Building the trade plan")
+    assert chapter.path.name == "07-trade-plan.md"
+    assert chapter.body.startswith("> **In plain words**")
+
+
+def test_chapter_7_sections_in_order():
+    assert _anchors(_chapter("trade-plan")) == CH7_ANCHORS
+
+
+@pytest.mark.parametrize("heading, names", [
+    ("Entry", {"plan.expiry_bars"}),
+    ("The stop", {"MIN_STOP_DISTANCE_PCT", "LEVEL_LIFECYCLE_STOPS_ENABLED"}),
+    ("The stop-distance cap and the clamp",
+     {"stop.hard_cap", "stop.clamp_level", "CLAMP_STOP_TO_HARD_CAP"}),
+])
+def test_chapter_7_rule_numbers_are_placeholders(heading, names):
+    assert names <= set(placeholders.names_in(_section(_chapter("trade-plan").body, heading)))
+
+
+def test_chapter_7_clamp_renders_the_live_numbers():
+    from swingbot.core.planning.builders import CLAMP_HEADROOM_PCT
+    from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT
+    section = _section(_chapter("trade-plan").body, "The stop-distance cap and the clamp")
+    rendered = placeholders.resolve(section)
+    assert f"{HARD_MAX_PLANNED_LOSS_PCT:g}%" in rendered
+    assert f"{HARD_MAX_PLANNED_LOSS_PCT - CLAMP_HEADROOM_PCT:g}%" in rendered
+    assert "`risk_cap`" in section
+
+
+def test_chapter_7_hard_cap_binds_whatever_the_setting_reads():
+    section = _section(_chapter("trade-plan").body, "The stop-distance cap and the clamp")
+    assert "settings page" in section
+    assert "still binds" in section
+    assert "MAX_STOP_LOSS_PCT" in placeholders.names_in(section)
+
+
+def test_chapter_7_names_edge_stops_only_as_not_adopted():
+    body = _chapter("trade-plan").body
+    assert "`edge/stops.py`" in body and "DATA_DRIVEN_STOPS_ENABLED" in body
+    assert "](/insights/guide/gates#measured-not-used)" in body
+    # The live plan manager scales out whenever tp1_fraction < 1; SCALE_OUT_ENABLED has no
+    # live reader (scan_params.scale_out_enabled is never read), so the chapter does not cite it.
+    assert "SCALE_OUT_ENABLED" not in body
+
+
+def test_chapter_7_pending_plan_is_cancelled_when_price_trades_through_the_stop():
+    section = _section(_chapter("trade-plan").body, "Entry")
+    assert "trades through its stop" in section
+    assert "closes through its stop" not in section
+
+
+def test_chapter_7_resolves_and_links_only_written_chapters():
+    chapter = _chapter("trade-plan")
+    assert "{{" not in placeholders.resolve(chapter.body)
+    links = _GUIDE_LINK.findall(chapter.body)
+    glossary = {anchor for slug, anchor in links if slug == "glossary"}
+    assert glossary and glossary <= GLOSSARY_LINKED
+    assert {slug for slug, _anchor in links} <= CH7_LINKABLE
+    assert not _NO_PCT.search(re.sub(r"\{\{[^}]*\}\}", "", chapter.body))

@@ -105,6 +105,11 @@
       "masked-strategies",
       "the-cards"
     ],
+    "trade-plan": [
+      "entry",
+      "the-stop",
+      "the-stop-distance-cap-and-the-clamp"
+    ],
     "what-it-is": [
       "what-it-does",
       "what-it-does-not-do",
