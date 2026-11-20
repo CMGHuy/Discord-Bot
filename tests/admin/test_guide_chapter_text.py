@@ -435,7 +435,8 @@ def test_chapter_5_resolves_and_links_only_written_chapters(_unmeasured_badges):
 # --- chapter 6: gates (v237 V237-11, V237-11b) ------------------------------------------
 
 CH6_ANCHORS = ["what-a-gate-does", "gates-in-the-live-scan", "direction-and-horizon-masks",
-               "shared-entry-gates", "market-regime"]
+               "shared-entry-gates", "market-regime", "relative-strength",
+               "higher-horizon-alignment", "post-signal-fill-vetoes", "measured-not-used"]
 CH6_LINKABLE = CH5_LINKABLE | {"gates"}
 
 
@@ -480,3 +481,37 @@ def test_chapter_6_resolves_and_links_only_written_chapters():
     assert glossary and glossary <= GLOSSARY_LINKED
     assert {slug for slug, _anchor in links} <= CH6_LINKABLE
     assert not _NO_PCT.search(re.sub(r"\{\{[^}]*\}\}", "", chapter.body))
+
+
+def test_chapter_6_switch_table_lists_every_row():
+    from swingbot.admin.guide import live_switches
+    section = _section(_chapter("gates").body, "Measured, not used")
+    assert "{{gates.switches}}" in section
+    rendered = placeholders.resolve(section)
+    assert "| Gate | Setting | Now | In the live scan |" in rendered
+    assert all(f"| {row.label} |" in rendered for row in live_switches.SWITCH_ROWS)
+
+
+@pytest.mark.parametrize("value, verdict", [(False, "measured, not used"), (True, "applied")])
+def test_chapter_6_switch_state_follows_the_setting(monkeypatch, value, verdict):
+    from swingbot import config
+    monkeypatch.setattr(config, "DEAD_CAT_BOUNCE_VETO", value)
+    rendered = placeholders.resolve(_section(_chapter("gates").body, "Measured, not used"))
+    row = next(line for line in rendered.splitlines()
+               if line.startswith("| Dead-cat bounce veto |"))
+    assert row.endswith(f"| {verdict} |")
+
+
+@pytest.mark.parametrize("heading, names", [
+    ("Relative strength", {"RS_GATE", "RS_LEADER_PERCENTILE", "RS_LAGGARD_PERCENTILE"}),
+    ("Higher-horizon alignment", {"HTF_CONFLUENCE_ENABLED"}),
+])
+def test_chapter_6_switch_values_are_placeholders(heading, names):
+    assert names <= set(placeholders.names_in(_section(_chapter("gates").body, heading)))
+
+
+def test_chapter_6_names_the_built_but_unused_vetoes():
+    section = _section(_chapter("gates").body, "Measured, not used")
+    assert "dead-cat bounce veto" in section and "headroom veto" in section
+    assert "built but off by default" in section
+    assert "whatever this list says" in section   # the table, not the prose, decides

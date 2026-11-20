@@ -5,7 +5,11 @@
       "gates-in-the-live-scan",
       "direction-and-horizon-masks",
       "shared-entry-gates",
-      "market-regime"
+      "market-regime",
+      "relative-strength",
+      "higher-horizon-alignment",
+      "post-signal-fill-vetoes",
+      "measured-not-used"
     ],
     "glossary": [
       "the-bot-and-its-alerts",
