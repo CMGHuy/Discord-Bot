@@ -66,7 +66,11 @@
       "level-families",
       "confluence-counts-families",
       "bonus-confirmations",
-      "touch-break-and-the-four-states"
+      "touch-break-and-the-four-states",
+      "higher-horizon-alignment",
+      "closed-bars-only",
+      "the-minimum-move",
+      "duplicate-merge"
     ],
     "pipeline": [
       "watchlist",

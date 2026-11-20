@@ -13,6 +13,8 @@ sources:
   - swingbot/core/market/levels_lifecycle.py:classify_levels
   - swingbot/core/market/levels_lifecycle.py:preferred_stop_anchor
   - swingbot/core/market/mtf.py:adjacent_aligned
+  - swingbot/core/market/mtf.py:horizon_trend
+  - swingbot/core/market/levels.py:atr_floor_pct
   - swingbot/core/scanning/strategy_pass.py:completed_frame
   - swingbot/core/scanning/analyze.py:_horizon_scenarios
   - swingbot/core/scanning/requirements.py:_build_requirement_checks
@@ -21,6 +23,9 @@ sources:
   - swingbot/core/planning/lifecycle.py:apply_level_lifecycle
   - swingbot/config.py:AVWAP_LEVELS_ENABLED
   - swingbot/config.py:MIN_REWARD_PCT
+  - swingbot/config.py:MIN_STOP_DISTANCE_PCT
+  - swingbot/config.py:MIN_RISK_REWARD_RATIO
+  - swingbot/config.py:MAX_STOP_LOSS_PCT
   - swingbot/config.py:CONFLUENCE_DEVIATION_PCT
   - swingbot/config.py:MIN_TARGET_CONFLUENCE_COUNT
   - swingbot/config.py:MIN_ALERT_CONFIDENCE_LEVEL
@@ -100,5 +105,52 @@ The most recent event wins, so a level that broke and was later touched and held
 <details><summary>Under the hood</summary>
 
 `levels_lifecycle.classify_levels(df, i, levels, horizon_key=...)` slices the frame to bar `i` before reading it. The window is the horizon's `sr_lookback` times `WINDOW_LOOKBACK_MULT` bars; a level decays after `sr_lookback` times `DECAY_LOOKBACK_MULT` bars without a touch. `preferred_stop_anchor` ranks tested over decaying over fresh and never returns a delivered level. The stop move is `planning/lifecycle.apply_level_lifecycle`, which acts only on a tested anchor.
+
+</details>
+
+## Higher-horizon alignment
+
+Each horizon has its own trend, read from its fast and slow moving averages. Two checks compare a setup with a longer view:
+
+- **Higher-timeframe bias** ({{HTF_CONFLUENCE_ENABLED}}): a counter-trend setup is flagged on the alert and in the plan's quality score. It never removes an alert or lowers its confidence.
+- **Adjacent-horizon alignment**: drops a scenario when the next horizon up trends against it. The longest horizon is exempt, and so is a setup whose next horizon up has too little history to read a trend; neither is ever counted as agreement. Whether the live scan applies it is listed in chapter 6, read from its setting.
+
+<details><summary>Under the hood</summary>
+
+`mtf.adjacent_aligned(df, horizon_key, direction)` returns `aligned`, `opposed` or `exempt`; `mtf.horizon_trend` compares the horizon's `ema_fast` with its `ema_slow`. The drop is guarded by `MTF_ADJACENT_GATE`. The bias flag is `HTF_CONFLUENCE_ENABLED`, informational by design.
+
+</details>
+
+## Closed bars only
+
+A daily bar is final only after its session closes. Strategy signals read [completed bars](/insights/guide/glossary#completed-bar) only: during the trading session the still-forming bar is dropped, so the live scan sees the bars a backtest of that day would see. Levels are measured against the current price, so a setup must also appear the same way on {{SIGNAL_CONFIRMATION_SCANS}} consecutive scans before it is confirmed, which filters out intraday flicker.
+
+<details><summary>Under the hood</summary>
+
+`strategy_pass.completed_frame(df, now)` removes only today's bar, and only during the regular session. `SIGNAL_CONFIRMATION_SCANS` drives the confirmation debounce in `scanning/scan_run.py`; in a replay one scan runs per completed bar, so the count is in daily bars there.
+
+</details>
+
+## The minimum move
+
+A scenario is built only when it clears hard requirements, with no "close enough":
+
+- The first target is at least {{MIN_REWARD_PCT}} away from today's price. Longer horizons raise this floor from their own target scale; they never lower it.
+- When no ATR band is in force (the band replaces these two checks), the stop is at least {{MIN_STOP_DISTANCE_PCT}} from the entry, so ordinary noise does not reach it, and no further than the horizon's own stop limit. The tighter caps a plan must then meet are in chapter 7.
+- The first target pays at least {{MIN_RISK_REWARD_RATIO}} [reward to risk](/insights/guide/glossary#reward-to-risk-rr).
+
+<details><summary>Under the hood</summary>
+
+`analyze._horizon_scenarios` uses the larger of `MIN_REWARD_PCT` and a fixed share of the horizon's `sr_target_min_pct` as the reward floor, and the larger of `MAX_STOP_LOSS_PCT` and the horizon's `max_risk_pct` as the stop limit; `levels.atr_floor_pct` adds a volatility floor under the stop distance. `requirements._build_requirement_checks` records which checks a scenario passed for the requirement table.
+
+</details>
+
+## Duplicate merge
+
+Several horizons can point at almost the same trade. Before alerts post, plans on the same ticker and direction whose entry, stop and target all lie within {{DEDUP_TOLERANCE_PCT}} of each other merge into one alert. The plan with the highest confidence score is kept, and the alert lists what it absorbed.
+
+<details><summary>Under the hood</summary>
+
+`dedup.dedup_scan_items` groups items by ticker and direction, clusters them with `_plans_similar`, keeps the highest `conf.score` and records the others in `combined_from`.
 
 </details>

@@ -268,7 +268,9 @@ def test_glossary_level_lifecycle_and_throttle_follow_the_code():
 # --- chapter 4: levels (v237 V237-9, V237-9b) ------------------------------------------
 
 CH4_ANCHORS = ["the-next-level-idea", "level-families", "confluence-counts-families",
-               "bonus-confirmations", "touch-break-and-the-four-states"]
+               "bonus-confirmations", "touch-break-and-the-four-states",
+               "higher-horizon-alignment", "closed-bars-only", "the-minimum-move",
+               "duplicate-merge"]
 
 
 def test_chapter_4_header_and_plain_words_callout():
@@ -320,3 +322,18 @@ def test_chapter_4_resolves_and_links_only_written_chapters():
     glossary = {anchor for slug, anchor in links if slug == "glossary"}
     assert glossary and glossary <= GLOSSARY_LINKED
     assert {slug for slug, _anchor in links} <= {"glossary", "pipeline", "what-it-is", "levels"}
+
+
+def test_chapter_4_alignment_reads_the_switch_not_a_hard_coded_state():
+    section = _section(_chapter("levels").body, "Higher-horizon alignment")
+    assert "{{HTF_CONFLUENCE_ENABLED}}" in section
+    assert "chapter 6" in section
+    assert not re.search(r"(is|are|switched) (off|on)", section)
+
+
+def test_chapter_4_minimum_move_and_confirmation_use_live_settings():
+    body = _chapter("levels").body
+    assert {"MIN_REWARD_PCT", "MIN_STOP_DISTANCE_PCT", "MIN_RISK_REWARD_RATIO"} <= set(
+        placeholders.names_in(_section(body, "The minimum move")))
+    assert "{{SIGNAL_CONFIRMATION_SCANS}}" in _section(body, "Closed bars only")
+    assert "{{DEDUP_TOLERANCE_PCT}}" in _section(body, "Duplicate merge")
