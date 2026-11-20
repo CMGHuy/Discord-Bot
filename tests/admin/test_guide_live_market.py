@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pytest
 
 from swingbot import config
-from swingbot.admin.guide import live_market as lm, live_risk, live_rules, placeholders as ph
+from swingbot.admin.guide import live_market as lm, live_risk, live_rules, live_switches, placeholders as ph
 from swingbot.core.market import levels, strategy_types
 
 MARKET_NAMES = {"levels.families", "CLUSTER_TOLERANCE_PCT", "horizons.table", "gates.list",
@@ -36,7 +36,8 @@ def test_market_table_has_exactly_the_planned_names():
 
 def test_registry_merges_both_tables_and_nothing_else():
     assert set(ph.PLACEHOLDERS) == (set(live_risk.RISK_PLACEHOLDERS) | MARKET_NAMES
-                                    | set(live_rules.RULE_PLACEHOLDERS))
+                                    | set(live_rules.RULE_PLACEHOLDERS)
+                                    | set(live_switches.SWITCH_PLACEHOLDERS))
 
 
 @pytest.mark.parametrize("name", sorted(MARKET_NAMES))
