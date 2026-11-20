@@ -11,9 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from swingbot.admin.guide import live_market, live_risk, placeholders
-from swingbot.admin.guide.chapters import (FIGURE_RE, Chapter, extract_headings, guide_dir,
-                                           load_chapters, split_source)
+from swingbot.admin.guide import cards, live_market, live_risk, placeholders
+from swingbot.admin.guide.chapters import (FIGURE_RE, Chapter, GuideFormatError,
+                                           extract_headings, guide_dir, load_chapters,
+                                           split_source)
 from swingbot.core.market import strategy_types
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -170,6 +171,24 @@ def strategy_file_problems(folder: Path) -> list[str]:
             + [f"strategies/{slug}.md: not a registered strategy" for slug in sorted(files - wanted)])
 
 
+def card_problems(root: Path | None = None) -> list[str]:
+    """Every card parses (cards.parse_card) and names a registered strategy key."""
+    folder = cards.cards_dir(root)
+    if not folder.is_dir():
+        return []
+    registered = set(live_market.registered_strategy_keys())
+    problems = []
+    for path in sorted(folder.glob("*.md")):
+        try:
+            card = cards.parse_card(path)
+        except GuideFormatError as exc:
+            problems.append(str(exc))
+            continue
+        if card.strategy not in registered:
+            problems.append(f"{path.name}: strategy {card.strategy!r} is not registered")
+    return problems
+
+
 def bare_percent_problems(chapters) -> list[str]:
     problems = []
     for chapter in (c for c in chapters if c.order in _PCT_ORDERS):
@@ -206,6 +225,9 @@ REAL_CHECKS = {
     "strategy cards": lambda g: strategy_file_problems(guide_dir() / "strategies"),
     "bare percent": bare_percent_problems,
     "double percent": double_percent_problems,
+    "card format": lambda g: card_problems(),
+    "card sources": lambda g: source_problems(cards.load_cards()),
+    "card reviewed_for": lambda g: version_problems(cards.load_cards(), _bot_version()),
 }
 
 
@@ -311,3 +333,76 @@ def test_double_percent_flags_a_percent_after_a_percent_placeholder():
         "01-sample.md:1: {{MAX_STOP_LOSS_PCT}} already ends in % -- drop the extra %"]
     assert double_percent_problems([_ch("Cap {{MAX_STOP_LOSS_PCT}}.")]) == []
     assert double_percent_problems([_ch("Mode {{POSITION_SIZING_MODE}}%.")]) == []
+
+
+# --- strategy cards (v237 V237-6) ------------------------------------------------------
+
+def _write_card(folder: Path, name: str, *, strategy: str, body: str = "**Idea.** x\n",
+                reviewed_for: str = "2.19.2",
+                sources=("swingbot/core/market/entry_filters.py",)) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    src = "".join(f"  - {s}\n" for s in sources)
+    path = folder / name
+    path.write_text(f'---\nstrategy: "{strategy}"\nreviewed_for: {reviewed_for}\n'
+                    f"sources:\n{src}---\n{body}", encoding="utf-8")
+    return path
+
+
+def test_real_checks_cover_the_cards():
+    assert {"card format", "card sources", "card reviewed_for"} <= set(REAL_CHECKS)
+
+
+def test_card_format_is_vacuous_without_a_folder(tmp_path):
+    assert card_problems(tmp_path) == []
+    (tmp_path / "strategies").mkdir()
+    assert card_problems(tmp_path) == []
+
+
+def test_card_format_reports_parse_errors_and_unregistered_keys(tmp_path, monkeypatch):
+    monkeypatch.setattr(live_market, "registered_strategy_keys",
+                        lambda: ("Break & Retest", "RSI", "VWAP"))
+    folder = tmp_path / "strategies"
+    _write_card(folder, "rsi.md", strategy="RSI")
+    _write_card(folder, "break-retest.md", strategy="Break & Retest", body="## Setup\n")
+    _write_card(folder, "macd.md", strategy="MACD")
+    _write_card(folder, "vwap.md", strategy="Vwap")   # slug matches, key does not
+    assert card_problems(tmp_path) == [
+        "break-retest.md: line 1 is a heading; the page adds '### <strategy>' itself",
+        "macd.md: strategy 'MACD' is not registered",
+        "vwap.md: strategy 'Vwap' is not registered",
+    ]
+
+
+def test_card_format_reports_a_file_name_that_does_not_match(tmp_path, monkeypatch):
+    monkeypatch.setattr(live_market, "registered_strategy_keys", lambda: ("Break & Retest",))
+    _write_card(tmp_path / "strategies", "break-and-retest.md", strategy="Break & Retest")
+    assert card_problems(tmp_path) == [
+        "break-and-retest.md: file name must be break-retest.md for strategy 'Break & Retest'"]
+
+
+def test_source_and_version_checks_run_over_cards(tmp_path):
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "mod.py").write_text("def entries(): ...\n", encoding="utf-8")
+    good = cards.StrategyCard(path=Path("rsi.md"), strategy="RSI", reviewed_for="2.19.2",
+                              sources=("pkg/mod.py:entries", "pkg"), body="x")
+    bad = cards.StrategyCard(path=Path("macd.md"), strategy="MACD", reviewed_for="2.20.0",
+                             sources=("pkg/mod.py:gone", "pkg/none.py"), body="x")
+    assert source_problems([good], root=tmp_path) == []
+    assert source_problems([bad], root=tmp_path) == [
+        "macd.md: gone is no longer defined in pkg/mod.py",
+        "macd.md: source pkg/none.py does not exist"]
+    assert version_problems([good, bad], "2.19.2") == [
+        "macd.md: reviewed_for 2.20.0 is newer than bot 2.19.2"]
+
+
+def test_real_card_checks_read_the_guide_folder(tmp_path, monkeypatch):
+    from swingbot.admin.guide import chapters as chapters_mod
+    monkeypatch.setattr(chapters_mod, "guide_dir", lambda: tmp_path)
+    monkeypatch.setattr(live_market, "registered_strategy_keys", lambda: ("RSI",))
+    _write_card(tmp_path / "strategies", "rsi.md", strategy="RSI", reviewed_for="99.0.0",
+                sources=("swingbot/no_such_module.py",))
+    assert REAL_CHECKS["card format"]([]) == []
+    assert REAL_CHECKS["card sources"]([]) == [
+        "rsi.md: source swingbot/no_such_module.py does not exist"]
+    assert REAL_CHECKS["card reviewed_for"]([]) == [
+        f"rsi.md: reviewed_for 99.0.0 is newer than bot {_bot_version()}"]
