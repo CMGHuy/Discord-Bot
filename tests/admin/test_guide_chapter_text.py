@@ -187,13 +187,18 @@ def test_chapter_3_sources_cover_every_stage():
 
 GLOSSARY_GROUPS = ["the-bot-and-its-alerts", "levels-and-setups", "inside-a-trade-plan",
                    "risk-and-sizing", "measuring-results", "about-this-guide"]
-#: Anchors chapters 1 and 3 link to (part 3 header of plan v236).
+#: Anchors chapters 1 and 3 link to (part 3 header of plan v236), plus the terms
+#: chapters 4-8 link to (v237 V237-8).
 GLOSSARY_LINKED = {
     "alert", "trade-plan", "paper-trade", "horizon", "long-and-short", "confidence",
     "watchlist-and-universe", "level", "level-family", "confluence", "scenario", "strategy",
     "completed-bar", "gate", "market-regime", "relative-strength", "stop", "tp1-and-tp2", "runner",
     "scale-out", "reward-to-risk-rr", "stop-distance-cap", "risk-per-trade", "dollar-risk-cap",
-    "portfolio-heat", "correlated-heat", "size-0-alert", "gap-through-the-stop", "r-multiple", "badge"}
+    "portfolio-heat", "correlated-heat", "size-0-alert", "gap-through-the-stop", "r-multiple", "badge",
+    # v237 V237-8
+    "level-lifecycle", "direction-mask", "drawdown-throttle", "kill-switch", "masked", "clamp",
+    "rejected-plan", "suggested-size", "entry", "shadow-mode", "support-and-resistance",
+    "provenance-label", "train-and-validation", "plan-states", "expectancy-expr"}
 
 
 def test_glossary_header_and_plain_words_callout():
@@ -232,3 +237,29 @@ def test_glossary_risk_numbers_come_from_placeholders():
             "PORTFOLIO_HEAT_CAP_PCT", "CORRELATED_HEAT_CAP_PCT", "correlation.threshold",
             "correlation.window", "CLUSTER_TOLERANCE_PCT"} <= set(placeholders.names_in(body))
     assert "{{" not in placeholders.resolve(body)
+
+
+# --- v237 V237-8: glossary terms for chapters 4-8 ----------------------------------------
+
+def _term(heading: str) -> str:
+    return _chapter("glossary").body.split(f"### {heading}\n", 1)[1].split("\n#", 1)[0]
+
+
+def test_glossary_holds_the_v237_terms_in_their_groups():
+    body = _chapter("glossary").body
+    assert len(GLOSSARY_LINKED) == 45
+    for group, term in [("Levels and setups", "Level lifecycle"),
+                        ("Levels and setups", "Direction mask"),
+                        ("Risk and sizing", "Drawdown throttle"),
+                        ("Risk and sizing", "Kill switch")]:
+        assert f"### {term}\n" in _section(body, group), term
+
+
+def test_glossary_level_lifecycle_and_throttle_follow_the_code():
+    from swingbot.core.market import levels_lifecycle
+    lifecycle = _term("Level lifecycle")
+    assert all(state in lifecycle for state in levels_lifecycle.STATES)
+    assert "retest" not in lifecycle.lower()
+    assert "{{DD_THROTTLE_ENABLED}}" in _term("Drawdown throttle")
+    assert "size of zero" in _term("Kill switch")
+    assert "{{" not in placeholders.resolve(_term("Drawdown throttle"))
