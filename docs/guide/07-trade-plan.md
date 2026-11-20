@@ -140,7 +140,7 @@ Level plans choose from the whole level map. Strategy plans choose from their ow
 
 Before TP1, once price has covered {{plan.breakeven_trigger}} of the way to TP1, the stop moves to the entry; a stop hit after that closes the trade as a scratch.
 
-At TP1 the plan closes {{plan.tp1_share}} of the position ([scale-out](/insights/guide/glossary#scale-out)); a plan with a single target closes in full. The rest is the [runner](/insights/guide/glossary#runner), and its stop moves at once to the runner floor, which locks in {{plan.runner_floor}} of the move from entry to TP1.
+At TP1 the plan closes {{plan.tp1_share}} of the position ([scale-out](/insights/guide/glossary#scale-out)); a plan whose TP1 share is the whole position closes in full at TP1. The rest is the [runner](/insights/guide/glossary#runner), and its stop moves at once to the runner floor, which locks in {{plan.runner_floor}} of the move from entry to TP1.
 
 After TP1 the runner's stop is the tightest of three: the floor; a chandelier trail {{plan.trail_atr}} behind the best price since TP1 (a strategy plan may use its own measured multiple); and, while the setting `RUNNER_GIVEBACK_ENABLED` is set, a give-back stop a set share below the best price. The runner closes at TP2 when there is one, otherwise when its stop is hit. A stall exit and a runner structure exit were measured and not adopted ([chapter 6](/insights/guide/gates#measured-not-used)).
 
@@ -166,7 +166,7 @@ Most plans end in one of these [plan states](/insights/guide/glossary#plan-state
 | TP1, runner trailed | the trail or the give-back stop closed the runner |
 | TP1, then TP2 | the runner reached the second target |
 
-A single-target plan that reaches TP1 closes there in full.
+A plan whose TP1 share is the whole position closes in full at TP1; every other plan keeps a runner after it.
 
 <details><summary>Under the hood</summary>
 
