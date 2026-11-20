@@ -328,7 +328,7 @@ def test_chapter_4_alignment_reads_the_switch_not_a_hard_coded_state():
     section = _section(_chapter("levels").body, "Higher-horizon alignment")
     assert "{{HTF_CONFLUENCE_ENABLED}}" in section
     assert "chapter 6" in section
-    assert not re.search(r"(is|are|switched) (off|on)", section)
+    assert not re.search(r"\b(is|are|switched) (off|on)\b", section)
 
 
 def test_chapter_4_minimum_move_and_confirmation_use_live_settings():
