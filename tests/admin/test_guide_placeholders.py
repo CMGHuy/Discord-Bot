@@ -343,3 +343,11 @@ def test_resolve_memo_still_rejects_unknown_names_first(monkeypatch):
     with pytest.raises(ph.UnknownPlaceholder):
         ph.resolve("{{version.bot}} {{DISCORD_TOKEN}}", memo)
     assert memo == {}
+
+
+def test_provenance_label_when_costs_were_not_recorded():
+    label = ph.provenance_label(source="validation-window backtest 2024-01-01..2025-12-31",
+                                n=112, run_date="2026-08-17", costs_included=None)
+    assert label == ("Source: validation-window backtest 2024-01-01..2025-12-31; N = 112; "
+                     "as of 2026-08-17; costs not recorded; before tax")
+    assert "costs included" not in label
