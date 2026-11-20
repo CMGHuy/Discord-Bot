@@ -165,3 +165,112 @@ def clause_win_rate_above_breakeven(added, *, n_resamples: int = BOOTSTRAP_RESAM
         CLAUSES[1], "PASS" if ok else "FAIL",
         f"own WR {point:.2f}% [{lo:.2f},{hi:.2f}] vs realised break-even "
         f"{bar:.2f}% (avg loss / (avg win + avg loss)), N={len(decided)}", lo, bar)
+
+
+# --- clause 3: book_net_gain ----------------------------------------------------------
+
+#: PRE-REGISTERED (spec Part C): the book's total R may fall by at most 10%
+#: of the added rows' own total R at the lower bound.
+TOLERANCE_SHARE = 0.10
+
+
+def _book_total(rows) -> float:
+    return float(sum(t.r_multiple for t in _closed(rows)))
+
+
+def _book_delta(baseline, component) -> float:
+    """Strategy on minus strategy off, the book's total R (a sum, not a mean)."""
+    return _book_total(component) - _book_total(baseline)
+
+
+def _book_verdict(point: float, lo: float, floor: float) -> bool:
+    return point > _EPS and lo > floor + _EPS
+
+
+def clause_book_net_gain(baseline, component, split: AdditiveSplit, *,
+                         n_resamples: int = BOOTSTRAP_RESAMPLES,
+                         seed: int = 42) -> ClauseResult:
+    """Clause 3: an added position that displaces a baseline plan (heat, one
+    position per ticker) must not cost the book its total R. Paired: both
+    arms resampled with the same week draw, so unchanged rows cancel."""
+    if not split.displaced:
+        return ClauseResult(CLAUSES[2], "SKIPPED",
+                            "no baseline row displaced; the book only gains rows",
+                            None, None)
+    added_total = _book_total(split.added)
+    floor = -TOLERANCE_SHARE * added_total
+    point = _book_delta(baseline, component)
+    lo, hi, p = _interval(week_cluster_bootstrap(
+        list(baseline), list(component), _book_delta,
+        n_resamples=n_resamples, seed=seed))
+    ok = _book_verdict(point, lo, floor)
+    return ClauseResult(
+        CLAUSES[2], "PASS" if ok else "FAIL",
+        f"book total R {point:+.2f}R [{lo:+.2f},{hi:+.2f}] p={p:.4f}; floor "
+        f"{floor:+.2f}R (-{TOLERANCE_SHARE:.0%} of the added rows' {added_total:+.2f}R); "
+        f"{len(split.added)} added, {len(split.displaced)} displaced", point, floor)
+
+
+# --- clause 4: stability --------------------------------------------------------------
+
+#: PRE-REGISTERED (spec Part C): the walk-forward test years and the bar.
+FOLD_YEARS = ("2021", "2022", "2023")
+FOLD_FLOOR_R = -0.10
+FOLD_MIN_N = 30
+FOLDS_POSITIVE = 2
+
+
+def _fold_row(fold: dict) -> dict:
+    split = split_additive(fold["baseline"], fold["component"])
+    closed = _closed(split.added)
+    return {"year": str(fold["test_year"]), "n": len(closed),
+            "exp_r": expectancy_r(closed), "misuse": split.misuse}
+
+
+def _fold_problem(rows: list) -> str | None:
+    years = tuple(row["year"] for row in rows)
+    if years != FOLD_YEARS:
+        return f"folds must be {'/'.join(FOLD_YEARS)}, got {'/'.join(years) or 'none'}"
+    for row in rows:
+        if row["misuse"]:
+            return f"fold {row['year']}: {row['misuse']}"
+    return None
+
+
+def _fold_text(row: dict) -> str:
+    exp = "n/a" if row["exp_r"] is None else f"{row['exp_r']:+.4f}R"
+    return f"{row['year']} {exp} N={row['n']}"
+
+
+def _stability_detail(rows: list, positive: int, thin: list, sunk: list) -> str:
+    parts = [_fold_text(row) for row in rows]
+    parts.append(f"positive {positive}/{len(FOLD_YEARS)} (need {FOLDS_POSITIVE}), "
+                 f"floor {FOLD_FLOOR_R:+.2f}R, min N {FOLD_MIN_N}")
+    if thin:
+        parts.append(f"thin: {', '.join(thin)}")
+    if sunk:
+        parts.append(f"below floor: {', '.join(sunk)}")
+    return "; ".join(parts)
+
+
+def _fold_tallies(rows: list) -> tuple:
+    """(positive fold count, thin fold years, fold years below the floor)."""
+    scored = [row for row in rows if row["exp_r"] is not None]
+    positive = sum(1 for row in scored if row["exp_r"] > _EPS)
+    thin = [row["year"] for row in rows if row["n"] < FOLD_MIN_N]
+    sunk = [row["year"] for row in scored if row["exp_r"] < FOLD_FLOOR_R - _EPS]
+    return positive, thin, sunk
+
+
+def clause_stability(folds: list) -> ClauseResult:
+    """Clause 4: the added rows' net ExpR per walk-forward fold (2021, 2022,
+    2023) is > 0 in at least two, below -0.10R in none, on N >= 30 each."""
+    rows = sorted((_fold_row(fold) for fold in folds), key=lambda row: row["year"])
+    problem = _fold_problem(rows)
+    if problem:
+        return ClauseResult(CLAUSES[3], "FAIL", problem, None, float(FOLDS_POSITIVE))
+    positive, thin, sunk = _fold_tallies(rows)
+    ok = positive >= FOLDS_POSITIVE and not thin and not sunk
+    return ClauseResult(CLAUSES[3], "PASS" if ok else "FAIL",
+                        _stability_detail(rows, positive, thin, sunk),
+                        float(positive), float(FOLDS_POSITIVE))
