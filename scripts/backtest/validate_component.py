@@ -20,7 +20,7 @@ from swingbot.core.backtesting.arms.selection import SELECTED, evaluate_cell, se
 from swingbot.core.backtesting.arms import dryup_clauses, gap_reclaim_census, gap_reclaim_clauses, headroom_clauses, reachability  # noqa: E402
 from swingbot.core.backtesting.arms.pairing import DuplicateKeyError, changed_outcomes, overlap  # noqa: E402
 from swingbot.core.backtesting.arms.provenance import check_r_basis, check_stamp  # noqa: E402
-from swingbot.core.backtesting.backtest_wf import gate as gate_expectancy, gate_expectancy_harvest, gate_win_rate, win_rate_fold_row  # noqa: E402
+from swingbot.core.backtesting.backtest_wf import gate as gate_expectancy, gate_expectancy_harvest, gate_win_rate, plateau_report, win_rate_fold_row  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cache_dir_source  # noqa: E402
 DECIDED = ("win", "loss")
@@ -455,14 +455,22 @@ def _selection_cells(args, grid):
     return cells
 
 
-def stage_selection(args):
+def _grid_or_refuse(args):
+    """The parsed --grid-arms cells, or None after the refusal line (messages unchanged)."""
     try:
         grid = _parse_grid(args.grid_arms)
     except ValueError as error:
         print(f"refused:malformed-grid -- {error}. Budget intact.", file=sys.stderr)
-        return 1
+        return None
     if not grid:
         print("refused:no-grid -- --grid-arms is required. Budget intact.", file=sys.stderr)
+        return None
+    return grid
+
+
+def stage_selection(args):
+    grid = _grid_or_refuse(args)
+    if grid is None:
         return 1
     try:
         cells = _selection_cells(args, grid)
@@ -493,20 +501,14 @@ DISPLACEMENT_CAUSE = "not exposed by the replay"
 _STAGES = {"reachability": "stage_reachability", "mde": "stage_mde", "selection": "stage_selection",
            "walkforward": "stage_walkforward", "validation": "stage_validation"}
 _ADDITIVE_STAGES = {"reachability": "stage_additive_reachability", "mde": "stage_additive_mde",
-                    "selection": "_additive_pending", "walkforward": "_additive_pending",
-                    "validation": "_additive_pending"}
+                    "selection": "stage_additive_selection", "walkforward": "stage_additive_walkforward",
+                    "validation": "stage_additive_validation"}
 
 
 def _stage_runner(args):
     """The stage callable for ``args.gate`` / ``args.stage``."""
     table = _ADDITIVE_STAGES if args.gate == "additive" else _STAGES
     return globals()[table[args.stage]]
-
-
-def _additive_pending(args):
-    print(f"refused:additive-stage-pending -- --gate additive --stage {args.stage} is not wired yet. "
-          "Budget intact.", file=sys.stderr)
-    return 1
 
 
 def _when(predicate, message):
@@ -543,6 +545,8 @@ _FLAG_CONFLICTS = (
           "--train-effect-from-arms reads a v72/v92 TRAIN effect; the additive gate freezes --expected-own-r"),
     _when(lambda a: not _additive(a) and (a.expected_own_r is not None or a.expected_sd_r is not None),
           "--expected-own-r and --expected-sd-r freeze the additive gate's Stage 0; pass --gate additive"),
+    _when(lambda a: not _additive(a) and (a.knob is not None or a.folds_arms is not None),
+          "--knob and --folds-arms belong to the additive gate; pass --gate additive"),
 )
 
 
@@ -635,6 +639,167 @@ def stage_additive_mde(args):
     return 0
 
 
+@dataclasses.dataclass(frozen=True)
+class _AdditiveCell:
+    value: float
+    result: AcceptanceResult
+    extra: dict
+
+    @property
+    def own_r(self):
+        return self.result.clause(additive.CLAUSES[0]).value
+
+
+def _additive_extra(baseline, split):
+    return {"disclosures": additive.disclosures(split.added, baseline),
+            "displaced": [{"key": list(row.key), "cause": DISPLACEMENT_CAUSE} for row in split.displaced],
+            "unchanged": len(baseline) - len(split.displaced)}
+
+
+def _additive_result(args, baseline, component, stage, folds=None):
+    """(result, extra), or None after the misuse or duplicate-key refusal."""
+    try:
+        result = additive.evaluate_additive(baseline, component, stage=stage, folds=folds,
+                                            n_resamples=args.resamples, seed=args.seed)
+    except additive.AdditiveMisuse as misuse:
+        _misuse_line(misuse.reason)
+        return None
+    except DuplicateKeyError as error:
+        print(f"refused:duplicate-key -- {error}. Budget intact.", file=sys.stderr)
+        return None
+    return result, _additive_extra(baseline, additive.split_additive(baseline, component))
+
+
+def _additive_markdown(args, result, extra):
+    shown = dataclasses.replace(result, split={
+        "removed": result.split["displaced"], "changed": 0, "unchanged": extra["unchanged"],
+        "added": result.split["added"], "is_subset": False})
+    notes = (f"Gate: additive (`acceptance_additive.py` v{additive.ADDITIVE_VERSION}); "
+             "removed = displaced baseline rows, changed = 0 by the add-only rule.")
+    if _notes(args):
+        notes = f"{notes} {_notes(args)}"
+    lines = [render_markdown(shown, title=args.title, window=args.window, notes=notes),
+             *additive.render_disclosures(extra["disclosures"]), "", "## Displaced rows", ""]
+    rows = [f"- {' '.join(str(part) for part in row['key'])} -- cause: {row['cause']}"
+            for row in extra["displaced"]]
+    return "\n".join(lines + (rows or ["- none"])) + "\n"
+
+
+def _write_additive(args, result, extra):
+    markdown = _additive_markdown(args, result, extra)
+    print(markdown)
+    if args.out_md:
+        Path(args.out_md).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out_md).write_text(markdown, encoding="utf-8")
+    _dump(args.out_json, {**render_json(result), "gate": "additive", **extra})
+
+
+def _finish_additive(args, baseline, component, stage, folds=None):
+    found = _additive_result(args, baseline, component, stage, folds)
+    if found is None:
+        return 1
+    _write_additive(args, *found)
+    return 0 if found[0].verdict == "PASS" else 1
+
+
+def _basis_refused(path, what):
+    token = check_r_basis(json.loads(Path(path).read_text()))
+    if token:
+        print(f"{token} -- {what} must be booked net (provenance r_basis = net). Budget intact.",
+              file=sys.stderr)
+    return token is not None
+
+
+def _additive_cell(args, value, path, full_universe):
+    arms = _selection_input(path, full_universe)
+    if arms is None or _basis_refused(path, f"selection cell {value}"):
+        return None
+    found = _additive_result(args, *arms, "selection")
+    return None if found is None else _AdditiveCell(value, *found)
+
+
+def _additive_cells(args, grid):
+    full_universe = _full_universe()
+    cells = []
+    for value, path in grid:
+        cell = _additive_cell(args, value, path, full_universe)
+        if cell is None:
+            return None
+        cells.append(cell)
+    return cells
+
+
+def _adopt(cells):
+    """Highest own net ExpR among cells passing clauses 1-3; first in grid order on a tie."""
+    eligible = [cell for cell in cells if cell.result.verdict == "PASS"]
+    if not eligible:
+        return None
+    best = max(cell.own_r for cell in eligible)
+    return next(cell for cell in eligible if cell.own_r >= best - 1e-12)
+
+
+def _plateau(args, cells, adopted):
+    if len(cells) < 2 or adopted is None:
+        return None
+    expectancies = [float("nan") if cell.own_r is None else cell.own_r for cell in cells]
+    report = plateau_report(args.knob or "value", [cell.value for cell in cells], expectancies,
+                            adopted.value)
+    print(f"plateau: {json.dumps(report)}")
+    return report
+
+
+def _print_cells(args, cells, adopted_value):
+    for cell in cells:
+        print(f"{args.knob or 'value'}={cell.value} verdict={cell.result.verdict} own ExpR={cell.own_r}")
+    print(f"verdict={'FAIL' if adopted_value is None else 'ADOPTED'} adopted={adopted_value}")
+
+
+def stage_additive_selection(args):
+    """Stage 1: clauses 1-3 per --grid-arms cell, then adoption and the plateau report."""
+    grid = _grid_or_refuse(args)
+    cells = None if grid is None else _additive_cells(args, grid)
+    if cells is None:
+        return 1
+    adopted = _adopt(cells)
+    adopted_value = adopted.value if adopted else None
+    _print_cells(args, cells, adopted_value)
+    shown = adopted or cells[0]
+    _write_additive(args, shown.result, {
+        **shown.extra, "plateau": _plateau(args, cells, adopted), "adopted": adopted_value,
+        "cells": [{"value": c.value, "verdict": c.result.verdict, "own_r": c.own_r} for c in cells]})
+    return 0 if adopted else 1
+
+
+def stage_additive_walkforward(args):
+    """Stage 2: clause 4 on the folds; the split is taken over the folds' pooled rows."""
+    folds = load_folds(args.arms)
+    baseline = [row for fold in folds for row in fold["baseline"]]
+    component = [row for fold in folds for row in fold["component"]]
+    return _finish_additive(args, baseline, component, "walkforward", folds)
+
+
+def _folds_arms_refused(args):
+    if args.folds_arms is None:
+        print("refused:no-folds-arms -- Stage 3 reads clause 4 from the Stage 2 arms file "
+              "(--folds-arms). Budget intact.", file=sys.stderr)
+        return True
+    if not args.bespoke_instrument:
+        token = check_stamp(json.loads(Path(args.folds_arms).read_text()),
+                            funnel_stage="walkforward", full_universe=_full_universe())
+        if token:
+            print(f"{token} -- --folds-arms stamp gate. Budget intact.", file=sys.stderr)
+            return True
+    return _basis_refused(args.folds_arms, "--folds-arms")
+
+
+def stage_additive_validation(args):
+    """Stage 3: the one VALIDATION shot, all four clauses."""
+    if _folds_arms_refused(args):
+        return 1
+    baseline, component = load_arms(args.arms)
+    return _finish_additive(args, baseline, component, "validation", load_folds(args.folds_arms))
+
+
 def _build_parser():
     parser = argparse.ArgumentParser(); parser.add_argument("--stage", required=True, choices=("reachability", "mde", "selection", "walkforward", "validation")); parser.add_argument("--arms", type=Path); parser.add_argument("--title", required=True); parser.add_argument("--window", required=True)
     parser.add_argument("--permutation-p", type=float, default=None); parser.add_argument("--train-effect-pp", type=float, default=0.0); parser.add_argument("--train-effect-r", type=float, default=0.0); parser.add_argument("--observed-days", type=int, default=None); parser.add_argument("--target-days", type=int, default=730); parser.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES); parser.add_argument("--seed", type=int, default=42); parser.add_argument("--notes", default=None); parser.add_argument("--out-md", default=None); parser.add_argument("--out-json", default=None); parser.add_argument("--bespoke-instrument", default=None); parser.add_argument("--mde-method", choices=("paired", "unpaired"), default="paired"); parser.add_argument("--gate", choices=_GATES, default="win_rate")
@@ -645,6 +810,8 @@ def _build_parser():
     parser.add_argument("--gap-reclaim", action="store_true", help="v192: score the gap-reclaim veto on its frozen strata (needs <arms stem>.gap_reclaim.json)")
     parser.add_argument("--expected-own-r", type=float, default=None, help="v238 additive Stage 0: frozen expected own net ExpR (half the selected ladder rung's net mean R)")
     parser.add_argument("--expected-sd-r", type=float, default=None, help="v238 additive Stage 0: frozen per-event net R standard deviation of that rung")
+    parser.add_argument("--knob", default=None, help="v238 additive Stage 1: the grid axis name printed in the plateau report")
+    parser.add_argument("--folds-arms", type=Path, default=None, help="v238 additive Stage 3: the Stage 2 arms file clause 4 reads")
     cache_dir_source.add_args(parser)
     instrument_cli.add_instrument_arg(parser)
     return parser
