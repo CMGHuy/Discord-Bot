@@ -337,3 +337,96 @@ def test_chapter_4_minimum_move_and_confirmation_use_live_settings():
         placeholders.names_in(_section(body, "The minimum move")))
     assert "{{SIGNAL_CONFIRMATION_SCANS}}" in _section(body, "Closed bars only")
     assert "{{DEDUP_TOLERANCE_PCT}}" in _section(body, "Duplicate merge")
+
+
+# --- chapter 5: strategies (v237 V237-10) ----------------------------------------------
+
+CH5_ANCHORS = ["strategies-are-not-level-families", "how-a-strategy-alert-is-sent",
+               "reading-a-card", "masked-strategies", "the-cards"]
+CH5_LINKABLE = {"glossary", "pipeline", "what-it-is", "levels", "strategies"}
+_NO_PCT = re.compile(r"(?<![\w.])\d+(?:\.\d+)?[ \t]?%")
+
+
+@pytest.fixture
+def _unmeasured_badges(monkeypatch):
+    """Every key reads as having no registry row, so no test depends on the committed registry."""
+    from swingbot.admin.guide import live_strategies
+    from swingbot.core.backtesting.registry import Badge
+    monkeypatch.setattr(live_strategies, "_badge", lambda key: Badge("WEAK", 0, 0.0, 0.0))
+
+
+def test_chapter_5_header_and_plain_words_callout():
+    chapter = _chapter("strategies")
+    assert (chapter.order, chapter.title) == (5, "Strategies")
+    assert chapter.path.name == "05-strategies.md"
+    assert chapter.body.startswith("> **In plain words**")
+
+
+def test_chapter_5_sections_in_order():
+    assert _anchors(_chapter("strategies")) == CH5_ANCHORS
+
+
+def test_chapter_5_cards_placeholder_closes_the_chapter():
+    body = _chapter("strategies").body
+    assert body.rstrip().endswith("{{strategies.cards}}")
+    assert placeholders.names_in(body).count("strategies.cards") == 1
+
+
+def test_chapter_5_renders_one_card_per_registered_key(_unmeasured_badges):
+    from swingbot.admin.guide import live_strategies
+    rendered = placeholders.resolve(_section(_chapter("strategies").body, "The cards"))
+    for key in live_market.registered_strategy_keys():
+        assert f"### {key}\n" in rendered
+    assert live_strategies.NO_ROW_MASKED in rendered
+    assert "**Badge:** WEAK" not in rendered   # a key with no row never shows a tier
+
+
+def test_chapter_5_badge_carries_its_provenance(monkeypatch):
+    from swingbot.admin.guide import live_strategies
+    from swingbot.core.backtesting.registry import Badge
+    row = Badge("VALIDATED", 112, 50.0, 0.219, window="2024-01-01..2025-12-31",
+                run_date="2026-08-17")
+    monkeypatch.setattr(live_strategies, "_badge", lambda key: row)
+    rendered = placeholders.resolve(_section(_chapter("strategies").body, "The cards"))
+    assert "N = 112; as of 2026-08-17; costs not recorded; before tax" in rendered
+
+
+def test_chapter_5_alert_path_reads_the_live_switches():
+    section = _section(_chapter("strategies").body, "How a strategy alert is sent")
+    assert {"STRATEGY_ALERTS_MODE", "STRATEGY_ALERTS_LIVE_STRATEGIES"} <= set(
+        placeholders.names_in(section))
+    assert all(f"| {mode} |" in section for mode in ("off", "shadow", "live"))
+
+
+def test_chapter_5_reading_a_card_defines_the_shared_gates():
+    import pandas as pd
+    from swingbot.core.market.entry_filters import compute_shared_gates
+    section = _section(_chapter("strategies").body, "Reading a card")
+    assert "the shared gates" in section
+    for label in ("Uptrend", "Medium-term trend", "Not dead flat", "Not panicking", "Real volume"):
+        assert f"**{label}**" in section
+    frame = pd.DataFrame({"Open": [10.0] * 30, "High": [11.0] * 30, "Low": [9.0] * 30,
+                          "Close": [10.0] * 30, "Volume": [1000.0] * 30})
+    gates = compute_shared_gates(frame)
+    for name in ("bull_regime", "trend50_bull", "atr_floor", "atr_calm", "vol_ok"):
+        assert name in gates and f"`{name}`" in section
+    assert "not a forecast" in section
+    assert "costs not recorded" in section and "before tax" in section
+
+
+def test_chapter_5_masked_strategies_never_show_an_empty_badge():
+    from swingbot.admin.guide import live_strategies
+    section = _section(_chapter("strategies").body, "Masked strategies")
+    assert live_strategies.NO_ROW_MASKED in section
+    assert "masked — research only" in section
+    assert "](/insights/guide/what-it-is#swing-horizons)" in section
+
+
+def test_chapter_5_resolves_and_links_only_written_chapters(_unmeasured_badges):
+    chapter = _chapter("strategies")
+    assert "{{" not in placeholders.resolve(chapter.body)
+    links = _GUIDE_LINK.findall(chapter.body)
+    glossary = {anchor for slug, anchor in links if slug == "glossary"}
+    assert glossary and glossary <= GLOSSARY_LINKED
+    assert {slug for slug, _anchor in links} <= CH5_LINKABLE
+    assert not _NO_PCT.search(re.sub(r"\{\{[^}]*\}\}", "", chapter.body))

@@ -87,6 +87,13 @@
       "monitoring",
       "close"
     ],
+    "strategies": [
+      "strategies-are-not-level-families",
+      "how-a-strategy-alert-is-sent",
+      "reading-a-card",
+      "masked-strategies",
+      "the-cards"
+    ],
     "what-it-is": [
       "what-it-does",
       "what-it-does-not-do",
