@@ -518,7 +518,10 @@ def test_chapter_6_names_the_built_but_unused_vetoes():
 
 # --- chapter 7: trade plan (v237 V237-12, V237-12b) -------------------------------------
 
-CH7_ANCHORS = ["entry", "the-stop", "the-stop-distance-cap-and-the-clamp"]
+CH7_ANCHORS = ["entry", "the-stop", "the-stop-distance-cap-and-the-clamp",
+               "the-stop-never-widens", "targets-that-pay-for-the-risk",
+               "scale-out-and-the-runner", "how-a-plan-closes",
+               "backtest-and-live-use-the-same-plan"]
 CH7_LINKABLE = CH6_LINKABLE | {"trade-plan"}
 
 
@@ -583,3 +586,36 @@ def test_chapter_7_resolves_and_links_only_written_chapters():
     assert glossary and glossary <= GLOSSARY_LINKED
     assert {slug for slug, _anchor in links} <= CH7_LINKABLE
     assert not _NO_PCT.search(re.sub(r"\{\{[^}]*\}\}", "", chapter.body))
+
+
+def test_chapter_7_stop_never_widens_and_gaps_can_pass_it():
+    section = _section(_chapter("trade-plan").body, "The stop never widens")
+    assert "tighter" in section and "loosen" in section
+    assert "glossary#gap-through-the-stop" in section
+
+
+@pytest.mark.parametrize("heading, names", [
+    ("Targets that pay for the risk",
+     {"MIN_RISK_REWARD_RATIO", "MAX_RISK_REWARD_RATIO", "MIN_REWARD_PCT"}),
+    ("Scale-out and the runner",
+     {"plan.breakeven_trigger", "plan.tp1_share", "plan.runner_floor", "plan.trail_atr"}),
+    ("Backtest and live use the same plan", {"PLAN_ENGINE_V2"}),
+])
+def test_chapter_7_exit_numbers_are_placeholders(heading, names):
+    assert names <= set(placeholders.names_in(_section(_chapter("trade-plan").body, heading)))
+
+
+def test_chapter_7_targets_have_no_fallback_and_tp2_is_optional():
+    section = _section(_chapter("trade-plan").body, "Targets that pay for the risk")
+    assert "no fallback" in section
+    assert "has a TP2 only when" in section
+
+
+def test_chapter_7_close_table_lists_every_outcome():
+    section = _section(_chapter("trade-plan").body, "How a plan closes")
+    for outcome in ("expired", "invalidated", "cancelled at the cap", "gap through the stop",
+                    "loss", "scratch", "TP1, runner at the floor", "TP1, runner trailed",
+                    "TP1, then TP2"):
+        assert f"| {outcome} |" in section
+    for reason in ("tp1_runner_be", "tp1_runner_trail", "tp1_runner_tp2"):
+        assert f"`{reason}`" in section

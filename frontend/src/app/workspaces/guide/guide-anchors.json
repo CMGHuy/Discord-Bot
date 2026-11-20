@@ -108,7 +108,12 @@
     "trade-plan": [
       "entry",
       "the-stop",
-      "the-stop-distance-cap-and-the-clamp"
+      "the-stop-distance-cap-and-the-clamp",
+      "the-stop-never-widens",
+      "targets-that-pay-for-the-risk",
+      "scale-out-and-the-runner",
+      "how-a-plan-closes",
+      "backtest-and-live-use-the-same-plan"
     ],
     "what-it-is": [
       "what-it-does",
