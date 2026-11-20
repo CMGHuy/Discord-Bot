@@ -5,7 +5,11 @@ from swingbot import config
 from swingbot.admin.guide import live_switches as ls, placeholders as ph
 from swingbot.core.market import strategy_types
 
-SWITCH_NAMES = {"gates.switches"}
+SWITCH_NAMES = {
+    "gates.switches", "STRATEGY_ALERTS_MODE", "STRATEGY_ALERTS_LIVE_STRATEGIES", "RS_GATE",
+    "RS_LEADER_PERCENTILE", "RS_LAGGARD_PERCENTILE", "HTF_CONFLUENCE_ENABLED",
+    "AVWAP_LEVELS_ENABLED", "LEVEL_LIFECYCLE_STOPS_ENABLED", "SCALE_OUT_ENABLED", "PLAN_ENGINE_V2",
+}
 LABELS = [
     "Market regime gate", "Adjacent-horizon alignment", "Relative strength, long arm",
     "Relative strength, short arm", "Dead-cat bounce veto", "Earnings blackout",
@@ -134,3 +138,65 @@ def test_no_sensitive_setting_is_a_switch():
     sensitive = {f.attr for f in config.FIELDS if f.sensitive}
     assert not sensitive & {s for row in ls.SWITCH_ROWS for s in row.settings}
     assert not sensitive & set(ls.SWITCH_PLACEHOLDERS)
+
+
+# --- single flags (V237-3b) ------------------------------------------------------
+
+@pytest.mark.parametrize("name, value, text", [
+    ("RS_GATE", True, "on"),
+    ("RS_GATE", False, "off"),
+    ("RS_LEADER_PERCENTILE", 0.0, "0"),
+    ("RS_LEADER_PERCENTILE", 80.0, "80"),
+    ("RS_LAGGARD_PERCENTILE", 25.0, "25"),
+    ("RS_LAGGARD_PERCENTILE", 12.5, "12.5"),
+    ("HTF_CONFLUENCE_ENABLED", True, "on"),
+    ("HTF_CONFLUENCE_ENABLED", False, "off"),
+    ("AVWAP_LEVELS_ENABLED", True, "on"),
+    ("AVWAP_LEVELS_ENABLED", False, "off"),
+    ("LEVEL_LIFECYCLE_STOPS_ENABLED", True, "on"),
+    ("LEVEL_LIFECYCLE_STOPS_ENABLED", False, "off"),
+    ("SCALE_OUT_ENABLED", True, "on"),
+    ("SCALE_OUT_ENABLED", False, "off"),
+    ("PLAN_ENGINE_V2", "on", "`on`"),
+    ("PLAN_ENGINE_V2", "shadow", "`shadow`"),
+    ("PLAN_ENGINE_V2", "off", "`off`"),
+])
+def test_single_flags_read_config_at_call_time(monkeypatch, name, value, text):
+    monkeypatch.setattr(config, name, value)
+    assert _render(name) == text
+
+
+@pytest.mark.parametrize("mode, text", [
+    ("off", "Off (`off`)"),
+    ("live", "Live -- alerts + paper trades (`live`)"),
+    ("someday", "someday (`someday`)"),
+])
+def test_strategy_mode_uses_the_option_label(monkeypatch, mode, text):
+    monkeypatch.setattr(config, "STRATEGY_ALERTS_MODE", mode)
+    assert _render("STRATEGY_ALERTS_MODE") == text
+
+
+def test_strategy_mode_shadow_label_comes_from_the_field(monkeypatch):
+    field = next(f for f in config.FIELDS if f.attr == "STRATEGY_ALERTS_MODE")
+    monkeypatch.setattr(config, "STRATEGY_ALERTS_MODE", "shadow")
+    assert _render("STRATEGY_ALERTS_MODE") == f"{dict(field.options)['shadow']} (`shadow`)"
+
+
+@pytest.mark.parametrize("value, text", [
+    ("", "every strategy"),
+    (" , ,", "every strategy"),
+    (None, "every strategy"),
+    ("MACD", "MACD"),
+    ("MACD,Volume Profile", "MACD, Volume Profile"),
+    (" MACD , Volume Profile ,", "MACD, Volume Profile"),
+])
+def test_live_strategies_allow_list(monkeypatch, value, text):
+    monkeypatch.setattr(config, "STRATEGY_ALERTS_LIVE_STRATEGIES", value)
+    assert _render("STRATEGY_ALERTS_LIVE_STRATEGIES") == text
+
+
+def test_no_sensitive_value_reaches_a_switch_placeholder(monkeypatch):
+    for f in (f for f in config.FIELDS if f.sensitive):
+        monkeypatch.setattr(config, f.attr, f"SENTINEL-{f.attr}", raising=False)
+    rendered = "\n".join(_render(name) for name in sorted(SWITCH_NAMES))
+    assert "SENTINEL-" not in rendered

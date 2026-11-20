@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from swingbot import config
-from swingbot.admin.guide.live_risk import _flag, _num
+from swingbot.admin.guide.live_risk import _field, _flag, _num
 from swingbot.core.market import strategy_types
 
 APPLIED = "applied"
@@ -100,6 +100,32 @@ def _cfg(attr: str, render: Callable[[object], str]) -> Callable[[], str]:
     return lambda: render(getattr(config, attr))
 
 
+def _strategy_mode() -> str:
+    value = config.STRATEGY_ALERTS_MODE
+    label = dict(_field("STRATEGY_ALERTS_MODE").options).get(value, value)
+    return f"{label} (`{value}`)"
+
+
+def _live_strategies() -> str:
+    parts = str(config.STRATEGY_ALERTS_LIVE_STRATEGIES or "").split(",")
+    names = [part.strip() for part in parts if part.strip()]
+    return ", ".join(names) if names else "every strategy"
+
+
+def _backticked(value) -> str:
+    return f"`{value}`"
+
+
 SWITCH_PLACEHOLDERS: dict[str, Callable[[], str]] = {
     "gates.switches": _switches,
+    "STRATEGY_ALERTS_MODE": _strategy_mode,
+    "STRATEGY_ALERTS_LIVE_STRATEGIES": _live_strategies,
+    "RS_GATE": _cfg("RS_GATE", _flag),
+    "RS_LEADER_PERCENTILE": _cfg("RS_LEADER_PERCENTILE", _num),
+    "RS_LAGGARD_PERCENTILE": _cfg("RS_LAGGARD_PERCENTILE", _num),
+    "HTF_CONFLUENCE_ENABLED": _cfg("HTF_CONFLUENCE_ENABLED", _flag),
+    "AVWAP_LEVELS_ENABLED": _cfg("AVWAP_LEVELS_ENABLED", _flag),
+    "LEVEL_LIFECYCLE_STOPS_ENABLED": _cfg("LEVEL_LIFECYCLE_STOPS_ENABLED", _flag),
+    "SCALE_OUT_ENABLED": _cfg("SCALE_OUT_ENABLED", _flag),
+    "PLAN_ENGINE_V2": _cfg("PLAN_ENGINE_V2", _backticked),
 }
