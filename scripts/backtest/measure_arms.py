@@ -5,6 +5,7 @@ v147: `--record-blocked PATH [--from --to]` writes TRAIN compression gate rows i
 v180: --knob TURTLE_SOUP_RESEARCH_MODE=structural also writes <out stem>.turtle_soup.json (see turtle_soup_sidecar).
 v192: --baseline-knob ATTR=value runs the BASELINE arm under its own delta (stamped as baseline_knob_delta).
 v192: --knob GAP_RECLAIM_ATR=g (> 0) also writes <out stem>.gap_reclaim.json, the census (see gap_reclaim_sidecar).
+v238: --r-basis {net,gross} books BOTH arms on that basis (arms.net_basis) and stamps provenance["r_basis"]; absent = today.
 """
 from __future__ import annotations
 
@@ -25,7 +26,7 @@ from swingbot.core.backtesting.arms.engine import (DEFAULT_ENGINES, get_populati
                                                    population_engine_for, run_arm)
 from swingbot.core.backtesting.arms.knobs import apply_knobs, parse_knob  # noqa: E402
 from swingbot.core.backtesting.arms.pairing import changed_outcomes  # noqa: E402
-from swingbot.core.backtesting.arms.provenance import build_stamp, code_hash  # noqa: E402
+from swingbot.core.backtesting.arms.provenance import R_BASES, build_stamp, code_hash  # noqa: E402
 from swingbot.core.backtesting.backtest_scenarios import _resolve_replay_workers  # noqa: E402
 from swingbot.core.backtesting.instrument import cli as instrument_cli  # noqa: E402
 from swingbot.core.marketdata import training_data  # noqa: E402
@@ -105,10 +106,21 @@ def _baseline_population_refusal(delta: dict, baseline_delta: dict):
         f"the baseline delta routes to {engine_id}, the component to {population_engine_for(delta)}.")
 
 
-def _refusal(delta: dict, baseline_delta: dict):
-    """The first static or population refusal over the component delta, then the baseline delta."""
+def _basis_refusal(delta: dict, r_basis):
+    """v238: a population engine's rows are not booked by arms.net_basis, so a basis is refused there."""
+    engine_id = population_engine_for(delta)
+    if r_basis is None or engine_id is None:
+        return None
+    return "refused:r-basis-population", (
+        f"{engine_id} rows are not booked by arms.net_basis; --r-basis needs the per-ticker engines.")
+
+
+def _refusal(delta: dict, baseline_delta: dict, r_basis=None):
+    """The first static or population refusal over the component delta, then the baseline delta,
+    then (v238) the basis refusal."""
     return (static_refusal(delta) or population_refusal(delta) or static_refusal(baseline_delta)
-            or population_refusal(baseline_delta) or _baseline_population_refusal(delta, baseline_delta))
+            or population_refusal(baseline_delta) or _baseline_population_refusal(delta, baseline_delta)
+            or _basis_refusal(delta, r_basis))
 
 
 def _unclassified(knobs) -> str | None:
@@ -130,12 +142,13 @@ def _deltas(args):
 
 
 def _worker(task):
-    ticker, engine_ids, horizons, signal_window, delta = task
+    ticker, engine_ids, horizons, signal_window, delta, r_basis = task
+    basis = {} if r_basis is None else {"r_basis": r_basis}      # v238: today's call when unset
     try:
         frame = load_frame(ticker)
         if frame is None:
             raise RuntimeError("no cached frame")
-        trades = run_arm(ticker, frame, engine_ids, horizons, signal_window, delta)
+        trades = run_arm(ticker, frame, engine_ids, horizons, signal_window, delta, **basis)
     except Exception as exc:
         raise RuntimeError(f"{ticker}: {exc!r}") from exc
     return ticker, trades
@@ -149,8 +162,9 @@ def _write_progress(path, done, total):
             pass
 
 
-def _run_arm_all(label, universe, engines, horizons, signal_window, delta, workers, progress_path, counter, total):
-    tasks = [(ticker, tuple(engines), tuple(horizons), signal_window, delta) for ticker in universe]
+def _run_arm_all(label, universe, engines, horizons, signal_window, delta, workers, progress_path, counter, total,
+                 r_basis=None):
+    tasks = [(ticker, tuple(engines), tuple(horizons), signal_window, delta, r_basis) for ticker in universe]
     by_ticker = {}
 
     def record(ticker, trades):
@@ -215,13 +229,17 @@ def _produce_population(engine_id, universe, horizons, signal_window, delta, bas
 
 
 def produce(stage, delta, *, universe, baseline_delta=None, spec=None, horizons=None, engines=DEFAULT_ENGINES,
-            workers=None, progress_path=None, preregistration=None) -> dict:
+            workers=None, progress_path=None, preregistration=None, r_basis=None) -> dict:
     """v192: ``baseline_delta`` is the baseline arm's own config delta (default none, today's
-    baseline); the stamp records it as ``baseline_knob_delta`` when non-empty."""
+    baseline); the stamp records it as ``baseline_knob_delta`` when non-empty. v238: ``r_basis``
+    ("net" / "gross") books both arms on that basis and is stamped; None is today's booking.
+    A basis on the population path raises ValueError (its rows are not booked by net_basis)."""
     spec = spec or windows.resolve(stage)
     horizons = tuple(horizons or windows.ALL_HORIZONS)
     baseline_delta = dict(baseline_delta or {})
     population = population_engine_for(delta)
+    if population is not None and r_basis is not None:
+        raise ValueError(f"r_basis={r_basis!r}: population engine {population} rows are not booked by arms.net_basis")
     if population is not None:
         engines = (population,)
         baseline_hash, baseline, component_hash, component = _produce_population(
@@ -230,13 +248,15 @@ def produce(stage, delta, *, universe, baseline_delta=None, spec=None, horizons=
         workers = _resolve_replay_workers(workers)
         total, counter = 2 * len(universe), [0]
         baseline_hash = code_hash()
-        baseline = _run_arm_all("baseline", universe, engines, horizons, spec.signal_window, baseline_delta, workers, progress_path, counter, total)
+        baseline = _run_arm_all("baseline", universe, engines, horizons, spec.signal_window, baseline_delta,
+                                workers, progress_path, counter, total, r_basis=r_basis)
         component_hash = code_hash()
-        component = _run_arm_all("component", universe, engines, horizons, spec.signal_window, delta, workers, progress_path, counter, total)
+        component = _run_arm_all("component", universe, engines, horizons, spec.signal_window, delta,
+                                 workers, progress_path, counter, total, r_basis=r_basis)
     stamp = build_stamp(stage=stage, signal_window=spec.signal_window, universe=universe, horizons=horizons,
                         engines=engines, knob_delta=delta, engine_hash_baseline=baseline_hash,
                         engine_hash_component=component_hash, changed_outcomes=changed_outcomes(baseline, component),
-                        preregistration=preregistration, baseline_knob_delta=baseline_delta)
+                        preregistration=preregistration, baseline_knob_delta=baseline_delta, r_basis=r_basis)
     blob: dict = {"provenance": stamp}
     if spec.fold_key != "folds":
         blob["baseline"], blob["component"] = _rows(baseline, *spec.signal_window), _rows(component, *spec.signal_window)
@@ -368,6 +388,9 @@ def main(argv=None) -> int:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--preregistration", type=Path, default=None)
+    parser.add_argument("--r-basis", dest="r_basis", choices=R_BASES, default=None,
+                        help="v238: book both arms net or gross and stamp provenance['r_basis'] "
+                             "(default: today's booking, no stamp key; --gate additive needs net)")
     from fetch_backtest_data import add_data_source_arg, apply_data_source
     add_data_source_arg(parser)
     instrument_cli.add_instrument_arg(parser)
@@ -379,7 +402,7 @@ def main(argv=None) -> int:
     if isinstance(deltas, int):
         return deltas
     delta, baseline_delta = deltas
-    refusal = _refusal(delta, baseline_delta)
+    refusal = _refusal(delta, baseline_delta, args.r_basis)
     if refusal:
         print(f"{refusal[0]} -- {refusal[1]} Budget intact.", file=sys.stderr)
         return 1
@@ -390,7 +413,8 @@ def main(argv=None) -> int:
     LOG_DIR.mkdir(exist_ok=True)
     progress = LOG_DIR / f"measure_arms.{uuid.uuid4().hex[:8]}.progress"
     blob = produce(args.stage, delta, universe=universe, baseline_delta=baseline_delta, workers=args.workers,
-                   progress_path=progress, preregistration=str(args.preregistration) if args.preregistration else None)
+                   progress_path=progress, preregistration=str(args.preregistration) if args.preregistration else None,
+                   r_basis=args.r_basis)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(blob), encoding="utf-8")
     training_data.write_provenance(args.out)
