@@ -624,7 +624,9 @@ def test_chapter_7_close_table_lists_every_outcome():
 # --- chapter 8: sizing and risk (v237 V237-13, V237-13b) --------------------------------
 
 CH8_ANCHORS = ["three-limits-not-one", "how-the-share-count-is-found", "sizing-modes",
-               "gap-aware-sizing"]
+               "gap-aware-sizing", "portfolio-and-correlated-heat",
+               "drawdown-throttle-and-kill-switch", "reject-clamp-or-size-0",
+               "caps-that-are-not-applied", "costs-turnover-and-tax"]
 CH8_LINKABLE = CH7_LINKABLE | {"sizing-risk"}
 CH8_NOTICE = ("Education about a paper-trading tool, not advice: alerts are not tailored to you, "
               "a suggested size is a default, and past results do not predict future ones.")
@@ -682,3 +684,72 @@ def test_chapter_8_resolves_and_links_only_written_chapters():
     assert glossary and glossary <= GLOSSARY_LINKED
     assert {slug for slug, _anchor in links} <= CH8_LINKABLE
     assert not _NO_PCT.search(re.sub(r"\{\{[^}]*\}\}", "", chapter.body))
+
+
+def _code_calls(pattern: str, *, skip: tuple[str, ...]) -> list[str]:
+    """Files under swingbot/ (outside the `skip` prefixes) whose text matches `pattern`."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    found = []
+    for path in sorted((root / "swingbot").rglob("*.py")):
+        rel = path.relative_to(root).as_posix()
+        if not rel.startswith(skip) and re.search(pattern, path.read_text(encoding="utf-8")):
+            found.append(rel)
+    return found
+
+
+@pytest.mark.parametrize("heading, names", [
+    ("Portfolio and correlated heat", {"PORTFOLIO_HEAT_CAP_PCT", "CORRELATED_HEAT_CAP_PCT",
+                                       "correlation.threshold", "correlation.window"}),
+    ("Drawdown throttle and kill switch", {"throttle.ladder", "throttle.resume", "throttle.streak",
+                                           "DD_THROTTLE_ENABLED", "KILLSWITCH_DEFAULT_ON"}),
+    ("Reject, clamp or size 0", {"stop.clamp_level", "CLAMP_STOP_TO_HARD_CAP"}),
+    ("Caps that are not applied", {"SECTOR_HEAT_CAP_PCT", "MAX_OPEN_POSITIONS",
+                                   "correlation.sector_fallback"}),
+    ("Costs, turnover and tax", {"alerts.per_week"}),
+])
+def test_chapter_8_portfolio_numbers_are_placeholders(heading, names):
+    assert names <= set(placeholders.names_in(_section(_chapter("sizing-risk").body, heading)))
+
+
+def test_chapter_8_size_0_headlines_match_the_alert_embed():
+    from pathlib import Path
+    embeds = (Path(__file__).resolve().parents[2]
+              / "swingbot" / "core" / "scanning" / "alert_embeds.py").read_text(encoding="utf-8")
+    section = _section(_chapter("sizing-risk").body, "Reject, clamp or size 0")
+    for headline in ("⛔ ENTRY BLOCKED — portfolio heat cap",
+                     "⛔ ENTRY BLOCKED — correlated cluster",
+                     "⛔ ENTRIES PAUSED (kill switch"):
+        assert headline in section and headline in embeds
+    assert "`plan rejected (" in section
+
+
+def test_chapter_8_says_which_brake_acts_on_alerts():
+    section = _section(_chapter("sizing-risk").body, "Drawdown throttle and kill switch")
+    assert "does not apply it" in section and "`!killswitch off`" in section
+    assert "`!killswitch on`" in section
+
+
+def test_chapter_8_unapplied_caps_are_still_unwired():
+    """If one of these gains a live caller, chapter 8 must change with it."""
+    section = _section(_chapter("sizing-risk").body, "Caps that are not applied")
+    assert "MAX_OPEN_PER_HORIZON" in section and "not applied to the live scan" in section
+    assert _code_calls(r"(sector_check|horizon_check|streak_multiplier)\(",
+                       skip=("swingbot/core/edge/heat.py", "swingbot/core/edge/throttle.py")) == []
+    assert _code_calls(r"DD_THROTTLE_ENABLED",
+                       skip=("swingbot/config.py", "swingbot/admin/guide/")) == []
+
+
+def test_chapter_8_costs_section_gives_no_tax_advice():
+    section = _section(_chapter("sizing-risk").body, "Costs, turnover and tax")
+    assert "before tax" in section and "ask a tax adviser" in section
+
+
+def test_glossary_drawdown_throttle_agrees_with_chapter_8():
+    term = _term("Drawdown throttle")
+    assert "does not apply it" in term and "{{DD_THROTTLE_ENABLED}}" in term
+    assert "When switched on" not in term
+
+
+def test_glossary_size_0_alert_names_the_kill_switch():
+    assert "kill switch" in _term("Size-0 alert")

@@ -102,7 +102,12 @@
       "three-limits-not-one",
       "how-the-share-count-is-found",
       "sizing-modes",
-      "gap-aware-sizing"
+      "gap-aware-sizing",
+      "portfolio-and-correlated-heat",
+      "drawdown-throttle-and-kill-switch",
+      "reject-clamp-or-size-0",
+      "caps-that-are-not-applied",
+      "costs-turnover-and-tax"
     ],
     "strategies": [
       "strategies-are-not-level-families",

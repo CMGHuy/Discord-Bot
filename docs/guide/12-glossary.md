@@ -177,7 +177,7 @@ The risk sitting in one group of stocks whose daily returns correlate above {{co
 
 ### Size-0 alert
 
-An alert a heat cap blocks. It still posts, flagged, with a suggested size of zero, so you see what the cap cost.
+An alert a heat cap or the kill switch blocks. It still posts, flagged, with a suggested size of zero, so you see what the cap cost.
 
 ### Suggested size
 
@@ -189,7 +189,7 @@ The price opens beyond the stop, so the fill is worse than −1R. Risk and heat 
 
 ### Drawdown throttle
 
-The throttle ladder: as the account falls further from its peak, the size of new entries steps down, and at the bottom of the ladder entries pause until the account has recovered part of the fall. The ladder is computed and shown on the Risk page. The setting reads {{DD_THROTTLE_ENABLED}}. The live scan does not apply it to alert sizes today.
+A ladder that sizes new entries down step by step as the account falls from its peak, and pauses them at the deepest step until the account recovers part of the fall. The walk-forward backtest applies it and the Risk page shows where the account stands on it; the live scan does not apply it to alert sizes yet, whatever its setting says (now {{DD_THROTTLE_ENABLED}}).
 
 ### Kill switch
 
