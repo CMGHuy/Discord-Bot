@@ -41,8 +41,11 @@ R is the stored `r_realized`.
   (LONG). Gap-through-stop exits are rare (13 of 182 LONG stop-outs since 10-22).
 - Logs (2026-11-09 onward only) show 330 `plan rejected (` lines, all
   `rebuild:no_scenario`. The 2% dollar-risk cap is not rejecting shorts.
-- Integrity: the bot's `Market regime:` log line still read "Bullish (SPY +3.9%
-  vs rising 200EMA)" on 11-12, and no such line appears after that.
+- The live regime label (`scanning/regime.py`, SPY vs EMA200) is slow, not
+  broken. It read "Bullish (SPY +3.9% vs rising 200EMA)" on 11-12 and
+  "Bearish (SPY −4.4% vs rising 200EMA)" on 11-20 (prod `bot.log`). It flips
+  only after a drop of this size, and it only feeds `score_confidence(regime_trend=…)`.
+  It never gates an alert. The bot has no fast stress signal; B1 would be the first.
 
 ## 3. Bear routes already closed — do not re-propose
 
@@ -107,5 +110,5 @@ a one-shot screen id on v1 would waste it.
 3. Screen B3.
 4. B2 gets a spec only if `screen2-uptrend_pullback` passes.
 
-Integrity follow-up, `Edge: none`: the live regime label (SPY vs a rising
-200EMA) is blind to a 10% correction and stopped logging after 11-12.
+No integrity follow-up: an earlier reading that the regime line stopped logging
+after 11-12 came from searching one rotated log file. It logs on every scan.
