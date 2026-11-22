@@ -29,6 +29,7 @@ INSERTED = {
         ("## Badge scoring", "  **The surviving badge threshold, and its history**"),
         ("## Funnel stages", STAGE_MINUS_TWO),
         ("## Harvest gate", "- **`Edge: harvest` features are OUT OF SCOPE"),
+        ("## Additive gate", "- **Additive-strategy gate (v238"),
         ("## Frozen constants", "- Frozen constants: `MIN_RISK_REWARD_RATIO"),
         ("## Evidence, registry and ledger", "- **Evidence age.**"),
     ],
@@ -182,3 +183,40 @@ def test_every_doc_section_command_in_a_skill_names_real_headings():
         if _matches(doc, argument) != 1
     ]
     assert problems == []
+
+
+def _section(doc: str, heading: str, next_heading: str) -> str:
+    lines = _lines(doc)
+    return "\n".join(lines[lines.index(heading):lines.index(next_heading)])
+
+
+def test_the_ladder_paragraph_closes_the_stage_minus_two_bullet():
+    lines = _lines("backtest-methodology.md")
+    funnel, harvest = lines.index("## Funnel stages"), lines.index("## Harvest gate")
+    stage = [i for i, line in enumerate(lines) if line.startswith(STAGE_MINUS_TWO)][0]
+    acceptance = lines.index("- **The acceptance funnel.** Selection never touches scoring data, and two")
+    ladder = [i for i, line in enumerate(lines) if line.startswith("  **Replication ladder (v238")]
+    assert len(ladder) == 1 and funnel < stage < ladder[0] < acceptance < harvest
+    body = "\n".join(lines[ladder[0]:acceptance])
+    for token in ("scripts/backtest/replicate_idea.py", "ladder-v1", "LADDER-HOLD",
+                  "LADDER-UNDERPOWERED", "LADDER-UNAVAILABLE", "v1 null", "signal close",
+                  "one rung per", "2021"):
+        assert token in body, token
+
+
+def test_the_additive_gate_names_its_clauses_basis_and_refusals():
+    text = _section("backtest-methodology.md", "## Additive gate", "## Frozen constants")
+    for token in ("own_expectancy", "win_rate_above_breakeven", "book_net_gain", "stability",
+                  "ADDITIVE_GATE_MISUSE", "refused:r-basis", "refused:additive-mde",
+                  "frictions.net_r_legs", "--r-basis net", "--gate additive", "week",
+                  "--expected-own-r", "--expected-sd-r", "--folds-arms"):
+        assert token in text, token
+
+
+def test_conventions_carry_the_ladder_citation_rule():
+    text = (DOCS / "document-conventions.md").read_text(encoding="utf-8")
+    rule = text[text.index("**Ladder citation (v238).**"):]
+    rule = rule[:rule.index("\n\n")]
+    for token in ("ladder-<name>-r<N>", "bot's shape", "orderable screened shape",
+                  "market-on-open", "time-cap", "realised risk", "not a header line"):
+        assert token in rule, token

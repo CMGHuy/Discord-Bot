@@ -120,10 +120,15 @@ LEDGER_FIELDS = ("id", "date", "hypothesis", "instrument", "n", "exp_r", "p",
 #: v214 appends SCREEN-AVOID-PASS: an avoid-mode screen pass (six clauses
 #: against the null and a control arm), which licenses a veto spec only; its
 #: p (share of resamples >= 0) is in the same BH family.
+#: v238 appends the replication ladder's three verdicts (instrument
+#: ladder-v1): a rung holds when the week-clustered lower 95% bound of its net
+#: mean R is above zero with N >= 300. LADDER-UNAVAILABLE is a refusal before
+#: any outcome is read and is never written. Their p is in the same BH family.
 VERDICTS = ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE", "WITHDRAWN", "OPEN",
             "SCREEN-PASS", "SCREEN-FAIL", "SCREEN-UNDERPOWERED",
-            "COST", "SAVED", "INCONCLUSIVE", "DESCRIPTION", "SCREEN-AVOID-PASS")
-INSTRUMENTS = ("v1", "v2", "screen-v1", "v3", "screen-v2")
+            "COST", "SAVED", "INCONCLUSIVE", "DESCRIPTION", "SCREEN-AVOID-PASS",
+            "LADDER-HOLD", "LADDER-FAIL", "LADDER-UNDERPOWERED")
+INSTRUMENTS = ("v1", "v2", "screen-v1", "v3", "screen-v2", "ladder-v1")
 DESCRIPTION = "DESCRIPTION"
 #: v162 adds one OPTIONAL field: the bars a verdict was measured on. Rows
 #: written before v162 have none and mean yfinance (ledger_data_source); they

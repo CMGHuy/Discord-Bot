@@ -47,6 +47,7 @@ ALLOW = {
     "scripts/backtest/measure_trend_signal_overlap.py": "v33 trend-signal overlap; closed TRAIN measurement",
     "scripts/backtest/measure_v104.py": "v104 measurement; its holdout end is frozen",
     "scripts/backtest/measure_v113.py": "v113 measurement; its holdout end is frozen",
+    "scripts/backtest/replicate_idea.py": "v238 replication ladder; its rung windows are frozen ladder.py constants, takes no --instrument",
     "scripts/backtest/run_confluence_validation.py": "plan Task 41 one-shot confluence VALIDATION run; spent",
     "scripts/backtest/screen_idea.py": "v140 Stage -2 screen; its window is part of the pre-registration",
     "scripts/backtest/screen_placebo.py": "v230 null placebo; uses pre-registered window constants, takes no --instrument",

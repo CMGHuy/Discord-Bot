@@ -15,30 +15,33 @@ class ArmEngine(Protocol):
                    params) -> list: ...
 
 
-def get_engine(engine_id: str, *, instrument=None) -> ArmEngine:
+def get_engine(engine_id: str, *, instrument=None, r_basis=None) -> ArmEngine:
     """Construct a registered engine without importing inactive engines.
     ``instrument`` (v157): None is v1; any other spec walks every trade under
-    its fills and costs (exit_sim.simulate_exit's seam)."""
+    its fills and costs (exit_sim.simulate_exit's seam). ``r_basis`` (v238): None
+    books today's rows; "net" / "gross" book every row on that basis (arms.net_basis)."""
     if engine_id == "confluence":
         from swingbot.core.backtesting.arms.confluence_engine import ConfluenceEngine
-        return ConfluenceEngine(instrument=instrument)
+        return ConfluenceEngine(instrument=instrument, r_basis=r_basis)
     if engine_id == "strategy":
         from swingbot.core.backtesting.arms.strategy_engine import StrategyEngine
-        return StrategyEngine(instrument=instrument)
+        return StrategyEngine(instrument=instrument, r_basis=r_basis)
     raise ValueError(f"unknown engine {engine_id!r}; expected one of {DEFAULT_ENGINES}")
 
 
 def run_arm(ticker: str, df, engine_ids, horizons, signal_window, delta: dict, *,
-            instrument=None) -> list:
+            instrument=None, r_basis=None) -> list:
     """Run one ticker arm, applying its config globals inside this worker.
-    ``instrument`` goes to every engine (get_engine); None is v1."""
+    ``instrument`` goes to every engine (get_engine); None is v1. ``r_basis`` (v238)
+    is forwarded only when set, so the default call is today's call exactly."""
     from swingbot.scan_params import ScanParams
 
+    basis = {} if r_basis is None else {"r_basis": r_basis}
     with apply_knobs(delta):
         params = ScanParams.from_config()
         out: list = []
         for engine_id in engine_ids:
-            out.extend(get_engine(engine_id, instrument=instrument).run_ticker(
+            out.extend(get_engine(engine_id, instrument=instrument, **basis).run_ticker(
                 ticker, df, horizons, signal_window, params))
     return out
 

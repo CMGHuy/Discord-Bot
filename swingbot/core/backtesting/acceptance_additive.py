@@ -1,0 +1,446 @@
+"""Additive-strategy acceptance gate (v230 spec Part C, plan v238).
+
+Read docs/claude/backtest-methodology.md's "Additive gate" section before
+changing anything here. The clause set and its constants are PRE-REGISTERED.
+
+The v72 gate makes the book's pooled win rate the objective. A strategy that
+only ADDS rows at reward:risk 2 breaks even at a 33% win rate, so it can pay
+while lowering the pooled win rate, and v72 refuses it (v180 died on a
+-0.21pp pooled dWR). This gate judges an added strategy on its own rows:
+
+1. own_expectancy (the objective): the added rows' net ExpR.
+2. win_rate_above_breakeven: their decided win rate against their OWN
+   realised break-even, avg loss / (avg win + avg loss).
+3. book_net_gain: the book's total R must not fall when an added position
+   displaces a baseline plan (SKIPPED with no displacement).
+4. stability: the added rows' ExpR per walk-forward fold.
+
+Every interval is week-clustered (instrument.stats): an added strategy's
+signals bunch on market days, so one bad week is one bet. Both arms must be
+net of costs; that precondition is checked by the caller
+(validate_component.py, provenance.check_r_basis), not here. numpy only.
+"""
+from __future__ import annotations
+
+from collections import Counter, defaultdict
+from dataclasses import dataclass
+
+import numpy as np
+
+from .acceptance import (
+    ALPHA, BOOTSTRAP_RESAMPLES, CLOSED, DECIDED, AcceptanceResult, ClauseResult,
+    _Z_POWER, expectancy_r, population_split, stratum_table, verdict_of, win_rate,
+)
+from .arms.pairing import index_by_key
+from .instrument.stats import iso_week_key, week_cluster_bootstrap
+
+ADDITIVE_VERSION = 1   # additive-procedure version, recorded in every results doc
+ADDITIVE_GATE_MISUSE = "ADDITIVE_GATE_MISUSE"
+CLAUSES = ("own_expectancy", "win_rate_above_breakeven", "book_net_gain", "stability")
+
+#: Strict thresholds: a value equal to its bar FAILs whatever its last bit.
+_EPS = 1e-9
+
+
+@dataclass(frozen=True)
+class AdditiveSplit:
+    """The component against the baseline, by pairing key.
+
+    ``added`` are component rows with no baseline key; ``displaced`` are
+    baseline rows with no component key (an added position blocked them).
+    ``misuse`` is None for an add-only arm, else the refusal reason."""
+    added: tuple
+    displaced: tuple
+    misuse: str | None = None
+
+
+def _r_changed(baseline_trade, component_trade) -> bool:
+    b, c = baseline_trade.r_multiple, component_trade.r_multiple
+    if (b is None) != (c is None):
+        return True
+    return b is not None and abs(b - c) > _EPS
+
+
+def _misuse(split: dict, moved: list) -> str | None:
+    added, removed = split["added"], split["removed"]
+    if not added:
+        return (f"{ADDITIVE_GATE_MISUSE}: the component adds no row; a filter or "
+                f"veto belongs to the v72 gate")
+    if moved:
+        return (f"{ADDITIVE_GATE_MISUSE}: {len(moved)} shared row(s) changed outcome "
+                f"or R (first {moved[0].key}); an exit or geometry change belongs "
+                f"to the v92 harvest gate")
+    if len(removed) > len(added):
+        return (f"{ADDITIVE_GATE_MISUSE}: {len(removed)} baseline row(s) vanished but "
+                f"only {len(added)} were added; every displaced row needs an added "
+                f"position")
+    return None
+
+
+def split_additive(baseline, component) -> AdditiveSplit:
+    """Partition the arms and decide whether the component only adds rows.
+
+    A duplicate key in either arm raises (``index_by_key``): pairing would
+    silently keep one row and every clause would be wrong."""
+    index_by_key(baseline)
+    index_by_key(component)
+    split = population_split(baseline, component)
+    moved = [bt for bt, _ in split["changed"]]
+    moved += [bt for bt, ct in split["unchanged"] if _r_changed(bt, ct)]
+    return AdditiveSplit(added=tuple(split["added"]),
+                         displaced=tuple(split["removed"]),
+                         misuse=_misuse(split, moved))
+
+
+def _closed(rows) -> list:
+    return [t for t in rows if t.outcome in CLOSED and t.r_multiple is not None]
+
+
+def added_bootstrap(added, statistic, *, n_resamples: int = BOOTSTRAP_RESAMPLES,
+                    seed: int = 42) -> np.ndarray:
+    """``statistic(rows)`` on each week-cluster draw of the added rows alone
+    (no baseline), undefined draws dropped."""
+    return week_cluster_bootstrap([], list(added),
+                                  lambda _baseline, rows: statistic(rows),
+                                  n_resamples=n_resamples, seed=seed)
+
+
+def _interval(draws) -> tuple:
+    """(lower 95% bound, upper 95% bound, one-sided p = share of draws <= 0)."""
+    lo = float(np.percentile(draws, 100 * ALPHA / 2))
+    hi = float(np.percentile(draws, 100 * (1 - ALPHA / 2)))
+    return lo, hi, float(np.mean(draws <= 0.0))
+
+
+def clause_own_expectancy(added, *, n_resamples: int = BOOTSTRAP_RESAMPLES,
+                          seed: int = 42) -> ClauseResult:
+    """Clause 1, the objective: the added rows' net ExpR, lower 95% bound > 0."""
+    closed = _closed(added)
+    point = expectancy_r(closed)
+    if point is None:
+        return ClauseResult(CLAUSES[0], "FAIL",
+                            "no closed added row with an R; own ExpR undefined",
+                            None, 0.0)
+    lo, hi, p = _interval(added_bootstrap(closed, expectancy_r,
+                                          n_resamples=n_resamples, seed=seed))
+    ok = lo > _EPS
+    return ClauseResult(
+        CLAUSES[0], "PASS" if ok else "FAIL",
+        f"own net ExpR {point:+.4f}R [{lo:+.4f},{hi:+.4f}] p={p:.4f} "
+        f"N={len(closed)} (lower bound must be > 0)", point, 0.0)
+
+
+def _mean_or_zero(values) -> float:
+    return float(np.mean(values)) if values else 0.0
+
+
+def realised_breakeven(rows) -> float | None:
+    """The win rate (a fraction) at which these rows' own average win and
+    average loss break even: avg loss / (avg win + avg loss), decided rows
+    only. No winner gives 1.0, no loser 0.0; no decided row gives None."""
+    decided = [t for t in rows if t.outcome in DECIDED and t.r_multiple is not None]
+    avg_win = _mean_or_zero([t.r_multiple for t in decided if t.outcome == "win"])
+    avg_loss = _mean_or_zero([-t.r_multiple for t in decided if t.outcome == "loss"])
+    total = avg_win + avg_loss
+    if not decided or total <= 0.0:
+        return None
+    return avg_loss / total
+
+
+def clause_win_rate_above_breakeven(added, *, n_resamples: int = BOOTSTRAP_RESAMPLES,
+                                    seed: int = 42) -> ClauseResult:
+    """Clause 2: the decided win rate's lower 95% bound (percent) above the
+    added rows' realised break-even (percent). Replaces v72's pooled
+    win-rate comparison with the strategy's own arithmetic."""
+    decided = [t for t in added if t.outcome in DECIDED and t.r_multiple is not None]
+    point, breakeven = win_rate(decided), realised_breakeven(decided)
+    if point is None or breakeven is None:
+        return ClauseResult(CLAUSES[1], "FAIL",
+                            "no decided added row; win rate and break-even undefined",
+                            None, None)
+    bar = 100.0 * breakeven
+    lo, hi, _ = _interval(added_bootstrap(decided, win_rate,
+                                          n_resamples=n_resamples, seed=seed))
+    ok = lo > bar + _EPS
+    return ClauseResult(
+        CLAUSES[1], "PASS" if ok else "FAIL",
+        f"own WR {point:.2f}% [{lo:.2f},{hi:.2f}] vs realised break-even "
+        f"{bar:.2f}% (avg loss / (avg win + avg loss)), N={len(decided)}", lo, bar)
+
+
+# --- clause 3: book_net_gain ----------------------------------------------------------
+
+#: PRE-REGISTERED (spec Part C): the book's total R may fall by at most 10%
+#: of the added rows' own total R at the lower bound.
+TOLERANCE_SHARE = 0.10
+
+
+def _book_total(rows) -> float:
+    return float(sum(t.r_multiple for t in _closed(rows)))
+
+
+def _book_delta(baseline, component) -> float:
+    """Strategy on minus strategy off, the book's total R (a sum, not a mean)."""
+    return _book_total(component) - _book_total(baseline)
+
+
+def _book_verdict(point: float, lo: float, floor: float) -> bool:
+    return point > _EPS and lo > floor + _EPS
+
+
+def clause_book_net_gain(baseline, component, split: AdditiveSplit, *,
+                         n_resamples: int = BOOTSTRAP_RESAMPLES,
+                         seed: int = 42) -> ClauseResult:
+    """Clause 3: an added position that displaces a baseline plan (heat, one
+    position per ticker) must not cost the book its total R. Paired: both
+    arms resampled with the same week draw, so unchanged rows cancel."""
+    if not split.displaced:
+        return ClauseResult(CLAUSES[2], "SKIPPED",
+                            "no baseline row displaced; the book only gains rows",
+                            None, None)
+    added_total = _book_total(split.added)
+    floor = -TOLERANCE_SHARE * added_total
+    point = _book_delta(baseline, component)
+    lo, hi, p = _interval(week_cluster_bootstrap(
+        list(baseline), list(component), _book_delta,
+        n_resamples=n_resamples, seed=seed))
+    ok = _book_verdict(point, lo, floor)
+    return ClauseResult(
+        CLAUSES[2], "PASS" if ok else "FAIL",
+        f"book total R {point:+.2f}R [{lo:+.2f},{hi:+.2f}] p={p:.4f}; floor "
+        f"{floor:+.2f}R (-{TOLERANCE_SHARE:.0%} of the added rows' {added_total:+.2f}R); "
+        f"{len(split.added)} added, {len(split.displaced)} displaced", point, floor)
+
+
+# --- clause 4: stability --------------------------------------------------------------
+
+#: PRE-REGISTERED (spec Part C): the walk-forward test years and the bar.
+FOLD_YEARS = ("2021", "2022", "2023")
+FOLD_FLOOR_R = -0.10
+FOLD_MIN_N = 30
+FOLDS_POSITIVE = 2
+
+
+def _fold_row(fold: dict) -> dict:
+    split = split_additive(fold["baseline"], fold["component"])
+    closed = _closed(split.added)
+    return {"year": str(fold["test_year"]), "n": len(closed),
+            "exp_r": expectancy_r(closed), "misuse": split.misuse}
+
+
+def _fold_problem(rows: list) -> str | None:
+    years = tuple(row["year"] for row in rows)
+    if years != FOLD_YEARS:
+        return f"folds must be {'/'.join(FOLD_YEARS)}, got {'/'.join(years) or 'none'}"
+    for row in rows:
+        if row["misuse"]:
+            return f"fold {row['year']}: {row['misuse']}"
+    return None
+
+
+def _fold_text(row: dict) -> str:
+    exp = "n/a" if row["exp_r"] is None else f"{row['exp_r']:+.4f}R"
+    return f"{row['year']} {exp} N={row['n']}"
+
+
+def _stability_detail(rows: list, positive: int, thin: list, sunk: list) -> str:
+    parts = [_fold_text(row) for row in rows]
+    parts.append(f"positive {positive}/{len(FOLD_YEARS)} (need {FOLDS_POSITIVE}), "
+                 f"floor {FOLD_FLOOR_R:+.2f}R, min N {FOLD_MIN_N}")
+    if thin:
+        parts.append(f"thin: {', '.join(thin)}")
+    if sunk:
+        parts.append(f"below floor: {', '.join(sunk)}")
+    return "; ".join(parts)
+
+
+def _fold_tallies(rows: list) -> tuple:
+    """(positive fold count, thin fold years, fold years below the floor)."""
+    scored = [row for row in rows if row["exp_r"] is not None]
+    positive = sum(1 for row in scored if row["exp_r"] > _EPS)
+    thin = [row["year"] for row in rows if row["n"] < FOLD_MIN_N]
+    sunk = [row["year"] for row in scored if row["exp_r"] < FOLD_FLOOR_R - _EPS]
+    return positive, thin, sunk
+
+
+def clause_stability(folds: list) -> ClauseResult:
+    """Clause 4: the added rows' net ExpR per walk-forward fold (2021, 2022,
+    2023) is > 0 in at least two, below -0.10R in none, on N >= 30 each."""
+    rows = sorted((_fold_row(fold) for fold in folds), key=lambda row: row["year"])
+    problem = _fold_problem(rows)
+    if problem:
+        return ClauseResult(CLAUSES[3], "FAIL", problem, None, float(FOLDS_POSITIVE))
+    positive, thin, sunk = _fold_tallies(rows)
+    ok = positive >= FOLDS_POSITIVE and not thin and not sunk
+    return ClauseResult(CLAUSES[3], "PASS" if ok else "FAIL",
+                        _stability_detail(rows, positive, thin, sunk),
+                        float(positive), float(FOLDS_POSITIVE))
+
+
+# --- Stage 0: the frozen-effect MDE precheck ------------------------------------------
+
+#: Two-sided normal quantiles z(1 - alpha/2), tabulated (no scipy in the image).
+_Z_TWO_SIDED = {0.05: 1.9600, 0.01: 2.5758, 0.10: 1.6449}
+STAGE0_REFUSAL = "refused:additive-mde"
+
+
+def mde_own_expectancy(*, n: int, sd_r: float, power: float = 0.80,
+                       alpha: float = ALPHA) -> float | None:
+    """Smallest own net ExpR the gate's lower 95% bound detects at ``power``
+    with ``n`` added rows of per-row spread ``sd_r`` (frozen with the effect
+    in the pre-registration, never read from fold-train)."""
+    if sd_r is None or not np.isfinite(sd_r) or sd_r < 0:
+        raise ValueError(f"sd_r must be a finite number >= 0, got {sd_r!r}")
+    z_a, z_b = _Z_TWO_SIDED.get(alpha), _Z_POWER.get(power)
+    if z_a is None or z_b is None:
+        raise ValueError(f"no tabulated z for alpha={alpha}, power={power}")
+    if n <= 0:
+        return None
+    return float((z_a + z_b) * sd_r / np.sqrt(n))
+
+
+def stage0_refusal(*, n: int, expected_r: float, sd_r: float) -> str | None:
+    """None when the shot may be spent; else the refusal line (budget intact).
+    ``n`` is a count-only pass of added rows; no R is read here."""
+    if expected_r <= 0:
+        return (f"{STAGE0_REFUSAL} -- the frozen expected own ExpR {expected_r:+.4f}R "
+                f"is not positive; budget intact")
+    mde = mde_own_expectancy(n=n, sd_r=sd_r)
+    if mde is None:
+        return f"{STAGE0_REFUSAL} -- no added row to size (N={n}); budget intact"
+    if mde > expected_r + _EPS:
+        return (f"{STAGE0_REFUSAL} -- MDE {mde:.4f}R at N={n} exceeds the frozen "
+                f"expected own ExpR {expected_r:.4f}R; budget intact")
+    return None
+
+
+# --- the gate -------------------------------------------------------------------------
+
+STAGE_CLAUSES = {"selection": CLAUSES[:3], "walkforward": CLAUSES[3:],
+                 "validation": CLAUSES}
+
+
+class AdditiveMisuse(ValueError):
+    """The component does not only add rows: it belongs to v72 or v92."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _clause_runners(baseline, component, split, folds, kw: dict) -> dict:
+    return {
+        CLAUSES[0]: lambda: clause_own_expectancy(split.added, **kw),
+        CLAUSES[1]: lambda: clause_win_rate_above_breakeven(split.added, **kw),
+        CLAUSES[2]: lambda: clause_book_net_gain(baseline, component, split, **kw),
+        CLAUSES[3]: lambda: clause_stability(folds),
+    }
+
+
+def evaluate_additive(baseline, component, *, stage: str, folds=None,
+                      n_resamples: int = BOOTSTRAP_RESAMPLES,
+                      seed: int = 42) -> AcceptanceResult:
+    """The additive gate at one funnel stage. Every clause the stage reads
+    must PASS; clause 3's SKIPPED (no displacement) never blocks."""
+    if stage not in STAGE_CLAUSES:
+        raise ValueError(f"stage must be one of {tuple(STAGE_CLAUSES)}, got {stage!r}")
+    names = STAGE_CLAUSES[stage]
+    if CLAUSES[3] in names and folds is None:
+        raise ValueError(f"stage {stage!r} reads clause 4 and needs folds")
+    split = split_additive(baseline, component)
+    if split.misuse:
+        raise AdditiveMisuse(split.misuse)
+    runners = _clause_runners(baseline, component, split, folds,
+                              {"n_resamples": n_resamples, "seed": seed})
+    clauses = tuple(runners[name]() for name in names)
+    return AcceptanceResult(stage=stage, verdict=verdict_of(clauses), clauses=clauses,
+                            strata=stratum_table(baseline, component),
+                            split={"added": len(split.added),
+                                   "displaced": len(split.displaced)},
+                            seed=seed, version=ADDITIVE_VERSION, cluster="week")
+
+
+# --- disclosures (never gating) -------------------------------------------------------
+
+def _ordered(rows) -> list:
+    return sorted(_closed(rows), key=lambda t: (str(t.entry_date)[:10], t.ticker))
+
+
+def _max_drawdown(rs) -> float:
+    peak = equity = worst = 0.0
+    for r in rs:
+        equity += r
+        peak = max(peak, equity)
+        worst = max(worst, peak - equity)
+    return float(worst)
+
+
+def _longest_losing_streak(rows) -> int:
+    best = run = 0
+    for trade in rows:
+        run = run + 1 if trade.outcome == "loss" else 0
+        best = max(best, run)
+    return best
+
+
+def _week_sums(rows) -> dict:
+    out = defaultdict(float)
+    for trade in _closed(rows):
+        out[iso_week_key(trade.entry_date)] += trade.r_multiple
+    return dict(out)
+
+
+def _top5_week_share(rows) -> float | None:
+    sums = _week_sums(rows)
+    total = sum(sums.values())
+    if total <= _EPS:
+        return None
+    return float(sum(sorted(sums.values(), reverse=True)[:5]) / total)
+
+
+def _signals_per_day(rows) -> tuple:
+    counts = list(Counter(str(t.entry_date)[:10] for t in rows).values())
+    if not counts:
+        return None, 0
+    return float(np.percentile(counts, 95)), int(max(counts))
+
+
+def _same_week_corr(added, baseline) -> float | None:
+    a, b = _week_sums(added), _week_sums(baseline)
+    weeks = sorted(set(a) & set(b))
+    if len(weeks) < 3:
+        return None
+    x = np.array([a[w] for w in weeks])
+    y = np.array([b[w] for w in weeks])
+    if np.std(x) == 0 or np.std(y) == 0:
+        return None
+    return float(np.corrcoef(x, y)[0, 1])
+
+
+def disclosures(added, baseline) -> dict:
+    """Spec Part C disclosures for the results doc. None of them gates."""
+    ordered = _ordered(added)
+    p95, peak = _signals_per_day(added)
+    return {"max_drawdown_r": _max_drawdown([t.r_multiple for t in ordered]),
+            "longest_losing_streak": _longest_losing_streak(ordered),
+            "top5_week_share": _top5_week_share(added),
+            "signals_per_day_p95": p95, "signals_per_day_max": peak,
+            "same_week_corr": _same_week_corr(added, baseline)}
+
+
+def _fmt(value, spec: str) -> str:
+    return "n/a" if value is None else format(value, spec)
+
+
+def render_disclosures(d: dict) -> list:
+    return [
+        "Disclosures (never gating):",
+        f"- Max drawdown of the added rows: {_fmt(d['max_drawdown_r'], '.2f')}R",
+        f"- Longest losing streak: {d['longest_losing_streak']}",
+        f"- Share of the added rows' total R from the five best weeks: "
+        f"{_fmt(d['top5_week_share'], '.1%')}",
+        f"- Signals per day: p95 {_fmt(d['signals_per_day_p95'], '.1f')}, "
+        f"max {d['signals_per_day_max']}",
+        f"- Same-week correlation of added R with the baseline book: "
+        f"{_fmt(d['same_week_corr'], '+.2f')}",
+    ]

@@ -106,3 +106,15 @@ def test_data_source_defaults_to_the_training_source(tmp_path, monkeypatch):
 def test_an_unknown_data_source_is_refused_by_argparse(tmp_path):
     with pytest.raises(SystemExit):
         cli.main(_args(tmp_path / "ledger.jsonl", **{"--data-source": "iex"}))
+
+
+# --- v238: the ladder's instrument and verdicts reach the CLI --------------------------
+
+def test_a_ladder_row_is_accepted_by_the_cli(tmp_path):
+    ledger = tmp_path / "ledger.jsonl"
+    code = cli.main(_args(ledger, **{"--id": "ladder-demo-r1", "--instrument": "ladder-v1",
+                                     "--verdict": "LADDER-HOLD", "--data-source": "alpaca"}))
+    assert code == 0
+    row = stats.load_ledger(ledger)[0]
+    assert (row["instrument"], row["verdict"], row["data_source"]) == (
+        "ladder-v1", "LADDER-HOLD", "alpaca")

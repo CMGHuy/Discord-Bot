@@ -22,6 +22,9 @@ v180: the masked Turtle Soup long joins under ``TURTLE_SOUP_RESEARCH_MODE=struct
 own ("bullish", "2w") cell (the same scoped ``gate_override``). Its rows are booked net of the
 screen's costs (``turtle_soup_research.net_r``) while every other row stays gross, and
 ``turtle_soup_events`` lists one event per counted Turtle Soup candidate (trade, cancel or plan_none).
+v238: ``StrategyEngine(r_basis=...)`` -- None (the default) keeps the booking above, byte for
+byte; "net" or "gross" books EVERY row, Turtle Soup included, through ``arms.net_basis`` (its
+sidecar event still logged, with the booked R).
 """
 from __future__ import annotations
 
@@ -38,6 +41,7 @@ from swingbot import config
 from swingbot.core.backtesting import backtest as bt
 from swingbot.core.backtesting.acceptance import arm_trade_from_plan
 from swingbot.core.backtesting.arms import turtle_soup_research as tsr
+from swingbot.core.backtesting.arms import net_basis
 from swingbot.core.backtesting.arms.confluence_engine import SKIPPED
 from swingbot.core.edge import gates
 from swingbot.core.market import entry_filters
@@ -126,11 +130,14 @@ class StrategyEngine:
 
     def __init__(self, strategies=None, compression_context: CompressionResearchContext | None = None,
                  instrument=None, *, blocked_sink: list | None = None,
-                 compression_allowlist: tuple | None = None):
+                 compression_allowlist: tuple | None = None, r_basis=None):
         self.strategies = tuple(strategies or bt.ALL_STRATEGIES)
         self.compression_context = compression_context
         # v157: the backtest instrument every simulate_exit call runs under; None is v1.
         self.instrument = instrument
+        # v238: the R basis rows are booked on; None is today's booking (see _booked_r).
+        net_basis.check_basis(r_basis, instrument=instrument)
+        self.r_basis = r_basis
         # v147, record-only: (arm, BlockedCandidate) per counted compression decision; None = off.
         self.blocked_sink = blocked_sink
         # v147: the decision's mode allowlist; None keeps the research-knob derivation below.
@@ -186,12 +193,22 @@ class StrategyEngine:
             )
 
     def _booked_r(self, ticker, df, date, plan, result) -> float:
-        """Gross R for every strategy but Turtle Soup, whose row is booked net and logged (v180)."""
+        """Gross R for every strategy but Turtle Soup, whose row is booked net and logged (v180).
+        Under a requested r_basis (v238) every row is booked through arms.net_basis alike."""
+        if self.r_basis is not None:
+            return self._basis_r(ticker, df, date, plan, result)
         if plan.strategy != TURTLE_SOUP:
             return result.r_total
         r_net = tsr.net_r(plan, result)
         self.turtle_soup_events.append(tsr.trade_event(ticker, df, date, plan, result, r_net))
         return r_net
+
+    def _basis_r(self, ticker, df, date, plan, result) -> float:
+        """One row on the requested basis; a Turtle Soup row still logs its sidecar event."""
+        r = net_basis.booked_r(plan, result, df, r_basis=self.r_basis)
+        if plan.strategy == TURTLE_SOUP:
+            self.turtle_soup_events.append(tsr.trade_event(ticker, df, date, plan, result, r))
+        return r
 
     def _record_signal(self, ticker, df, date, plan, result) -> None:
         """One supplemental row per scored compression signal: dates, mode and why it closed."""

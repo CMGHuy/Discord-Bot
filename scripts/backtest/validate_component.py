@@ -13,13 +13,14 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 from swingbot.core.backtesting.acceptance import ALPHA, CLOSED, BOOTSTRAP_RESAMPLES, GEOMETRY_MAX_DROP_PCT, NON_INFERIORITY_R, VOLUME_MAX_CUT_PCT, ArmTrade, AcceptanceResult, ClauseResult, evaluate, delta_expectancy_r, WR_STATISTICS, mde_paired, mde_win_rate, project_target_n, render_json, render_markdown, win_rate_statistic  # noqa: E402
 from swingbot.core.backtesting.acceptance_harvest import HARVEST_VERSION, WIN_RATE_FLOOR_PP, evaluate_harvest, mde_expectancy_r  # noqa: E402
+from swingbot.core.backtesting import acceptance_additive as additive  # noqa: E402
 from swingbot.core.backtesting.acceptance import population_split  # noqa: E402
 from swingbot.core.backtesting.instrument import cli as instrument_cli, contract  # noqa: E402
 from swingbot.core.backtesting.arms.selection import SELECTED, evaluate_cell, select_cell, with_clause  # noqa: E402
 from swingbot.core.backtesting.arms import dryup_clauses, gap_reclaim_census, gap_reclaim_clauses, headroom_clauses, reachability  # noqa: E402
-from swingbot.core.backtesting.arms.pairing import changed_outcomes, overlap  # noqa: E402
-from swingbot.core.backtesting.arms.provenance import check_stamp  # noqa: E402
-from swingbot.core.backtesting.backtest_wf import gate as gate_expectancy, gate_expectancy_harvest, gate_win_rate, win_rate_fold_row  # noqa: E402
+from swingbot.core.backtesting.arms.pairing import DuplicateKeyError, changed_outcomes, overlap  # noqa: E402
+from swingbot.core.backtesting.arms.provenance import check_r_basis, check_stamp  # noqa: E402
+from swingbot.core.backtesting.backtest_wf import gate as gate_expectancy, gate_expectancy_harvest, gate_win_rate, plateau_report, win_rate_fold_row  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cache_dir_source  # noqa: E402
 DECIDED = ("win", "loss")
@@ -454,14 +455,22 @@ def _selection_cells(args, grid):
     return cells
 
 
-def stage_selection(args):
+def _grid_or_refuse(args):
+    """The parsed --grid-arms cells, or None after the refusal line (messages unchanged)."""
     try:
         grid = _parse_grid(args.grid_arms)
     except ValueError as error:
         print(f"refused:malformed-grid -- {error}. Budget intact.", file=sys.stderr)
-        return 1
+        return None
     if not grid:
         print("refused:no-grid -- --grid-arms is required. Budget intact.", file=sys.stderr)
+        return None
+    return grid
+
+
+def stage_selection(args):
+    grid = _grid_or_refuse(args)
+    if grid is None:
         return 1
     try:
         cells = _selection_cells(args, grid)
@@ -483,36 +492,348 @@ def stage_selection(args):
     return 0 if result.verdict == SELECTED else 1
 
 
-def main(argv=None):
+# --- v238: --gate additive (v230 spec Part C) ------------------------------------------
+
+_GATES = ("win_rate", "harvest", "additive")
+DISPLACEMENT_CAUSE = "not exposed by the replay"
+
+#: stage -> function name, resolved at call time so a monkeypatched stage is honoured.
+_STAGES = {"reachability": "stage_reachability", "mde": "stage_mde", "selection": "stage_selection",
+           "walkforward": "stage_walkforward", "validation": "stage_validation"}
+_ADDITIVE_STAGES = {"reachability": "stage_additive_reachability", "mde": "stage_additive_mde",
+                    "selection": "stage_additive_selection", "walkforward": "stage_additive_walkforward",
+                    "validation": "stage_additive_validation"}
+
+
+def _stage_runner(args):
+    """The stage callable for ``args.gate`` / ``args.stage``."""
+    table = _ADDITIVE_STAGES if args.gate == "additive" else _STAGES
+    return globals()[table[args.stage]]
+
+
+def _when(predicate, message):
+    return lambda args: message if predicate(args) else None
+
+
+def _additive(args):
+    return args.gate == "additive"
+
+
+_MECHANISM_ADDITIVE = ("--dryup-mechanism and --headroom-mechanism score v72 clause 6; "
+                       "the additive gate has no mechanism clause")
+
+#: First message wins; the first five entries are main's pre-v238 checks, verbatim, in order.
+_FLAG_CONFLICTS = (
+    _when(lambda a: a.dryup_mechanism and a.headroom_mechanism,
+          "--dryup-mechanism and --headroom-mechanism are different clause-6 readings; pass one"),
+    _when(lambda a: a.mechanism_json and a.gate == "harvest",
+          "--mechanism-json replaces v72 clause 6; the v92 harvest gate has no mechanism clause"),
+    _when(lambda a: a.dryup_mechanism and a.gate == "harvest",
+          "--dryup-mechanism scores v72 clause 6; the v92 harvest gate has no mechanism clause"),
+    _when(lambda a: _wr_statistic(a) != "standardised" and a.gate == "harvest",
+          "--wr-statistic selects the v72 win-rate clause-1 statistic; the v92 harvest gate has no win-rate clause"),
+    _gap_reclaim_conflict,
+    _when(lambda a: _additive(a) and a.gap_reclaim,
+          "--gap-reclaim scores the v72 win-rate funnel; the additive gate is a different gate"),
+    _when(lambda a: _additive(a) and a.mechanism_json,
+          "--mechanism-json replaces v72 clause 6; the additive gate has no mechanism clause"),
+    _when(lambda a: _additive(a) and (a.dryup_mechanism or a.headroom_mechanism), _MECHANISM_ADDITIVE),
+    _when(lambda a: _additive(a) and _wr_statistic(a) != "standardised",
+          "--wr-statistic selects the v72 win-rate clause-1 statistic; the additive gate judges win rate "
+          "against its own break-even"),
+    _when(lambda a: _additive(a) and a.train_effect_from_arms,
+          "--train-effect-from-arms reads a v72/v92 TRAIN effect; the additive gate freezes --expected-own-r"),
+    _when(lambda a: not _additive(a) and (a.expected_own_r is not None or a.expected_sd_r is not None),
+          "--expected-own-r and --expected-sd-r freeze the additive gate's Stage 0; pass --gate additive"),
+    _when(lambda a: not _additive(a) and (a.knob is not None or a.folds_arms is not None),
+          "--knob and --folds-arms belong to the additive gate; pass --gate additive"),
+)
+
+
+def _flag_conflict(args):
+    for check in _FLAG_CONFLICTS:
+        message = check(args)
+        if message:
+            return message
+    return None
+
+
+def _additive_basis_gate(args):
+    """--gate additive only, under --bespoke-instrument too: both arms must be booked net."""
+    if not _additive(args):
+        return None
+    token = check_r_basis(json.loads(Path(args.arms).read_text()))
+    if token:
+        print(f"{token} -- the additive gate needs arms booked net (provenance r_basis = net; "
+              "measure_arms.py --r-basis net). Budget intact.", file=sys.stderr)
+        return 1
+    return None
+
+
+def _misuse_line(reason):
+    print(f"{reason} -- the additive gate takes a component that only adds rows; use --gate win_rate "
+          "(v72) or harvest (v92). Budget intact.", file=sys.stderr)
+    return 1
+
+
+def _additive_arms(args):
+    """(baseline, component, split) when the arms are add-only, else None after a refusal."""
+    baseline, component = load_arms(args.arms)
+    try:
+        split = additive.split_additive(baseline, component)
+    except DuplicateKeyError as error:
+        print(f"refused:duplicate-key -- {error}. Budget intact.", file=sys.stderr)
+        return None
+    if split.misuse:
+        _misuse_line(split.misuse)
+        return None
+    return baseline, component, split
+
+
+def _print_displaced(split):
+    for row in split.displaced:
+        print(f"displaced: {row.ticker} {row.strategy} {row.horizon_key} {row.entry_date} "
+              f"-- cause: {DISPLACEMENT_CAUSE}")
+
+
+def stage_additive_reachability(args):
+    """Stage -1 after the stamp and basis gates: the component must only add rows."""
+    arms = _additive_arms(args)
+    if arms is None:
+        return 1
+    baseline, component, split = arms
+    print(f"additive split: baseline N={len(baseline)} component N={len(component)} "
+          f"added={len(split.added)} displaced={len(split.displaced)}")
+    _print_displaced(split)
+    _dump(args.out_json, {"added": len(split.added), "displaced": len(split.displaced)})
+    print("REACHABLE -- the component only adds rows; Stage 0 may proceed.")
+    return 0
+
+
+def _refuse_unfrozen(why):
+    print(f"refused:additive-mde-unfrozen -- {why}. Budget intact.", file=sys.stderr)
+    return 1
+
+
+def stage_additive_mde(args):
+    """Stage 0: the frozen own ExpR against the MDE at the closed added-row count (no R read)."""
+    if args.expected_own_r is None or args.expected_sd_r is None:
+        return _refuse_unfrozen("Stage 0 reads --expected-own-r and --expected-sd-r, both frozen "
+                                "in the pre-registration")
+    arms = _additive_arms(args)
+    if arms is None:
+        return 1
+    n = _count(arms[2].added, CLOSED)
+    try:
+        mde = additive.mde_own_expectancy(n=n, sd_r=args.expected_sd_r)
+    except ValueError as error:
+        return _refuse_unfrozen(str(error))
+    shown = "n/a" if mde is None else f"{mde:.4f}R"
+    print(f"added N (closed)   : {n}\nfrozen own ExpR    : {args.expected_own_r:+.4f}R\n"
+          f"frozen sd          : {args.expected_sd_r:.4f}R\nMDE                : {shown}")
+    refusal = additive.stage0_refusal(n=n, expected_r=args.expected_own_r, sd_r=args.expected_sd_r)
+    if refusal:
+        print(refusal, file=sys.stderr)
+        return 1
+    print("RESOLVABLE -- the shot may proceed.")
+    return 0
+
+
+@dataclasses.dataclass(frozen=True)
+class _AdditiveCell:
+    value: float
+    result: AcceptanceResult
+    extra: dict
+
+    @property
+    def own_r(self):
+        return self.result.clause(additive.CLAUSES[0]).value
+
+
+def _additive_extra(baseline, split):
+    return {"disclosures": additive.disclosures(split.added, baseline),
+            "displaced": [{"key": list(row.key), "cause": DISPLACEMENT_CAUSE} for row in split.displaced],
+            "unchanged": len(baseline) - len(split.displaced)}
+
+
+def _additive_result(args, baseline, component, stage, folds=None):
+    """(result, extra), or None after the misuse or duplicate-key refusal."""
+    try:
+        result = additive.evaluate_additive(baseline, component, stage=stage, folds=folds,
+                                            n_resamples=args.resamples, seed=args.seed)
+    except additive.AdditiveMisuse as misuse:
+        _misuse_line(misuse.reason)
+        return None
+    except DuplicateKeyError as error:
+        print(f"refused:duplicate-key -- {error}. Budget intact.", file=sys.stderr)
+        return None
+    return result, _additive_extra(baseline, additive.split_additive(baseline, component))
+
+
+def _additive_markdown(args, result, extra):
+    shown = dataclasses.replace(result, split={
+        "removed": result.split["displaced"], "changed": 0, "unchanged": extra["unchanged"],
+        "added": result.split["added"], "is_subset": False})
+    notes = (f"Gate: additive (`acceptance_additive.py` v{additive.ADDITIVE_VERSION}); "
+             "removed = displaced baseline rows, changed = 0 by the add-only rule.")
+    if _notes(args):
+        notes = f"{notes} {_notes(args)}"
+    lines = [render_markdown(shown, title=args.title, window=args.window, notes=notes),
+             *additive.render_disclosures(extra["disclosures"]), "", "## Displaced rows", ""]
+    rows = [f"- {' '.join(str(part) for part in row['key'])} -- cause: {row['cause']}"
+            for row in extra["displaced"]]
+    return "\n".join(lines + (rows or ["- none"])) + "\n"
+
+
+def _write_additive(args, result, extra):
+    markdown = _additive_markdown(args, result, extra)
+    print(markdown)
+    if args.out_md:
+        Path(args.out_md).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out_md).write_text(markdown, encoding="utf-8")
+    _dump(args.out_json, {**render_json(result), "gate": "additive", **extra})
+
+
+def _finish_additive(args, baseline, component, stage, folds=None):
+    found = _additive_result(args, baseline, component, stage, folds)
+    if found is None:
+        return 1
+    _write_additive(args, *found)
+    return 0 if found[0].verdict == "PASS" else 1
+
+
+def _basis_refused(path, what):
+    token = check_r_basis(json.loads(Path(path).read_text()))
+    if token:
+        print(f"{token} -- {what} must be booked net (provenance r_basis = net). Budget intact.",
+              file=sys.stderr)
+    return token is not None
+
+
+def _additive_cell(args, value, path, full_universe):
+    arms = _selection_input(path, full_universe)
+    if arms is None or _basis_refused(path, f"selection cell {value}"):
+        return None
+    found = _additive_result(args, *arms, "selection")
+    return None if found is None else _AdditiveCell(value, *found)
+
+
+def _additive_cells(args, grid):
+    full_universe = _full_universe()
+    cells = []
+    for value, path in grid:
+        cell = _additive_cell(args, value, path, full_universe)
+        if cell is None:
+            return None
+        cells.append(cell)
+    return cells
+
+
+def _adopt(cells):
+    """Highest own net ExpR among cells passing clauses 1-3; first in grid order on a tie."""
+    eligible = [cell for cell in cells if cell.result.verdict == "PASS"]
+    if not eligible:
+        return None
+    best = max(cell.own_r for cell in eligible)
+    return next(cell for cell in eligible if cell.own_r >= best - 1e-12)
+
+
+def _plateau(args, cells, adopted):
+    if len(cells) < 2 or adopted is None:
+        return None
+    expectancies = [float("nan") if cell.own_r is None else cell.own_r for cell in cells]
+    report = plateau_report(args.knob or "value", [cell.value for cell in cells], expectancies,
+                            adopted.value)
+    print(f"plateau: {json.dumps(report)}")
+    return report
+
+
+def _print_cells(args, cells, adopted_value):
+    for cell in cells:
+        print(f"{args.knob or 'value'}={cell.value} verdict={cell.result.verdict} own ExpR={cell.own_r}")
+    print(f"verdict={'FAIL' if adopted_value is None else 'ADOPTED'} adopted={adopted_value}")
+
+
+def stage_additive_selection(args):
+    """Stage 1: clauses 1-3 per --grid-arms cell, then adoption and the plateau report."""
+    grid = _grid_or_refuse(args)
+    cells = None if grid is None else _additive_cells(args, grid)
+    if cells is None:
+        return 1
+    adopted = _adopt(cells)
+    adopted_value = adopted.value if adopted else None
+    _print_cells(args, cells, adopted_value)
+    shown = adopted or cells[0]
+    _write_additive(args, shown.result, {
+        **shown.extra, "plateau": _plateau(args, cells, adopted), "adopted": adopted_value,
+        "cells": [{"value": c.value, "verdict": c.result.verdict, "own_r": c.own_r} for c in cells]})
+    return 0 if adopted else 1
+
+
+def stage_additive_walkforward(args):
+    """Stage 2: clause 4 on the folds; the split is taken over the folds' pooled rows."""
+    folds = load_folds(args.arms)
+    baseline = [row for fold in folds for row in fold["baseline"]]
+    component = [row for fold in folds for row in fold["component"]]
+    return _finish_additive(args, baseline, component, "walkforward", folds)
+
+
+def _folds_arms_refused(args):
+    if args.folds_arms is None:
+        print("refused:no-folds-arms -- Stage 3 reads clause 4 from the Stage 2 arms file "
+              "(--folds-arms). Budget intact.", file=sys.stderr)
+        return True
+    if not args.bespoke_instrument:
+        token = check_stamp(json.loads(Path(args.folds_arms).read_text()),
+                            funnel_stage="walkforward", full_universe=_full_universe())
+        if token:
+            print(f"{token} -- --folds-arms stamp gate. Budget intact.", file=sys.stderr)
+            return True
+    return _basis_refused(args.folds_arms, "--folds-arms")
+
+
+def stage_additive_validation(args):
+    """Stage 3: the one VALIDATION shot, all four clauses."""
+    if _folds_arms_refused(args):
+        return 1
+    baseline, component = load_arms(args.arms)
+    return _finish_additive(args, baseline, component, "validation", load_folds(args.folds_arms))
+
+
+def _build_parser():
     parser = argparse.ArgumentParser(); parser.add_argument("--stage", required=True, choices=("reachability", "mde", "selection", "walkforward", "validation")); parser.add_argument("--arms", type=Path); parser.add_argument("--title", required=True); parser.add_argument("--window", required=True)
-    parser.add_argument("--permutation-p", type=float, default=None); parser.add_argument("--train-effect-pp", type=float, default=0.0); parser.add_argument("--train-effect-r", type=float, default=0.0); parser.add_argument("--observed-days", type=int, default=None); parser.add_argument("--target-days", type=int, default=730); parser.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES); parser.add_argument("--seed", type=int, default=42); parser.add_argument("--notes", default=None); parser.add_argument("--out-md", default=None); parser.add_argument("--out-json", default=None); parser.add_argument("--bespoke-instrument", default=None); parser.add_argument("--mde-method", choices=("paired", "unpaired"), default="paired"); parser.add_argument("--gate", choices=("win_rate", "harvest"), default="win_rate")
+    parser.add_argument("--permutation-p", type=float, default=None); parser.add_argument("--train-effect-pp", type=float, default=0.0); parser.add_argument("--train-effect-r", type=float, default=0.0); parser.add_argument("--observed-days", type=int, default=None); parser.add_argument("--target-days", type=int, default=730); parser.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES); parser.add_argument("--seed", type=int, default=42); parser.add_argument("--notes", default=None); parser.add_argument("--out-md", default=None); parser.add_argument("--out-json", default=None); parser.add_argument("--bespoke-instrument", default=None); parser.add_argument("--mde-method", choices=("paired", "unpaired"), default="paired"); parser.add_argument("--gate", choices=_GATES, default="win_rate")
     parser.add_argument("--wr-statistic", choices=tuple(WR_STATISTICS), default="standardised"); parser.add_argument("--train-effect-from-arms", action="store_true")
     parser.add_argument("--grid-arms", action="append", default=[])
     parser.add_argument("--mde-refused", action="append", type=float, default=[])
     parser.add_argument('--dryup-mechanism', action='store_true'); parser.add_argument('--headroom-mechanism', action='store_true'); parser.add_argument("--mechanism-json", default=None)
     parser.add_argument("--gap-reclaim", action="store_true", help="v192: score the gap-reclaim veto on its frozen strata (needs <arms stem>.gap_reclaim.json)")
+    parser.add_argument("--expected-own-r", type=float, default=None, help="v238 additive Stage 0: frozen expected own net ExpR (half the selected ladder rung's net mean R)")
+    parser.add_argument("--expected-sd-r", type=float, default=None, help="v238 additive Stage 0: frozen per-event net R standard deviation of that rung")
+    parser.add_argument("--knob", default=None, help="v238 additive Stage 1: the grid axis name printed in the plateau report")
+    parser.add_argument("--folds-arms", type=Path, default=None, help="v238 additive Stage 3: the Stage 2 arms file clause 4 reads")
     cache_dir_source.add_args(parser)
     instrument_cli.add_instrument_arg(parser)
+    return parser
+
+
+def main(argv=None):
+    parser = _build_parser()
     args = parser.parse_args(argv)
     _instrument_gate(args)
     cache_dir_source.resolve(args)
-    if args.dryup_mechanism and args.headroom_mechanism:
-        parser.error("--dryup-mechanism and --headroom-mechanism are different clause-6 readings; pass one")
-    if args.mechanism_json and args.gate == "harvest":
-        parser.error("--mechanism-json replaces v72 clause 6; the v92 harvest gate has no mechanism clause")
-    if args.dryup_mechanism and args.gate == "harvest":
-        parser.error("--dryup-mechanism scores v72 clause 6; the v92 harvest gate has no mechanism clause")
-    if _wr_statistic(args) != "standardised" and args.gate == "harvest":
-        parser.error("--wr-statistic selects the v72 win-rate clause-1 statistic; the v92 harvest gate has no win-rate clause")
-    conflict = _gap_reclaim_conflict(args)
+    conflict = _flag_conflict(args)
     if conflict:
         parser.error(conflict)
     if args.stage == "selection":
-        return stage_selection(args)
+        return _stage_runner(args)(args)
     if args.arms is None:
         parser.error("--arms is required for non-selection stages")
     refused = _stamp_gate(args)
-    if refused is not None: return refused
-    return {"reachability": stage_reachability,"mde": stage_mde,"walkforward": stage_walkforward,"validation": stage_validation}[args.stage](args)
+    if refused is None:
+        refused = _additive_basis_gate(args)
+    if refused is not None:
+        return refused
+    return _stage_runner(args)(args)
 
 if __name__ == "__main__": raise SystemExit(main())
