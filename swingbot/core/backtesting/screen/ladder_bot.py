@@ -5,14 +5,19 @@ leaves to the builder are recorded in BOT_SHAPE and printed in every rung 3/4
 results doc (plan v238 index ruling 7)."""
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Iterable
+
 import numpy as np
 import pandas as pd
 
 from swingbot.core.backtesting.screen import race
+from swingbot.core.backtesting.screen.ladder import LadderEvent
+from swingbot.core.market import levels as market_levels
 from swingbot.core.market.indicators import atr as atr_indicator
 from swingbot.core.market.strategy_types import HORIZONS
 from swingbot.core.planning.builders import strategy_entry_reference
-from swingbot.core.planning.targets import _safe_atr_value
+from swingbot.core.planning.targets import _safe_atr_value, select_structural_target
 from swingbot.core.risk_limits import HARD_MAX_PLANNED_LOSS_PCT, planned_loss_pct
 
 BOT_SHAPE = {
@@ -82,3 +87,74 @@ def rung3_levels(df: pd.DataFrame, signal_pos: int, *,
     close = float(df["Close"].iloc[signal_pos])
     sign = 1.0 if direction == "long" else -1.0
     return stop, close + sign * race.REWARD_RISK * abs(close - stop)
+
+
+ATTRITION = ("no_level_in_band", "risk_cap")
+
+
+def _scan_params():
+    """The live reward:risk band (a seam the tests replace)."""
+    from swingbot.scan_params import ScanParams
+    return ScanParams.from_config()
+
+
+def _target_candidates(frame: pd.DataFrame, close: float, side: str) -> list[float]:
+    """The confluence level map's trade-side prices, nearest first."""
+    supports, resistances = market_levels.build_level_map(
+        frame, HORIZONS[BOT_SHAPE["horizon_key"]], close)
+    return market_levels.target_candidates(supports, resistances, side)
+
+
+def rung4_levels(df: pd.DataFrame, signal_pos: int, *,
+                 direction: str) -> tuple[float | None, float | None, str | None]:
+    """(rung 3's stop, the bot's band target, attrition reason or None)."""
+    side = plan_direction(direction)
+    stop = bot_stop(df, signal_pos, direction=direction)
+    close = float(df["Close"].iloc[signal_pos])
+    if stop is None or clamp_would_drop(close, stop, direction=direction):
+        return stop, None, "risk_cap"
+    params = _scan_params()
+    target = select_structural_target(
+        close, stop, side == "bullish",
+        _target_candidates(signal_frame(df, signal_pos), close, side),
+        params.min_risk_reward_ratio, params.max_risk_reward_ratio)
+    if target is None:
+        return stop, None, "no_level_in_band"
+    return stop, float(target), None
+
+
+def _one_per_ticker(events: list[LadderEvent]) -> list[LadderEvent]:
+    kept, busy = [], {}
+    for event in sorted(events, key=lambda e: (e.signal_date, e.ticker)):
+        if event.signal_date >= busy.get(event.ticker, ""):
+            kept.append(event)
+            busy[event.ticker] = event.exit_date
+    return kept
+
+
+def _concurrent(events: list[LadderEvent], max_open: int) -> list[LadderEvent]:
+    kept, open_exits = [], []
+    for event in sorted(events, key=lambda e: (e.entry_date, e.ticker)):
+        open_exits = [x for x in open_exits if x >= event.entry_date]
+        if len(open_exits) < max_open:
+            kept.append(event)
+            open_exits.append(event.exit_date)
+    return kept
+
+
+def book_survival(events: Iterable[LadderEvent], *, max_open: int) -> dict:
+    """Shares of all events that survive one position per ticker, and that
+    plus the concurrent-position limit; signals per day. Never gating."""
+    if max_open < 1:
+        raise ValueError("max_open must be at least 1")
+    events = list(events)
+    if not events:
+        return {"one_per_ticker_share": None, "concurrent_share": None,
+                "signals_per_day_p95": None, "signals_per_day_max": 0}
+    single = _one_per_ticker(events)
+    both = _concurrent(single, max_open)
+    per_day = np.array(list(Counter(e.signal_date for e in events).values()), dtype=float)
+    return {"one_per_ticker_share": len(single) / len(events),
+            "concurrent_share": len(both) / len(events),
+            "signals_per_day_p95": float(np.percentile(per_day, 95)),
+            "signals_per_day_max": int(per_day.max())}
