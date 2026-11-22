@@ -6,11 +6,11 @@ sources:
   - swingbot/core/market/entry_filters.py:compute_shared_gates
   - swingbot/core/market/strategy_types.py:admits
 ---
-**Idea.** A range high that held price back often becomes the floor once it breaks on heavy volume. The trade buys the first pullback that holds the old high.
+**Idea.** A range high that held price back can become a floor after a breakout. The trade looks for a pullback that holds the old high.
 
 **Entry rule.**
 
-- Within the last few bars price broke the prior range high on volume well above its recent average.
+- Within the last few bars price exceeded the prior range high and volume reached the required multiple of its recent average. The two conditions can occur on different bars.
 - Price is back near that level, the bar's low held it, and the close cleared the previous bar's high.
 - RSI sits in a middle band, and the shared trend and volatility gates pass.
 

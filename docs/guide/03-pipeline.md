@@ -92,7 +92,7 @@ The size comes from the risk: the distance from entry to [stop](/insights/guide/
 
 - The stop may sit at most {{MAX_STOP_LOSS_PCT}} from the entry (the [stop-distance cap](/insights/guide/glossary#stop-distance-cap)). A stop further away is clamped to that distance or the plan is dropped; clamping is {{CLAMP_STOP_TO_HARD_CAP}}.
 - The sizing mode is {{POSITION_SIZING_MODE}}. In the fixed-risk mode one trade loses at most {{RISK_PER_TRADE_PCT}} of the account at its stop ([risk per trade](/insights/guide/glossary#risk-per-trade)).
-- No trade risks more than {{MAX_RISK_AMOUNT_ABSOLUTE}} ([dollar risk cap](/insights/guide/glossary#dollar-risk-cap)).
+- The [dollar risk cap](/insights/guide/glossary#dollar-risk-cap) limits the planned loss at the stop when enabled. Current setting is {{MAX_RISK_AMOUNT_ABSOLUTE}}.
 
 Then the open book is checked. When the new trade would push [portfolio heat](/insights/guide/glossary#portfolio-heat) over {{PORTFOLIO_HEAT_CAP_PCT}}, or put more than {{CORRELATED_HEAT_CAP_PCT}} of risk into one group of stocks that move together ([correlated heat](/insights/guide/glossary#correlated-heat)), the alert still posts, flagged, with a suggested size of zero.
 

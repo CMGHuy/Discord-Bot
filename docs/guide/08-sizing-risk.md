@@ -77,11 +77,11 @@ Three different numbers limit what one trade can lose, and each acts at a differ
 
 | Limit | What it measures | Now | Past it |
 |---|---|---|---|
-| [Stop-distance cap](/insights/guide/glossary#stop-distance-cap) | distance from entry to stop, as a share of the entry price | {{stop.hard_cap}}; the setting, now {{MAX_STOP_LOSS_PCT}}, cannot go above it | the stop is clamped or the plan rejected ([chapter 7](/insights/guide/trade-plan#the-stop-distance-cap-and-the-clamp)) |
+| [Stop-distance cap](/insights/guide/glossary#stop-distance-cap) | distance from entry to stop, as a share of the entry price | standard cap {{stop.hard_cap}} (maximum stop distance setting now {{MAX_STOP_LOSS_PCT}}) | the stop is clamped or the plan rejected ([chapter 7](/insights/guide/trade-plan#the-stop-distance-cap-and-the-clamp)) |
 | [Risk per trade](/insights/guide/glossary#risk-per-trade) | share of the account lost at the stop | {{RISK_PER_TRADE_PCT}}, never more than {{RISK_PER_TRADE_PCT.max}} | fewer shares |
 | [Dollar risk cap](/insights/guide/glossary#dollar-risk-cap) | money lost at the stop | {{MAX_RISK_AMOUNT_ABSOLUTE}} | fewer shares |
 
-The first decides whether a plan exists at all; the other two decide how many shares it gets. Of the two money limits, whichever is less money wins: on a small account the risk per trade usually binds, on a large one the dollar cap does.
+The first decides whether a plan exists at all; the other two decide how many shares it gets. When the dollar risk cap is on, the smaller of that cap and the risk-per-trade budget limits the size.
 
 The values shown are the stored account's, read when this page is drawn. The `.env` settings only seed a new account; `!account risk` and `!account maxrisk` change the stored values.
 
@@ -95,7 +95,7 @@ The values shown are the stored account's, read when this page is drawn. The `.e
 
 1. The risk budget is the balance times the risk per trade.
 2. The share count is the budget divided by the distance from entry to stop (or a wider sizing distance, see [gap-aware sizing](#gap-aware-sizing)).
-3. Three caps can cut it, and the tightest wins: the position's value may not pass {{MAX_POSITION_SIZE_PCT}} of the balance, nor {{MAX_POSITION_VALUE_ABSOLUTE}}, and its loss at the stop may not pass the dollar risk cap.
+3. The position value is capped at {{MAX_POSITION_SIZE_PCT}} of the balance. An enabled absolute position-value cap (current setting {{MAX_POSITION_VALUE_ABSOLUTE}}) or dollar risk cap can cut the share count further.
 4. Last, in every sizing mode, the loss at the stop may never pass {{sizing.risk_ceiling}} of the balance; the share count is rounded down when rounding up would break it.
 
 For example, a balance of $10,000 with a risk budget of $100 and a stop $2.00 below a $50.00 entry gives 50 shares, a $2,500 position; a position cap below $2,500 cuts the shares further. The risk and position value an alert shows are recomputed from the final share count, so they are what a stop-out would really cost.

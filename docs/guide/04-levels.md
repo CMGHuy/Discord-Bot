@@ -90,7 +90,7 @@ Both are scored in `scanning/confidence.py`. `levels._STRATEGY_FAMILY_PREFIXES` 
 
 A level is judged by what price has done to it, on finished bars only. That record is the [level lifecycle](/insights/guide/glossary#level-lifecycle):
 
-- **Touch**: a bar reaches within {{levels.touch_atr}} of the level without closing beyond it by the break distance below.
+- **Touch**: a bar reaches the level or comes within {{levels.touch_atr}} of it. Its close may cross the level by at most that same tolerance.
 - **Break**: a bar closes beyond the level by more than {{levels.break_atr}}.
 
 | State | Meaning |

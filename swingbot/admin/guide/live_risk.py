@@ -37,8 +37,10 @@ def _flag(value) -> str:
     return "on" if value else "off"
 
 
-def _money(value) -> str:
+def _money_cap(value) -> str:
     amount = float(value)
+    if amount <= 0:
+        return "off"
     return f"${amount:,.0f}" if amount.is_integer() else f"${amount:,.2f}"
 
 
@@ -124,7 +126,7 @@ RISK_PLACEHOLDERS: dict[str, Callable[[], str]] = {
     "CLAMP_STOP_TO_HARD_CAP": lambda: _flag(config.CLAMP_STOP_TO_HARD_CAP),
     "RISK_PER_TRADE_PCT": _from_account("risk_pct", _pct),
     "RISK_PER_TRADE_PCT.max": _risk_max,
-    "MAX_RISK_AMOUNT_ABSOLUTE": _from_account("max_risk_amount_absolute", _money),
+    "MAX_RISK_AMOUNT_ABSOLUTE": _from_account("max_risk_amount_absolute", _money_cap),
     "PORTFOLIO_HEAT_CAP_PCT": _cfg_pct("PORTFOLIO_HEAT_CAP_PCT"),
     "CORRELATED_HEAT_CAP_PCT": _cfg_pct("CORRELATED_HEAT_CAP_PCT"),
     "SECTOR_HEAT_CAP_PCT": _cfg_pct("SECTOR_HEAT_CAP_PCT"),
@@ -138,6 +140,6 @@ RISK_PLACEHOLDERS: dict[str, Callable[[], str]] = {
     "sizing.gap": _gap_table,
     "version.bot": _bot_version,
     "MAX_POSITION_SIZE_PCT": _from_account("max_position_pct", _pct),
-    "MAX_POSITION_VALUE_ABSOLUTE": _from_account("max_position_value_absolute", _money),
+    "MAX_POSITION_VALUE_ABSOLUTE": _from_account("max_position_value_absolute", _money_cap),
     "MAX_OPEN_POSITIONS": _from_account("max_open_positions", _count),
 }

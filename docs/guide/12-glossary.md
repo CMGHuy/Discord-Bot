@@ -161,7 +161,7 @@ The share of the account one trade loses at its stop in the fixed-risk sizing mo
 
 ### Dollar risk cap
 
-The most one trade may lose at its stop in money: {{MAX_RISK_AMOUNT_ABSOLUTE}}.
+A limit on one trade's planned loss at the stop, in money. Current setting is {{MAX_RISK_AMOUNT_ABSOLUTE}}.
 
 ### Rejected plan
 

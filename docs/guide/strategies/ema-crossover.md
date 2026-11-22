@@ -10,9 +10,9 @@ sources:
 
 **Entry rule.**
 
-- The fast EMA crossed above the slow EMA and stayed above on the next bar, with the slow EMA rising.
+- The fast EMA crossed above the slow EMA and stayed above on the next bar.
 - Within a set number of bars price dips to the fast EMA and closes back above it; the first such touch is the entry.
-- RSI dipped before the cross and is above its midline now, momentum agrees, price is not stretched away from the fast EMA, and the shared gates pass.
+- RSI dipped below its threshold at least once in the five bars before entry and is above its midline on the entry bar. The slow EMA is rising at entry, momentum agrees, price stays close enough to the fast EMA, and the shared gates pass.
 
 **Where it fires.** Both sides (shorts mirror it) on every horizon, with the periods of the averages set per horizon.
 

@@ -133,11 +133,13 @@ def test_version_bot(monkeypatch):
     ("RISK_PER_TRADE_PCT", "risk_pct", 1.0, "1%"),
     ("RISK_PER_TRADE_PCT", "risk_pct", 0.5, "0.5%"),
     ("MAX_RISK_AMOUNT_ABSOLUTE", "max_risk_amount_absolute", 100.0, "$100"),
+    ("MAX_RISK_AMOUNT_ABSOLUTE", "max_risk_amount_absolute", 0.0, "off"),
     ("MAX_RISK_AMOUNT_ABSOLUTE", "max_risk_amount_absolute", 62.5, "$62.50"),
     ("MAX_RISK_AMOUNT_ABSOLUTE", "max_risk_amount_absolute", 1500.0, "$1,500"),
     ("MAX_POSITION_SIZE_PCT", "max_position_pct", 10.0, "10%"),
     ("MAX_POSITION_SIZE_PCT", "max_position_pct", 0.1, "0.1%"),
     ("MAX_POSITION_VALUE_ABSOLUTE", "max_position_value_absolute", 1000.0, "$1,000"),
+    ("MAX_POSITION_VALUE_ABSOLUTE", "max_position_value_absolute", 0.0, "off"),
     ("MAX_OPEN_POSITIONS", "max_open_positions", 30, "30"),
     ("MAX_OPEN_POSITIONS", "max_open_positions", 5, "5"),
 ])
