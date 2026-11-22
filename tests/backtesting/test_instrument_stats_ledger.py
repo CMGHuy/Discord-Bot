@@ -20,8 +20,9 @@ def test_fields_and_vocabularies_are_the_plan_set():
     assert stats.VERDICTS == ("PASS", "FAIL", "NO-LIFT", "UNMEASURABLE",
                               "WITHDRAWN", "OPEN", "SCREEN-PASS", "SCREEN-FAIL",
                               "SCREEN-UNDERPOWERED", "COST", "SAVED", "INCONCLUSIVE",
-                              "DESCRIPTION", "SCREEN-AVOID-PASS")
-    assert stats.INSTRUMENTS == ("v1", "v2", "screen-v1", "v3", "screen-v2")
+                              "DESCRIPTION", "SCREEN-AVOID-PASS",
+                              "LADDER-HOLD", "LADDER-FAIL", "LADDER-UNDERPOWERED")
+    assert stats.INSTRUMENTS == ("v1", "v2", "screen-v1", "v3", "screen-v2", "ladder-v1")
 
 
 def test_ledger_path_is_the_committed_results_file():
@@ -156,9 +157,10 @@ def test_a_screen_row_validates(verdict):
                                    verdict=verdict))
 
 
-def test_the_avoid_label_is_appended_last_and_the_old_order_is_kept():
-    """v214: an addition, never a reorder; the committed ledger is never edited."""
-    assert stats.VERDICTS[-1] == "SCREEN-AVOID-PASS"
+def test_the_avoid_label_keeps_its_place_and_the_old_order_is_kept():
+    """v214: an addition, never a reorder; the committed ledger is never edited.
+    v238 appended the ladder verdicts after it."""
+    assert stats.VERDICTS[13] == "SCREEN-AVOID-PASS"
     assert stats.VERDICTS.count("SCREEN-AVOID-PASS") == 1
     rows = stats.load_ledger()
     assert all(row["verdict"] in stats.VERDICTS for row in rows)
@@ -265,3 +267,55 @@ def test_a_description_row_appends_in_field_order(tmp_path):
     assert list(stored) == [*stats.LEDGER_FIELDS, "data_source"]
     assert (stored["verdict"], stored["instrument"], stored["p"]) == ("DESCRIPTION", "v3", None)
     assert stats.load_ledger(path) == [stored]
+
+
+# --- v238: the replication ladder's instrument and verdicts ----------------
+
+LADDER_VERDICTS = ("LADDER-HOLD", "LADDER-FAIL", "LADDER-UNDERPOWERED")
+
+
+def test_the_ladder_verdicts_are_appended_after_every_older_verdict():
+    """An append, never a reorder: every row written before v238 keeps its
+    verdict's position, and the three ladder labels sit last, in rule order."""
+    assert stats.VERDICTS[:14][-1] == "SCREEN-AVOID-PASS"
+    assert stats.VERDICTS[-3:] == LADDER_VERDICTS
+    assert len(set(stats.VERDICTS)) == len(stats.VERDICTS)
+
+
+def test_ladder_v1_is_the_last_instrument():
+    assert stats.INSTRUMENTS[-1] == "ladder-v1"
+    assert stats.INSTRUMENTS[:5] == ("v1", "v2", "screen-v1", "v3", "screen-v2")
+
+
+def test_unavailable_is_a_refusal_not_a_ledger_verdict():
+    """LADDER-UNAVAILABLE spends no shot and writes no row (index ruling 8)."""
+    assert "LADDER-UNAVAILABLE" not in stats.VERDICTS
+    with pytest.raises(ValueError, match="invalid field"):
+        stats.validate_ledger_row(_row(id="ladder-demo-r1", instrument="ladder-v1",
+                                       verdict="LADDER-UNAVAILABLE"))
+
+
+@pytest.mark.parametrize("verdict", LADDER_VERDICTS)
+def test_a_ladder_row_validates_with_its_data_source(verdict):
+    stats.validate_ledger_row(_row(id="ladder-demo-r1", instrument="ladder-v1",
+                                   verdict=verdict, data_source="alpaca"))
+
+
+def test_a_ladder_row_enters_the_same_bh_family():
+    rows = [_row(id="a", p=0.01),
+            _row(id="ladder-demo-r1", instrument="ladder-v1", verdict="LADDER-HOLD",
+                 p=0.04, data_source="alpaca")]
+    for row in rows:
+        stats.validate_ledger_row(row)
+    assert stats.ledger_qvalues(rows) == {"a": pytest.approx(0.02),
+                                          "ladder-demo-r1": pytest.approx(0.04)}
+
+
+def test_a_ladder_row_appends_and_reloads(tmp_path):
+    path = tmp_path / "ledger.jsonl"
+    row = _row(id="ladder-demo-r1", instrument="ladder-v1", verdict="LADDER-FAIL",
+               data_source="alpaca")
+    stats.append_ledger_row(row, path)
+    assert stats.load_ledger(path) == [row]
+    with pytest.raises(ValueError, match="duplicate id"):
+        stats.append_ledger_row(row, path)

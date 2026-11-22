@@ -259,7 +259,7 @@ def _avoid_summary():
 
 def test_the_mode_vocabularies_agree():
     assert verdict.MODES == ideas_module.MODES == ("edge", "avoid")
-    assert verdict.SCREEN_AVOID_PASS == stats.VERDICTS[-1] == "SCREEN-AVOID-PASS"
+    assert verdict.SCREEN_AVOID_PASS == stats.VERDICTS[13] == "SCREEN-AVOID-PASS"
 
 
 def test_an_avoid_summary_pairs_the_null_and_the_control_arm():
