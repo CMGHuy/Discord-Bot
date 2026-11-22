@@ -33,6 +33,10 @@ DEFAULT_STORE = Path(config.DATA_DIR) / "market_data_pit" / "daily"
 DEFAULT_WORK = ROOT / "logs" / "ladder"
 PROGRESS_EVERY = 25
 _NO_SHOT = "No row, no shot spent."
+FINAL_YEAR = ladder.READ_END[:4]
+PRIOR_READS = {"turtle_soup": (
+    "a screen-style race on Alpaca 2018-2022 (watchlist) was already read at -0.046R in "
+    "docs/superpowers/results/2026-10-23-v180-turtle-soup-result.md; this rung is not blind to it")}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -46,6 +50,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--results-dir", type=Path, default=screen_idea.RESULTS_DIR)
     p.add_argument("--ledger", type=Path, default=stats.LEDGER_PATH)
     p.add_argument("--date", type=screen_idea._iso_day, default=date.today().isoformat())
+    p.add_argument("--watchlist", type=Path, default=None,
+                   help="tickers, one per line: rung 1 prints that subset, never gating")
     p.add_argument("--tickers", default=None, help="comma list; smoke test, needs --dry-run")
     p.add_argument("--dry-run", action="store_true")
     return p
@@ -350,6 +356,187 @@ def _run_later(idea, rung: int, args, out) -> RungRun:
                    **_readouts(rung, blobs, events, reasons))
 
 
+def results_path(results_dir, name: str, rung: int, day: str) -> Path:
+    return Path(results_dir) / f"{day}-{ladder.ladder_id(name, rung)}.md"
+
+
+def _f(value, spec: str = "+.4f") -> str:
+    return "n/a" if value is None else format(value, spec)
+
+
+def _summary(values) -> dict:
+    values = list(values)
+    return {"n": len(values), "mean": float(np.mean(values)) if values else None}
+
+
+def _diff_line(label: str, diff) -> str:
+    below = "; wholly below zero" if diff.wholly_below_zero else ""
+    return (f"- {label} on {diff.n} shared events: {_f(diff.mean)}R "
+            f"[{_f(diff.lo)}, {_f(diff.hi)}]{below}.")
+
+
+def _head(idea, rung, hold, day, input_instrument) -> list:
+    lines = [f"# {ladder.ladder_id(idea.name, rung)}: rung {rung} ({ladder.RUNG_NAMES[rung]}) "
+             f"-- {hold.verdict}", "",
+             f"- Date {day}; instrument `{ladder.LADDER_INSTRUMENT}`; Alpaca PIT S&P 500 store; "
+             f"events {ladder.EVENT_START}..{ladder.READ_END}, frames from {ladder.STORE_START}; "
+             "nothing later is read.",
+             f"- Idea `{idea.name}`: {idea.direction}, race {idea.race_shape}, entry {idea.entry}, "
+             f"cap {idea.time_cap_bars}; {idea.summary}",
+             f"- Input: the governing screen row, instrument `{input_instrument}`."]
+    if input_instrument == "screen-v1":
+        lines.append(f"- **Input flag:** the screen pass rests on the v1 null: {ladder.BIASED_NULL_NOTE}.")
+    return lines
+
+
+def _hold_lines(rung, hold) -> list:
+    extra = "; rung 1 also needs a positive dExpR against the v1 null" if rung == 1 else ""
+    lines = ["", "## Hold rule", "",
+             f"- Week-clustered lower 95% bound of net mean R > 0 with N >= {ladder.HOLD_N}{extra}.",
+             f"- N = {hold.n}; net mean R {_f(hold.mean)} [{_f(hold.lo)}, {_f(hold.hi)}], "
+             f"one-sided p {_f(hold.p, '.4f')}: **{hold.verdict}**."]
+    if rung == 1:
+        lines.append(f"- dExpR against the v1 null {_f(hold.delta_null)}R; {ladder.BIASED_NULL_NOTE}.")
+    return lines
+
+
+def _book_lines(run, year, stress, watchlist) -> list:
+    counters = ", ".join(f"{k} {v}" for k, v in sorted(run.counters.items())) or "none"
+    lines = ["", "## Book", "",
+             f"- {FINAL_YEAR} alone: N = {year['n']}, net mean R {_f(year['mean'])}.",
+             f"- Gap-through fills, priced never dropped: {run.gap_count} events, summed net R "
+             f"{run.gap_r:+.4f}.",
+             f"- Costs: {screen_idea.base_slippage()} bps a side plus commission (shorts: borrow); "
+             f"at {ladder_race.STRESS_FACTOR} x slippage (never gating) N = {stress['n']}, "
+             f"net mean R {_f(stress['mean'])}.",
+             f"- Counters: {counters}."]
+    if watchlist is not None:
+        lines.append(f"- Watchlist subset (never gating): N = {watchlist['n']}, net mean R "
+                     f"{_f(watchlist['mean'])}.")
+    return lines
+
+
+def _rung1_lines(idea) -> list:
+    lines = ["", "## A robustness check", "",
+             f"- Not an independent replication: the years before {FINAL_YEAR} lie inside the "
+             f"screen's window on the same universe; only the data source and {FINAL_YEAR} are new."]
+    if idea.name in PRIOR_READS:
+        lines.append(f"- Prior read: {PRIOR_READS[idea.name]}.")
+    return lines
+
+
+def _bot_lines(run) -> list:
+    lines = ["", "## Bot shape (builder's stand-ins, plan v238 ruling 7)", ""]
+    lines += [f"- `{key}`: {value}" for key, value in ladder_bot.BOT_SHAPE.items()]
+    if run.clamp_share is not None:
+        lines.append(f"- Fixed dollar risk; the 2% price-distance cap would have dropped "
+                     f"{run.clamp_share:.1%} of events (never gating).")
+    if run.attrition is not None:
+        lines.append("- Attrition: " + ", ".join(f"{k} {v}" for k, v in run.attrition.items()) + ".")
+    if run.survival is not None:
+        s = run.survival
+        lines.append(f"- Book survival (never gating): one position per ticker "
+                     f"{_f(s['one_per_ticker_share'], '.1%')}; with the {config.MAX_OPEN_POSITIONS}-"
+                     f"position limit {_f(s['concurrent_share'], '.1%')}; signals per day p95 "
+                     f"{_f(s['signals_per_day_p95'], '.1f')}, max {s['signals_per_day_max']}.")
+    return lines
+
+
+def render_rung(idea, rung, run, hold, *, diff=None, year_2020=None, watchlist=None, stress=None,
+                date, input_instrument=None) -> str:
+    year_2020 = year_2020 or _summary(e.r for e in run.events if e.entry_date.startswith(FINAL_YEAR))
+    stress = stress or _summary(e.r_stress for e in run.events if e.r_stress is not None)
+    lines = _head(idea, rung, hold, date, input_instrument) + _hold_lines(rung, hold)
+    lines += _book_lines(run, year_2020, stress, watchlist)
+    if rung == 1:
+        lines += _rung1_lines(idea)
+    if diff is not None:
+        lines += ["", "## Paired difference to the rung above", "",
+                  _diff_line(f"Rung {rung} minus rung {rung - 1}", diff)]
+    if rung >= 3:
+        lines += _bot_lines(run)
+    return "\n".join(lines) + "\n"
+
+
+def _hypothesis(idea, rung, input_instrument) -> str:
+    extra = " and a positive dExpR against the v1 null" if rung == 1 else ""
+    text = (f"{idea.name} replication ladder rung {rung} ({ladder.RUNG_NAMES[rung]}): week-clustered "
+            f"lower 95% bound of net mean R > 0 with N >= {ladder.HOLD_N}{extra}; Alpaca PIT S&P 500 "
+            f"store, events {ladder.EVENT_START}..{ladder.READ_END}, after costs (v238).")
+    if rung == 1:
+        text += f" Null v1: {ladder.BIASED_NULL_NOTE}."
+    if input_instrument == "screen-v1":
+        text += " Input: a screen-v1 SCREEN-PASS, flagged biased null (v230 placebo)."
+    return text
+
+
+def ledger_row(idea, rung, hold, path, date, *, input_instrument=None) -> dict:
+    return {"id": ladder.ladder_id(idea.name, rung), "date": date,
+            "hypothesis": _hypothesis(idea, rung, input_instrument),
+            "instrument": ladder.LADDER_INSTRUMENT, "n": hold.n,
+            "exp_r": None if hold.mean is None else round(hold.mean, 4),
+            "p": None if hold.p is None else round(hold.p, 4),
+            "verdict": hold.verdict, "record": screen_idea.record_path(path),
+            "data_source": "alpaca"}
+
+
+def _holds(name, rung, rows, verdict) -> dict:
+    ids = {ladder.ladder_id(name, r): r for r in ladder.RUNGS if r < rung}
+    return {**{ids[row["id"]]: row["verdict"] for row in rows if row["id"] in ids}, rung: verdict}
+
+
+def _diff_to(args, rung_above, run):
+    return ladder.paired_difference(read_events(_events_path(_work(args), rung_above)), run.events)
+
+
+def _watch_summary(args, rung, events) -> dict | None:
+    if rung != 1 or args.watchlist is None:
+        return None
+    text = Path(args.watchlist).read_text(encoding="utf-8").replace(",", "\n")
+    watch = {t.strip().upper() for t in text.splitlines() if t.strip()}
+    return _summary(e.r for e in events if e.ticker in watch)
+
+
+def _tail(args, rung, step, diff42) -> str:
+    lines = ["", "## Next step", "", f"- {ladder.NEXT_STEPS[step]}."]
+    if diff42 is not None:
+        lines.append(_diff_line("Rung 4 minus rung 2", diff42))
+    if rung == 1:
+        universe = screen_idea.load_universe(args.store, args.membership,
+                                             ladder.STORE_START, ladder.READ_END)
+        cov = ladder.membership_coverage(universe.members, args.store)
+        lines.append(f"- Membership: {cov['in_store']}/{cov['members']} members in the store; "
+                     f"missing {cov['missing_count']}: {', '.join(cov['missing']) or 'none'}.")
+    crash = RunMarker(_work(args) / f"rung{rung}").crash_note()
+    if crash:
+        lines.append(f"- Crash record: {crash}.")
+    return "\n".join(lines) + "\n"
+
+
+def publish(args, idea, rung, run) -> int:
+    """Results doc first, then the ledger row; --dry-run only prints."""
+    rows = stats.load_ledger(args.ledger)
+    instrument = (ladder.input_row(idea.name, rows) or {}).get("instrument")
+    hold = ladder.hold(run.events, rung=rung)
+    path = results_path(args.results_dir, idea.name, rung, args.date)
+    row = ledger_row(idea, rung, hold, path, args.date, input_instrument=instrument)
+    stats.validate_ledger_row(row)
+    diff42 = _diff_to(args, 2, run) if rung == 4 and hold.verdict == ladder.HOLD else None
+    text = render_rung(idea, rung, run, hold, diff=None if rung == 1 else _diff_to(args, rung - 1, run),
+                       watchlist=_watch_summary(args, rung, run.events), date=args.date,
+                       input_instrument=instrument)
+    text += _tail(args, rung, ladder.next_step(_holds(idea.name, rung, rows, hold.verdict), diff42), diff42)
+    if args.dry_run:
+        print(text)
+        return 0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+    stats.append_ledger_row(row, path=args.ledger)
+    print(f"{row['id']}: {hold.verdict}, N={hold.n}, mean {_f(hold.mean)}R, "
+          f"lower95 {_f(hold.lo)}R -> {row['record']}")
+    return 0
+
+
 def run_rung(idea, rung: int, args, *, out=print) -> RungRun:
     """One rung's events and read-outs; nothing is published here."""
     if rung == 1:
@@ -362,17 +549,22 @@ def main(argv=None) -> int:
     screen_idea._utf8_stdout()
     idea = IDEAS[args.idea]
     reason = refusals(args, idea, stats.load_ledger(args.ledger))
-    if reason is None and not args.dry_run:     # V238-16: the run marker and publish
-        reason = f"refused: ladder-publish-pending (publishing lands with V238-16). {_NO_SHOT}"
+    marker = RunMarker(_work(args) / f"rung{args.rung}")
+    if reason is None and not args.dry_run:
+        reason = marker.start()
     if reason:
         print(reason, file=sys.stderr)
         return 2
     run = run_rung(idea, args.rung, args)
     if not args.tickers:
         write_events(_events_path(_work(args), args.rung), run.events)
-    print(f"{ladder.ladder_id(idea.name, args.rung)} (dry run): N={len(run.events)}, "
-          f"gap-through {run.gap_count} ({run.gap_r:+.4f}R)")
-    return 0
+    code = publish(args, idea, args.rung, run)
+    if args.dry_run:
+        print(f"{ladder.ladder_id(idea.name, args.rung)} (dry run): N={len(run.events)}, "
+              f"gap-through {run.gap_count} ({run.gap_r:+.4f}R)")
+    else:
+        marker.finish()
+    return code
 
 
 if __name__ == "__main__":

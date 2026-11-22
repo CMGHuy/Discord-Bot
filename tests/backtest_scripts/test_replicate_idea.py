@@ -101,13 +101,6 @@ def test_main_refuses_on_stderr_and_writes_nothing(tmp_path, capsys):
     assert not (tmp_path / "work").exists() and not (tmp_path / "results").exists()
 
 
-def test_a_real_run_waits_for_publishing(tmp_path, capsys):      # V238-16 replaces this test
-    _store(tmp_path)
-    _ledger(tmp_path / "ledger.jsonl", PASS_ROW)
-    assert ri.main(_argv(tmp_path)) == 2
-    assert "ladder-publish-pending" in capsys.readouterr().err
-
-
 def test_events_round_trip_with_nan_gross_and_no_stress(tmp_path):
     events = [LadderEvent("AAA", "2017-03-01", "2017-03-02", "2017-03-08", -0.5, math.nan,
                           "timeout", r_null=0.1),
