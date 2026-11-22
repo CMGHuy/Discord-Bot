@@ -2,7 +2,11 @@
 replicate_idea.py --idea <name> --rung <1-4> --work-dir <dir>. Rung 1 re-races
 the screen through the v1 pipeline on the Alpaca PIT store; rungs 2-4 race the
 rung above's events. Refusals exit 2 before any outcome is read. Frames end at
-ladder.READ_END (never 2021+). --dry-run writes no doc, row or marker."""
+ladder.READ_END (never 2021+). A full-universe --dry-run reads no outcome: it prints
+counts only (no hold, mean, bound, p, verdict or paired difference) and writes nothing,
+so no rung can be read before its one shot is spent; a --tickers smoke run (needs
+--dry-run) prints the full doc but writes only under rung<N>-smoke/, which no later
+rung ever reads as input."""
 from __future__ import annotations
 
 import argparse
@@ -62,7 +66,23 @@ def _work(args) -> Path:
 
 
 def _events_path(work_dir, rung: int) -> Path:
+    """The published events file: written only by a run that spends its shot."""
     return Path(work_dir) / f"rung{rung}-events.json"
+
+
+def _run_dir(work_dir, rung: int, *, smoke: bool = False) -> Path:
+    """A rung's marker and checkpoint directory; a smoke run's is rung<N>-smoke/."""
+    return Path(work_dir) / (f"rung{rung}-smoke" if smoke else f"rung{rung}")
+
+
+def _smoke_events_path(work_dir, rung: int) -> Path:
+    """A --tickers smoke run's events: inspection only, never a later rung's input."""
+    return _run_dir(work_dir, rung, smoke=True) / "events.json"
+
+
+def _blind(args) -> bool:
+    """A full-universe dry run: counts only, no outcome read, nothing written."""
+    return bool(args.dry_run and not args.tickers)
 
 
 def _tickers(args):
@@ -195,6 +215,11 @@ def _rung1_events(idea, screen, store) -> list:
             for i, row in enumerate(screen.events)]
 
 
+def _screen_checkpoint(args) -> Path | None:
+    """None for a full dry run (writes nothing); rung1-smoke/screen for a smoke run."""
+    return None if _blind(args) else _run_dir(_work(args), 1, smoke=bool(args.tickers)) / "screen"
+
+
 def _run_rung1(idea, args, out) -> RungRun:
     universe = screen_idea.load_universe(args.store, args.membership,
                                          ladder.STORE_START, ladder.READ_END)
@@ -204,7 +229,7 @@ def _run_rung1(idea, args, out) -> RungRun:
     screens, skipped = screen_idea.screen_universe(
         idea, universe, args.store, start=ladder.STORE_START, end=ladder.READ_END,
         tickers=_tickers(args), out=out, event_start=ladder.EVENT_START,
-        checkpoint_dir=_work(args) / "rung1" / ("screen-smoke" if args.tickers else "screen"))
+        checkpoint_dir=_screen_checkpoint(args))
     events = _sorted(e for s in screens for e in _rung1_events(idea, s, args.store))
     counters = sum((Counter(s.counters) for s in screens), Counter(skipped))
     return RungRun(events, counters, *_gap_totals(events))
@@ -250,7 +275,7 @@ class RunMarker:
 
 def _ticker_checkpoint(work_dir, rung: int, ticker: str, *, smoke: bool = False) -> Path:
     """A --tickers smoke run checkpoints under rung<N>-smoke/, never the real run's rung<N>/."""
-    return Path(work_dir) / (f"rung{rung}-smoke" if smoke else f"rung{rung}") / f"{ticker}.json"
+    return _run_dir(work_dir, rung, smoke=smoke) / f"{ticker}.json"
 
 
 def _arrays(levels) -> tuple:
@@ -304,6 +329,8 @@ def _race_ticker(idea, rung: int, ticker: str, signals: list, args) -> dict:
 def _ticker_rung(idea, rung: int, ticker: str, upper: list, args) -> dict:
     """A finished checkpoint for exactly these signals, else race and checkpoint."""
     signals = [event.signal_date for event in upper]
+    if _blind(args):
+        return _race_ticker(idea, rung, ticker, signals, args)
     path = _ticker_checkpoint(_work(args), rung, ticker, smoke=bool(args.tickers))
     if path.is_file():
         blob = json.loads(path.read_text(encoding="utf-8"))
@@ -516,14 +543,28 @@ def _tail(args, rung, step, diff42) -> str:
         cov = ladder.membership_coverage(universe.members, args.store)
         lines.append(f"- Membership: {cov['in_store']}/{cov['members']} members in the store; "
                      f"missing {cov['missing_count']}: {', '.join(cov['missing']) or 'none'}.")
-    crash = RunMarker(_work(args) / f"rung{rung}").crash_note()
+    crash = _marker(args, rung).crash_note()
     if crash:
         lines.append(f"- Crash record: {crash}.")
     return "\n".join(lines) + "\n"
 
 
+def _marker(args, rung: int) -> RunMarker:
+    return RunMarker(_run_dir(_work(args), rung, smoke=bool(args.tickers)))
+
+
+def dry_counts(idea, rung: int, run, *, out=print) -> None:
+    """A full-universe dry run's only output: counts that carry no R."""
+    tickers = len({event.ticker for event in run.events})
+    counts = ", ".join(f"{name} {value}" for name, value in sorted(run.counters.items()))
+    out(f"{ladder.ladder_id(idea.name, rung)} (dry run, no outcome read): {len(run.events)} events "
+        f"on {tickers} tickers; counts: {counts or 'none'}")
+
+
 def publish(args, idea, rung, run) -> int:
-    """Results doc first, then the ledger row; --dry-run only prints."""
+    """Results doc first, then the ledger row; a smoke run only prints it."""
+    if _blind(args):
+        raise RuntimeError("a full-universe dry run reads no outcome; nothing to publish")
     rows = stats.load_ledger(args.ledger)
     instrument = (ladder.input_row(idea.name, rows) or {}).get("instrument")
     hold = ladder.hold(run.events, rung=rung)
@@ -558,20 +599,22 @@ def main(argv=None) -> int:
     screen_idea._utf8_stdout()
     idea = IDEAS[args.idea]
     reason = refusals(args, idea, stats.load_ledger(args.ledger))
-    marker = RunMarker(_work(args) / f"rung{args.rung}")
+    marker = _marker(args, args.rung)
     if reason is None and not args.dry_run:
         reason = marker.start()
     if reason:
         print(reason, file=sys.stderr)
         return 2
     run = run_rung(idea, args.rung, args)
-    if not args.tickers:
-        write_events(_events_path(_work(args), args.rung), run.events)
+    if _blind(args):
+        dry_counts(idea, args.rung, run)
+        return 0
+    smoke = bool(args.tickers)
+    work = _work(args)
+    write_events(_smoke_events_path(work, args.rung) if smoke else _events_path(work, args.rung),
+                 run.events)
     code = publish(args, idea, args.rung, run)
-    if args.dry_run:
-        print(f"{ladder.ladder_id(idea.name, args.rung)} (dry run): N={len(run.events)}, "
-              f"gap-through {run.gap_count} ({run.gap_r:+.4f}R)")
-    else:
+    if not args.dry_run:
         marker.finish()
     return code
 

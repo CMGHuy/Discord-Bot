@@ -183,6 +183,9 @@ interpreting any backtest, grid, or validation result.
   and stop and swaps only the target: a stop past the 2% price-distance cap
   is sized down as on rung 3, never dropped, and its count is reported as
   the never-gating `risk_cap` read-out; only `no_level_in_band` is attrition.
+  A full-universe `--dry-run` reads no outcome (counts only, no hold, mean,
+  bound, p or verdict) and writes nothing; a `--tickers` smoke run prints the
+  doc but writes only under `rung<N>-smoke/`, never a later rung's input.
   The stand-ins are recorded in `ladder_bot.BOT_SHAPE`. Hold rule, every rung: week-clustered lower 95%
   bound of net mean R > 0 with N ≥ 300 (`LADDER-HOLD`), N < 300
   `LADDER-UNDERPOWERED`, anything else `LADDER-FAIL`; rung 1 also needs a

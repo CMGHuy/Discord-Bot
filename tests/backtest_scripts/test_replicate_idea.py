@@ -8,6 +8,7 @@ import pytest
 import replicate_idea as ri  # on sys.path via conftest.py
 import screen_idea
 
+from swingbot.core.backtesting.instrument import stats
 from swingbot.core.backtesting.screen import ladder
 from swingbot.core.backtesting.screen.ideas import IDEAS
 from swingbot.core.backtesting.screen.ladder import LadderEvent
@@ -114,14 +115,13 @@ def test_events_round_trip_with_nan_gross_and_no_stress(tmp_path):
     assert b"\r" not in path.read_bytes()
 
 
-def test_rung_one_dry_run_races_the_screen_and_writes_its_events(tmp_path, monkeypatch, capsys):
+def test_rung_one_races_the_screen_and_checkpoints_it(tmp_path, monkeypatch):
     _store(tmp_path)
-    _ledger(tmp_path / "ledger.jsonl", PASS_ROW)
     ends, real = [], screen_idea.load_frame
     monkeypatch.setattr(screen_idea, "load_frame",
                         lambda path, start, end: ends.append(end) or real(path, start, end))
-    assert ri.main(_argv(tmp_path, "--dry-run")) == 0
-    events = ri.read_events(tmp_path / "work" / "rung1-events.json")
+    lines = []
+    events = ri.run_rung(IDEAS["turn_of_month"], 1, _args(tmp_path), out=_quiet(lines)).events
     assert len(events) > 50 and events == ri._sorted(events)
     assert all(ladder.EVENT_START <= e.signal_date < e.entry_date <= e.exit_date <= ladder.READ_END
                for e in events)
@@ -129,8 +129,62 @@ def test_rung_one_dry_run_races_the_screen_and_writes_its_events(tmp_path, monke
     assert all(e.r_stress is not None and e.r_stress <= e.r + 1e-12 for e in events)
     assert set(ends) == {ladder.READ_END}
     assert any((tmp_path / "work" / "rung1" / "screen").glob("*.pkl"))
+    assert any("3/3 members in the store" in line for line in lines)
+
+
+def _no_outcome(out):
+    """A full-universe dry run prints counts only: no doc, no R figure, no verdict."""
+    low = out.lower()
+    for text in ("# ladder-", "## next step", "mean", "lower", "gap-through", "verdict",
+                 ladder.HOLD.lower(), "paired", "minus rung"):
+        assert text not in low, text
+
+
+def test_a_full_universe_dry_run_reads_no_outcome_and_writes_nothing(tmp_path, monkeypatch, capsys):
+    _store(tmp_path)
+    _ledger(tmp_path / "ledger.jsonl", PASS_ROW)
+    monkeypatch.setattr(ri.ladder, "hold", lambda *a, **k: pytest.fail("a dry run read the outcome"))
+    assert ri.main(_argv(tmp_path, "--dry-run")) == 0
     out = capsys.readouterr().out
-    assert "3/3 members in the store" in out and "ladder-turn_of_month-r1 (dry run): N=" in out
+    _no_outcome(out)
+    assert "3/3 members in the store" in out and "ladder-turn_of_month-r1 (dry run" in out
+    assert "events" in out
+    assert not (tmp_path / "work").exists() and not (tmp_path / "results").exists()
+    assert len(stats.load_ledger(tmp_path / "ledger.jsonl")) == 1
+
+
+def test_a_full_dry_run_leaves_no_events_for_rung_two(tmp_path):
+    _store(tmp_path)
+    _ledger(tmp_path / "ledger.jsonl", PASS_ROW)
+    assert ri.main(_argv(tmp_path, "--dry-run")) == 0
+    rows = [PASS_ROW, _ladder_row(1, ladder.HOLD)]
+    assert "rung1-events.json" in ri.refusals(_args(tmp_path, "--dry-run", rung=2), IDEA, rows)
+
+
+def test_a_smoke_run_writes_its_events_apart_and_rung_two_refuses_them(tmp_path, capsys):
+    _store(tmp_path)
+    _ledger(tmp_path / "ledger.jsonl", PASS_ROW)
+    assert ri.main(_argv(tmp_path, "--dry-run", "--tickers", "AAA")) == 0
+    out = capsys.readouterr().out
+    assert "# ladder-turn_of_month-r1" in out                  # the smoke doc still prints
+    smoke = ri.read_events(ri._smoke_events_path(tmp_path / "work", 1))
+    assert smoke and {e.ticker for e in smoke} == {"AAA"}
+    assert not ri._events_path(tmp_path / "work", 1).exists()
+    assert not (tmp_path / "work" / "rung1").exists() and not (tmp_path / "results").exists()
+    assert len(stats.load_ledger(tmp_path / "ledger.jsonl")) == 1
+    rows = [PASS_ROW, _ladder_row(1, ladder.HOLD)]
+    assert "rung1-events.json" in ri.refusals(_args(tmp_path, "--dry-run", rung=2), IDEA, rows)
+
+
+def test_a_smoke_run_reads_its_own_crash_record_not_the_real_runs(tmp_path, capsys):
+    _store(tmp_path)
+    _ledger(tmp_path / "ledger.jsonl", PASS_ROW)
+    real = tmp_path / "work" / "rung1"
+    ri._write_json(real / ri.RUNNING_FILE, {"started": "earlier"})
+    ri._write_json(real / ri.CRASH_FILE, {"crashed_run": {"started": "earlier"}})
+    assert ri.main(_argv(tmp_path, "--dry-run", "--tickers", "AAA")) == 0
+    assert "Crash record" not in capsys.readouterr().out
+    assert ri._run_dir(tmp_path / "work", 1, smoke=True).name == "rung1-smoke"
 
 
 def test_a_smoke_run_prints_missing_members_and_keeps_apart(tmp_path):
@@ -140,7 +194,8 @@ def test_a_smoke_run_prints_missing_members_and_keeps_apart(tmp_path):
                       out=_quiet(lines))
     assert {e.ticker for e in run.events} == {"AAA"}
     assert any("missing 1: ZZZ" in line for line in lines)
-    assert [p.name for p in (tmp_path / "work" / "rung1").iterdir()] == ["screen-smoke"]
+    assert not (tmp_path / "work" / "rung1").exists()
+    assert [p.name for p in (tmp_path / "work" / "rung1-smoke").iterdir()] == ["screen"]
 
 
 def test_a_re_race_that_disagrees_with_the_screen_stops_the_run():

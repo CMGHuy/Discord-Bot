@@ -3,6 +3,7 @@ from collections import Counter
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 import replicate_idea as ri  # on sys.path via conftest.py
 
@@ -78,7 +79,8 @@ def test_publish_dry_run_prints_and_writes_nothing(tmp_path, capsys):
     _store(tmp_path)
     _ledger(tmp_path / "ledger.jsonl", PASS_ROW)
     (tmp_path / "watch.txt").write_text("T0\n", encoding="utf-8")
-    assert ri.publish(_args(tmp_path, "--dry-run", "--watchlist", str(tmp_path / "watch.txt")),
+    assert ri.publish(_args(tmp_path, "--dry-run", "--tickers", "T0",
+                            "--watchlist", str(tmp_path / "watch.txt")),
                       IDEA, 1, _run()) == 0
     out = capsys.readouterr().out
     assert "# ladder-turn_of_month-r1" in out and ladder.NEXT_STEPS["pending"] in out
@@ -102,7 +104,7 @@ def test_publish_writes_the_doc_before_the_row(tmp_path, monkeypatch):
 def test_a_failed_rung_one_closes_the_idea(tmp_path, capsys):
     _store(tmp_path)
     _ledger(tmp_path / "ledger.jsonl", PASS_ROW)
-    ri.publish(_args(tmp_path, "--dry-run"), IDEA, 1, _run(r=-0.1))
+    ri.publish(_args(tmp_path, "--dry-run", "--tickers", "T0"), IDEA, 1, _run(r=-0.1))
     assert ladder.NEXT_STEPS["non_replication"] in capsys.readouterr().out
 
 
@@ -111,7 +113,7 @@ def test_rung_four_names_the_shape_from_its_difference_to_rung_two(tmp_path, cap
     _ledger(tmp_path / "ledger.jsonl", PASS_ROW, *(_ladder_row(r, ladder.HOLD) for r in (1, 2, 3)))
     for rung in (2, 3):
         ri.write_events(ri._events_path(tmp_path / "work", rung), _events(0.6))
-    args = _args(tmp_path, "--dry-run", rung=4)
+    args = _args(tmp_path, "--dry-run", "--tickers", "T0", rung=4)
     assert ri.publish(args, IDEA, 4, _run(0.6)) == 0
     out = capsys.readouterr().out
     assert ladder.NEXT_STEPS["bot_shape"] in out and "Rung 4 minus rung 2 on 320 shared events" in out
@@ -131,3 +133,23 @@ def test_main_publishes_records_the_crash_and_spends_the_shot(tmp_path, monkeypa
     assert (tmp_path / "work" / "rung1-events.json").is_file()
     assert ri.main(_argv(tmp_path)) == 2
     assert "one shot per id" in capsys.readouterr().err
+
+
+def test_publish_refuses_a_full_universe_dry_run(tmp_path, monkeypatch):
+    _store(tmp_path)
+    _ledger(tmp_path / "ledger.jsonl", PASS_ROW)
+    monkeypatch.setattr(ri.ladder, "hold", lambda *a, **k: pytest.fail("a dry run read the outcome"))
+    with pytest.raises(RuntimeError, match="no outcome"):
+        ri.publish(_args(tmp_path, "--dry-run"), IDEA, 1, _run())
+
+
+def test_a_crashed_smoke_run_never_reaches_the_real_runs_doc(tmp_path, monkeypatch):
+    _store(tmp_path)
+    _ledger(tmp_path / "ledger.jsonl", PASS_ROW)
+    smoke = ri._run_dir(tmp_path / "work", 1, smoke=True)
+    ri._write_json(smoke / ri.RUNNING_FILE, {"started": "earlier"})
+    ri._write_json(smoke / ri.CRASH_FILE, {"crashed_run": {"started": "earlier"}})
+    monkeypatch.setattr(ri, "run_rung", lambda idea, rung, args: _run())
+    assert ri.main(_argv(tmp_path)) == 0
+    doc = ri.results_path(tmp_path / "results", "turn_of_month", 1, "2026-11-20")
+    assert "crash" not in doc.read_text(encoding="utf-8").lower()
