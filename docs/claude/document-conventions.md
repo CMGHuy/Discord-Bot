@@ -221,6 +221,21 @@ does not exist, or says `exempt` with an `Edge:` other than `none`. A split
 spec carries the line in its `_0-index` part. Why the screen exists, its
 pass rule and its one-shot discipline: `backtest-methodology.md` § Stage −2.
 
+**Ladder citation (v238).** From v238's merge, a strategy spec whose
+`Screen:` cites a `SCREEN-PASS` also cites, in its body, its
+`ladder-<name>-r<N>` ledger rows and names the shape the ladder selected:
+the bot's shape (rungs 1–4 hold and rung 4's paired difference to rung 2 is
+not wholly below zero) or the orderable screened shape (rungs 1 and 2 hold).
+A spec shipping the orderable screened shape also states the order set
+placed at the alert (a market-on-open entry, a stop order and a limit target
+at the alert's prices, the share count from the close-anchored risk, and the
+broker's market-on-open cut-off); the time-cap exit (a closing order on
+session `CAP` that the partner places or the bot pings, never a resting
+order left to outlive the plan); that a `trail` idea is not shippable until
+a nightly stop-update path exists; and the realised risk when the open gaps,
+with its distribution. A documentation rule, not a header line
+(`backtest-methodology.md` § Funnel stages, the replication ladder).
+
 **`Panel:`** — specs only, and only specs numbered **v146 or above** (v145 and
 earlier are exempt by number and never retrofitted). It sits directly under
 `Screen:` and names one to three expert role skills (`skills-tools.md`

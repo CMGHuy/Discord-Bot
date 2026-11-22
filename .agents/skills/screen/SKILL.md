@@ -71,3 +71,7 @@ script printed it.
 
 One committed results doc and one ledger row for `<idea>`, from a single real
 run against the committed definition.
+
+## After a pass
+
+A `SCREEN-PASS` is not a strategy licence. Its next step is the replication ladder: `scripts/backtest/replicate_idea.py --idea <idea> --rung <N> --work-dir <dir>`, one rung per `backtest-runner` dispatch, in order (rung N is refused without `LADDER-HOLD` on rung N-1), each a one-shot `ladder-<idea>-r<N>` ledger row. A `screen-v1` pass is a valid input, flagged biased null. An idea whose context series is missing from the PIT store is refused `LADDER-UNAVAILABLE`, no shot spent. The strategy spec then cites its ladder rows and the shape selected (`document-conventions.md`, Ladder citation); an added strategy is judged by `validate_component.py --gate additive` (`backtest-methodology.md` § Additive gate).

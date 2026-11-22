@@ -161,6 +161,43 @@ interpreting any backtest, grid, or validation result.
   a veto spec, not a veto**: that spec says
   `<ledger-id> SCREEN-AVOID-PASS (veto)` under `Edge: expectancy` and runs
   the unchanged funnel on the bot's own replay.
+  **Replication ladder (v238, `scripts/backtest/replicate_idea.py`, core
+  `screen/ladder.py`, `ladder_race.py`, `ladder_bot.py`).** A screen pass
+  is raced on one shape; the ladder changes one thing per rung, so a failure
+  names its cause. Input: the idea's governing `SCREEN-PASS` row
+  (`screen2-<name>` over `screen-<name>`, instrument in
+  `ladder.INPUT_INSTRUMENTS`; a `screen-v1` input is flagged biased null,
+  v230 placebo). Run one rung per `backtest-runner` dispatch
+  (`--idea <name> --rung <N> --work-dir <dir>`), each a one-shot
+  `ladder-<name>-r<N>` ledger row, instrument `ladder-v1`, data source
+  alpaca. Rung 1 (robustness) re-races the screen's own trigger and shape
+  through the v1 screen pipeline on the PIT S&P 500 Alpaca store, events
+  2017-03-01..2020-12-31: a robustness check, not an independent
+  replication (only the data source and 2020 are new; 2020 is printed
+  alone). Rung 1 runs on the v1 null (v234 stop gate 2), whose known bias
+  every rung 1 doc and row quotes. Rung 2 (orderable) anchors the same ATR
+  stop and target on the **signal close**, so the alert can rest them as
+  orders, entry still the next open; rung 3 swaps in the bot's stop (rung
+  2's events, target distance in R held), rung 4 the bot's target band
+  (1.5–2.5 R:R, no level means no trade); the stand-ins are recorded in
+  `ladder_bot.BOT_SHAPE`. Hold rule, every rung: week-clustered lower 95%
+  bound of net mean R > 0 with N ≥ 300 (`LADDER-HOLD`), N < 300
+  `LADDER-UNDERPOWERED`, anything else `LADDER-FAIL`; rung 1 also needs a
+  positive ΔExpR against the null. Rung N is refused without `LADDER-HOLD`
+  on rung N−1; an idea whose context series is missing from the store is
+  refused `LADDER-UNAVAILABLE` before any outcome is read (no row, no shot
+  spent); rungs 2–4 need the fixed next-open shape. Gap fills are priced,
+  never dropped; costs 5 bps a side plus commission (shorts: borrow), with
+  2 × slippage printed beside, never gating. Runs checkpoint per ticker under
+  `<work-dir>/rung<N>/`; a crashed run that wrote no result may be re-run
+  once (`crash.json`). The ladder never reads 2021 or later. Outcome:
+  rung 1 failing or underpowered closes the idea as a non-replication;
+  rungs 1–4 holding with rung 4's paired difference to rung 2 not wholly
+  below zero licenses a strategy spec in the bot's shape; rungs 1 and 2
+  holding otherwise license the orderable screened shape (rung 2) at the 2%
+  dollar-risk rule; rung 1 holding and rung 2 failing goes to the partner.
+  The spec then cites its ladder rows (`document-conventions.md`, Ladder
+  citation) and an added strategy is judged by `## Additive gate`.
 - **The acceptance funnel.** Selection never touches scoring data, and two
   free gates stand in front of the one-shot budget. Run it with
   `python scripts/backtest/validate_component.py --stage <stage>`.
@@ -225,6 +262,51 @@ interpreting any backtest, grid, or validation result.
   that design. v100 added that paired variant:
   `acceptance.mde_paired(..., statistic=delta_expectancy_r)`, used by
   `validate_component.py --stage mde --gate harvest`.
+
+## Additive gate
+
+- **Additive-strategy gate (v238, `swingbot/core/backtesting/acceptance_additive.py`,
+  `validate_component.py --gate additive`).** For a component arm that only
+  **adds rows** to the baseline (apart from displaced baseline rows); any
+  other arm is refused `ADDITIVE_GATE_MISUSE` and belongs to v72 or v92.
+  Own net ExpR is the objective. The book's pooled win rate is not a clause:
+  a strategy adding rows at reward:risk 2 breaks even at 33%, lowers the
+  pooled win rate while paying, and v180 died on that (−0.21pp pooled ΔWR).
+
+  | # | Clause | Instrument | Threshold |
+  |---|---|---|---|
+  | 1 | `own_expectancy` (objective) | added rows' net ExpR, week-cluster bootstrap | lower 95% bound > 0 (one-sided p reported) |
+  | 2 | `win_rate_above_breakeven` | added rows' decided win rate against their realised break-even `avg loss / (avg win + avg loss)` | lower 95% bound > break-even |
+  | 3 | `book_net_gain` | paired change in the book's total R, strategy on vs off | point > 0 and lower 95% bound > −10% of the added rows' total R; `SKIPPED` when no baseline row is displaced |
+  | 4 | `stability` | per-fold net ExpR of the added rows, folds 2021 / 2022 / 2023 | > 0 in ≥ 2 of 3, no fold below −0.10R, per-fold N ≥ 30 |
+
+  Week clusters (10,000 resamples, seed 42), not ticker clusters: an added
+  strategy's signals bunch on market days, so one bad week is one bet. A
+  displaced row is a baseline key absent from the component arm; every
+  other baseline row must be identical, and the results doc lists each
+  displaced row (cause `not exposed by the replay` until the replay exposes
+  one). **Both arms are net:** produce them with `measure_arms.py
+  --r-basis net`, which books every row through `frictions.net_r_legs`
+  (entry and exits slipped against the trade, one round-trip commission,
+  shorts pay `frictions.borrow_r` over calendar days held, longs never) and
+  stamps `provenance["r_basis"]`; `--gate additive` refuses a missing, gross
+  or malformed stamp with `refused:r-basis` (under `--bespoke-instrument`
+  too); no other gate reads the stamp, and the default booking stays gross
+  and byte-identical. Stages: `reachability` (−1: stamp, basis, add-only
+  split); `mde` (0: an MDE precheck against an effect frozen in the
+  pre-registration, `--expected-own-r` = half the selected ladder rung's
+  net mean R and `--expected-sd-r` = that rung's per-event SD, N = closed
+  added rows, no R read; refused `refused:additive-mde`, budget intact);
+  `selection` (1: clauses 1–3 per `--grid-arms` cell, the adopted cell the
+  best own net ExpR among passing cells, `plateau_report()` printed with
+  two or more cells, `--knob` naming the axis); `walkforward` (2: clause
+  4); `validation` (3:
+  one shot, all four, clause 4 from `--folds-arms`). Disclosures, never
+  gating: maximum drawdown in R, longest losing streak, the five best
+  weeks' share of total R, signals per day at p95 and maximum, and the
+  same-week correlation with the baseline book. No geometry lock and no
+  pooled win-rate clause; the badge threshold (`win_rate >= 50`) is
+  untouched. Ledger verdicts are the funnel's `PASS` / `FAIL` / `NO-LIFT`.
 
 ## Frozen constants
 
