@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-19 22:51:05 UTC",
+  "generated_at": "2026-11-22 22:15:50 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.45.0",
-    "bot": "2.19.4"
+    "bot": "2.19.5"
   },
   "releases": [
     {
@@ -2734,6 +2734,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-11-22",
+      "last_seen": "2026-11-22",
+      "commit": "f3bff2d4",
+      "subject": "release(bot): 2.19.5 -- Insights Guide chapters 4-8: levels, strategies, gates, trade plan, sizing and risk (v237)",
+      "versions": {
+        "ui": "1.45.0",
+        "bot": "2.19.5"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
