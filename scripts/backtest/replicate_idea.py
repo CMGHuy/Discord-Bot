@@ -119,6 +119,7 @@ class RungRun:
     survival: dict | None = None
     clamp_share: float | None = None
     attrition: dict | None = None
+    risk_cap: dict | None = None
 
 
 def _write_json(path, value) -> None:
@@ -293,7 +294,7 @@ def _race_ticker(idea, rung: int, ticker: str, signals: list, args) -> dict:
     base = ladder_race.race_levels(df, pos[keep], idea.time_cap_bars, **kw)
     stress = ladder_race.race_levels(df, pos[keep], idea.time_cap_bars,
                                      slippage_bps=_stress_bps(), **kw)
-    clamp = _clamp_count(df, pos[keep], stop[keep], idea.direction) if rung == 3 else 0
+    clamp = _clamp_count(df, pos[keep], stop[keep], idea.direction) if rung in (3, 4) else 0
     return {"signals": list(signals),
             "events": [asdict(e) for e in ladder_race.to_events(ticker, df, base, stress=stress)],
             "reasons": dict(Counter(r for r in reasons if r is not None)), "clamp": clamp}
@@ -322,12 +323,15 @@ def _by_ticker(events) -> dict:
 
 
 def _readouts(rung: int, blobs: list, events: list, reasons: Counter) -> dict:
-    """Rung 3's clamp share; rung 4's attrition and book survival. Never gating."""
+    """Rung 3's clamp share; rung 4's attrition, risk_cap count and book survival.
+    Never gating: rung 4 races every wide stop, risk_cap only counts them."""
+    clamp = sum(blob["clamp"] for blob in blobs)
+    share = clamp / len(events) if events else None
     if rung == 3:
-        clamp = sum(blob["clamp"] for blob in blobs)
-        return {"clamp_share": clamp / len(events) if events else None}
+        return {"clamp_share": share}
     if rung == 4:
         return {"attrition": {name: reasons.get(name, 0) for name in ladder_bot.ATTRITION},
+                "risk_cap": {"count": clamp, "share": share},
                 "survival": ladder_bot.book_survival(events, max_open=int(config.MAX_OPEN_POSITIONS))}
     return {}
 
@@ -433,6 +437,10 @@ def _bot_lines(run) -> list:
                      f"{run.clamp_share:.1%} of events (never gating).")
     if run.attrition is not None:
         lines.append("- Attrition: " + ", ".join(f"{k} {v}" for k, v in run.attrition.items()) + ".")
+    if run.risk_cap is not None:
+        lines.append(f"- risk_cap (never gating): {run.risk_cap['count']} raced events "
+                     f"({_f(run.risk_cap['share'], '.1%')}) have a stop past the 2% "
+                     "price-distance cap; kept and sized down like rung 3, never dropped.")
     if run.survival is not None:
         s = run.survival
         lines.append(f"- Book survival (never gating): one position per ticker "

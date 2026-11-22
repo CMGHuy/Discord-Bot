@@ -52,14 +52,22 @@ def test_rung4_target_band(band, offsets, expected_r, reason):
         assert (target - close) / (close - stop) == pytest.approx(expected_r, rel=1e-3)
 
 
-def test_a_stop_past_the_cap_is_risk_cap_attrition_before_any_level_is_built(monkeypatch):
-    monkeypatch.setattr(lb, "_target_candidates",
-                        lambda *a: pytest.fail("the level map must not be built"))
+def test_a_stop_past_the_cap_keeps_rung_three_stop_and_gets_a_band_target(band):
+    """Rung 4 changes only the target: a wide stop is sized down, never dropped."""
     df, t = random_walk(200, seed=3), 150
-    stop, target, why = lb.rung4_levels(df, t, direction="long")
-    assert (target, why) == (None, "risk_cap")
-    assert stop == pytest.approx(lb.bot_stop(df, t, direction="long"))
-    assert set(lb.ATTRITION) == {"no_level_in_band", "risk_cap"}
+    close = float(df["Close"].iloc[t])
+    stop = lb.bot_stop(df, t, direction="long")
+    assert lb.clamp_would_drop(close, stop, direction="long")      # past the 2% cap
+    band([2.0 * (close - stop)])
+    got_stop, target, why = lb.rung4_levels(df, t, direction="long")
+    assert why is None and got_stop == pytest.approx(stop)
+    assert (target - close) / (close - stop) == pytest.approx(2.0, rel=1e-6)
+
+
+def test_attrition_is_only_a_missing_target_or_stop(monkeypatch):
+    assert set(lb.ATTRITION) == {"no_level_in_band", "no_stop"}
+    monkeypatch.setattr(lb, "bot_stop", lambda *a, **k: None)
+    assert lb.rung4_levels(_calm(), 60, direction="long") == (None, None, "no_stop")
 
 
 def test_the_live_level_map_lands_inside_the_band():

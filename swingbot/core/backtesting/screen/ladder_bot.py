@@ -38,7 +38,10 @@ BOT_SHAPE = {
         "an idea has no strategy or horizon of its own: RSI sizes through the generic "
         "ATR branch and 2w (14 holding days) is the horizon nearest the screen's caps; "
         "the confluence level map is the bot's nearest-real-level source, so rung 4's "
-        "no-level attrition is real (the ATR-ladder candidates always qualify)"),
+        "no-level attrition is real (the ATR-ladder candidates always qualify); rung 4 "
+        "keeps rung 3's population and stop and swaps only the target: a stop past the "
+        "2% price-distance cap is sized down, never dropped, and counted in the "
+        "never-gating risk_cap read-out (partner ruling 2026-11-22)"),
 }
 _PLAN_SIDE = {"long": "bullish", "short": "bearish"}
 
@@ -89,7 +92,10 @@ def rung3_levels(df: pd.DataFrame, signal_pos: int, *,
     return stop, close + sign * race.REWARD_RISK * abs(close - stop)
 
 
-ATTRITION = ("no_level_in_band", "risk_cap")
+# Rung 4's real attrition: no target in the band, or no usable stop (rung 3
+# already dropped those, so it stays 0 on rung 3's events). A stop past the 2%
+# cap is not attrition: it is raced and only counted (risk_cap, never gating).
+ATTRITION = ("no_level_in_band", "no_stop")
 
 
 def _scan_params():
@@ -107,12 +113,14 @@ def _target_candidates(frame: pd.DataFrame, close: float, side: str) -> list[flo
 
 def rung4_levels(df: pd.DataFrame, signal_pos: int, *,
                  direction: str) -> tuple[float | None, float | None, str | None]:
-    """(rung 3's stop, the bot's band target, attrition reason or None)."""
+    """(rung 3's stop, the bot's band target, attrition reason or None).
+
+    Only the target changes from rung 3: a stop past the 2% cap is kept."""
     side = plan_direction(direction)
     stop = bot_stop(df, signal_pos, direction=direction)
+    if stop is None:
+        return None, None, "no_stop"
     close = float(df["Close"].iloc[signal_pos])
-    if stop is None or clamp_would_drop(close, stop, direction=direction):
-        return stop, None, "risk_cap"
     params = _scan_params()
     target = select_structural_target(
         close, stop, side == "bullish",

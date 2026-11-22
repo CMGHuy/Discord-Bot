@@ -42,6 +42,7 @@ def test_rung_two_races_every_rung_one_event_from_the_signal_close(tmp_path):
     assert (run.gap_count, run.gap_r) == (len(gaps), pytest.approx(sum(e.r for e in gaps)))
     assert all(e.r_stress is not None and e.r_stress <= e.r + 1e-12 for e in run.events)
     assert run.survival is None and run.clamp_share is None and run.attrition is None
+    assert run.risk_cap is None
 
 
 def test_rung_two_checkpoints_each_ticker_and_resumes(tmp_path, monkeypatch):
@@ -94,25 +95,44 @@ def test_rung_three_live_adapter_keeps_every_event(tmp_path):
     assert 0.0 <= run.clamp_share <= 1.0
 
 
-def test_rung_four_reports_attrition_and_book_survival(tmp_path, monkeypatch):
+def test_rung_four_reports_attrition_risk_cap_and_book_survival(tmp_path, monkeypatch):
     _store(tmp_path, tickers=("AAA",))
     upper = _upper(tmp_path, 3, tickers=("AAA",))
     index = ri._frame(tmp_path / "store", "AAA").index
-    cut = {index.get_loc(upper[0].signal_date): "risk_cap",
-           index.get_loc(upper[1].signal_date): "no_level_in_band"}
+    no_level = index.get_loc(upper[0].signal_date)
+    wide = index.get_loc(upper[1].signal_date)
 
     def band(df, pos, *, direction):
         close = float(df["Close"].iloc[pos])
-        if pos in cut:
-            return close * 0.99, None, cut[pos]
+        if pos == no_level:
+            return close * 0.99, None, "no_level_in_band"
+        if pos == wide:                         # 5% stop: past the cap, still raced
+            return close * 0.95, close * 1.10, None
         return close * 0.99, close * 1.02, None
 
     monkeypatch.setattr(ri.ladder_bot, "rung4_levels", band)
     run = _run(tmp_path, 4)
-    assert run.attrition == {"no_level_in_band": 1, "risk_cap": 1}
-    assert run.counters["raced"] == len(upper) - 2 == len(run.events)
+    assert run.attrition == {"no_level_in_band": 1, "no_stop": 0}
+    assert run.counters["raced"] == len(upper) - 1 == len(run.events)
+    assert upper[1].key in {e.key for e in run.events}
+    assert run.risk_cap == {"count": 1, "share": pytest.approx(1 / (len(upper) - 1))}
     assert set(run.survival) == {"one_per_ticker_share", "concurrent_share",
                                  "signals_per_day_p95", "signals_per_day_max"}
+
+
+def test_rung_four_races_every_wide_stop_and_counts_it_in_the_risk_cap_readout(tmp_path, monkeypatch):
+    _store(tmp_path, tickers=("AAA",))
+    upper = _upper(tmp_path, 3, tickers=("AAA",))
+
+    def wide(df, pos, *, direction):            # every stop 5% away: sized down, never dropped
+        close = float(df["Close"].iloc[pos])
+        return close * 0.95, close * 1.10, None
+
+    monkeypatch.setattr(ri.ladder_bot, "rung4_levels", wide)
+    run = _run(tmp_path, 4)
+    assert [e.key for e in run.events] == [e.key for e in upper]
+    assert run.risk_cap == {"count": len(upper), "share": pytest.approx(1.0)}
+    assert run.attrition == {"no_level_in_band": 0, "no_stop": 0}
 
 
 def test_rung_four_live_adapter_accounts_for_every_event(tmp_path):
@@ -161,4 +181,5 @@ def test_rung_four_attriting_a_whole_ticker_races_nothing(tmp_path, monkeypatch)
                         lambda df, pos, *, direction: (None, None, "no_level_in_band"))
     run = _run(tmp_path, 4)
     assert run.events == [] and run.counters["raced"] == 0
-    assert run.attrition == {"no_level_in_band": len(upper), "risk_cap": 0}
+    assert run.attrition == {"no_level_in_band": len(upper), "no_stop": 0}
+    assert run.risk_cap == {"count": 0, "share": None}

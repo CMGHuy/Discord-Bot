@@ -179,8 +179,11 @@ interpreting any backtest, grid, or validation result.
   stop and target on the **signal close**, so the alert can rest them as
   orders, entry still the next open; rung 3 swaps in the bot's stop (rung
   2's events, target distance in R held), rung 4 the bot's target band
-  (1.5–2.5 R:R, no level means no trade); the stand-ins are recorded in
-  `ladder_bot.BOT_SHAPE`. Hold rule, every rung: week-clustered lower 95%
+  (1.5–2.5 R:R, no level means no trade). Rung 4 keeps rung 3's population
+  and stop and swaps only the target: a stop past the 2% price-distance cap
+  is sized down as on rung 3, never dropped, and its count is reported as
+  the never-gating `risk_cap` read-out; only `no_level_in_band` is attrition.
+  The stand-ins are recorded in `ladder_bot.BOT_SHAPE`. Hold rule, every rung: week-clustered lower 95%
   bound of net mean R > 0 with N ≥ 300 (`LADDER-HOLD`), N < 300
   `LADDER-UNDERPOWERED`, anything else `LADDER-FAIL`; rung 1 also needs a
   positive ΔExpR against the null. Rung N is refused without `LADDER-HOLD`

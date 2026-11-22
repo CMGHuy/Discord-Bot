@@ -66,9 +66,12 @@ def test_rung_three_and_four_docs_print_the_bot_shape_and_readouts():
     assert "Paired difference to the rung above" in three
     survival = {"one_per_ticker_share": 0.5, "concurrent_share": 0.4,
                 "signals_per_day_p95": 8.0, "signals_per_day_max": 8}
-    four = ri.render_rung(IDEA, 4, _run(attrition={"no_level_in_band": 3, "risk_cap": 1},
+    four = ri.render_rung(IDEA, 4, _run(attrition={"no_level_in_band": 3, "no_stop": 0},
+                                        risk_cap={"count": 8, "share": 0.025},
                                         survival=survival), hold, diff=diff, date="2026-11-20")
-    assert "no_level_in_band 3, risk_cap 1" in four and "Book survival" in four
+    assert "no_level_in_band 3, no_stop 0" in four and "Book survival" in four
+    assert "risk_cap (never gating): 8 raced events (2.5%)" in four
+    assert "never dropped" in four
 
 
 def test_publish_dry_run_prints_and_writes_nothing(tmp_path, capsys):
