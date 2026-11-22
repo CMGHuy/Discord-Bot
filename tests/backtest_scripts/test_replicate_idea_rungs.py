@@ -28,7 +28,7 @@ def _upper(tmp_path, rung_above, tickers=("AAA", "BBB"), positions=POSITIONS):
 
 
 def _run(tmp_path, rung, *extra):
-    return ri.run_rung(IDEA, rung, _args(tmp_path, "--dry-run", *extra, rung=rung),
+    return ri.run_rung(IDEA, rung, _args(tmp_path, *extra, rung=rung),
                        out=lambda *_a, **_k: None)
 
 
@@ -180,13 +180,30 @@ def test_run_marker_allows_one_rerun_after_a_crash(tmp_path):
     assert not (directory / ri.RUNNING_FILE).exists()
 
 
-def test_main_dry_run_rung_two_writes_its_events(tmp_path, capsys):
+def test_main_full_dry_run_rung_two_counts_and_writes_nothing(tmp_path, monkeypatch, capsys):
     _store(tmp_path)
     upper = _upper(tmp_path, 1)
     _ledger(tmp_path / "ledger.jsonl", PASS_ROW, _ladder_row(1, ladder.HOLD))
+    monkeypatch.setattr(ri.ladder, "hold", lambda *a, **k: pytest.fail("a dry run read the outcome"))
+    before = sorted(p.name for p in (tmp_path / "work").iterdir())
     assert ri.main(_argv(tmp_path, "--dry-run", rung=2)) == 0
-    assert len(ri.read_events(tmp_path / "work" / "rung2-events.json")) == len(upper)
-    assert "ladder-turn_of_month-r2 (dry run)" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert f"ladder-turn_of_month-r2 (dry run, no outcome read): {len(upper)} events" in out
+    for text in ("mean", "lower", "gap-through", "# ladder-", "Next step", "minus rung"):
+        assert text not in out, text
+    assert sorted(p.name for p in (tmp_path / "work").iterdir()) == before
+    assert not (tmp_path / "results").exists()
+
+
+def test_main_smoke_rung_two_writes_events_and_checkpoints_under_smoke(tmp_path, capsys):
+    _store(tmp_path)
+    _upper(tmp_path, 1)
+    _ledger(tmp_path / "ledger.jsonl", PASS_ROW, _ladder_row(1, ladder.HOLD))
+    assert ri.main(_argv(tmp_path, "--dry-run", "--tickers", "AAA", rung=2)) == 0
+    assert "# ladder-turn_of_month-r2" in capsys.readouterr().out
+    assert {e.ticker for e in ri.read_events(ri._smoke_events_path(tmp_path / "work", 2))} == {"AAA"}
+    assert not ri._events_path(tmp_path / "work", 2).exists()
+    assert not (tmp_path / "work" / "rung2").exists() and not (tmp_path / "results").exists()
 
 
 def test_rung_four_attriting_a_whole_ticker_races_nothing(tmp_path, monkeypatch):
