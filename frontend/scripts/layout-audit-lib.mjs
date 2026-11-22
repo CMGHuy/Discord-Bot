@@ -6,7 +6,7 @@
  * Spec: docs/superpowers/specs/2026-10-19-v179-mobile-layout-consistency-design.md §3.5, §6a.6.
  */
 
-/** Every route and tab (34) on the v202 paths (spec v202 §2): the old names are redirects and are
+/** Every route and tab (35) on the v202 paths (spec v202 §2): the old names are redirects and are
  *  not visited. `:id` is a trade id, `:plan` an open (else pending) trade's id, `:symbol` a
  *  watchlist symbol with trades, `:date` the day a closed trade closed -- resolved from the API at
  *  run time. A route or tab added to the app is added here in the same commit. */
@@ -18,7 +18,7 @@ export const ROUTES = Object.freeze([
   '/insights/analytics', '/insights/analytics?tab=attribution', '/insights/analytics?tab=execution',
   '/insights/analytics?tab=edge', '/insights/analytics?tab=pipeline', '/insights/analytics?tab=tuning',
   '/insights/analytics?tab=partials', '/insights/analytics?tab=cancels', '/insights/analytics?tab=benchmark',
-  '/insights/research', '/insights/reports', '/insights/reports?tab=gates', '/insights/guide', '/insights/guide/pipeline',
+  '/insights/research', '/insights/reports', '/insights/reports?tab=gates', '/insights/guide', '/insights/guide/pipeline', '/insights/guide/strategies',
   '/watchlist', '/watchlist/:symbol',
   '/risk',
   '/system', '/system?tab=logs', '/system?tab=scan', '/system?tab=providers', '/system?tab=users', '/system/versions',
