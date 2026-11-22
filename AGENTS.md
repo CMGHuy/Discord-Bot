@@ -176,9 +176,9 @@ finding stops close-out). Feature
 acceptance is one gate (`swingbot/core/backtesting/acceptance.py`, driven by
 `scripts/backtest/validate_component.py --stage mde|walkforward|validation`):
 win rate is the objective, expectancy a non-inferiority constraint, and every
-verdict appends a row to `preregistration-ledger.jsonl`. A screen pass then runs the replication
-ladder (`scripts/backtest/replicate_idea.py`, four one-shot
-`ladder-<name>-r<N>` rungs, instrument `ladder-v1`, never reading 2021+)
+verdict appends a row to `preregistration-ledger.jsonl`. A screen pass then
+runs the replication ladder (`scripts/backtest/replicate_idea.py`, four
+one-shot `ladder-<name>-r<N>` rungs, instrument `ladder-v1`, never reading 2021+)
 before a strategy spec, which cites its ladder rows and the shape selected;
 an added strategy is judged by `validate_component.py --gate additive` (own
 net ExpR the objective, win rate above its own realised break-even, both
