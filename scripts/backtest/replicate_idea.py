@@ -12,7 +12,7 @@ import os
 import sys
 from collections import Counter
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -26,7 +26,7 @@ for _path in (ROOT, Path(__file__).resolve().parent):
 import screen_idea  # noqa: E402  imported, never edited (index Global Constraints)
 from swingbot import config  # noqa: E402
 from swingbot.core.backtesting.instrument import stats  # noqa: E402
-from swingbot.core.backtesting.screen import indicators, ladder, ladder_race, race  # noqa: E402
+from swingbot.core.backtesting.screen import indicators, ladder, ladder_bot, ladder_race, race  # noqa: E402
 from swingbot.core.backtesting.screen.ideas import IDEAS  # noqa: E402
 
 DEFAULT_STORE = Path(config.DATA_DIR) / "market_data_pit" / "daily"
@@ -203,11 +203,158 @@ def _run_rung1(idea, args, out) -> RungRun:
     return RungRun(events, counters, *_gap_totals(events))
 
 
+NO_STOP = "no_stop"
+RUNNING_FILE = "running.json"
+CRASH_FILE = "crash.json"
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+class RunMarker:
+    """One shot per id; a crashed run that wrote no result may run once more."""
+
+    def __init__(self, directory):
+        self.directory = Path(directory)
+        self.running = self.directory / RUNNING_FILE
+        self.crash = self.directory / CRASH_FILE
+
+    def start(self) -> str | None:
+        if self.running.is_file():
+            if self.crash.is_file():
+                return (f"refused: {self.directory} records a crashed run whose re-run "
+                        f"crashed too; the partner decides. {_NO_SHOT}")
+            crashed = json.loads(self.running.read_text(encoding="utf-8"))
+            _write_json(self.crash, {"crashed_run": crashed, "rerun_started": _now()})
+        _write_json(self.running, {"started": _now()})
+        return None
+
+    def finish(self) -> None:
+        self.running.unlink(missing_ok=True)
+
+    def crash_note(self) -> str | None:
+        if not self.crash.is_file():
+            return None
+        crashed = json.loads(self.crash.read_text(encoding="utf-8"))["crashed_run"]
+        return (f"re-run once after a crash: the first run started {crashed.get('started')} "
+                f"and wrote no result ({self.crash.as_posix()})")
+
+
+def _ticker_checkpoint(work_dir, rung: int, ticker: str) -> Path:
+    return Path(work_dir) / f"rung{rung}" / f"{ticker}.json"
+
+
+def _arrays(levels) -> tuple:
+    """[(stop, target, reason)] -> stop and target arrays (NaN when absent), reasons."""
+    stop = np.array([np.nan if s is None else s for s, _, _ in levels], dtype=float)
+    target = np.array([np.nan if t is None else t for _, t, _ in levels], dtype=float)
+    return stop, target, [reason for _, _, reason in levels]
+
+
+def _rung2_levels(df, pos, direction: str) -> tuple:
+    stop, target = ladder_race.orderable_levels(df, pos, atr=indicators.atr(df), direction=direction)
+    return np.asarray(stop, dtype=float), np.asarray(target, dtype=float), [None] * len(pos)
+
+
+def _rung3_levels(df, pos, direction: str) -> tuple:
+    pairs = [ladder_bot.rung3_levels(df, int(p), direction=direction) for p in pos]
+    return _arrays([(s, t, NO_STOP if s is None else None) for s, t in pairs])
+
+
+def _rung4_levels(df, pos, direction: str) -> tuple:
+    return _arrays([ladder_bot.rung4_levels(df, int(p), direction=direction) for p in pos])
+
+
+_LEVELS = {2: _rung2_levels, 3: _rung3_levels, 4: _rung4_levels}
+
+
+def _clamp_count(df, pos, stop, direction: str) -> int:
+    close = df["Close"].to_numpy(dtype=float)[pos]
+    return int(sum(ladder_bot.clamp_would_drop(c, s, direction=direction)
+                   for c, s in zip(close, stop)))
+
+
+def _race_ticker(idea, rung: int, ticker: str, signals: list, args) -> dict:
+    """One ticker's rung: levels from the signal bar, then the orderable race."""
+    df = _frame(args.store, ticker)
+    pos = df.index.get_indexer(pd.to_datetime(signals))
+    if (pos < 0).any():
+        raise RuntimeError(f"{ticker}: a rung {rung - 1} signal bar is not in the store frame")
+    stop, target, reasons = _LEVELS[rung](df, pos, idea.direction)
+    keep = np.array([reason is None for reason in reasons], dtype=bool)
+    kw = {"stop": stop[keep], "target": target[keep], "direction": idea.direction}
+    base = ladder_race.race_levels(df, pos[keep], idea.time_cap_bars, **kw)
+    stress = ladder_race.race_levels(df, pos[keep], idea.time_cap_bars,
+                                     slippage_bps=_stress_bps(), **kw)
+    clamp = _clamp_count(df, pos[keep], stop[keep], idea.direction) if rung == 3 else 0
+    return {"signals": list(signals),
+            "events": [asdict(e) for e in ladder_race.to_events(ticker, df, base, stress=stress)],
+            "reasons": dict(Counter(r for r in reasons if r is not None)), "clamp": clamp}
+
+
+def _ticker_rung(idea, rung: int, ticker: str, upper: list, args) -> dict:
+    """A finished checkpoint for exactly these signals, else race and checkpoint."""
+    signals = [event.signal_date for event in upper]
+    path = _ticker_checkpoint(_work(args), rung, ticker)
+    if path.is_file():
+        blob = json.loads(path.read_text(encoding="utf-8"))
+        if blob["signals"] != signals:
+            raise RuntimeError(f"{path} was written for other rung {rung - 1} events; "
+                               "move it away to re-run")
+        return blob
+    blob = _race_ticker(idea, rung, ticker, signals, args)
+    _write_json(path, blob)
+    return blob
+
+
+def _by_ticker(events) -> dict:
+    groups: dict = {}
+    for event in sorted(events, key=lambda e: (e.ticker, e.signal_date)):
+        groups.setdefault(event.ticker, []).append(event)
+    return groups
+
+
+def _readouts(rung: int, blobs: list, events: list, reasons: Counter) -> dict:
+    """Rung 3's clamp share; rung 4's attrition and book survival. Never gating."""
+    if rung == 3:
+        clamp = sum(blob["clamp"] for blob in blobs)
+        return {"clamp_share": clamp / len(events) if events else None}
+    if rung == 4:
+        return {"attrition": {name: reasons.get(name, 0) for name in ladder_bot.ATTRITION},
+                "survival": ladder_bot.book_survival(events, max_open=int(config.MAX_OPEN_POSITIONS))}
+    return {}
+
+
+def _race_tickers(idea, rung: int, args, out) -> list:
+    """Every wanted ticker's checkpoint blob, with a percent every PROGRESS_EVERY tickers."""
+    groups = _by_ticker(read_events(_events_path(_work(args), rung - 1)))
+    wanted = _tickers(args)
+    names = [t for t in groups if wanted is None or t in wanted]
+    blobs = []
+    for i, ticker in enumerate(names, start=1):
+        blobs.append(_ticker_rung(idea, rung, ticker, groups[ticker], args))
+        if i % PROGRESS_EVERY == 0 or i == len(names):
+            out(f"[{idea.name}] rung {rung}: {i}/{len(names)} tickers "
+                f"({100.0 * i / len(names):.0f}%)", flush=True)
+    return blobs
+
+
+def _run_later(idea, rung: int, args, out) -> RungRun:
+    blobs = _race_tickers(idea, rung, args, out)
+    events = _sorted(ladder.LadderEvent(**row) for blob in blobs for row in blob["events"])
+    reasons = sum((Counter(blob["reasons"]) for blob in blobs), Counter())
+    counters = Counter(events_in=sum(len(blob["signals"]) for blob in blobs), raced=len(events))
+    counters.update(reasons)
+    return RungRun(events, counters, *_gap_totals(events),
+                   **_readouts(rung, blobs, events, reasons))
+
+
 def run_rung(idea, rung: int, args, *, out=print) -> RungRun:
     """One rung's events and read-outs; nothing is published here."""
-    if rung != 1:
-        raise NotImplementedError("rungs 2-4 land with V238-15")
-    return _run_rung1(idea, args, out)
+    if rung == 1:
+        return _run_rung1(idea, args, out)
+    return _run_later(idea, rung, args, out)
 
 
 def main(argv=None) -> int:
