@@ -2,7 +2,7 @@
 title: Finding levels and setups
 slug: levels
 order: 4
-reviewed_for: 2.19.2
+reviewed_for: 2.19.5
 sources:
   - swingbot/core/market/levels.py:ALL_STRATEGY_FAMILIES
   - swingbot/core/market/levels.py:CLUSTER_TOLERANCE_PCT

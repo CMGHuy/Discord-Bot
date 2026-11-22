@@ -2,7 +2,7 @@
 title: Strategies
 slug: strategies
 order: 5
-reviewed_for: 2.19.2
+reviewed_for: 2.19.5
 sources:
   - swingbot/core/market/strategy.py:STRATEGY_FUNCS
   - swingbot/core/market/strategy_types.py:STRATEGY_GATES

@@ -2,7 +2,7 @@
 title: Building the trade plan
 slug: trade-plan
 order: 7
-reviewed_for: 2.19.2
+reviewed_for: 2.19.5
 sources:
   - swingbot/core/planning/builders.py:build_confluence_plan
   - swingbot/core/planning/builders.py:build_strategy_plan

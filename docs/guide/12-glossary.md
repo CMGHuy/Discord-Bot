@@ -2,7 +2,7 @@
 title: Glossary
 slug: glossary
 order: 12
-reviewed_for: 2.19.2
+reviewed_for: 2.19.5
 sources:
   - swingbot/core/backtesting/registry.py:Badge
   - swingbot/core/backtesting/registry.py:decay_for

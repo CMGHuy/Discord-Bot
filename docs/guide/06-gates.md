@@ -2,7 +2,7 @@
 title: Filters and gates
 slug: gates
 order: 6
-reviewed_for: 2.19.2
+reviewed_for: 2.19.5
 sources:
   - swingbot/core/market/strategy_types.py:admits
   - swingbot/core/market/strategy_types.py:REGIME_ALLOW

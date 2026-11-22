@@ -2,7 +2,7 @@
 title: Sizing and risk
 slug: sizing-risk
 order: 8
-reviewed_for: 2.19.2
+reviewed_for: 2.19.5
 sources:
   - swingbot/core/planning/account.py:compute_position_size
   - swingbot/core/planning/account.py:load_account_config
