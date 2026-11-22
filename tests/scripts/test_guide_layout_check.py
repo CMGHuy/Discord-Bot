@@ -105,3 +105,35 @@ def test_missing_credentials_exit_2_and_run_nothing(tmp_path, capsys):
     assert glc.main(["--report", str(report)], runner=lambda a, c: called.append(1), env_path=env) == 2
     assert called == [] and not report.exists()
     assert "cannot run" in capsys.readouterr().err
+
+
+# --- v237 V237-14: chapters 4-8 ----------------------------------------------------------
+
+def _written():
+    from swingbot.admin.guide import chapters
+    return {chapter.slug: chapter for chapter in chapters.load_chapters()}
+
+
+def test_drawer_expects_every_written_chapter():
+    assert glc.CHAPTERS_IN_DRAWER == 8 == len(_written())
+
+
+def test_pages_add_the_widest_trading_chapters_and_keep_pipeline_last():
+    assert glc.PAGES == ("", "what-it-is", "glossary", "strategies", "sizing-risk", "pipeline")
+    written = _written()
+    assert all(page in written for page in glc.PAGES if page)
+
+
+def test_every_deep_link_names_a_real_heading():
+    assert "sizing-risk#reject-clamp-or-size-0" in glc.DEEP_LINKS
+    written = _written()
+    for link in glc.DEEP_LINKS:
+        slug, anchor = link.split("#", 1)
+        assert anchor in [heading.anchor for heading in written[slug].headings], link
+
+
+def test_report_title_names_no_plan_and_lists_the_new_pages():
+    text = glc.render_report([{"width": 1440, "problems": []}], "http://localhost:1234", "2026-11-18")
+    assert text.startswith("# Guide layout check -- 2026-11-18\n")
+    assert "`/insights/guide/strategies`" in text and "`/insights/guide/sizing-risk`" in text
+    assert "`sizing-risk#reject-clamp-or-size-0`" in text

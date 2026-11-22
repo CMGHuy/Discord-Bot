@@ -5,14 +5,24 @@ SIGHUP hot reload; module constants are read by attribute), so a changed
 default can never leave stale prose. Only names in RISK_PLACEHOLDERS exist:
 no function here takes a name, and nothing reads a config attribute that is
 not spelled out below.
+
+Sizing settings an operator edits with !account (risk per trade, the dollar
+risk cap, the sizing mode, the position caps, the open-position limit) come
+from the stored account row the sizer reads, never from their .env seeds.
 """
 from __future__ import annotations
 
+import logging
 from typing import Callable
 
 from swingbot import config
 from swingbot.core.edge import correlation, sizing
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.planning import gap_sizing
+
+log = logging.getLogger(__name__)
+
+UNAVAILABLE = "not available right now"
 
 
 def _num(value) -> str:
@@ -27,8 +37,10 @@ def _flag(value) -> str:
     return "on" if value else "off"
 
 
-def _money(value) -> str:
+def _money_cap(value) -> str:
     amount = float(value)
+    if amount <= 0:
+        return "off"
     return f"${amount:,.0f}" if amount.is_integer() else f"${amount:,.2f}"
 
 
@@ -40,14 +52,40 @@ def _cfg_pct(attr: str) -> Callable[[], str]:
     return lambda: _pct(getattr(config, attr))
 
 
+def _load_account() -> dict:
+    """The stored account row (patched in tests; the real read needs the database)."""
+    from swingbot.core.planning.account import load_account_config
+    return load_account_config()
+
+
+def _account_value(key: str):
+    """One setting from the stored account row; None when it cannot be read."""
+    try:
+        return _load_account().get(key)
+    except Exception as exc:  # the guide renders without the database
+        swallowed(log, "ops.admin.guide.account_row", exc,
+                  "guide: account row unreadable: %s", exc)
+        return None
+
+
+def _from_account(key: str, render: Callable[[object], str]) -> Callable[[], str]:
+    def placeholder() -> str:
+        value = _account_value(key)
+        return UNAVAILABLE if value is None else render(value)
+    return placeholder
+
+
 def _risk_max() -> str:
     return _pct(_field("RISK_PER_TRADE_PCT").max)
 
 
-def _sizing_mode() -> str:
-    value = config.POSITION_SIZING_MODE
+def _mode_text(value) -> str:
     label = dict(_field("POSITION_SIZING_MODE").options).get(value, value)
     return f"{label} (`{value}`)"
+
+
+def _count(value) -> str:
+    return str(int(value))
 
 
 def _sector_fallback() -> str:
@@ -86,13 +124,13 @@ RISK_PLACEHOLDERS: dict[str, Callable[[], str]] = {
     "MAX_STOP_LOSS_PCT": _cfg_pct("MAX_STOP_LOSS_PCT"),
     "MIN_STOP_DISTANCE_PCT": _cfg_pct("MIN_STOP_DISTANCE_PCT"),
     "CLAMP_STOP_TO_HARD_CAP": lambda: _flag(config.CLAMP_STOP_TO_HARD_CAP),
-    "RISK_PER_TRADE_PCT": _cfg_pct("RISK_PER_TRADE_PCT"),
+    "RISK_PER_TRADE_PCT": _from_account("risk_pct", _pct),
     "RISK_PER_TRADE_PCT.max": _risk_max,
-    "MAX_RISK_AMOUNT_ABSOLUTE": lambda: _money(config.MAX_RISK_AMOUNT_ABSOLUTE),
+    "MAX_RISK_AMOUNT_ABSOLUTE": _from_account("max_risk_amount_absolute", _money_cap),
     "PORTFOLIO_HEAT_CAP_PCT": _cfg_pct("PORTFOLIO_HEAT_CAP_PCT"),
     "CORRELATED_HEAT_CAP_PCT": _cfg_pct("CORRELATED_HEAT_CAP_PCT"),
     "SECTOR_HEAT_CAP_PCT": _cfg_pct("SECTOR_HEAT_CAP_PCT"),
-    "POSITION_SIZING_MODE": _sizing_mode,
+    "POSITION_SIZING_MODE": _from_account("sizing_mode", _mode_text),
     "correlation.threshold": lambda: _num(correlation.DEFAULT_THRESHOLD),
     "correlation.window": lambda: f"{correlation.DEFAULT_WINDOW} trading days",
     "correlation.sector_fallback": _sector_fallback,
@@ -101,4 +139,7 @@ RISK_PLACEHOLDERS: dict[str, Callable[[], str]] = {
     "sizing.risk_ceiling": lambda: _pct(sizing.RISK_CEILING_PCT),
     "sizing.gap": _gap_table,
     "version.bot": _bot_version,
+    "MAX_POSITION_SIZE_PCT": _from_account("max_position_pct", _pct),
+    "MAX_POSITION_VALUE_ABSOLUTE": _from_account("max_position_value_absolute", _money_cap),
+    "MAX_OPEN_POSITIONS": _from_account("max_open_positions", _count),
 }

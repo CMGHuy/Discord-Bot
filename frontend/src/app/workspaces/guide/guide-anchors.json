@@ -1,5 +1,16 @@
 {
   "chapters": {
+    "gates": [
+      "what-a-gate-does",
+      "gates-in-the-live-scan",
+      "direction-and-horizon-masks",
+      "shared-entry-gates",
+      "market-regime",
+      "relative-strength",
+      "higher-horizon-alignment",
+      "post-signal-fill-vetoes",
+      "measured-not-used"
+    ],
     "glossary": [
       "the-bot-and-its-alerts",
       "alert",
@@ -16,9 +27,11 @@
       "support-and-resistance",
       "level",
       "level-family",
+      "level-lifecycle",
       "confluence",
       "scenario",
       "strategy",
+      "direction-mask",
       "completed-bar",
       "gate",
       "market-regime",
@@ -42,6 +55,8 @@
       "size-0-alert",
       "suggested-size",
       "gap-through-the-stop",
+      "drawdown-throttle",
+      "kill-switch",
       "measuring-results",
       "r-multiple",
       "expectancy-expr",
@@ -57,6 +72,17 @@
       "reviewed-for",
       "under-the-hood"
     ],
+    "levels": [
+      "the-next-level-idea",
+      "level-families",
+      "confluence-counts-families",
+      "bonus-confirmations",
+      "touch-break-and-the-four-states",
+      "higher-horizon-alignment",
+      "closed-bars-only",
+      "the-minimum-move",
+      "duplicate-merge"
+    ],
     "pipeline": [
       "watchlist",
       "price-data",
@@ -71,6 +97,34 @@
       "alert",
       "monitoring",
       "close"
+    ],
+    "sizing-risk": [
+      "three-limits-not-one",
+      "how-the-share-count-is-found",
+      "sizing-modes",
+      "gap-aware-sizing",
+      "portfolio-and-correlated-heat",
+      "drawdown-throttle-and-kill-switch",
+      "reject-clamp-or-size-0",
+      "caps-that-are-not-applied",
+      "costs-turnover-and-tax"
+    ],
+    "strategies": [
+      "strategies-are-not-level-families",
+      "how-a-strategy-alert-is-sent",
+      "reading-a-card",
+      "masked-strategies",
+      "the-cards"
+    ],
+    "trade-plan": [
+      "entry",
+      "the-stop",
+      "the-stop-distance-cap-and-the-clamp",
+      "the-stop-never-widens",
+      "targets-that-pay-for-the-risk",
+      "scale-out-and-the-runner",
+      "how-a-plan-closes",
+      "backtest-and-live-use-the-same-plan"
     ],
     "what-it-is": [
       "what-it-does",

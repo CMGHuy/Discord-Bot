@@ -18,6 +18,9 @@ from typing import Callable, Mapping
 
 from swingbot.admin.guide.live_market import MARKET_PLACEHOLDERS
 from swingbot.admin.guide.live_risk import RISK_PLACEHOLDERS
+from swingbot.admin.guide.live_rules import RULE_PLACEHOLDERS
+from swingbot.admin.guide.live_strategies import STRATEGY_PLACEHOLDERS
+from swingbot.admin.guide.live_switches import SWITCH_PLACEHOLDERS
 
 PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}")
 _ANY_BRACES_RE = re.compile(r"\{\{(.*?)\}\}", re.S)
@@ -44,7 +47,9 @@ def _merge(*tables: Mapping[str, Callable[[], str]]) -> Mapping[str, Callable[[]
     return MappingProxyType(merged)
 
 
-PLACEHOLDERS: Mapping[str, Callable[[], str]] = _merge(RISK_PLACEHOLDERS, MARKET_PLACEHOLDERS)
+PLACEHOLDERS: Mapping[str, Callable[[], str]] = _merge(
+    RISK_PLACEHOLDERS, MARKET_PLACEHOLDERS, RULE_PLACEHOLDERS, SWITCH_PLACEHOLDERS,
+    STRATEGY_PLACEHOLDERS)
 
 
 def names_in(markdown: str) -> list[str]:
@@ -74,7 +79,16 @@ def resolve(markdown: str, memo: dict[str, str] | None = None) -> str:
     return PLACEHOLDER_RE.sub(value, markdown)
 
 
-def provenance_label(*, source: str, n: int, run_date: str, costs_included: bool) -> str:
-    """Where a performance figure comes from; always ends with 'before tax'."""
-    costs = "costs included" if costs_included else "costs not included"
-    return f"Source: {source}; N = {n}; as of {run_date}; {costs}; before tax"
+def _costs_text(costs_included: bool | None) -> str:
+    if costs_included is None:
+        return "costs not recorded"
+    return "costs included" if costs_included else "costs not included"
+
+
+def provenance_label(*, source: str, n: int, run_date: str, costs_included: bool | None) -> str:
+    """Where a performance figure comes from; always ends with 'before tax'.
+
+    costs_included=None: the source does not record whether costs were
+    deducted (registry rows carry no friction flag) -- never claim either way.
+    """
+    return f"Source: {source}; N = {n}; as of {run_date}; {_costs_text(costs_included)}; before tax"

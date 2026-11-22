@@ -152,3 +152,30 @@ def test_unknown_revision_exits_2(capsys):
 
 def test_an_empty_range_has_no_changed_paths():
     assert gs.changed_paths("HEAD..HEAD") == []
+
+
+# --- strategy cards (v237 V237-6) ------------------------------------------------------
+
+def test_touched_accepts_a_strategy_card(tmp_path):
+    from swingbot.admin.guide.cards import StrategyCard
+    card = StrategyCard(path=tmp_path / "rsi.md", strategy="RSI", reviewed_for="2.19.2",
+                        sources=("swingbot/core/market/entry_filters.py:rsi_entries",
+                                 "swingbot/core/edge"),
+                        body="**Idea.** x")
+    changed = ["swingbot/core/market/entry_filters.py", "swingbot/core/edge/heat.py", "README.md"]
+    assert gs.touched(changed, [card]) == [
+        (card, ["swingbot/core/edge/heat.py", "swingbot/core/market/entry_filters.py"])]
+    assert gs.touched(["README.md"], [card]) == []
+
+
+def test_both_card_loaders_read_the_same_sources(tmp_path):
+    from swingbot.admin.guide import cards
+    folder = tmp_path / "strategies"
+    folder.mkdir()
+    (folder / "rsi.md").write_text(
+        '---\nstrategy: "RSI"\nreviewed_for: 2.19.2\nsources:\n'
+        "  - swingbot/core/market/entry_filters.py:rsi_entries\n"
+        "  - swingbot/core/market/strategy_types.py:admits\n---\n**Idea.** x\n",
+        encoding="utf-8")
+    assert ([(c.path.name, c.sources) for c in gs.load_cards(tmp_path)]
+            == [(c.path.name, c.sources) for c in cards.load_cards(tmp_path)])

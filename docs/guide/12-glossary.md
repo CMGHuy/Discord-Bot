@@ -79,6 +79,10 @@ One support or resistance price after nearby candidates from different methods h
 
 One method of drawing levels, for example moving averages, Fibonacci retracements or pivots. The level chapter lists them all.
 
+### Level lifecycle
+
+What price has done to a level, read from finished bars: fresh (never touched), tested (touched and held), delivered (price closed through it) or decaying (not touched for a long time). A stop prefers to sit beyond a tested level and never leans on a delivered one.
+
 ### Confluence
 
 How many different level families agree on one level. Candidates within {{CLUSTER_TOLERANCE_PCT}} of each other merge, and each family counts once, however many lines it draws.
@@ -90,6 +94,10 @@ A possible trade from the current price: long toward the next resistance or shor
 ### Strategy
 
 A named entry rule, such as a breakout or a pullback, measured in backtests and allowed only on the sides and horizons its results support.
+
+### Direction mask
+
+The sides (long, short) and horizons on which a strategy may alert, set from its measured results. A strategy whose mask admits nothing is masked: measured in research, never alerted.
 
 ### Completed bar
 
@@ -153,7 +161,7 @@ The share of the account one trade loses at its stop in the fixed-risk sizing mo
 
 ### Dollar risk cap
 
-The most one trade may lose at its stop in money: {{MAX_RISK_AMOUNT_ABSOLUTE}}.
+A limit on one trade's planned loss at the stop, in money. Current setting is {{MAX_RISK_AMOUNT_ABSOLUTE}}.
 
 ### Rejected plan
 
@@ -169,7 +177,7 @@ The risk sitting in one group of stocks whose daily returns correlate above {{co
 
 ### Size-0 alert
 
-An alert a heat cap blocks. It still posts, flagged, with a suggested size of zero, so you see what the cap cost.
+An alert a heat cap or the kill switch blocks. It still posts, flagged, with a suggested size of zero, so you see what the cap cost.
 
 ### Suggested size
 
@@ -178,6 +186,14 @@ The number of shares that loses the risk per trade at the stop for the account s
 ### Gap through the stop
 
 The price opens beyond the stop, so the fill is worse than −1R. Risk and heat are measured to the stop, not to the gap.
+
+### Drawdown throttle
+
+A ladder that sizes new entries down step by step as the account falls from its peak, and pauses them at the deepest step until the account recovers part of the fall. The walk-forward backtest applies it and the Risk page shows where the account stands on it; the live scan does not apply it to alert sizes yet, whatever its setting says (now {{DD_THROTTLE_ENABLED}}).
+
+### Kill switch
+
+A pause on new entries that the scan engages on its own after a deep drawdown, a violent market day or a broken data feed, and that only a person can release. While it is on, alerts still post, with a suggested size of zero.
 
 ## Measuring results
 

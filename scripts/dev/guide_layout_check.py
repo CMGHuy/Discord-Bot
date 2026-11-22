@@ -1,8 +1,8 @@
-"""Guide page layout check at three widths (v236 V236-11; spec v215 § Testing, "Layout").
+"""Guide page layout check at three widths (v236 V236-11, v237 V237-14; spec v215 § Testing, "Layout").
 
 Logs into a running admin with Playwright and opens the guide at 390, 820
 and 1440 px. At each width: no sideways overflow; the contents mode the
-width owns (picker < 640, drawer 640-1023, sticky rail >= 1024); every
+width owns (picker < 640, drawer 640-1023 listing every written chapter, sticky rail >= 1024); every
 guide control at least 44 px on phone and tablet (counting .sb-hit's
 ::after); a deep link lands its heading in the top half of the viewport.
 
@@ -30,9 +30,9 @@ WIDTHS = (390, 820, 1440)
 HEIGHT = 900
 MIN_TARGET_PX = 44
 TOUCH_MAX_WIDTH = 1023
-PAGES = ("", "what-it-is", "glossary", "pipeline")   # the last one is screenshotted
-DEEP_LINKS = ("what-it-is#the-notice", "glossary#r-multiple")
-CHAPTERS_IN_DRAWER = 3
+PAGES = ("", "what-it-is", "glossary", "strategies", "sizing-risk", "pipeline")   # the last one is screenshotted
+DEEP_LINKS = ("what-it-is#the-notice", "glossary#r-multiple", "sizing-risk#reject-clamp-or-size-0")
+CHAPTERS_IN_DRAWER = 8
 DEFAULT_BASE = "http://localhost:1234"
 DEFAULT_OUT = ROOT / "logs" / "v236-layout"
 DEFAULT_REPORT = ROOT / "docs" / "superpowers" / "results" / "2026-11-18-v236-guide-layout.md"
@@ -107,7 +107,7 @@ def deep_link_problems(width: int, link: str, top: float | None, height: int = H
 
 def render_report(results: list[dict], base: str, today: str) -> str:
     problems = [p for row in results for p in row["problems"]]
-    lines = [f"# v236 guide layout check -- {today}", "",
+    lines = [f"# Guide layout check -- {today}", "",
              f"Base `{base}`; widths {', '.join(str(w) for w in WIDTHS)}; pages "
              + ", ".join(f"`/insights/guide/{p}`" for p in PAGES)
              + f"; deep links {', '.join(f'`{d}`' for d in DEEP_LINKS)}. "
