@@ -55,6 +55,21 @@ def test_rung_two_checkpoints_each_ticker_and_resumes(tmp_path, monkeypatch):
     assert _run(tmp_path, 2).events == first.events
 
 
+def test_a_tickers_smoke_run_keeps_its_checkpoints_apart_from_the_real_run(tmp_path, monkeypatch):
+    _store(tmp_path)
+    _upper(tmp_path, 1)
+    smoke = _run(tmp_path, 2, "--tickers", "AAA")
+    assert {e.ticker for e in smoke.events} == {"AAA"}
+    assert ri._ticker_checkpoint(tmp_path / "work", 2, "AAA", smoke=True).is_file()
+    assert not ri._ticker_checkpoint(tmp_path / "work", 2, "AAA").exists()
+    raced, real = [], ri._race_ticker
+    monkeypatch.setattr(ri, "_race_ticker",
+                        lambda idea, rung, ticker, *a: raced.append(ticker) or real(idea, rung, ticker, *a))
+    _run(tmp_path, 2)
+    assert raced == ["AAA", "BBB"]                     # the smoke blob is never picked up
+    assert ri._ticker_checkpoint(tmp_path / "work", 2, "AAA").is_file()
+
+
 def test_a_checkpoint_from_other_events_is_refused(tmp_path):
     _store(tmp_path)
     _upper(tmp_path, 1)

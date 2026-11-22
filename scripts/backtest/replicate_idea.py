@@ -248,8 +248,9 @@ class RunMarker:
                 f"and wrote no result ({self.crash.as_posix()})")
 
 
-def _ticker_checkpoint(work_dir, rung: int, ticker: str) -> Path:
-    return Path(work_dir) / f"rung{rung}" / f"{ticker}.json"
+def _ticker_checkpoint(work_dir, rung: int, ticker: str, *, smoke: bool = False) -> Path:
+    """A --tickers smoke run checkpoints under rung<N>-smoke/, never the real run's rung<N>/."""
+    return Path(work_dir) / (f"rung{rung}-smoke" if smoke else f"rung{rung}") / f"{ticker}.json"
 
 
 def _arrays(levels) -> tuple:
@@ -303,7 +304,7 @@ def _race_ticker(idea, rung: int, ticker: str, signals: list, args) -> dict:
 def _ticker_rung(idea, rung: int, ticker: str, upper: list, args) -> dict:
     """A finished checkpoint for exactly these signals, else race and checkpoint."""
     signals = [event.signal_date for event in upper]
-    path = _ticker_checkpoint(_work(args), rung, ticker)
+    path = _ticker_checkpoint(_work(args), rung, ticker, smoke=bool(args.tickers))
     if path.is_file():
         blob = json.loads(path.read_text(encoding="utf-8"))
         if blob["signals"] != signals:

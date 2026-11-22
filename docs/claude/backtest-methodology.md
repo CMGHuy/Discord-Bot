@@ -192,8 +192,9 @@ interpreting any backtest, grid, or validation result.
   spent); rungs 2–4 need the fixed next-open shape. Gap fills are priced,
   never dropped; costs 5 bps a side plus commission (shorts: borrow), with
   2 × slippage printed beside, never gating. Runs checkpoint per ticker under
-  `<work-dir>/rung<N>/`; a crashed run that wrote no result may be re-run
-  once (`crash.json`). The ladder never reads 2021 or later. Outcome:
+  `<work-dir>/rung<N>/` (a `--tickers` smoke run under `rung<N>-smoke/`,
+  never picked up by the real run); a crashed run that wrote no result may
+  be re-run once (`crash.json`). The ladder never reads 2021 or later. Outcome:
   rung 1 failing or underpowered closes the idea as a non-replication;
   rungs 1–4 holding with rung 4's paired difference to rung 2 not wholly
   below zero licenses a strategy spec in the bot's shape; rungs 1 and 2
