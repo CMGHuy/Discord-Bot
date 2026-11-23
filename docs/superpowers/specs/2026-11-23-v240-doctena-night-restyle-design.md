@@ -62,6 +62,9 @@ sits beside them):
    and Recent activity redrawn with them.
 
 The mockups are the visual reference. **This spec wins where they differ.**
+The panel review changed three things the mockups show: the active nav marker
+and the "Capital" wordmark are blue, not mint (§1, §5); `--text-faint` and
+`--accent` are lighter than drawn; and the tab-bar editor has no grip handle.
 
 ## Decisions (partner, 2026-11-23)
 
@@ -110,12 +113,23 @@ their last readers and are deleted.
 | `--overlay-dim` | `#00131F` at 72% |
 | `--border` / `--border-strong` | `#0D3D59` / `#1D5373` |
 | `--text` / `--text-secondary` / `--text-muted` | `#FAFDFF` / `#C8E1EF` / `#8FB3C8` |
-| `--text-faint` | `#4B748A` |
-| `--accent` | `#328EC0` |
-| `--accent-fill` / `--accent-fill-hi` | `#0072B0` / `#0A82C4` |
-| `--accent-soft` | `#328EC0` at 18% |
+| `--text-faint` | `#6E94A8` (doctena `#4B748A` measured 3.4:1 on `--surface`; lifted to clear 4.5:1, because it carries captions and hints) |
+| `--accent` (accent text, links, nav marker) | `#5AA9D6` (doctena `#328EC0` is 4.1:1 on `--surface-raised`; lifted to clear 4.5:1) |
+| `--accent-fill` / `--accent-fill-hi` | `#0072B0` / `#005B8C` (white text 5.1:1 / 7:1; hover darkens, as doctena's pressed state does) |
+| `--accent-soft` | `#328EC0` at 24% |
+| `--control-border` (new) | `#0072B0`: inputs, selects and segmented controls, 3.4:1 on `--surface` (WCAG 1.4.11). `--border` stays for panels and rules, where it is decorative |
 | `--pos` (gains, long) | `#53CEB5` (doctena mint) |
 | `--neg` (losses, short) | `#F07A7A` (doctena error `#C52020`, lifted for a dark ground) |
+
+**Mint and coral mean money and direction, nothing else.** `--pos` and `--neg`
+appear only on signed P&L figures, R multiples, and the long/short direction
+markers (today's convention: green ▲ long, red ▼ short, kept with the new
+arrows). Navigation, the brand, active states, focus rings and non-P&L chips use
+`--accent` or the chip tokens. The colour of a P&L figure comes from its sign,
+never from the trade's direction. Every loss also carries a true minus
+(`−`, U+2212) in money, percent and R figures, so a loss never reads by hue
+alone (red-green colour blindness). The plan adds a source-scan test for the
+first rule and a formatter test for the second.
 
 - **Contrast holds.** `contrast.spec.ts` runs over both themes
   (`theme-tokens.ts`, `TOKEN_THEMES`). Every Navy pair it checks must pass at
@@ -127,7 +141,14 @@ their last readers and are deleted.
   `'graphite'` is Navy, so a browser that never chose gets Navy, and one that
   explicitly chose Black keeps Black. The pre-boot script in
   `frontend/src/index.html` flips the same way, so the first paint is never
-  the wrong theme, and so does the theme-color meta.
+  the wrong theme. That script carries copied literals today: `NAVY_BG =
+  '#070c18'`, pinned to `--midnight-950` by `primitives.spec.ts` (line 156
+  and 286–312) and `tokens.spec.ts` (378–444), and the static
+  `<meta name="theme-color" content="#0d0f12">` is Graphite. After this
+  change the static meta and the default ground are the doctena `--bg`
+  (`#00131F`). The script gains a `GRAPHITE_BG` literal that it applies only
+  on an explicit `'graphite'`, and both literals are pinned to their tokens by
+  the same tests, re-pointed.
 - **The bare `:root` stays Graphite.** `dump_tokens.py` and `resolve-token.ts`
   read only `:root` (v225), so the Discord chart PNGs and the token fixture
   (`tests/charts/resolved_tokens.json`) keep the Black colours. The Discord
@@ -143,13 +164,22 @@ their last readers and are deleted.
   no-CDN rule (spec v13) holds.
 - `frontend/src/styles/fonts.css` declares `Jost` once per subset with
   `font-weight: 100 900` and `unicode-range`, and drops the Inter and
-  JetBrains Mono `@font-face` rules. The Inter and JetBrains Mono woff2 files
-  stay on disk: `swingbot/core/charts/chart_style.py` loads Inter for the
-  Discord charts.
-- Add doctena's metric-matched fallback faces (`Jost Fallback` over local
-  Arial/Arial Bold, and `Jost Fallback Android` over Roboto, using the
-  size-adjust and ascent/descent overrides measured above) so a slow font
-  load does not shift the layout.
+  JetBrains Mono `@font-face` rules.
+- **Owners of the old files.** `vendor/inter/` stays while
+  `swingbot/core/charts/chart_style.py:20` reads `inter-500.woff2` for the
+  Discord charts; it is removed only with that reader. `vendor/jetbrains-mono/`
+  has no reader once `fonts.css` drops it, and is deleted in the same plan,
+  after the `tnum` check below passes.
+- Add doctena's metric-matched fallback faces so a slow font load does not
+  shift the layout. Measured from doctena.de's stylesheet, 2026-11-23 (all
+  with `line-gap-override: 0%`):
+
+  | Face | Weights | `src: local(...)` | size-adjust | ascent | descent |
+  |---|---|---|---|---|---|
+  | `Jost Fallback` | 100–500 | Arial, ArialMT | 95.87% | 111.61% | 39.12% |
+  | `Jost Fallback` | 600–900 | Arial Bold, Arial-BoldMT | 95.49% | 112.06% | 39.27% |
+  | `Jost Fallback Android` | 100–500 | Roboto, Roboto Regular, Roboto-Regular | 96.08% | 111.37% | 39.03% |
+  | `Jost Fallback Android` | 600–900 | Roboto Bold, Roboto-Bold | 101.36% | 105.57% | 37% |
 - Tokens: `--font-sans: "Jost", "Jost Fallback", "Jost Fallback Android",
   system-ui, sans-serif;` and `--font-mono: var(--font-sans)`. `--font-num`
   and `--font-figure` keep reading those tokens, so no component changes.
@@ -157,7 +187,13 @@ their last readers and are deleted.
   gets, `font-variant-numeric: tabular-nums`. Jost has tabular figures (the
   `tnum` feature), which is what keeps columns aligned without a mono face.
   The plan's first font task confirms `tnum` in the vendored file before
-  anything depends on it.
+  anything depends on it. **If `tnum` is missing**, `--font-num` stays on
+  JetBrains Mono (its files are then kept), the rest of the app takes Jost,
+  and the partner is told before the plan goes on.
+- **Gate:** a source-scan test fails any rule that reads `--font-num` or
+  `--font-mono`, or styles a `.num` cell, without `font-variant-numeric:
+  tabular-nums`. Numeric columns stay right-aligned. The three-device check
+  (§9) includes a 12–13px price column, where Jost's x-height is smallest.
 - Code samples (`code` in Insights → Tuning, the gallery) keep reading
   `--font-mono`, which is now Jost. That is the partner's "everything" choice.
 - `styles.css:116`'s note about JetBrains Mono's missing 600 weight is
@@ -221,7 +257,7 @@ Each path's comment says what it shows, as today.
 | `info` | replaces the `ⓘ` text glyph in `sb-hint` and every inline info marker |
 | `long` / `short` | trend-up / trend-down arrows, replacing the `▲` / `▼` glyphs in `direction-arrow.ts` and every direction marker |
 | `close` | replaces the `×` text in `sb-drawer`, sheets and dialogs |
-| `edit`, `grip`, `up`, `down`, `plus`, `minus` | the tab-bar editor (§6) and drawers |
+| `edit`, `up`, `down`, `plus`, `minus` | the tab-bar editor (§6) and drawers. No `grip`: the editor has no drag-reorder, so nothing should look draggable |
 
 **Text glyphs that act as icons become `sb-icon`.** The plan inventories
 them from the 48 files that hold `▲ ▼ ⓘ × ✓ ✗ ⚠ ● ○ ★` today. The rule:
@@ -229,7 +265,9 @@ a glyph that stands alone as a status, direction, action or info marker
 becomes an icon. A glyph inside a sentence or a notation stays text:
 `115.26 → 123.05`, `+2.9%`, `N = 412`, and the `→` in "View in Trades →".
 Each replaced glyph keeps its accessible name on the control or cell that
-holds it (icons stay `aria-hidden`).
+holds it (icons stay `aria-hidden`). Glyphs such as `✓ ✗ ⚠ ● ○ ★` may carry
+meaning today, so a test checks that each status, direction and outcome cell
+keeps its text or `aria-label` after the swap.
 
 ### 5. The rail: 64px, icons only, tooltips
 
@@ -244,13 +282,15 @@ holds it (icons stay `aria-hidden`).
   delay), on keyboard focus, and on a **long-press** (§6) on a touch screen,
   and closes on leave, blur, Escape or tap elsewhere. Only one tooltip shows
   at a time.
-- **Active entry:** `--accent-soft` fill plus a 3px `--pos` (mint) bar on the
-  rail's inner edge, as in mockup 2.
+- **Active entry:** `--accent-soft` fill plus a 3px `--accent` bar on the
+  rail's inner edge, and `aria-current="page"`. Mockup 2 drew the bar in mint.
+  The panel moved it to `--accent`, because mint means "gain" (§1). The bar
+  and the fill are two cues, so the state does not rest on one hue.
 - **Order:** Dashboard, Watchlist, Trades, **Calendar**, Risk, Insights;
   System at the foot (admin only, as today).
 - **Brand:** the diamond heads the rail. The top-bar wordmark reads
-  **Bomeo Capital**, Bomeo in `--text` weight 700 and Capital in `--pos`
-  weight 500 (the two-tone treatment v202 D2 kept). Every
+  **Bomeo Capital**, Bomeo in `--text` weight 700 and Capital in `--accent`
+  weight 500 (the two-tone treatment v202 D2 kept; blue, not mint, per §1). Every
   `aria-label="Bomeo Capital — …"` already matches. `LABELS.brand` changes
   from "Swingbot" to "Bomeo Capital".
 - Tablet (640–1023px) and desktop use the same rail. Phone hides it, as today.
@@ -262,13 +302,22 @@ holds it (icons stay `aria-hidden`).
 - `NAV_ENTRIES` gains `{ path: '/calendar', label: 'Calendar', icon:
   'calendar' }` after Trades. Trades loses its `sections`: Book is the whole
   page, so its section tabs disappear.
-- Routes: `/calendar` and `/calendar/:date` take the Calendar workspace and
-  its day page. `/trades/calendar` and `/trades/calendar/:date` redirect
-  (Angular `redirectTo`, query string kept) to them, so bookmarks and old
-  Discord links still land.
-- `swingbot/admin/spa.py`'s SPA prefix list gains `"calendar"`, so a hard
-  refresh on `/calendar` serves the SPA instead of a 404. This is the
-  `bot patch`.
+- Routes: the redirect direction flips, in one change. Today
+  `app.routes.ts:84-85` sends `calendar` and `calendar/:date` to
+  `trades/calendar[/:date]`, and `nav.ts:98` holds the alias
+  `'/calendar': '/trades/calendar'`. After: the Calendar workspace loads at
+  `/calendar` and `/calendar/:date`; `/trades/calendar` and
+  `/trades/calendar/:date` redirect to them (query string kept); the old
+  redirects and the alias are deleted, so no pair of redirects points at each
+  other. The `trades/calendar` route guard comment (`app.routes.ts:49`) moves
+  with it. Bookmarks and old Discord links still land.
+- `swingbot/admin/spa.py`: `"calendar"` is **already** in `WORKSPACES`
+  (line 57), but in the "pre-v202 names … removed at Phase 4's close-out"
+  group, and the comment at lines 44–49 lists it for removal. It moves into
+  the destinations group (line 55) and the removal note drops it, so no later
+  close-out deletes a live destination's prefix. `"trades"` stays, which
+  keeps `/trades/calendar` reachable on a reload for its redirect. This is the
+  `bot patch`, and a Python test pins `calendar` as a destination.
 - The command palette, breadcrumb (`breadcrumbFor`: "Calendar", then
   "Calendar / 23 Nov 2026" on a day) and section tabs all read the nav model,
   so they follow without their own changes. Their tests update.
@@ -276,27 +325,48 @@ holds it (icons stay `aria-hidden`).
 **Phone tab bar** (`phone-tab-bar.ts`, `more-sheet.ts`):
 
 - **Labels always shown**, under each icon, 11px, weight 600. The active tab
-  gets the mint-tinted pill. The Dashboard tab keeps its "Home" label (v202 §3).
+  gets the `--accent-soft` pill with the icon in `--accent` (not mint, §1) and
+  `aria-current="page"`. The Dashboard tab keeps its "Home" label (v202 §3).
+  Tabs share the bar's width equally, whether it holds 2 or 5, and the 5-tab
+  bar is checked at 320px.
 - **Default tabs:** Home, Watchlist, Trades, Calendar, then More. Risk,
   Insights and System (admin) sit in the More sheet.
 - **Press and hold (long-press):** a touch held for 500ms without moving
   more than 10px opens that tab's tooltip above it, using the same `sb-hint`
-  as the rail, and navigates nowhere. Release closes it after 1.5s or on the
-  next touch, and the click that follows a long-press is swallowed. A move
-  over 10px or a second finger cancels it. This lives in one shared
-  `sbLongPress` directive, which the rail (§5) and the tab bar both use, and
-  which emits on its own (no hint coupling), so it is testable alone.
+  as the rail, and navigates nowhere. The tooltip stays until the next touch
+  anywhere, or Escape (no timed close, so a slow reader is not rushed). The
+  click that follows a long-press is swallowed. A move over 10px or a second
+  finger cancels it. This lives in one shared `sbLongPress` directive, which
+  the rail (§5) and the tab bar both use, and which emits on its own (no hint
+  coupling), so it is testable alone.
+- **The OS must not fight it.** A held touch on a link opens the iOS/Android
+  link preview, the context menu or text selection. The directive's host
+  links get `-webkit-touch-callout: none` and `user-select: none`, and the
+  directive prevents `contextmenu` for touch-originated presses only. Tests
+  cover all three.
 - **Editing the bar.** The More sheet gains an **Edit tab bar** action
   (pencil icon) that opens the editor in an `sb-drawer` (§7):
   - "In the tab bar": the chosen pages, in order, each with up/down buttons
     (44px targets) and a remove (minus) button. Dashboard is pinned first
     and has none.
   - "Under More": every other page the login may see, each with an add (plus)
-    button. Add is disabled while the bar holds 4 pages, with the reason
-    shown.
+    button. Add is disabled while the bar holds 4 pages, and the reason
+    ("The bar holds 4 pages. Remove one to add another.") shows as inline text
+    above the Under More list, never only in a tooltip.
   - A live preview of the bar, **Reset** (back to the default) and **Done**.
-    Changes apply at once; Done closes.
+    Changes apply at once; Done closes. Reset shows an inline **Undo** for 8
+    seconds. Every move, add, remove and reset is announced through an
+    `aria-live="polite"` region ("Calendar moved to position 3").
   - Up to **4 pages + More**. Fewer than 4 is allowed (minimum: Dashboard).
+  - Reordering is by the buttons only, so nothing in the editor competes with
+    the sheet's drag-to-close. Focus is trapped in the editor and returns to
+    the **Edit tab bar** button when it closes.
+  - **Risk is never out of reach.** The editor moves pages between the bar
+    and More and never hides one, so Risk (heat, the 2% dollar-risk cap) is
+    always one tap from the bar. A test pins that every nav page the login
+    may see is in exactly one of the two lists. The Dashboard's open-risk
+    figure (`trading-performance.ts`) stays on the phone layout, so heat is
+    readable without opening Risk.
 - **Storage:** `localStorage['ui.tabbar']` holds a JSON array of nav paths,
   read and written through the existing storage wrapper, in try/catch like
   `ui.theme`. On read the list is validated against
@@ -318,18 +388,29 @@ holds it (icons stay `aria-hidden`).
   handle, 85dvh maximum height and rounded top corners
   (`--panel-radius`). From 1024px it stays the right-hand panel. The
   640–1023px `85vw` side rule is deleted.
-- **Drag down to close** works below 1024px (`viewport.isNarrow()`, today
-  `isPhone()`). The rule is unchanged: a downward drag from the handle or
-  header, or from the body while the body is scrolled to the top, pulls the
-  sheet with the finger. Release past `SWIPE_CLOSE_PX` (80px) **or** a fast
-  flick (over 0.5px/ms in the last 100ms, over 24px) closes it with the exit
-  animation from where it was let go. Otherwise it springs back. Scrolling a
-  long body never closes the sheet until the body is back at its top.
-- The swipe logic moves out of `Drawer` into a shared `sbSwipeDismiss`
-  directive (`frontend/src/app/ui/swipe-dismiss.ts`), so the other sheets
-  reuse it rather than copy it. `Drawer` behaviour is byte-for-byte the
-  same on phone; the existing swipe tests move with it and still pass.
-- The close `×` becomes the `close` icon (§4).
+- **Drag down to close**, in three separate steps so each is provable:
+  1. **Extract, no behaviour change.** The swipe logic (`layout.ts:600-638`)
+     moves out of `Drawer` into a shared `sbSwipeDismiss` directive
+     (`frontend/src/app/ui/swipe-dismiss.ts`). Phone behaviour is identical:
+     a downward drag from the handle or header, or from the body while the
+     body is scrolled to the top, pulls the sheet with the finger; release
+     past `SWIPE_CLOSE_PX` (80px) closes it from where it was let go,
+     otherwise it springs back. The existing swipe tests move with it,
+     unchanged, and pass.
+  2. **Widen.** The gesture works below 1024px (`viewport.isNarrow()`,
+     today `isPhone()`).
+  3. **Add flick.** A fast flick (over 0.5px/ms over the last 100ms, and over
+     24px) also closes it. New tests cover it.
+
+  Scrolling a long body never closes the sheet until the body is back at its
+  top.
+- **A visible close button stays on every sheet**: `sb-drawer`, More and
+  Live, at least 44×44px, as the non-drag alternative (WCAG 2.5.7). The
+  close `×` text becomes the `close` icon (§4). Focus returns to the control
+  that opened the sheet.
+- **Landscape phone** (e.g. 844×390) is 640px+ wide and below 1024px, so it
+  gets the centred sheet. At 85dvh of 390px (about 330px) the handle and
+  header stay fixed and the body scrolls; §9 adds this size to the checks.
 
 **Other sheets get the same gesture:** `sb-more-sheet` and `sb-live-sheet`
 (phone bottom sheet; on tablet the live sheet becomes a bottom sheet too,
@@ -352,8 +433,39 @@ surfaces below 1024px:
 | Versions lane segments | hover-only tooltip, unreachable by tap | a tap opens a drawer with the segment's release details; the filter toggle moves to a button inside it |
 | Live sheet activity/bot rows | nothing | stay as rows (the sheet is itself a drawer; no drawer stacks on a drawer) |
 
+**`sb-data-table` gets an explicit, per-table policy.** Today the row drawer
+is gated by `phone()` and at least one `compact` column
+(`data-table.ts:723-757`), and `phoneTap` (`'drawer' | 'emit'`) applies to
+phones only; its docstring promises "tablet and desktop rows are unaffected".
+Turning drawers on for tablet changes all 18 consumers at once, so the input
+is renamed `narrowTap` (`'drawer' | 'emit' | 'none'`), applies below 1024px,
+and defaults to `'drawer'`. Each consumer is set explicitly in the plan, so
+the change is auditable table by table:
+
+- `'emit'` keeps its owner's drawer at tablet width too: Dashboard positions
+  → `TradeDrawer`, Research ledger → its own drawer.
+- `'none'` for any table whose rows carry nothing beyond what the row shows.
+- The card layout (`cardsAt`) stays phone-only: tablet keeps full columns.
+  `[expansion]` content renders inside the drawer on both widths, and the
+  inline chevron row is removed below 1024px.
+
 Rules that apply everywhere:
 
+- **An interactive cell wins over the row.** A link, button, sort header or
+  checkbox in a row does its own thing; only a tap elsewhere on the row opens
+  the drawer. A tappable row shows a trailing chevron and is focusable
+  (`tabindex="0"`); Enter or Space opens the drawer, and focus returns to the
+  row when it closes.
+- **The drawer adds to the row; it never replaces it.** No column a row shows
+  today is removed by this spec. On phone the `compact` columns that carry
+  risk (risk $, % of account, stop, R on trade, plan and exposure tables)
+  stay on the card. Risk sector rows keep their heat % against the heat cap
+  visible on the row; the drawer adds the exact figures. `TradeDrawer`
+  already shows entry, stop, target and dollar risk; a test pins that.
+- **Drawers carry the row's caveats.** A drawer for a plan, trade or
+  strategy row shows its badge tier and as-of time. Any caveat label a
+  figure carries in its row (pre-cost, pre-tax, sample size) is repeated
+  beside that figure in the drawer.
 - **No drawer on top of a drawer.** A tap inside an open drawer that would
   open another one navigates instead (today's `detailLink` behaviour).
 - **Desktop does not change.** At 1024px and up, row clicks keep today's
@@ -383,8 +495,8 @@ Rules that apply everywhere:
 
 ### 9. Three devices
 
-Every changed screen is checked at phone (390px), tablet (820px) and desktop
-(1440px) per `docs/claude/ui-design.md`: rail, top bar, tab bar, editor,
+Every changed screen is checked at phone (390px, and 320px for the tab bar),
+landscape phone (844×390), tablet (820px) and desktop (1440px) per `docs/claude/ui-design.md`: rail, top bar, tab bar, editor,
 every drawer in §7's table, and one page per workspace for font and shapes.
 Touch targets stay ≥44px, nothing scrolls sideways at 390px, and long
 labels wrap or truncate with their full text in the drawer.
@@ -393,8 +505,9 @@ labels wrap or truncate with their full text in the drawer.
 
 If the image is rolled back after v240 (`scripts/ops/rollback_to.sh`):
 
-- `/calendar` bookmarks 404 at the server (the old `spa.py` has no
-  `calendar` prefix). `/trades/calendar` works again.
+- `/calendar` bookmarks keep working: the old `spa.py` already serves the
+  `calendar` prefix (line 57), and the old router redirects it to
+  `/trades/calendar` (`app.routes.ts:84-85`).
 - `ui.tabbar` stays in browser storage, unused and harmless. A `ui.theme` of
   `navy` shows the old Navy, and an unset theme shows Black again.
 - No data, schema or bot behaviour changes, so there is nothing to undo
@@ -436,6 +549,16 @@ edge and empty cases included (CLAUDE.md):
 - **Drawers:** for each surface in §7's table, a tablet-width and a
   phone-width test that a tap opens the drawer with the right heading and
   fields, and a desktop-width test that behaviour is unchanged.
+- **Panel-driven gates:** `--pos`/`--neg` read only by P&L, R and direction
+  rules (source scan); every formatted loss carries U+2212; every
+  `--font-num`/`.num` rule has `tabular-nums` (source scan); status,
+  direction and outcome cells keep an accessible name after the glyph swap;
+  `narrowTap` is set explicitly on every `sb-data-table` consumer; an
+  interactive cell click does not open the row drawer; Enter/Space on a
+  focused row opens it; `TradeDrawer` shows entry, stop, target and
+  dollar risk; drawers show badge tier and as-of time; the editor's two lists
+  partition the visible nav pages; long-press host links carry
+  `-webkit-touch-callout: none` and touch `contextmenu` is prevented.
 - **E2E (Playwright):** the rail tooltip, the phone editor round-trip
   (remove Watchlist, add Risk, reload, still there, Reset), and drag-to-close
   on a phone and a tablet viewport.
@@ -453,18 +576,65 @@ edge and empty cases included (CLAUDE.md):
 
 ## What follows
 
-Three plans, each numbered when written, in this order:
+Five plans, each numbered when written, each under the 20-task cap, run
+**strictly in this order** (one worktree at a time):
 
-1. **Foundations**: Jost vendoring, fonts.css, the Navy palette and default
-   flip, radius and button tokens, the icon component's 24 grid and the
-   full redraw, glyph-to-icon replacement. Every later plan sits on these
-   tokens and icons.
-2. **Shell and navigation**: the 64px icon rail with tooltips, the
-   `sbLongPress` directive, Calendar as a destination (routes, redirects,
-   `spa.py`), the Bomeo Capital wordmark, `TabBarPrefs`, the tab-bar labels,
-   the editor.
-3. **Drawers**: `sbSwipeDismiss`, the bottom sheet below 1024px, More and
-   Live sheets on the gesture, and the surface-by-surface moves in §7's table.
+1. **Theme and type**: Jost vendoring and the `tnum` check, fonts.css and
+   fallbacks, the Navy palette and default flip (pre-boot literals, meta),
+   `--control-border`, radius and button tokens, the money-colour and
+   true-minus rules, the `tabular-nums` gate, JetBrains Mono removal.
+2. **Icons**: the 24-grid `sb-icon` with `size` and filled sub-paths, the
+   full redraw, the new names, and glyph-to-icon replacement across the
+   48 files, with accessible-name tests.
+3. **Shell and navigation**: the 64px rail with tooltips, `sbLongPress`,
+   Calendar as a destination (redirect flip, alias removal, `spa.py`
+   regrouping), the wordmark, `TabBarPrefs`, tab-bar labels, the editor.
+4. **Drawer core**: `sbSwipeDismiss` (extract, widen, flick as separate
+   tasks), the bottom sheet below 1024px, More and Live sheets on the
+   gesture with close buttons, and `sb-data-table`'s `narrowTap` policy set
+   on all 18 consumers.
+5. **Drawer surfaces**: the bespoke moves in §7's table (watchlist,
+   calendar day cards, dashboard watchlist panel, risk sector/matrix/
+   clusters, versions lanes, caveats in drawers).
 
-Plan 2's editor opens in an `sb-drawer`, so it gets drag-to-close as soon as
-plan 3 lands. Plan 2 does not wait for plan 3.
+Why strictly in order: plans 1 and 2 change tokens and icons every later
+screen is checked against. Plans 3 and 4 both edit `shell/more-sheet.ts`
+(the Edit action and `TabBarPrefs` in 3; the gesture and handle in 4) and
+`sb-drawer` use, so they never run in parallel. Plan 5 builds on plan 4's
+policy input.
+
+## Panel review
+
+Run 2026-11-23 on a91c43db, serially: ux-designer (sonnet), staff-engineer
+(opus), financial-advisor (sonnet). No BLOCKING findings; 32 ADVISORY.
+Duplicates are merged on one line naming every seat.
+
+- ux-designer, financial-advisor: mint marks the active nav entry, tab pill and wordmark, so it means both "you are here" and "gain" -- applied: nav, brand and active states use `--accent`; mint and coral only on signed money, R and direction (§1, §5, §6).
+- ux-designer: `--text-faint` `#4B748A` is 3.4–3.7:1, under 4.5:1 for text -- applied: `#6E94A8` (§1).
+- ux-designer: `--accent-fill-hi` and accent text under 4.5:1 -- applied: hover `#005B8C`, accent text `#5AA9D6` (§1).
+- ux-designer: borders under 3:1 in a flat, shadowless design -- applied: new `--control-border` `#0072B0` for controls; `--border` stays decorative (§1).
+- ux-designer, financial-advisor: no gate that numeric rules carry `tabular-nums`; small-size legibility -- applied: source-scan gate, right alignment, 12–13px check, and a JetBrains Mono fallback for `--font-num` if `tnum` is missing (§2). Slashed zero -- rejected: IDs are hex and tickers are letters, so 0/O is not ambiguous here.
+- ux-designer: icon-only rail is undiscoverable on tablet; keep labels or an expand toggle there -- rejected: the partner chose icons only (D5), knowingly reversing v202 §3; tooltips on hover, focus and long-press cover it.
+- ux-designer: long-press fights the OS link preview, context menu and text selection; the 1.5s close is short -- applied: callout/selection off, touch `contextmenu` prevented, tooltip stays until the next touch (§6). Dropping long-press from the labelled tab bar -- rejected: the partner asked for it (D9).
+- ux-designer: `grip` implies drag-reorder; where the add-disabled reason shows; Reset undo; announcements -- applied: no grip, inline reason, 8s Undo, `aria-live` (§4, §6).
+- ux-designer: editor reorder vs sheet drag; focus trap and return -- applied: buttons only, focus trapped and returned (§6).
+- ux-designer: tablet row drawers conflict with cell links and sort headers; rows need an affordance and keyboard access -- applied: interactive cells win, trailing chevron, focusable rows, Enter/Space, focus return (§7).
+- ux-designer: drag needs a non-drag alternative on every sheet; landscape phone falls into the tablet sheet -- applied: 44px close button on drawer, More and Live; 844×390 added to §9 (§7, §9).
+- ux-designer: tab spacing with fewer tabs; 320px -- applied: equal-width tabs, 320px check (§6, §9).
+- staff-engineer: `calendar` is already in `spa.py` `WORKSPACES`, flagged for removal -- applied: move it to the destinations group and rewrite the removal note, not "add" it (§6).
+- staff-engineer: rollback text wrong, old image still serves `/calendar` -- applied (§10).
+- staff-engineer: `app.routes.ts:84-85` and the `nav.ts:98` alias redirect the other way, so the two would loop -- applied: flip and delete in one change (§6).
+- staff-engineer: pre-boot `NAVY_BG` and the static theme-color meta are copied literals pinned to the deleted `--midnight-950` -- applied: doctena `--bg` for meta and default, `GRAPHITE_BG` for explicit Black, both pinned (§1).
+- staff-engineer: tablet drawers flip the default for all 18 `sb-data-table` consumers; `phoneTap: 'emit'` owners unaddressed -- applied: `narrowTap` policy (`drawer`/`emit`/`none`) set explicitly per consumer, `cardsAt` stays phone-only (§7).
+- staff-engineer: "byte-for-byte" refactor contradicts the added flick -- applied: extract, widen and flick are three separate steps with their own tests (§7).
+- staff-engineer: plans 1 and 3 would exceed 20 tasks -- applied: five plans, theme/type, icons, shell, drawer core, drawer surfaces (What follows).
+- staff-engineer: plans 2 and 3 both edit `more-sheet.ts` -- applied: strict order, never parallel (What follows).
+- staff-engineer: fallback-face metrics cited but not recorded -- applied: measured values tabled (§2).
+- staff-engineer: JetBrains Mono and Inter files lose their SPA readers; name owners -- applied: Inter kept while `chart_style.py:20` reads it; JetBrains Mono deleted after the `tnum` check (§2).
+- financial-advisor: direction arrows on P&L tokens make a winning short red -- rejected: today's convention (green ▲ long, red ▼ short) is kept with the new arrows, and P&L figures already take colour from their sign (§1 states it).
+- financial-advisor: losses readable only by hue -- applied: true minus on every loss, formatter test (§1).
+- financial-advisor: Risk behind More by default -- applied: the editor never hides a page, a partition test, and the Dashboard open-risk figure stays on phone (§6).
+- financial-advisor: drawers must not replace row risk figures -- applied: no column removed; risk compact columns stay on phone cards; heat % stays on sector rows; `TradeDrawer` contents pinned (§7).
+- financial-advisor: drawers must carry badge tier, as-of time and caveats -- applied (§7).
+- financial-advisor: status cells must keep accessible names after the glyph swap -- applied, with a test (§4).
+- financial-advisor: mint/coral must not be confused with chip blues -- applied: the money-colour rule (§1).
