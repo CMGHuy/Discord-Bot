@@ -1,3 +1,4 @@
+import { CHART_CHROME } from '../chart/chart-frame';
 import { stripComments } from './all-sources';
 
 /**
@@ -73,4 +74,18 @@ function closingBacktick(source: string, from: number): number {
   let close = source.indexOf('`', from);
   while (close > 0 && source[close - 1] === '\\') close = source.indexOf('`', close + 1);
   return close;
+}
+
+const CHART_CHROME_RE = /\$\{CHART_CHROME\.(\w+)\}/g;
+
+/**
+ * The source with every `${CHART_CHROME.<key>}` replaced by the token name
+ * it holds (chart-frame.ts), so a gate reads `color:var(--text-muted)`
+ * where bar-list.ts and six other charts interpolate it. Any other
+ * interpolation, and an unknown key, is left as written (styleRules then
+ * turns it into `__expr__`).
+ */
+export function withChartChrome(source: string): string {
+  const chrome: Readonly<Record<string, string>> = CHART_CHROME;
+  return source.replace(CHART_CHROME_RE, (whole, key: string) => chrome[key] ?? whole);
 }
