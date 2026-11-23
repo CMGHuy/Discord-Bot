@@ -33,9 +33,11 @@ and `regime_action` (what the engine *would* do: `would_veto`, `caution`,
 note under its plan table. A confirmed state change posts one notice to the
 ops channel, listing the resting bullish entries. bomeo-capital.com shows a
 "Trend:" banner in the app shell and a regime chip on trade and plan detail.
-A shadow report compares live would-veto longs with the rest. A base-rate
-study measures, on SPY back to 1993, how often a CORRECTION became a BEAR and
-how SPY behaved afterwards.
+A parity check replays every stored row on cached bars, so the shadow cannot
+drift from the rules the screens will use. The base-rate study (on SPY back
+to 1993, how often a CORRECTION became a BEAR and how SPY behaved afterwards)
+and the shadow report (live would-veto longs against the rest) follow in
+their own evidence plan (see What follows).
 
 What it leaves alone: no plan is blocked, sized, scored, re-ordered,
 cancelled or created. `regime.py`, `score_confidence` and the v209 machine
@@ -46,7 +48,7 @@ no banner. Success has four parts. The classifier replays this week as the
 spec states (CORRECTION from `D = 10-22`, stress on `D = 11-17..11-20`,
 never BEAR). The `off` arm is byte-identical in `entry_context`, in both
 embed builders and in DB writes. The banner and chip pass the layout audit
-at 390/768/1440. The base-rate results doc is committed with its hashes.
+at 390/768/1440. Parity replays the committed row export clean.
 Each live action (B9 veto, B8 pullback long, B7 bear short) still waits for
 its own screen row.
 
@@ -57,7 +59,7 @@ its own screen row.
   it truncates again defensively) and `shadow_action`. `regime_episodes.py`
   holds confirmed episodes (a run of two labelled sessions; flicker merges
   into its neighbour) and `confirmed_transition`. The live pass, the API's
-  "since" count and the 1993 study all share it.
+  "since" count and the follow-on 1993 study all share it.
 - **Live calendar (`swingbot/core/scanning/regime_calendar.py`).**
   `session_pair(now) -> (s, D)` uses the half-day-aware `session` helpers
   (`last_regular_close`, `nyse_calendar().next_session`). `cut_completed(df,
@@ -95,12 +97,10 @@ its own screen row.
   `sb-regime-banner` in `shell.html` directly after the `.tape-strip` div, and
   an `sb-regime-chip` on the `.tags` rows of `trade-detail.ts` and
   `plan-detail.ts`.
-- **Evidence.** `scripts/reports/regime_shadow_report.py` (live monitoring,
-  never a screen), `scripts/reports/regime_parity.py` (stored rows vs a cache
-  replay, with the boundary-day tolerance) and
-  `scripts/research/regime_base_rates.py`, which reads a new
-  `data/backtest_cache_regime/` (SPY and ^VIX, 1993-01-01 → 2026-11-20,
-  hash-pinned).
+- **Evidence.** `scripts/reports/regime_parity.py` (stored rows vs a cache
+  replay, with the boundary-day tolerance). V239-1 fetches the hash-pinned
+  `data/backtest_cache_regime/` (SPY and ^VIX, 1993-01-01 → 2026-11-20) that
+  the replay fixture is cut from and the follow-on base-rate study reads.
 
 **Tech stack:** Python 3.11, pandas/numpy, SQLAlchemy + Alembic (Postgres), discord.py embeds, Flask, Angular (signals, OnPush, vitest), Playwright layout audit.
 
@@ -181,7 +181,7 @@ its own screen row.
 - **Tests and suites.** New `tests/regime/` (created by V239-1) joins suite
   `market-signals` in `tests/suites.toml`. It holds every test that needs no
   DB, Flask or Angular: classifier, episodes, calendar, vocabulary, notices,
-  pass, stamp, wiring, embeds, reports, parity and study. DB tests go in
+  pass, stamp, wiring, embeds and parity. DB tests go in
   `tests/db/`, API tests in `tests/admin/test_api_v1_market_regime.py`, config
   in `tests/test_config_v239_keys.py`, lifecycle kinds in `tests/infra/`.
   Never add to `tests/scanning/` or `tests/scripts/` (near cap). Frontend
@@ -194,7 +194,8 @@ its own screen row.
 - **UI:** every banner or chip change is checked at 390 / 768 / 1440. Touch
   targets are ≥ 44 px at ≤ 1023 px. Driving the browser is Playwright only.
   The `.env` admin credentials are loaded inside scripts and never printed.
-- **Study reproducibility:** fixed end `2026-11-20`. The study refuses to run
+- **Study reproducibility** (V239-1's cache; binding on the follow-on
+  study): fixed end `2026-11-20`. The study refuses to run
   if a cache file's SHA-256 differs from its recorded value. It checkpoints
   per year and writes Markdown with `encoding="utf-8", newline="\n"`. It
   describes SPY and moves no gate.
@@ -222,18 +223,22 @@ At most 2 implementers at once (session rule).
   parallel with V239-4..8 (disjoint files).
 - **V239-10** (wiring) needs V239-8 (`regime_for_pass`) and V239-9
   (`regime_day` kwargs, `regime_asof`).
-- **V239-11** (embeds) needs V239-3 (`alert_line`) only. It reads the stamped
-  keys by name, so it runs in parallel with V239-8..10.
+- **V239-11** (embeds, outlook stamp) needs V239-3 (`alert_line`), V239-8
+  (`regime_for_pass`) and V239-9 (`QualifyContext.regime_day`). The embed half
+  reads the stamped keys by name. It runs in parallel with V239-10 (disjoint
+  files).
 - **V239-12** (API) needs V239-3, 4, 5 and 6.
-- **V239-13** (store, banner, shell) needs V239-12 (wire shape).
+- **V239-13** (wire types, store) needs V239-12 (wire shape).
   **V239-14** (chip) needs V239-9 (the wire keys). V239-13 ∥ V239-14
   (disjoint files: neither touches the other's component, and only V239-13
   edits `models.ts` / `api-client.ts`).
-- **V239-15** (layout audit) needs V239-13 and V239-14.
-- **V239-16** (shadow report, parity) needs V239-2. V239-17 (study) needs
-  V239-1, 2 and 3. V239-16 ∥ V239-17 (disjoint files).
-- **V239-18** (docs, skills, guide) needs every other task (it cites final
-  names).
+- **V239-15** (banner + shell mount, layout audit) needs V239-13 and V239-14.
+- **V239-16** (parity) needs V239-2b (the replay fixture), V239-1
+  (`fetch_regime_data.csv_path`) and V239-6b (`market_regime_repo().recent`,
+  only on the table path). It runs in parallel with V239-9..15 (disjoint
+  files).
+- **V239-17** (docs, skills, guide, Codex mirror) needs every other task (it
+  cites final names).
 
 ## Task ledger
 
@@ -251,14 +256,13 @@ At most 2 implementers at once (session rule).
 | V239-8 | Regime pass: compute-or-read `D`, insert once, notice from the winner | 2b | opus | M `swingbot/core/scanning/regime_scan.py`, C `tests/regime/test_regime_pass.py` | `regime_for_pass(*, now: datetime \| None = None, repo=None, fetch: Callable[[str], DataFrame] \| None = None, plans=None, trades=None) -> RegimeDay \| None` (never raises; `None` when off or on failure) |
 | V239-9 | Stamp `bear_regime` / `regime_action`; thread `regime_day`; wire keys | 3 | opus | M `swingbot/core/planning/params.py`, M `swingbot/core/scanning/analyze.py`, M `swingbot/core/scanning/qualify.py`, M `swingbot/admin/trade_why.py`, M `tests/admin/test_api_v1_trade_detail.py`, C `tests/regime/test_regime_stamp.py` | `params.regime_asof(day: RegimeDay \| None) -> dict` (`{}` or `{"bear_regime_day": day}`); `params._merge_regime(plan, asof) -> None`; `attach_plan_v2(..., shock_state=None, regime_day=None)`; `QualifyContext.regime_day: RegimeDay \| None = None`; `trade_why.WIRE_CONTEXT_KEYS` gains `"bear_regime"`, `"regime_action"` |
 | V239-10 | Scan wiring on every lane, and the `off` byte-identical pins | 3 | opus | M `swingbot/core/scanning/scan_run.py`, M `swingbot/core/scanning/short_run.py`, C `tests/regime/test_regime_wiring.py`, C `tests/regime/test_regime_off_byte_identical.py` | `_attach_item_plan(..., shock_state=None, regime_day=None)`; `_rebuild_item(..., shock_state=None, regime_day=None)`; `_maybe_run_strategy_pass(..., shock_state=None, regime_day=None)`; `short_run._bare_context(frames, shock_state=None, regime_day=None)`; `_lane_state` adds key `"regime_day"` |
-| V239-11 | Regime line on every alert builder | 3 | sonnet | M `swingbot/core/scanning/alert_embeds.py`, C `tests/regime/test_regime_embeds.py` | `alert_embeds.REGIME_FIELD = "Trend"`; `alert_embeds.regime_fields(plan) -> list[tuple[str, str, bool]]` (reads `getattr(plan, "entry_context", None)`; `[]` without a line) |
+| V239-11 | Regime line on every alert builder; outlook plans stamped | 3 | sonnet | M `swingbot/core/scanning/alert_embeds.py`, M `swingbot/core/scanning/outlook_run.py`, C `tests/regime/test_regime_embeds.py`, C `tests/regime/test_regime_outlook.py` | `alert_embeds.REGIME_FIELD = "Trend"`; `alert_embeds.regime_fields(plan) -> list[tuple[str, str, bool]]` (reads `getattr(plan, "entry_context", None)`; `[]` without a line); `outlook_run._context` passes `regime_day=regime_scan.regime_for_pass(now=now)` |
 | V239-12 | `GET /api/v1/market/regime` and its access row | 3 | sonnet | C `swingbot/admin/api_v1/market_regime.py`, M `swingbot/admin/api_v1/__init__.py`, M `tests/admin/access_expectations.py`, C `tests/admin/test_api_v1_market_regime.py` | JSON `{mode: str, today: RegimeDayWire \| null, history: RegimeDayWire[≤60] (oldest first), episode: {label: str, since_sessions: int} \| null}`; `RegimeDayWire` = `RegimeDay.to_row()` columns minus `doc`, dates ISO, plus `computed_at` ISO and `display: {label, words, numbers}`; `market_regime.HISTORY_LIMIT = 60`; `regime_payload(now=None, repo=None) -> dict` |
-| V239-13 | SPA wire types, `RegimeStore`, `sb-regime-banner` in the shell | 4 | sonnet | M `frontend/src/app/api/models.ts`, M `frontend/src/app/api/api-client.ts`, C `frontend/src/app/stores/regime.store.ts`, C `frontend/src/app/stores/regime.store.spec.ts`, C `frontend/src/app/shell/regime-banner.ts`, C `frontend/src/app/shell/regime-banner.spec.ts`, M `frontend/src/app/shell/shell.html`, M `frontend/src/app/shell/shell.ts`, M `frontend/src/app/shell/shell.spec.ts` | TS `RegimeState`, `RegimeAction`, `RegimeDisplay`, `RegimeDay`, `RegimeEpisode`, `RegimeResponse`; `ApiClient.marketRegime(): Observable<RegimeResponse>`; `RegimeStore` (`banner: Signal<RegimeBanner \| null>`, `status: Signal<'loading' \| 'ready' \| 'error'>`, `refresh()`); `RegimeBanner {kind: 'reading' \| 'none'; label; since: number \| null; numbers: string \| null; words: string \| null; pullback: boolean; accessibleName: string}`; selector `sb-regime-banner` |
+| V239-13 | SPA wire types and `RegimeStore` (banner model; the component moved to V239-15) | 4 | sonnet | M `frontend/src/app/api/models.ts`, M `frontend/src/app/api/api-client.ts`, C `frontend/src/app/stores/regime.store.ts`, C `frontend/src/app/stores/regime.store.spec.ts` | TS `RegimeState`, `RegimeAction`, `RegimeDisplay`, `RegimeDay`, `RegimeEpisode`, `RegimeResponse`; `ApiClient.marketRegime(): Observable<RegimeResponse>`; `RegimeStore` (`banner: Signal<RegimeBanner \| null>`, `status: Signal<'loading' \| 'ready' \| 'error'>`, `refresh()`); `RegimeBanner {kind: 'reading' \| 'none'; label; since: number \| null; numbers: string \| null; words: string \| null; pullback: boolean; tone: 'bear' \| 'correction' \| 'muted'; accessibleName: string}` |
 | V239-14 | Regime chip on trade detail and plan detail | 4 | sonnet | C `frontend/src/app/workspaces/trades/why/regime-chip.ts`, C `frontend/src/app/workspaces/trades/why/regime-chip.spec.ts`, M `frontend/src/app/workspaces/trades/trade-detail.ts`, M `frontend/src/app/workspaces/plans/plan-detail.ts`, M `frontend/src/app/workspaces/trades/trade-detail.spec.ts`, M `frontend/src/app/workspaces/plans/plan-detail.spec.ts` | `regimeChip(ctx: Record<string, unknown> \| null \| undefined) -> {label: string; tone: ChipTone; prefix: string} \| null`; selector `sb-regime-chip` (input `context`) |
-| V239-15 | Layout audit: banner and chip at 390 / 768 / 1440 | 4 | sonnet | M `frontend/src/app/shell/regime-banner.ts`, M `frontend/src/app/workspaces/trades/why/regime-chip.ts`, M `frontend/scripts/layout-audit.allow.json` (only if a finding is a documented false positive) | none |
-| V239-16 | Shadow report and live-vs-replay parity check | 5 | sonnet | C `scripts/reports/regime_shadow_report.py`, C `scripts/reports/regime_parity.py`, C `tests/regime/test_regime_shadow_report.py`, C `tests/regime/test_regime_parity.py`, C `tests/fixtures/regime/market_regime_days_export.json` | `regime_shadow_report.MIN_N = 30`; `summarise(trades: Iterable[dict]) -> list[dict]`; `render(rows) -> str`; `main(argv=None) -> int`; `regime_parity.BOUNDARY_PCT = 0.001`; `boundary_day(day: RegimeDay) -> bool`; `@dataclass ParityResult(matches: int, boundary: list, failures: list)`; `compare(stored: list[dict], spy, vix) -> ParityResult`; `main(argv=None) -> int` |
-| V239-17 | SPY base-rate study (1993 → 2026-11-20) and its results doc | 5 | opus | C `scripts/research/regime_base_rates.py`, C `tests/regime/test_regime_base_rates.py`, C `docs/superpowers/results/2026-11-23-v239-regime-base-rates.md` | `regime_base_rates.END = "2026-11-20"`; `label_series(spy, vix) -> list[RegimeDay]`; `check_hashes(cache_dir: Path, work_dir: Path) -> str \| None`; `main(argv=None) -> int` |
-| V239-18 | Skills, architecture map, guide and Codex mirror | 5 | sonnet | M `.claude/skills/alert-surface/SKILL.md`, M `.agents/skills/alert-surface/SKILL.md` (via `sync_codex.py`), M `docs/claude/architecture.md`, M `AGENTS.md`, M `docs/guide/07-trade-plan.md` | none |
+| V239-15 | `sb-regime-banner` in the shell, then the layout audit: banner and chip at 390 / 768 / 1440 | 4 | sonnet | C `frontend/src/app/shell/regime-banner.ts`, C `frontend/src/app/shell/regime-banner.spec.ts`, M `frontend/src/app/shell/shell.html`, M `frontend/src/app/shell/shell.ts`, M `frontend/src/app/shell/shell.spec.ts`, M `frontend/src/app/workspaces/trades/why/regime-chip.ts`, M `frontend/scripts/layout-audit.allow.json` (only if a finding is a documented false positive) | selector `sb-regime-banner` |
+| V239-16 | Live-vs-replay parity check | 5 | sonnet | C `scripts/reports/regime_parity.py`, C `tests/regime/test_regime_parity.py`, C `tests/fixtures/regime/market_regime_days_export.json` | `regime_parity.BOUNDARY_PCT = 0.001`; `boundary_day(day: RegimeDay) -> bool`; `@dataclass ParityResult(matches: int, boundary: list, failures: list, uncovered: list = [])` (`uncovered`: rows the cache cannot replay); `compare(stored: list[dict], spy, vix) -> ParityResult`; `main(argv=None) -> int` (0 clean, 1 fail, 2 cannot run) |
+| V239-17 | Skills, architecture map, guide and Codex mirror | 5 | sonnet | M `.claude/skills/alert-surface/SKILL.md`, M `.agents/skills/alert-surface/SKILL.md` (via `sync_codex.py`), M `docs/claude/architecture.md`, M `AGENTS.md`, M `docs/guide/07-trade-plan.md`, M `docs/guide/01-what-it-is.md`, M `docs/guide/03-pipeline.md`, M `tests/admin/test_guide_chapter_text.py` (`CH7_ANCHORS`) | none (chapters 04/05/06/08/12: close-out records `guide: no reader-visible change`) |
 
 ## Parts
 
@@ -269,8 +273,20 @@ At most 2 implementers at once (session rule).
 | 2 | `2026-11-23-v239-bear-regime-engine-shadow_2-store-and-pass.md` | V239-5, V239-6, V239-6b, V239-7 | config/mode, table + migration + queue kind, repo, notice |
 | 2b | `2026-11-23-v239-bear-regime-engine-shadow_2b-pass.md` | V239-8 | the scan-pass engine (own file: part 2 would pass 1500 lines) |
 | 3 | `2026-11-23-v239-bear-regime-engine-shadow_3-stamp-and-alerts.md` | V239-9..V239-12 | `entry_context` stamp, every scan lane, `off` pins, alert lines, admin API |
-| 4 | `2026-11-23-v239-bear-regime-engine-shadow_4-frontend.md` | V239-13..V239-15 | store + shell banner, detail chip, three-width layout audit |
-| 5 | `2026-11-23-v239-bear-regime-engine-shadow_5-evidence-and-docs.md` | V239-16..V239-18 | shadow report, parity, base-rate study + results doc, skill/guide/doc alignment |
+| 4 | `2026-11-23-v239-bear-regime-engine-shadow_4-frontend.md` | V239-13..V239-15 | store, detail chip, shell banner + three-width layout audit |
+| 5 | `2026-11-23-v239-bear-regime-engine-shadow_5-evidence-and-docs.md` | V239-16..V239-17 | live-vs-replay parity, skill/guide/doc alignment and the Codex mirror |
+
+## What follows
+
+- **Follow-on evidence plan (not written yet):** the SPY base-rate study
+  (`scripts/research/regime_base_rates.py`, results doc
+  `docs/superpowers/results/<date>-<vN>-regime-base-rates.md`, hash-pinned on
+  V239-1's `data/backtest_cache_regime/`, checkpointed per year) and the
+  shadow report (`scripts/reports/regime_shadow_report.py`, live monitoring,
+  never a screen). It depends on V239-1..3 and, for the report, on trades
+  stamped during the shadow soak. Seed drafts:
+  `.superpowers/plan-drafts-v239/V239-17-study-draft.md` and
+  `.superpowers/plan-drafts-v239/shadow-report-draft.md` (gitignored).
 
 ## Handoff
 
@@ -284,3 +300,28 @@ At most 2 implementers at once (session rule).
   V239-7 to V239-6 (a storage contract with no lane-A dependency).
   V239-8 sits alone in part 2b (`_2b-pass.md`) because part 2 would
   pass 1500 lines.
+- 2026-11-23: part 4 written. V239-13 as drawn passed 20 KB with no `b`
+  slot left, so the banner component, its spec and the shell mount
+  (`shell/regime-banner.ts`, `regime-banner.spec.ts`, `shell.html`,
+  `shell.ts`, `shell.spec.ts`) moved to V239-15 (which already needed
+  V239-13). V239-13 keeps `models.ts`, `api-client.ts` and the store;
+  `RegimeBanner` gains `tone: 'bear' | 'correction' | 'muted'`. Ledger rows
+  V239-13 / V239-15 aligned by the controller.
+- 2026-11-23: part 3 written (V239-9 15.4 KB, V239-10 19.8 KB, V239-11 12.6 KB,
+  V239-12 15.7 KB; no split). Test files beyond the ledger rows: V239-9 and
+  V239-10 each change one assertion in `tests/scanning/test_shock_short_lane.py`
+  (`QualifyContext` field order, the exact `_lane_state` dict). V239-10 also
+  pins `BEAR_REGIME_MODE=off` in `tests/conftest.py` `_pin_dotenv_settings`, so
+  no existing scan test fetches SPY/^VIX or writes `market_regime_days`.
+  V239-12 adds `EPISODE_ROWS = 500`, so the "since" count is not capped at 60.
+  Outlook plans stamped in V239-11 (partner).
+- 2026-11-23: part 5 cut (partner, 2026-11-23). The base-rate study and the
+  shadow report left v239 for a follow-on evidence plan (What follows): the
+  study drafted at 27.4 KB and, with the shadow report and the docs task, the
+  remaining work needed four tasks with two rows left. The ledger is now 19
+  rows: V239-16 is parity only (`ParityResult` gains a defaulted
+  `uncovered`), V239-17 is the docs/skills/guide/Codex task (old V239-18),
+  and old V239-17/V239-18 are gone. Drafts kept as the follow-on's seed:
+  `.superpowers/plan-drafts-v239/V239-17-study-draft.md`,
+  `.superpowers/plan-drafts-v239/shadow-report-draft.md`.
+- V239-15's audit leaves the shared replica on the v239 alembic revision (partner, 2026-11-23); `--undo` removes only the seed rows; a later `/replicate-prod-db --full` rebuilds it if incremental mode refuses.

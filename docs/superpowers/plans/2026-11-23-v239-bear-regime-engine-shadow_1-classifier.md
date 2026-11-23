@@ -405,7 +405,7 @@ Rules for every script in this folder:
 
 | Script | Plan | Cache | Results |
 |---|---|---|---|
-| `regime_base_rates.py` | v239 | `data/backtest_cache_regime/` (`scripts/data/fetch_regime_data.py`) | `docs/superpowers/results/2026-11-23-v239-regime-base-rates.md` |
+| `regime_base_rates.py` (added by the v239 follow-on evidence plan; not in v239) | follow-on | `data/backtest_cache_regime/` (`scripts/data/fetch_regime_data.py`) | written by that plan |
 ```
 
 - [ ] **Step 7: Run the real fetch once (network)**
