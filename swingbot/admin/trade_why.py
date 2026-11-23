@@ -19,7 +19,8 @@ from swingbot.core.presentation.why_view import GateThresholds, calendar_rows, g
 
 #: Only these entry_context keys go on the wire, not the full feature dict.
 WIRE_CONTEXT_KEYS = ("regime2_state", "rs_pctile", "sector_pctile", "rs_combined",
-                     "htf_aligned", "gap_p90_pct", "gap_fragile")
+                     "htf_aligned", "gap_p90_pct", "gap_fragile",
+                     "bear_regime", "regime_action")   # v239: the chip reads the stamp
 
 
 def gate_thresholds() -> GateThresholds:

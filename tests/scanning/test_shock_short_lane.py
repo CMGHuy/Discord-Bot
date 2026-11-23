@@ -41,7 +41,8 @@ def _lane_inputs(monkeypatch):
 
 def test_the_label_is_the_last_context_field_and_defaults_to_none():
     fields = dataclasses.fields(qualify.QualifyContext)
-    assert fields[-1].name == "shock_state" and fields[-1].default is None
+    shock = next(f for f in fields if f.name == "shock_state")
+    assert fields[-2] is shock and shock.default is None   # v239: regime_day follows it
     ctx = qualify.QualifyContext(frames={}, spy=None, sector_of={}, etf_symbol_of={},
                                  sector_frames={}, regime=None, regimes=None)
     assert ctx.shock_state is None

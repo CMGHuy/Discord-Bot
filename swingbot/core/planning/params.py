@@ -5,6 +5,7 @@ import logging
 
 from swingbot import config
 from swingbot.core.backtesting.registry import Badge, decay_note, get_badge
+from swingbot.core.market import bear_regime
 from swingbot.core.market.strategy_types import BREAKEVEN_TRIGGER_FRACTION, FIB_LIMIT, TURTLE_SOUP
 from .plan_types import TradePlanV2
 
@@ -224,6 +225,17 @@ def shock_asof(shock_state: str | None) -> dict:
     return {} if shock_state is None else {"shock_state": shock_state}
 
 
+#: v239: the asof key carrying the pass's RegimeDay. entry_context() reads only
+#: FEATURE_KEYS from the asof, so the object itself never reaches a record.
+REGIME_ASOF_KEY = "bear_regime_day"
+
+
+def regime_asof(day: "bear_regime.RegimeDay | None") -> dict:
+    """v239: the asof fragment carrying the bear-regime day. Empty for None, so an
+    `off` pass hands stamp_entry_context exactly the pre-v239 dict."""
+    return {} if day is None else {REGIME_ASOF_KEY: day}
+
+
 def stamp_entry_context(plan: TradePlanV2, df, asof: dict | None) -> None:
     from swingbot.core.edge.context import entry_context
     try:
@@ -233,6 +245,7 @@ def stamp_entry_context(plan: TradePlanV2, df, asof: dict | None) -> None:
     except Exception:
         plan.entry_context = {}
     _merge_shock_state(plan, asof)
+    _merge_regime(plan, asof)
 
 
 def _merge_shock_state(plan: TradePlanV2, asof: dict | None) -> None:
@@ -241,6 +254,17 @@ def _merge_shock_state(plan: TradePlanV2, asof: dict | None) -> None:
     label = (asof or {}).get("shock_state")
     if label is not None:
         plan.entry_context = {**(plan.entry_context or {}), "shock_state": label}
+
+
+def _merge_regime(plan: TradePlanV2, asof: dict | None) -> None:
+    """v239 shadow: the day's state and what the engine WOULD do with a plan of this
+    direction. Beside the feature dict like shock_state; absent when no day."""
+    day = (asof or {}).get(REGIME_ASOF_KEY)
+    if day is None:
+        return
+    action = bear_regime.shadow_action(day.state, day.stress, day.pullback_trigger, plan.direction)
+    plan.entry_context = {**(plan.entry_context or {}), "bear_regime": day.state,
+                          "regime_action": action}
 
 
 def badge_stats_line(badge: Badge) -> str:

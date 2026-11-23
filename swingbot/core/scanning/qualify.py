@@ -25,6 +25,7 @@ from typing import Mapping
 
 from swingbot import config
 from swingbot.core.edge.rs_gate import rs_verdict
+from swingbot.core.market.bear_regime import RegimeDay
 
 from . import analyze
 
@@ -61,6 +62,7 @@ class QualifyContext:
     issued_at: str | None = None           # plan clock; None = wall clock (live only)
     now: object = None
     shock_state: str | None = None         # v209: the run's stored shock label; None = no key
+    regime_day: RegimeDay | None = None
 
 
 def _confirmed(item, context: QualifyContext) -> str | None:
@@ -95,7 +97,8 @@ def _attach_plan(item, context: QualifyContext) -> bool:
         item, item.plan, frame, item.result.ticker, item.result.horizon_key,
         level_map=item.level_map, regime=context.regime, rs_percentile=item.rs_percentile,
         breadth=context.breadth, regime2_state=analyze._regime_at(context.regimes, when),
-        issued_at=context.issued_at, now=context.now, shock_state=context.shock_state)
+        issued_at=context.issued_at, now=context.now, shock_state=context.shock_state,
+        regime_day=context.regime_day)
     if item.plan_v2 is not None:
         item.plan_v2.regime_aligned = not (item.htf_info and item.htf_info.get("counter_trend", False))
     return not (config.PLAN_ENGINE_V2 == "on" and getattr(item, "plan_v2_rejected", None))

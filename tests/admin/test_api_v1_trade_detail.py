@@ -225,6 +225,20 @@ def test_plan_entry_context_wins_and_is_filtered_to_the_wire_keys(seed, logged_i
     assert set(ctx) <= set(trade_why.WIRE_CONTEXT_KEYS)
 
 
+
+def test_the_bear_regime_stamp_reaches_the_wire(seed, logged_in, fixed_today):
+    ctx = {**_why_plan()["entry_context"], "bear_regime": "CORRECTION", "regime_action": "aligned"}
+    seed(plans=[_why_plan(entry_context=ctx)], trades=[_trade(_TRADE_ID, plan_id=_PLAN_ID)])
+    wire = _detail(logged_in, _PLAN_ID)["entry_context"]
+    assert (wire["bear_regime"], wire["regime_action"]) == ("CORRECTION", "aligned")
+    assert trade_why.WIRE_CONTEXT_KEYS[-2:] == ("bear_regime", "regime_action")
+
+
+def test_a_legacy_plan_without_the_stamp_gets_no_regime_keys(seed, logged_in, fixed_today):
+    seed(plans=[_why_plan()], trades=[_trade(_TRADE_ID, plan_id=_PLAN_ID)])
+    wire = _detail(logged_in, _PLAN_ID)["entry_context"]
+    assert "bear_regime" not in wire and "regime_action" not in wire   # never upcast
+
 def test_an_empty_plan_context_falls_back_to_the_trades(seed, logged_in, fixed_today):
     trade = {**_trade(_TRADE_ID, plan_id=_PLAN_ID), "entry_context": {"rs_combined": 90.0},
              "risk_features": {"days_to_earnings": 4}}
