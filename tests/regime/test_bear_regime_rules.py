@@ -226,3 +226,144 @@ def test_row_column_order_is_the_persistence_contract():
     assert type(row["session_date"]) is date
     assert type(row["last_bar_date"]) is date
     assert type(row["sma200"]) is float
+
+
+# --- V239-2b: the ^VIX side and the shadow action -------------------------------
+
+@pytest.mark.parametrize("vix_at_s, stress", [(25.0, True), (24.99, False), (37.6, True)])
+def test_stress_threshold_is_inclusive(vix_at_s, stress):
+    spy = _spy(CORRECTION)
+    day = _classify(spy, _vix(spy, tail=(vix_at_s,)))
+    assert day.stress is stress and day.vix_close == vix_at_s
+
+
+def test_stress_is_none_without_a_vix_bar_dated_s():
+    spy = _spy(CORRECTION)
+    assert _classify(spy, None).stress is None
+    assert _classify(spy, _vix(spy).iloc[:-1]).stress is None          # VIX lags a day
+    assert _classify(spy, _vix(spy, tail=(float("nan"),))).stress is None
+
+
+def test_pullback_fires_on_an_up_day_as_vix_eases():
+    spy = _spy(CORRECTION_UP_DAY)
+    day = _classify(spy, _vix(spy, tail=(30, 34, 36, 33, 30)))  # 30 <= 0.85 * 36 = 30.6
+    assert day.state == br.CORRECTION
+    assert day.pullback_trigger is True and day.pullback_reason is None
+    assert day.vix_max5 == 36.0 and day.spy_high_prev == 177.0
+
+
+def test_pullback_needs_vix_to_ease():
+    spy = _spy(CORRECTION_UP_DAY)
+    assert _classify(spy, _vix(spy, tail=(30, 34, 36, 33, 31))).pullback_trigger is False
+
+
+def test_pullback_needs_a_close_above_the_prior_high():
+    spy = _spy(CORRECTION)                                       # C 180, H[s-1] 181
+    assert _classify(spy, _vix(spy, tail=(30, 34, 36, 33, 30))).pullback_trigger is False
+
+
+def test_pullback_only_in_a_correction():
+    spy = _rising()
+    day = _classify(spy, _vix(spy, tail=(30, 34, 36, 33, 20)))
+    assert day.state == br.NORMAL
+    assert day.pullback_trigger is False and day.pullback_reason is None
+
+
+def test_a_vix_hole_in_the_window_is_a_gap_never_a_trigger():
+    spy = _spy(CORRECTION_UP_DAY)
+    vix = _vix(spy, tail=(30, 34, 36, 33, 30)).drop(spy.index[-3])
+    day = _classify(spy, vix)
+    assert day.pullback_trigger is False and day.pullback_reason == br.VIX_GAP
+    assert day.vix_max5 is None and day.stress is True and day.vix_close == 30.0
+
+
+def test_no_vix_at_all_in_a_correction_records_the_gap():
+    day = _classify(_spy(CORRECTION), None)
+    assert (day.pullback_trigger, day.pullback_reason, day.vix_close) == (False, br.VIX_GAP, None)
+
+
+def test_no_lookahead_a_vix_bar_after_s_is_never_read():
+    spy = _spy(CORRECTION_UP_DAY)
+    vix = _vix(spy, tail=(30, 34, 36, 33, 30))
+    plain = _classify(spy, vix)
+    assert _classify(_with_bar_after_s(spy, 1.0), _with_bar_after_s(vix, 90.0)) == plain
+
+
+def test_a_vix_bar_on_a_non_spy_date_is_ignored():
+    spy = _spy(CORRECTION_UP_DAY)
+    vix = _vix(spy, tail=(30, 34, 36, 33, 30))
+    saturday = pd.DataFrame({"Close": [99.0]}, index=pd.DatetimeIndex([pd.Timestamp("2026-10-17")]))
+    assert _classify(spy, pd.concat([vix, saturday]).sort_index()) == _classify(spy, vix)
+
+
+@pytest.mark.parametrize("state, stress, pullback, direction, action", [
+    (br.BEAR, None, False, "bullish", br.WOULD_VETO),
+    (br.BEAR, True, False, "bullish", br.WOULD_VETO),
+    (br.CORRECTION, True, False, "bullish", br.WOULD_VETO),
+    (br.CORRECTION, False, False, "bullish", br.CAUTION),
+    (br.CORRECTION, None, False, "bullish", br.CAUTION),
+    (br.CORRECTION, True, True, "bullish", br.PULLBACK_WATCH),   # pullback wins over would_veto
+    (br.CORRECTION, False, True, "bullish", br.PULLBACK_WATCH),
+    (br.NORMAL, True, False, "bullish", br.NONE),
+    (br.UNKNOWN, None, True, "bullish", br.NONE),
+    (br.BEAR, True, False, "bearish", br.ALIGNED),
+    (br.CORRECTION, False, True, "bearish", br.ALIGNED),
+    (br.NORMAL, None, False, "bearish", br.NONE),
+    (br.UNKNOWN, None, False, "bearish", br.NONE),
+    (br.BEAR, True, False, "long", br.NONE),
+    (br.BEAR, True, False, "", br.NONE),
+])
+def test_shadow_action_table(state, stress, pullback, direction, action):
+    assert br.shadow_action(state, stress, pullback, direction) == action
+
+
+@pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf])
+def test_non_finite_vix_inside_window_is_a_gap(value):
+    spy = _spy(CORRECTION_UP_DAY)
+    day = _classify(spy, _vix(spy, tail=(30, value, 36, 33, 30)))
+    assert (day.pullback_trigger, day.pullback_reason, day.vix_max5) == (False, br.VIX_GAP, None)
+    assert day.stress is True and day.vix_close == 30.0
+
+
+@pytest.mark.parametrize("value", [np.inf, -np.inf])
+def test_infinite_vix_at_s_is_unavailable(value):
+    spy = _spy(CORRECTION_UP_DAY)
+    day = _classify(spy, _vix(spy, tail=(value,)))
+    assert (day.stress, day.vix_close, day.vix_max5) == (None, None, None)
+    assert (day.pullback_trigger, day.pullback_reason) == (False, br.VIX_GAP)
+
+
+def test_pullback_vix_ratio_boundary_is_inclusive():
+    spy = _spy(CORRECTION_UP_DAY)
+    assert _classify(spy, _vix(spy, tail=(40, 40, 40, 40, 34))).pullback_trigger is True
+    assert _classify(spy, _vix(spy, tail=(40, 40, 40, 40, 34.0001))).pullback_trigger is False
+
+
+def test_pullback_prior_high_boundary_is_strict():
+    spy = _spy(CORRECTION_UP_DAY)
+    spy.iloc[-2, spy.columns.get_loc("High")] = spy.iloc[-1]["Close"]
+    assert _classify(spy, _vix(spy, tail=(30, 34, 36, 33, 30))).pullback_trigger is False
+
+
+def test_vix_values_outside_five_spy_sessions_are_ignored():
+    spy = _spy(CORRECTION_UP_DAY)
+    vix = _vix(spy, tail=(30, 34, 36, 33, 31))
+    plain = _classify(spy, vix)
+    vix.iloc[-6, 0] = 99.0
+    assert _classify(spy, vix) == plain
+    vix.iloc[-6, 0] = np.nan
+    assert _classify(spy, vix) == plain
+
+
+@pytest.mark.parametrize("tz", ["Pacific/Kiritimati", "America/New_York"])
+def test_vix_exact_match_uses_its_wall_date(tz):
+    spy = _spy(CORRECTION_UP_DAY)
+    vix = _vix(spy, tail=(30, 34, 36, 33, 30))
+    assert _classify(spy, vix.tz_localize(tz)) == _classify(spy, vix)
+
+
+def test_duplicate_vix_wall_date_uses_last_observation():
+    spy = _spy(CORRECTION_UP_DAY)
+    vix = _vix(spy, tail=(30, 34, 36, 33, 30))
+    earlier = pd.DataFrame({"Close": [99.0]}, index=vix.index[-1:])
+    assert _classify(spy, pd.concat([earlier, vix])) == _classify(spy, vix)

@@ -64,6 +64,8 @@ _FLOAT_FIELDS = ("spy_close", "sma50", "sma200", "sma50_lag5", "sma200_lag20",
                  "spy_high_prev", "vix_close", "vix_max5")
 
 
+_LONG_BY_STATE = {BEAR: WOULD_VETO, CORRECTION: CAUTION}
+
 @dataclass(frozen=True)
 class RegimeDay:
     """One labelled session. ``session_date`` is D; ``last_bar_date`` is the
@@ -176,6 +178,38 @@ def _state(m: dict) -> str:
     return NORMAL
 
 
+def _finite_or_none(value) -> float | None:
+    if value is None:
+        return None
+    value = float(value)
+    return value if math.isfinite(value) else None
+
+
+def _vix_window(vix: pd.DataFrame | None,
+                window: list[dt.date]) -> tuple[float | None, float | None]:
+    """(V[s], max(V[s-4..s])) matched by exact date, never filled; the max is
+    None when any of the window's bars is missing or NaN."""
+    frame = _upto(vix, window[-1])
+    if frame is None or len(frame) == 0:
+        return None, None
+    series = pd.Series(_column(frame, "Close"), index=_dates(frame))
+    series = series[~series.index.duplicated(keep="last")]
+    values = [_finite_or_none(series.get(d)) for d in window]
+    if any(v is None for v in values):
+        return values[-1], None
+    return values[-1], max(values)
+
+
+def _pullback(state: str, m: dict, vix_close: float | None,
+              vix_max5: float | None) -> tuple[bool, str | None]:
+    if state != CORRECTION:
+        return False, None
+    if vix_close is None or vix_max5 is None:
+        return False, VIX_GAP
+    eased = vix_close <= PULLBACK_VIX_RATIO * vix_max5
+    return bool(eased and m["spy_close"] > m["spy_high_prev"]), None
+
+
 def classify(spy: pd.DataFrame, vix: pd.DataFrame | None, *, last_session: dt.date,
              session_date: dt.date, spy_provider: str | None = None,
              vix_provider: str | None = None) -> RegimeDay:
@@ -187,4 +221,26 @@ def classify(spy: pd.DataFrame, vix: pd.DataFrame | None, *, last_session: dt.da
     if reason is not None:
         return RegimeDay(state=UNKNOWN, unknown_reason=reason, **base)
     measures = _measures(frame)
-    return RegimeDay(state=_state(measures), **measures, **base)
+    state = _state(measures)
+    vix_close, vix_max5 = _vix_window(vix, list(_dates(frame)[-PULLBACK_VIX_WINDOW:]))
+    trigger, why = _pullback(state, measures, vix_close, vix_max5)
+    return RegimeDay(state=state, stress=None if vix_close is None else vix_close >= STRESS_VIX,
+                     pullback_trigger=trigger, pullback_reason=why, vix_close=vix_close,
+                     vix_max5=vix_max5, **measures, **base)
+
+
+def shadow_action(state: str, stress: bool | None, pullback_trigger: bool, direction: str) -> str:
+    """What the engine WOULD do with a plan of ``direction`` (spec table).
+
+    A pullback day wins over would_veto: it is the panic easing inside a
+    correction, so "would skip" and "pullback watch" never show together.
+    """
+    if direction == "bearish":
+        return ALIGNED if state in (BEAR, CORRECTION) else NONE
+    if direction != "bullish":
+        return NONE
+    if state == CORRECTION and pullback_trigger:
+        return PULLBACK_WATCH
+    if state == CORRECTION and stress is True:
+        return WOULD_VETO
+    return _LONG_BY_STATE.get(state, NONE)
