@@ -76,6 +76,16 @@ describe('Histogram', () => {
     expect(fills[1].classList.contains('negative')).toBe(false);
   });
 
+  it('marks a bin led by the true minus sign (U+2212) as negative too', () => {
+    const element = render([
+      { label: '−1.0R', count: 4 },
+      { label: '1.0R', count: 4 },
+    ]);
+    const fills = element.querySelectorAll('.fill');
+    expect(fills[0].classList.contains('negative')).toBe(true);
+    expect(fills[1].classList.contains('negative')).toBe(false);
+  });
+
   it('takes the caller own predicate for scales that are not signed', () => {
     const fixture = TestBed.createComponent(Histogram);
     fixture.componentRef.setInput('bins', [{ label: '0-2 days', count: 1 }]);

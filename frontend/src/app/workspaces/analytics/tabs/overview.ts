@@ -423,7 +423,7 @@ export class OverviewTab {
     .map((b) => ({ label: `${fixed(Math.round(b.lo * 10) / 10, 1)}R`, count: b.count })));
   readonly monthBars = computed(() => (this.store.performance()?.calendar ?? [])
     .map((m) => ({ label: m.month, value: m.return_pct, n: m.n })));
-  readonly negativeBin = (bin: { label: string }) => bin.label.startsWith('-');
+  readonly negativeBin = (bin: { label: string }) => /^[-−]/.test(bin.label);
 
   /* -- Table views -- one signal per panel, local like the Gallery's
    * segmented-control pattern (`gallery.ts`'s `segmentValue`/`rangeValue`);

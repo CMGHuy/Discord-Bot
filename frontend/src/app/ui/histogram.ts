@@ -125,7 +125,7 @@ export class Histogram {
    *  signed-scale histogram here. A caller whose bins are not signed passes
    *  its own predicate, or accepts that nothing is marked as a loss. */
   readonly isNegative = input<(bin: HistogramBin) => boolean>((bin) =>
-    bin.label.startsWith('-'),
+    /^[-−]/.test(bin.label),
   );
 
   /** A fixed scale ceiling. Wins over the default scale-to-tallest-bin --
