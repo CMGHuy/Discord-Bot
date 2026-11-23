@@ -103,12 +103,72 @@ a one-shot screen id on v1 would waste it.
 - Differs from the v211 shock screens: those were shorts taken during a
   shock. This is a long taken on the release.
 
+### Addendum 2026-11-23 — week 11-16..11-20 and B4–B6
+
+Read-only production query, 2026-11-23, main ledger. SPY fell 8.6% from the
+11-13 close to the 11-20 close, closed below SMA200 from 11-18 on, and closed
+11-20 at its low. VIX went 19.3 → 37.6.
+
+| Closed 11-16..11-23 | N | WR % | ExpR | avg win R | avg loss R | sum R |
+|---|---|---|---|---|---|---|
+| LONG | 74 | 14.9 | −0.39 | +1.90 | −0.79 | −29.1 |
+| SHORT | 26 | 34.6 | +0.15 | +2.34 | −1.01 | +3.9 |
+
+- The bot issued 101 plans: 73 bullish, all from the confluence source. Only 2 of
+  90 watchlist names rose. LONG stop-outs cost −47.8R.
+- Entry-day VIX vs ExpR on those 74 LONG trades: <20 −1.37 (n 8), 20–25 −0.42
+  (n 20), 25–30 −0.46 (n 36), >30 +0.60 (n 9). Too thin to act on. The
+  direction matches B3.
+- Ticker vs its own SMA200 at entry: below −0.47 (n 54), above −0.19
+  (n 20). Derived from the daily CSV (`entry_context` lacks the field), which
+  can carry split artifacts.
+- Worst LONG names: high beta (AMD, COHR, RKLB, RIOT). Best relative names:
+  cybersecurity and staples (PANW, CRWD, WMT, PEP).
+- Unresolved: the 7 still-open longs show +16.1R price-R, which is implausible
+  for this tape. Quote timestamps are unverified, so do not use it.
+
+These are hints, not evidence. They motivate the rows below, and each row
+still needs its own screen verdict. Parameters frozen 2026-11-23.
+
+### B4. `below_sma200_long_veto` — avoid mode
+
+- Claim: long entries in a ticker whose prior-session close is below its own
+  SMA200 (computable only with ≥ 200 bars) underperform long entries above it.
+- Test: avoid-mode screen with a control arm. Longs below SMA200 vs the matched
+  null, on the v2 instrument.
+- Differs from `uptrend_pullback` (B2): B2 is an entry trigger (above SMA200 +
+  RSI(2) < 10). B4 is a veto on every long the bot already issues.
+
+### B5. `high_beta_stress_long_veto` — avoid mode
+
+- Claim: long entries in the screen universe's top-beta tercile (60-session
+  beta to SPY, known at `t`) underperform while the SPY Correction rule holds:
+  prior SPY close < SMA50 and SMA50[t−1] < SMA50[t−6].
+- Test: avoid-mode screen with a control arm. Top-tercile longs in Correction vs
+  the matched null.
+
+### B6. `book_drawdown_long_throttle` — book-level pause
+
+- Claim: skipping new longs while the mean `r_realized` of the last 20 LONG
+  trades **closed before the entry bar** is < 0 raises the book's long
+  ExpR.
+- Test: a single-name event screen cannot express it. It runs on a replayed
+  bot book (v238 rung-4 output or its successor), comparing the paused book
+  with the unpaused one. Window 20 and threshold 0 are frozen now. A changed
+  value is a new idea with a new name.
+
+B1–B6 are all long vetoes or long triggers, so they form one BH family.
+
 ## 5. Order
 
 1. Screen v2 lands (v238, then the v230 batch re-screen, which includes B2).
 2. Fetch `^VIX3M`, then screen B1.
-3. Screen B3.
+3. Screen B3, then B4 and B5.
 4. B2 gets a spec only if `screen2-uptrend_pullback` passes.
+5. B6 waits for a replayed bot book.
+
+Not a hypothesis, and not on this slate: a display-only Correction/Stress tag
+on LONG alerts (`Edge: none`) gets its own spec, dated 2026-11-23.
 
 No integrity follow-up: an earlier reading that the regime line stopped logging
 after 11-12 came from searching one rotated log file. It logs on every scan.
