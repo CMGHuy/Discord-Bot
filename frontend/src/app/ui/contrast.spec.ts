@@ -103,7 +103,7 @@ for (const theme of TOKEN_THEMES) {
       }
     }
 
-    // --neg on --neg-soft over --surface-overlay is 4.48:1 in both themes (spec v225 § Palette): out of scope, not gated.
+    // --neg on --neg-soft over --surface-overlay falls below 4.5:1 in both themes, outside the gated pairs.
     for (const [fg, soft] of [['--pos', '--pos-soft'], ['--neg', '--neg-soft']]) {
       for (const bg of ['--surface', '--surface-raised']) {
         it(`${fg} on ${soft} over ${bg} clears 4.5:1`, () => {
@@ -113,7 +113,38 @@ for (const theme of TOKEN_THEMES) {
       }
     }
   });
+  /**
+   * v240 §1: --text-faint stays a rule and divider colour (never text), held
+   * to the non-text threshold of WCAG 1.4.11 on every surface. Doctena's
+   * #4B748A was lifted to #6E94A8 so dividers read on all four in Navy.
+   */
+  describe(`--text-faint reads as a divider on every surface (${theme})`, () => {
+    for (const bg of SURFACES) {
+      it(`--text-faint on ${bg} clears 3:1`, () => {
+        expect(ratio(tok('--text-faint'), tok(bg))).toBeGreaterThanOrEqual(3);
+      });
+    }
+  });
 }
+
+/**
+ * v240 §1: --control-border outlines inputs, selects and segmented controls,
+ * so it is a non-text UI component colour and needs 3:1 against the ground
+ * it sits on (WCAG 1.4.11). Navy only (index Decision 1): Black keeps its
+ * strong hairline (about 1.5:1), a known gap the spec keeps with Black's
+ * colours.
+ */
+describe('v240: --control-border clears 3:1 (navy)', () => {
+  for (const bg of ['--bg', '--surface']) {
+    it(`--control-border on ${bg} clears 3:1`, () => {
+      expect(ratio(resolveTokenIn('navy', '--control-border'), resolveTokenIn('navy', bg))).toBeGreaterThanOrEqual(3);
+    });
+  }
+
+  it('is the strong hairline under Black, so Black controls look as before', () => {
+    expect(resolveTokenIn('graphite', '--control-border')).toBe(resolveTokenIn('graphite', '--border-strong'));
+  });
+});
 
 /**
  * v186 (D2, D3, D4): no text in the primitives v186 touched is painted in

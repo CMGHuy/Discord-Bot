@@ -481,11 +481,14 @@ describe('v240: the Navy block (doctena night)', () => {
     }
   });
 
-  it('states the ground/ink rule in the tokens.css header', () => {
+  it('states the Navy rule in the tokens.css header', () => {
     const header = CSS.slice(0, CSS.indexOf(':root {'));
     expect(header).toMatch(/ground and ink/i);
     expect(header).toContain('data-theme');
     expect(header).toContain('v225');
+    expect(header).toContain('v240');
+    expect(header).toContain('--control-border');
+    expect(header).toMatch(/twenty tokens/i);
     expect(header).toMatch(/no light theme/i);
   });
 });
