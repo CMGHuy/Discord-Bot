@@ -36,8 +36,8 @@ Create `tests/regime/test_regime_pass.py`:
 ```python
 """v239 V239-8: the regime pass -- compute-or-read D, insert once, notice from the winner.
 
-The replay fixture (V239-2b) gives real bars: labelled after the 11-18 close,
-D = 11-19 is CORRECTION with stress (spec "This week replayed")."""
+The replay fixture (V239-2b) gives real bars: labelled after the 11-19 close,
+D = 11-20 is CORRECTION with stress (spec "This week replayed")."""
 import logging
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -52,9 +52,9 @@ from swingbot.core.market import bear_regime as br
 from swingbot.core.scanning import regime_scan as rs
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "regime" / "spy_vix_replay.csv"
-AFTER_CLOSE = datetime(2026, 11, 18, 22, 0, tzinfo=timezone.utc)   # 17:00 ET Wed
-INTRADAY = datetime(2026, 11, 19, 16, 0, tzinfo=timezone.utc)      # 11:00 ET Thu
-S, D = date(2026, 11, 18), date(2026, 11, 19)
+AFTER_CLOSE = datetime(2026, 11, 19, 22, 0, tzinfo=timezone.utc)   # 17:00 ET Thu
+INTRADAY = datetime(2026, 11, 20, 16, 0, tzinfo=timezone.utc)      # 11:00 ET Fri
+S, D = date(2026, 11, 19), date(2026, 11, 20)
 
 
 def _replay():
@@ -183,14 +183,14 @@ def test_no_row_computes_d_from_both_feeds_and_stores_it_once():
 
 def test_a_partial_bar_and_later_bars_are_cut_before_classifying():
     day = _run(_Repo(), now=INTRADAY)                 # the frames run to 11-20
-    hand = br.classify(SPY.loc[:"2026-11-18"], VIX.loc[:"2026-11-18"], last_session=S,
+    hand = br.classify(SPY.loc[:"2026-11-19"], VIX.loc[:"2026-11-19"], last_session=S,
                        session_date=D, spy_provider="alpaca", vix_provider="yfinance")
     assert day == hand
 
 
 def test_a_stale_spy_label_is_stamped_but_not_stored_so_the_next_pass_retries():
     repo = _Repo()
-    stale = _run(repo, fetch=_fetcher(spy=SPY.loc[:"2026-11-17"]))
+    stale = _run(repo, fetch=_fetcher(spy=SPY.loc[:"2026-11-18"]))
     assert (stale.state, stale.unknown_reason) == (br.UNKNOWN, br.REASON_STALE)
     assert repo.inserted == []
     assert _run(repo).state == br.CORRECTION and len(repo.inserted) == 1
@@ -198,7 +198,7 @@ def test_a_stale_spy_label_is_stamped_but_not_stored_so_the_next_pass_retries():
 
 def test_a_short_history_unknown_is_stored():
     repo = _Repo()
-    day = _run(repo, fetch=_fetcher(spy=SPY.loc[:"2026-11-18"].tail(100)))
+    day = _run(repo, fetch=_fetcher(spy=SPY.loc[:"2026-11-19"].tail(100)))
     assert (day.state, day.unknown_reason) == (br.UNKNOWN, br.REASON_SHORT)
     assert len(repo.inserted) == 1
 
@@ -263,7 +263,7 @@ def test_a_gap_is_counted_in_nyse_sessions(monkeypatch):
     _labels_as(monkeypatch)
     repo = _Repo(_prior(br.NORMAL, br.NORMAL, br.CORRECTION, end=date(2026, 11, 6)))
     _run(repo)
-    assert repo.events[0]["payload"]["gap_sessions"] == 9      # 11-09..11-13, 11-16..11-19
+    assert repo.events[0]["payload"]["gap_sessions"] == 10     # 11-09..11-13, 11-16..11-20
 
 
 def test_a_notice_that_cannot_be_built_never_costs_the_row(monkeypatch, caplog):
@@ -442,7 +442,7 @@ def regime_for_pass(*, now: datetime | None = None, repo=None,
 - [ ] **Step 4: Run the tests to see them pass**
 
 Run: `python scripts/dev/testrun.py file tests/regime/test_regime_pass.py`
-Expected: `0 failed`. A wrong label for D = 11-19 is a V239-2/2b replay issue (`testrun.py file tests/regime/test_bear_regime_replay.py`), not this pass's.
+Expected: `0 failed`. A wrong label for D = 11-20 is a V239-2/2b replay issue (`testrun.py file tests/regime/test_bear_regime_replay.py`), not this pass's.
 
 Run: `python scripts/dev/testrun.py file tests/test_config_v239_keys.py`
 Expected: `0 failed` (`MODES` and `regime_mode` unchanged).

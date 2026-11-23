@@ -176,6 +176,12 @@ daily):
   close < SMA200. BEAR wins over CORRECTION.
 - STRESS: ^VIX close ≥ 25 (an overlay on either state).
 
+The v239 replay fixture uses frozen Yahoo bars through 2026-11-20. The
+first CORRECTION label in its October window is October 23. CORRECTION
+holds on each session from November 6 through November 23. STRESS is true
+on November 6, 9, 18, 20 and 23. The partner approved correcting the
+replay dates on 2026-11-23. The definitions of B7–B9 stay as frozen above.
+
 - **B9 `regime_engine_long_veto`, avoid mode.** Claim: long entries on BEAR
   days, or on CORRECTION days with STRESS on, underperform the matched null.
   This is the screen that licenses switching the live long veto on.

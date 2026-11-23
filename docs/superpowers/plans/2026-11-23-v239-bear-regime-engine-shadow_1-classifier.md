@@ -869,7 +869,7 @@ git commit -m "feat(v239): bear-regime classifier, SPY side -- RegimeDay rows, s
 
 **Model:** opus — exact-date VIX alignment without forward fill, the pullback window and the replay pin decide what B8 and B9 will screen; a wrong match reads a later VIX bar.
 
-**Why:** completes the classifier V239-2 started (spec § Rules, § Shadow action). It adds `stress` (`V[s] ≥ 25`), the pullback trigger (`V[s] ≤ 0.85 × max(V[s−4..s])` and `C[s] > H[s−1]`, CORRECTION only), the `vix_gap` reason, and the pure `shadow_action` table. It then commits a fixture of real SPY and ^VIX bars cut from V239-1's cache and pins the spec's replay of the week: CORRECTION from `D = 2026-10-22`, stress on `D = 11-17..11-20`, never BEAR.
+**Why:** completes the classifier V239-2 started (spec § Rules, § Shadow action). It adds `stress` (`V[s] ≥ 25`), the pullback trigger (`V[s] ≤ 0.85 × max(V[s−4..s])` and `C[s] > H[s−1]`, CORRECTION only), the `vix_gap` reason, and the pure `shadow_action` table. It then commits a fixture of real SPY and ^VIX bars cut from V239-1's cache and pins the exact raw CORRECTION and stress dates from the verified Yahoo replay in the spec.
 
 **Files:**
 - Modify: `swingbot/core/market/bear_regime.py` (created by V239-2)
@@ -993,11 +993,14 @@ Fixture: tests/fixtures/regime/spy_vix_replay.csv, adjusted SPY high/close and
 data/backtest_cache_regime/ (scripts/data/fetch_regime_data.py, V239-1).
 vix_close is blank where ^VIX had no bar that session: never filled.
 
-Convention (spec "Replay convention"): "CORRECTION from 10-22" means
-D = 2026-10-22, labelled from s = 2026-10-21's close. Each D is labelled from
-the full frames; classify cuts them to s itself, so this is also a
-no-lookahead check on real data. These expectations are the spec's own: if
-one fails, report it, never edit it."""
+Convention: D is labelled from s, the prior completed SPY session. Each D
+is labelled from the full frames; classify cuts them to s itself.
+
+The original spec's continuous correction from D=10-22 and stress only on
+D=11-17..11-20 disagreed with the manifest-verified Yahoo cache. The partner
+authorized correcting these replay dates on 2026-11-23, keeping all frozen
+classifier rules. The exact raw daily labels below include intervening NORMAL
+days; they deliberately apply no episode smoothing."""
 from datetime import date
 from pathlib import Path
 
@@ -1008,7 +1011,14 @@ from swingbot.core.market import bear_regime as br
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "regime" / "spy_vix_replay.csv"
 FIRST_D, LAST_D, NEXT_D = date(2026, 10, 22), date(2026, 11, 20), date(2026, 11, 23)
-STRESS_DAYS = {date(2026, 11, 17), date(2026, 11, 18), date(2026, 11, 19), date(2026, 11, 20)}
+CORRECTION_DAYS = {date.fromisoformat(value) for value in (
+    "2026-10-23", "2026-10-26", "2026-10-27",
+    "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-06",
+    "2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13",
+    "2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20",
+    "2026-11-23",
+)}
+STRESS_DAYS = {date(2026, 11, day) for day in (6, 9, 18, 20, 23)}
 
 
 @pytest.fixture(scope="module")
@@ -1032,10 +1042,11 @@ def test_fixture_covers_the_window_with_enough_history():
     assert (raw.index <= pd.Timestamp("2026-10-21")).sum() >= br.MIN_BARS + 40
 
 
-def test_correction_starts_on_d_2026_10_22(labels):
-    assert labels[date(2026, 10, 21)].state != br.CORRECTION
-    window = {d: day.state for d, day in labels.items() if FIRST_D <= d <= LAST_D}
-    assert window and set(window.values()) == {br.CORRECTION}, window
+def test_raw_daily_states_match_the_verified_replay(labels):
+    assert len(labels) == 28
+    assert set(labels) >= CORRECTION_DAYS
+    expected = {d: br.CORRECTION if d in CORRECTION_DAYS else br.NORMAL for d in labels}
+    assert {d: day.state for d, day in labels.items()} == expected
 
 
 def test_never_bear_through_the_decline(labels):
@@ -1045,16 +1056,25 @@ def test_never_bear_through_the_decline(labels):
     assert last.spy_close < last.sma200                 # under SMA200, yet not BEAR
 
 
-def test_stress_exactly_on_d_11_17_to_11_20(labels):
-    window = {d: day for d, day in labels.items() if FIRST_D <= d <= LAST_D}
-    assert {d for d, day in window.items() if day.stress} == STRESS_DAYS
-    assert all(day.stress is not None for day in window.values())
+def test_stress_dates_match_the_verified_replay(labels):
+    assert {d for d, day in labels.items() if day.stress} == STRESS_DAYS
+    assert all(day.stress is not None for day in labels.values())
 
 
 def test_every_day_is_a_full_reading_from_an_earlier_bar(labels):
     for d, day in labels.items():
         assert day.state != br.UNKNOWN, (d, day.unknown_reason)
         assert day.last_bar_date < d
+
+
+def test_real_bar_labels_equal_frames_truncated_at_s(labels):
+    raw = pd.read_csv(FIXTURE, parse_dates=["Date"], index_col="Date")
+    for d, full in labels.items():
+        past = raw.loc[:pd.Timestamp(full.last_bar_date)]
+        spy = past.rename(columns={"spy_high": "High", "spy_close": "Close"})[["High", "Close"]]
+        vix = past[["vix_close"]].rename(columns={"vix_close": "Close"}).dropna()
+        assert br.classify(spy, vix, last_session=full.last_bar_date, session_date=d,
+                           spy_provider="yfinance", vix_provider="yfinance") == full
 ```
 
 - [ ] **Step 3: Run both test files to see them fail**

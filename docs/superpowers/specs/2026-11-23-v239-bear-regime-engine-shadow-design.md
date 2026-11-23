@@ -82,9 +82,8 @@ Every rule below indexes from `s`: `C[s]` is the last completed SPY close,
   session, and a scan after the close but before the refresher ran each map to
   one defined `(s, D)` pair, with one test per case. A half-day session counts
   as completed after its early close.
-- **Replay convention.** The slate's "CORRECTION from 10-22" means
-  `D = 2026-10-22`, i.e. labelled from `s = 2026-10-21`'s close. The replay
-  fixture uses this convention.
+- **Replay convention.** The label's date is `D`, the session after the
+  completed bar `s`. For example, `D = 2026-10-22` uses the 2026-10-21 close.
 
 ### Rules
 
@@ -116,9 +115,13 @@ SPY high. `V` is the ^VIX close. All are evaluated at `s` unless lagged.
   screen exactly these rules. Smoothing applies only to what a person reads:
   the transition notice, the banner's "since" count and study episodes (see
   Confirmed transitions).
-- **This week replayed:** CORRECTION from `D = 10-22`, `stress` on
-  `D = 11-17..11-20`, never BEAR (SMA200 731.7 still rising). The plan pins
-  this replay as a test, from a fixture of real SPY/^VIX closes.
+- **Verified replay on frozen Yahoo data.** The first CORRECTION in the
+  fixture's October test window is `D = 10-23`. The raw labels return to
+  NORMAL on several sessions before a sustained CORRECTION from
+  `D = 11-06` through `D = 11-23`. Stress is true on November 6, 9, 18,
+  20 and 23. There are no BEAR days in the replay window. The partner
+  approved correcting the replay expectations on 2026-11-23. The fixture
+  uses the same rule definitions and thresholds above.
 
 ### Confirmed transitions
 
@@ -351,7 +354,7 @@ a separate downgrade revision and is never needed for rollback.
   - `stress = None` on a missing or misdated VIX bar
   - `pullback_trigger` only in CORRECTION, `False` with `vix_gap` on a VIX
     hole, and `C[s] > H[s−1]` firing on a crafted series
-  - the `D = 10-22 .. 11-20` replay fixture
+  - exact raw state and stress dates on the verified Yahoo replay fixture
   - no-lookahead: appending a bar after `s` never changes the label for `D`
   - a frame ending in a partial bar equals the hand-cut frame
 - **Calendar:** weekend, holiday, half-day and after-close-before-refresher

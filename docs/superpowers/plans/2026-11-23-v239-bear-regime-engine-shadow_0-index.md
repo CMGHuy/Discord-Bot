@@ -44,9 +44,9 @@ cancelled or created. `regime.py`, `score_confidence` and the v209 machine
 are untouched, and so is the execution ticket's own body. The classifier
 constants live in code as `Final`s, never `.env`. `BEAR_REGIME_MODE=off` is a
 byte-identical kill switch: no fetch, no row, no stamp, no line, no notice,
-no banner. Success has four parts. The classifier replays this week as the
-spec states (CORRECTION from `D = 10-22`, stress on `D = 11-17..11-20`,
-never BEAR). The `off` arm is byte-identical in `entry_context`, in both
+no banner. Success has four parts. The classifier reproduces the spec's verified
+Yahoo replay, including the raw CORRECTION and stress dates and the
+absence of BEAR labels. The `off` arm is byte-identical in `entry_context`, in both
 embed builders and in DB writes. The banner and chip pass the layout audit
 at 390/768/1440. Parity replays the committed row export clean.
 Each live action (B9 veto, B8 pullback long, B7 bear short) still waits for
