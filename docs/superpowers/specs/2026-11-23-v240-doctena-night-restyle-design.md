@@ -680,3 +680,33 @@ web manifest join the meta in taking the Navy ground; and `--control-border`
 measures 3.28:1, not 3.4:1. It also confirmed Jost's `tnum`, so the JetBrains
 Mono fallback is dropped. It added `--pill-radius`, the Navy `--pos-soft`/`--neg-soft`
 re-point, the fixture regeneration rule, and the seven true-minus sites.
+
+### Corrections from the plan 2 code brief (2026-11-23)
+
+The brief for plan 2 read the icon and glyph sites and corrected these premises.
+**Glyph count:** "48 files" counted comments and `×` used as multiplication
+(`1.40×`, `1.5 × ATR`), which §4's rule keeps as text. Only about 8 standalone
+markers exist: `direction-arrow.ts` ▲/▼, `layout.ts` × close and ▾/▸ toggle,
+`data-table.ts` ▾/▸, `watchlist.ts` ◉/○, `versions.ts` `&#9650;`, and `guide.ts`
+CSS ▸/▾. Replacing them is one task.
+**Absent glyphs:** `ⓘ ✗ ● ★` appear nowhere. `✓` is a value suffix in `plan-cell.ts`
+and stays text. `⚠` is a server-built prefix (`short_notice.py`) and stays.
+**Hint:** `sb-hint` draws a letter in a CSS circle, not `ⓘ`. It now always
+draws the `info` icon and loses its `glyph` input. The rail's version hint (`v`)
+and the dashboard's open-positions help (`?`) become `info` too (partner,
+2026-11-23).
+**Accessible names:** status and outcome cells are a CSS dot, bar and text,
+so they have no glyph to lose. The accessible-name test instead guards these:
+- direction-arrow
+- the recent-activity icon host
+- the plan-cell closed icon
+- the tape toggle
+- the drawer close button
+- the panel and row toggles
+- the `info` trigger
+**Mockup conflicts, where the spec wins:** stroke is 1.8 everywhere (mockup 4
+draws 2), `analytics` is the bulb with a rising line (mockup 4 draws bars), and
+there is no `grip` (mockups 3 and 4 draw one).
+**Existing pins:** `icon.spec.ts` pins the old half-hatched `theme` path, and
+`shell.css`/`shell.spec.ts` pin the 24px svg override. Both move with the new
+`theme` crescent and the `size` input.
