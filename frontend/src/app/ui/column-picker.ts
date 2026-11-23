@@ -136,7 +136,7 @@ export interface PickableColumn {
     /* The last visible column cannot be unchecked: an empty table is not a
        column preference, it is a broken screen with no way back except this
        same menu. */
-    label.locked { color: var(--text-faint); cursor: default; }
+    label.locked { color: var(--text-muted); cursor: default; }
 
     .reset {
       width: 100%;

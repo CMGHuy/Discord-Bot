@@ -78,7 +78,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
     .b3 { background: var(--quality-3); }
     .b4 { background: var(--quality-4); }
     .b5 { background: var(--quality-5); }
-    .missing { color: var(--text-faint); background: none; }
+    .missing { color: var(--text-muted); background: none; }
     .clustered { outline: 1px solid var(--accent); outline-offset: -1px; }
   `,
 })

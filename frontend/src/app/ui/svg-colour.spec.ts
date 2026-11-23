@@ -22,12 +22,12 @@ const SVG_PRIMITIVES = [
   'matrix', 'small-multiples', 'line-chart', 'timeline',
 ] as const;
 
-/** Selectors allowed to keep --text-faint, each with its reason. */
-const FAINT_ALLOWED: Partial<Record<(typeof SVG_PRIMITIVES)[number], string[]>> = {
-  // The '—' a matrix prints for a missing cell: a disabled glyph, the one
-  // non-rule use correction 13 allows.
-  matrix: ['.missing'],
-};
+/**
+ * Selectors allowed to keep --text-faint, each with its reason. Empty since
+ * v240: the matrix's missing-cell dash moved to --text-muted with every
+ * other faint text (type-gates.spec.ts). Add an entry only with a reason.
+ */
+const FAINT_ALLOWED: Partial<Record<(typeof SVG_PRIMITIVES)[number], string[]>> = {};
 
 const read = (stem: string) =>
   stripComments(readFileSync(join(process.cwd(), 'src/app/ui', `${stem}.ts`), 'utf8'));

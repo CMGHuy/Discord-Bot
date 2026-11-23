@@ -30,7 +30,7 @@ import { Spinner } from './spinner';
        bottom edge, gives the meta its baseline, so "12 s ago" sits on the
        price's baseline (layout audit, 3px off before). */
     .mv-meta sb-spinner { align-self: center; }
-    .mv-meta { display: inline-flex; align-items: baseline; gap: var(--space-4); font-size: var(--text-micro); color: var(--text-faint); font-variant-numeric: tabular-nums; --spinner-size: 10px; }
+    .mv-meta { display: inline-flex; align-items: baseline; gap: var(--space-4); font-size: var(--text-micro); color: var(--text-muted); font-variant-numeric: tabular-nums; --spinner-size: 10px; }
     [data-tone=stale] .mv-age, [data-tone=stalled] .mv-age { color: var(--warn); }
     .mv-err { color: var(--neg); }
     @media (max-width: ${BREAKPOINTS.sm - 1}px) {

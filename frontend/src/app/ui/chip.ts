@@ -100,6 +100,7 @@ export function qualityTone(value: number | string | null | undefined): ChipTone
       border: 1px solid var(--border-strong);
       border-radius: var(--chip-radius);
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-chip);
       font-weight: 500;
       white-space: nowrap;

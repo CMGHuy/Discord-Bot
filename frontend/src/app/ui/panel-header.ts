@@ -50,7 +50,7 @@ import { Hint } from './hint';
     h2.tip:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
     .meta { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-end; gap: var(--space-6) var(--space-10); margin-left: auto; }
     .meta:empty { display: none; }
-    .n,.all-time { font-family: var(--font-num); font-size:var(--text-micro); letter-spacing:.06em; text-transform:uppercase; color: var(--text-muted); }
+    .n,.all-time { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size:var(--text-micro); letter-spacing:.06em; text-transform:uppercase; color: var(--text-muted); }
     .all-time { color:var(--warn); }
     .total { font-family: var(--font-figure); font-weight: var(--figure-weight); letter-spacing: var(--figure-tracking); font-variant-numeric: tabular-nums; font-size: var(--text-chip); color: var(--text-secondary); }
     .table { border:0; padding:0; background:none; color:var(--accent); cursor:pointer; font:inherit; font-size:var(--text-chip); }

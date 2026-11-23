@@ -153,6 +153,7 @@
 .brand sb-icon { flex: none; color: var(--accent); }
 .brand .word {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: var(--text-body);
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -183,7 +184,7 @@
   white-space: nowrap;
   text-align: left;
 }
-.palette-trigger .shortcut { font-family: var(--font-mono); font-size: var(--text-micro); color: var(--text-muted); }
+.palette-trigger .shortcut { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-micro); color: var(--text-muted); }
 
 /* v225: the theme toggle. Icon buttons have no pressed look of their own,
    so Dark blue on shows the segmented controls' selected look -- the

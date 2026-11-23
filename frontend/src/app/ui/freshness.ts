@@ -33,7 +33,7 @@ export const STALE_AFTER_SEC = 900;
     .freshness {
       font-size: var(--text-micro);
       font-variant-numeric: tabular-nums;
-      color: var(--text-faint);
+      color: var(--text-muted);
     }
     .stale { color: var(--warn); }
     .flag { font-style: italic; }

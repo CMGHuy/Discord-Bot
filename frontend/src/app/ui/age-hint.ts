@@ -106,7 +106,7 @@ function snapshotLabel(
     :host { display: inline; }
     .age-hint {
       font-size: var(--text-micro);
-      color: var(--text-faint);
+      color: var(--text-muted);
       white-space: nowrap;
       margin-inline-start: var(--space-4);
       font-variant-numeric: tabular-nums;
