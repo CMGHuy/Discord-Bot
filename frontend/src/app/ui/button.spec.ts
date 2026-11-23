@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { Button, type ButtonVariant } from './button';
+import { styleRules } from './testing/style-rules';
 import { allSources, stripComments } from './testing/all-sources';
 import { resolveToken } from './testing/resolve-token';
 
@@ -213,5 +214,34 @@ describe('v195: danger is the killswitch alone', () => {
   it('confirms the killswitch on the solid variant', () => {
     const risk = allSources().find(({ name }) => name === 'app/workspaces/risk/risk.ts')!.source;
     expect(risk).toContain('dangerVariant="danger"');
+  });
+});
+
+/* v240 §3 and index Decision 6: a text button reads UPPERCASE with +0.04em
+ * tracking at 600, as on doctena. Icon controls, filter chips, segmented
+ * tabs and inline links keep sentence case and normal tracking. */
+describe('v240: uppercase text buttons', () => {
+  const RESET = ':host(.icon), :host(.danger-icon), :host(.chip), :host(.segment), :host(.link)';
+  const body = (selector: string) =>
+    styleRules('app/ui/button.ts', SOURCE).find((rule) => rule.selector === selector)?.body ?? '';
+
+  it('sets every button in uppercase, +0.04em, weight 600 on :host', () => {
+    const host = body(':host');
+    expect(host).toContain('text-transform: uppercase;');
+    expect(host).toContain('letter-spacing: 0.04em;');
+    expect(host).toContain('font-weight: 600;');
+  });
+
+  it('resets the icon, danger-icon, chip, segment and link variants in one rule', () => {
+    const reset = body(RESET);
+    expect(reset).toContain('text-transform: none;');
+    expect(reset).toContain('letter-spacing: normal;');
+  });
+
+  it('sets text-transform in no other rule, so no variant drifts back to mixed case', () => {
+    const setters = styleRules('app/ui/button.ts', SOURCE)
+      .filter((rule) => /text-transform:/.test(rule.body))
+      .map((rule) => rule.selector);
+    expect(setters).toEqual([':host', RESET]);
   });
 });

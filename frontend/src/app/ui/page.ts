@@ -66,7 +66,7 @@ import { RouteTitleService } from '../routing/route-title.service';
       gap: var(--space-10) var(--space-14);
     }
     .heading { flex: 1 1 280px; min-width: 0; }
-    .title { margin: 0; color: var(--text); font-size: var(--text-title); font-weight: 600; line-height: 1.25; }
+    .title { margin: 0; color: var(--text); font-size: var(--text-title); font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; }
     .description { margin: var(--space-4) 0 0; max-width: min(65ch, 100%); color: var(--text-muted); font-size: var(--text-body); }
     .actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-8); }
     .scope, .kpis, .primary { min-width: 0; }

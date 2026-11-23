@@ -48,12 +48,12 @@ export interface SelectOption {
        --text-control is 16px on touch, the size below which a phone zooms
        into a focused field. v195 Phase 2: the panel is the flat --surface
        now, so the field sits one step down on the --bg well, behind the
-       strong hairline, and its edge brightens on hover. */
+       control border (v240, 3:1 in Navy), and its edge brightens on hover. */
     select {
       height: var(--control-h);
       padding: 0 var(--space-8);
       background: var(--bg);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--control-border);
       border-radius: var(--control-radius);
       color: var(--text);
       font: inherit;
@@ -112,7 +112,7 @@ export class Select {
       height: var(--control-h);
       padding: 0 var(--space-8);
       background: var(--bg);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--control-border);
       border-radius: var(--control-radius);
       color: var(--text);
       font: inherit;

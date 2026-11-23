@@ -222,7 +222,7 @@ export function targetNeedsOlder(
       font-variant-numeric: tabular-nums;
       overflow-wrap: anywhere;
     }
-    .part + .part::before { content: '·'; margin: 0 var(--space-4); color: var(--text-faint); }
+    .part + .part::before { content: '·'; margin: 0 var(--space-4); color: var(--text-muted); }
     .states { grid-area: states; }
     .part[data-tone='pos'] { color: var(--pos); }
     .part[data-tone='neg'] { color: var(--neg); }

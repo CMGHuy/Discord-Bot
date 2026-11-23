@@ -8,7 +8,7 @@ import { EmptyStateComponent } from '../../../ui/empty-state';
 import { PanelError } from '../../../ui/panel-error';
 import { Segmented } from '../../../ui/segmented';
 import { AnalyticsBenchmark, BenchmarkDailyRow, BenchmarkEstimate, BenchmarkIndexKey, BenchmarkKey, BenchmarkPoint, BenchmarkRange, BenchmarkSeriesStats, BenchmarkStat, BenchmarkVs } from '../../../api/models';
-import { MINUS, num } from '../../../ui/format';
+import { fixed, lossSign, num, pct as formatPct } from '../../../ui/format';
 import { Button } from '../../../ui/button';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { LineChart, LineChartSeries } from '../../../ui/line-chart';
@@ -39,9 +39,9 @@ export const EMPTY_BARS = 'No benchmark data yet';
 export const STALE_BARS = 'Benchmarks not updating — refresher is off';
 
 export function signedPct(value: number | null, dp = 2): string {
-  if (value === null) return '—';
-  if (value === 0) return `${(0).toFixed(dp)}%`;
-  return `${value > 0 ? '+' : MINUS}${Math.abs(value).toFixed(dp)}%`;
+  // v240 Decision 10: format.ts's `pct`, so a value that rounds to zero
+  // prints unsigned; `pct(null)` is the em dash this always returned.
+  return formatPct(value, dp);
 }
 
 export function etClock(iso: string): string {
@@ -98,7 +98,8 @@ function signTone(value: number | null): StatTone {
 }
 
 function money(value: number, currency: string): string {
-  return `${value < 0 ? MINUS : ''}${currency}${num(Math.abs(value), 2)}`;
+  const magnitude = num(Math.abs(value), 2);
+  return `${lossSign(value, magnitude)}${currency}${magnitude}`;
 }
 
 function tile(label: string, stat: BenchmarkStat, format: (value: number) => string,
@@ -116,7 +117,7 @@ function returnTiles(stats: BenchmarkSeriesStats): BenchmarkTile[] {
 }
 
 function sharpeTile(stats: BenchmarkSeriesStats): BenchmarkTile {
-  return tile('Sharpe (rf = 0)', stats.sharpe, (v) => v.toFixed(2), 'Annualised (252), rf = 0, sample std.');
+  return tile('Sharpe (rf = 0)', stats.sharpe, (v) => fixed(v, 2), 'Annualised (252), rf = 0, sample std.');
 }
 
 function botTiles(stats: BenchmarkSeriesStats, currency: string): BenchmarkTile[] {
@@ -129,7 +130,7 @@ function botTiles(stats: BenchmarkSeriesStats, currency: string): BenchmarkTile[
 }
 
 function betaText(value: number, estimate: BenchmarkEstimate): string {
-  return `β ${value.toFixed(2)}${estimate.se == null ? '' : ` ± ${estimate.se.toFixed(2)}`}`;
+  return `β ${fixed(value, 2)}${estimate.se == null ? '' : ` ± ${estimate.se.toFixed(2)}`}`;
 }
 
 function alphaTile(alpha: BenchmarkEstimate): BenchmarkTile {
@@ -137,7 +138,7 @@ function alphaTile(alpha: BenchmarkEstimate): BenchmarkTile {
     ? 'Headline cell: SPY over the whole live book. Annualised Jensen alpha, rf = 0; indicative, not evidence of edge. The t-statistic uses unadjusted OLS errors, assuming independent, constant-variance observations.'
     : `${ALPHA_CELLS_HINT}: annualised Jensen alpha, rf = 0; indicative, not evidence of edge. The t-statistic uses unadjusted OLS errors, assuming independent, constant-variance observations.`;
   return { ...tile('Alpha (rf = 0)', alpha,
-    (v) => `α ${signedPct(v, 1)}${alpha.t == null ? '' : ` (t ${alpha.t.toFixed(1)})`}`, hint), bold: !!alpha.headline };
+    (v) => `α ${signedPct(v, 1)}${alpha.t == null ? '' : ` (t ${fixed(alpha.t, 1)})`}`, hint), bold: !!alpha.headline };
 }
 
 function indexTiles(stats: BenchmarkSeriesStats, key: BenchmarkIndexKey, vs: BenchmarkVs | undefined): BenchmarkTile[] {
@@ -235,9 +236,9 @@ export function dailyVisible(visible: ReadonlySet<string>): string[] {
 export function captureTiles(p: AnalyticsBenchmark): BenchmarkTile[] {
   const c = p.capture;
   return [
-    { ...tile('Up capture', c.up_pct, (v) => `${v.toFixed(1)}%`, CAPTURE_FORMULA), sample: c.up_n },
-    { ...tile('Down capture', c.down_pct, (v) => `${v.toFixed(1)}%`, DOWN_FORMULA), sample: c.down_n },
-    { ...tile('Capture ratio', c.ratio, (v) => `${v.toFixed(2)}×`, 'Up capture ÷ down capture.'), sample: c.up_n + c.down_n },
+    { ...tile('Up capture', c.up_pct, (v) => `${fixed(v, 1)}%`, CAPTURE_FORMULA), sample: c.up_n },
+    { ...tile('Down capture', c.down_pct, (v) => `${fixed(v, 1)}%`, DOWN_FORMULA), sample: c.down_n },
+    { ...tile('Capture ratio', c.ratio, (v) => `${fixed(v, 2)}×`, 'Up capture ÷ down capture.'), sample: c.up_n + c.down_n },
   ];
 }
 
@@ -343,22 +344,22 @@ export function beatLine(p: AnalyticsBenchmark): string {
     .series-chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--text); }
     .swatch { display: inline-block; width: 14px; border-top: 2px solid; margin-right: var(--space-6); vertical-align: middle; }
     .swatch.dashed { border-top-style: dashed; }
-    .sub, .caption, .clamp, .stamp { font-size: var(--text-micro); color: var(--text-faint); }
+    .sub, .caption, .clamp, .stamp { font-size: var(--text-micro); color: var(--text-muted); }
     .sub { display: block; }
     .paper { margin: 0; font-size: var(--text-chip); color: var(--text-secondary); }
     .banner, .stale { margin: 0; font-size: var(--text-chip); color: var(--warn); }
     .range { display: grid; gap: var(--space-6); }
     .stats { display: grid; gap: var(--space-10); }
     .group h3 { margin: 0; font-size: var(--text-chip); color: var(--text); }
-    .group-note { font-weight: normal; color: var(--text-faint); margin-left: var(--space-6); }
+    .group-note { font-weight: normal; color: var(--text-muted); margin-left: var(--space-6); }
     .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-10); }
     .tile.bold { outline: 1px solid var(--accent); border-radius: var(--panel-radius); --figure-weight: 700; }
-    .strip-line, .exposure-caption, .markers { margin: 0; font-size: var(--text-micro); color: var(--text-faint); }
+    .strip-line, .exposure-caption, .markers { margin: 0; font-size: var(--text-micro); color: var(--text-muted); }
     .markers { padding-left: var(--space-14); }
     .more{min-height:44px;margin-top:var(--space-10);padding:0 var(--space-14);border:1px solid var(--border);border-radius:var(--panel-radius);background:var(--surface);color:var(--text)}
     .beat{margin:var(--space-10) 0 0;font-size:var(--text-chip);color:var(--text-secondary)}
     .footnote{display:grid;gap:var(--space-4)}
-    .footnote p{margin:0;font-size:var(--text-micro);color:var(--text-faint)}
+    .footnote p{margin:0;font-size:var(--text-micro);color:var(--text-muted)}
     @media (max-width:639px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.today .cells{grid-template-columns:repeat(2,minmax(0,1fr))}}
   `,
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MINUS, amount, held, money, pct, quantity, rMultiple, riskPct, shareCount, signed, timeInZone } from './format';
+import { MINUS, amount, fixed, held, lossSign, money, num, pct, quantity, rMultiple, riskPct, shareCount, signFor, signed, timeInZone } from './format';
 
 /* No prior spec file existed for format.ts; timeInZone is new (Watchlist
  * Earnings calendar) and carries real cross-timezone/DST behaviour worth
@@ -95,8 +95,9 @@ describe('amount (v85: the hero balance figure needs grouped thousands)', () => 
     expect(amount(997480.01, '€')).toBe('997,480.01 €');
   });
 
-  it('carries no sign -- it names a level, not a movement', () => {
-    expect(amount(-5, '€')).toBe('-5.00 €');
+  it('prints a true minus for a negative balance and leaves rounded zero unsigned', () => {
+    expect(amount(-5, '€')).toBe('−5.00 €');
+    expect(amount(-0.004, '€')).toBe('0.00 €');
   });
 
   it('renders absence as the em dash, not as zero', () => {
@@ -172,9 +173,11 @@ describe('riskPct (v194 B5: a tiny risk never reads as zero)', () => {
     expect(riskPct(1234.5)).toBe('1,234.50%');
   });
 
-  it('keeps the sign of a negative value, tiny or not', () => {
-    expect(riskPct(-1.234)).toBe('-1.23%');
-    expect(riskPct(-0.002)).toBe('-<0.01%');
+  it('keeps the sign of a negative value, tiny or not, as a true minus (v240 §1)', () => {
+    expect(riskPct(-1.234)).toBe('−1.23%');
+    expect(riskPct(-0.002)).toBe('−<0.01%');
+    expect(riskPct(-1234.5)).toBe('−1,234.50%');
+    expect(riskPct(-1.234)).not.toContain('-');
   });
 
   it('renders absence as the em dash', () => {
@@ -222,7 +225,7 @@ describe('v195: a true minus on every signed figure', () => {
   });
 
   it('prints no hyphen-minus from any signed helper', () => {
-    for (const value of [-0.004, -1, -2.5, -1234.567]) {
+    for (const value of [-1, -2.5, -1234.567]) {
       for (const text of [pct(value), pct(value, 0), money(value, '$'), money(value, '€', 0), rMultiple(value), signed(value)]) {
         expect(text, `${value} -> ${text}`).not.toContain(HYPHEN);
         expect(text.startsWith(MINUS), `${value} -> ${text}`).toBe(true);
@@ -233,5 +236,110 @@ describe('v195: a true minus on every signed figure', () => {
   it('leaves the unsigned level formatter unsigned and zero unsigned', () => {
     expect(amount(1420, '$', 0)).toBe('1,420 $');
     expect(signed(0)).toBe('0.00');
+  });
+});
+
+/* v240 §1 (index Decision 9): the plain-number sites (metric cards and
+ * chips, R labels, chart tooltips) print a true minus on a loss, no plus on
+ * a gain, and no sign on a value that rounds to zero. */
+describe('fixed (v240: a true minus on plain numbers)', () => {
+  it('prints a loss with U+2212 and keeps the decimals', () => {
+    expect(fixed(-2.5, 2)).toBe('−2.50');
+    expect(fixed(-0.26, 1)).toBe('−0.3');
+    expect(fixed(-1234.567, 0)).toBe('−1235');
+    expect(fixed(-2.5, 2)).not.toContain('-');
+  });
+
+  it('prints a gain and zero without a sign', () => {
+    expect(fixed(2.5, 2)).toBe('2.50');
+    expect(fixed(0, 2)).toBe('0.00');
+    expect(fixed(-0, 2)).toBe('0.00');
+  });
+
+  it('never prints a signed zero for a loss that rounds away', () => {
+    expect(fixed(-0.004, 2)).toBe('0.00');
+    expect(fixed(-0.04, 1)).toBe('0.0');
+    expect(fixed(-0.4, 0)).toBe('0');
+    expect(fixed(-0.005, 2)).toBe('−0.01');
+  });
+
+  it('does not group thousands, like the toFixed it replaces', () => {
+    expect(fixed(12345.6, 1)).toBe('12345.6');
+    expect(fixed(-12345.6, 1)).toBe(`${MINUS}12345.6`);
+  });
+});
+
+/* v240 (index Decision 10, partner 2026-11-23): a value that rounds to zero
+ * prints unsigned in every signed helper, as in fixed(): never "−0.00" or
+ * "+0.00", because a zero has no sign. */
+describe('v240: no signed zero from any signed helper', () => {
+  it('prints a loss that rounds to zero unsigned', () => {
+    expect(pct(-0.004)).toBe('0.00%');
+    expect(pct(-0.4, 0)).toBe('0%');
+    expect(money(-0.004, '€')).toBe('0.00 €');
+    expect(money(-0.4, '$', 0)).toBe('0 $');
+    expect(rMultiple(-0.004)).toBe('0.00R');
+    expect(signed(-0.004)).toBe('0.00');
+    expect(signed(-0.04, 1)).toBe('0.0');
+  });
+
+  it('prints a gain that rounds to zero unsigned', () => {
+    expect(pct(0.004)).toBe('0.00%');
+    expect(money(0.004, '€')).toBe('0.00 €');
+    expect(rMultiple(0.004)).toBe('0.00R');
+    expect(signed(0.004)).toBe('0.00');
+  });
+
+  it('keeps the sign on the smallest value that does not round away', () => {
+    expect(pct(-0.006)).toBe('−0.01%');
+    expect(money(-0.006, '€')).toBe('−0.01 €');
+    expect(rMultiple(0.006)).toBe('+0.01R');
+    expect(signed(-0.006)).toBe('−0.01');
+    expect(money(-1234567.891, '$')).toBe('−1,234,567.89 $');
+  });
+
+  it('prints no sign at all on any rounded-away value', () => {
+    for (const value of [-0.004, 0.004, -0, 0]) {
+      for (const text of [pct(value), pct(value, 0), money(value, '$'), money(value, '€', 0), rMultiple(value), signed(value)]) {
+        expect(text, `${value} -> ${text}`).not.toMatch(/^[+−-]/);
+      }
+    }
+  });
+});
+
+/* v240 V240-12b: signFor and lossSign are the sign rule the local
+ * formatters outside format.ts share (index Decision 10). */
+describe('v240: signFor and lossSign', () => {
+  it('signFor signs a printed magnitude only when it holds a non-zero digit', () => {
+    expect(signFor(1.2, '1.20')).toBe('+');
+    expect(signFor(-1.2, '1.20')).toBe(MINUS);
+    expect(signFor(-0.004, '0.00')).toBe('');
+    expect(signFor(0.004, '0.00')).toBe('');
+    expect(signFor(0, '0')).toBe('');
+    expect(signFor(-0, '0.00')).toBe('');
+    expect(signFor(-0.001, '<0.01')).toBe(MINUS);
+  });
+
+  it('lossSign puts a true minus on a visible loss and nothing else', () => {
+    expect(lossSign(-1.2, '1.20')).toBe(MINUS);
+    expect(lossSign(-1234.5, '1,234.50')).toBe(MINUS);
+    expect(lossSign(1.2, '1.20')).toBe('');
+    expect(lossSign(-0.004, '0.00')).toBe('');
+    expect(lossSign(-0.4, '0 $')).toBe('');
+    expect(lossSign(0, '0.00')).toBe('');
+    expect(lossSign(-0, '0.00')).toBe('');
+  });
+});
+
+describe('plain grouping and quantity signs (v240)', () => {
+  it('preserves grouping and uses a true minus for a visible loss', () => {
+    expect(num(-1234.56)).toBe('−1,234.56');
+    expect(quantity(-1234.5)).toBe('−1,234.5');
+  });
+
+  it('prints a negative number that rounds away without a sign', () => {
+    expect(num(-0.004)).toBe('0.00');
+    expect(num(-0)).toBe('0.00');
+    expect(quantity(-0.004)).toBe('0');
   });
 });

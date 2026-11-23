@@ -221,6 +221,7 @@ export function barWidth(col: number): string {
       background: var(--warn-soft);
       color: var(--warn);
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-micro);
     }
     .content.stale { color: var(--text-secondary); }

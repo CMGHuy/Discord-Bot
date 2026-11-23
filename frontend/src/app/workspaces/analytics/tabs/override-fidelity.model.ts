@@ -1,7 +1,7 @@
 import {
   OverrideRowDto, OverrideStatus, OverrideSummary, OverrideVerdict, OverrideWaitingOn,
 } from '../../../api/models';
-import { num } from '../../../ui/format';
+import { num, signFor } from '../../../ui/format';
 
 /* v173 — copy and formatting for "Overrides vs engine". Every figure is
  * computed server-side; these helpers only word it. The copy is frozen by
@@ -37,29 +37,30 @@ const WAITING_ITEM: Record<Exclude<OverrideWaitingOn, 'count'>, (v: OverrideVerd
   excluded: (v) => `left-out rows at most 20% (now ${Math.round(v.excluded_share * 100)}%)`,
 };
 
-const MINUS = '−';   // negatives line up with positives in tabular figures
 
 const known = (x: number | null): x is number => x !== null && Number.isFinite(x);
-const sign = (x: number): string => (x > 0 ? '+' : x < 0 ? MINUS : '');
 const be = (n: number): string => (n === 1 ? 'is' : 'are');
 
-function magnitude(x: number, currency: string): string {
-  return currency + num(Math.abs(x), 2);
-}
+/** A signed figure from a magnitude already formatted: `signFor` gives '+'
+ *  on a gain, a true minus on a loss and nothing on a zero or a value that
+ *  rounds to zero (v240, index Decision 10). */
+const signedText = (x: number, magnitude: string): string => `${signFor(x, magnitude)}${magnitude}`;
 
 function fixed2(x: number | null): string {
-  return known(x) ? `${sign(x)}${Math.abs(x).toFixed(2)}` : '—';
+  return known(x) ? signedText(x, Math.abs(x).toFixed(2)) : '—';
 }
 
 export const plural = (n: number, one: string, many: string): string =>
   `${n} ${n === 1 ? one : many}`;
 
 export function signedUsd(x: number | null, currency: string): string {
-  return known(x) ? sign(x) + magnitude(x, currency) : '—';
+  if (!known(x)) return '—';
+  const digits = num(Math.abs(x), 2);
+  return `${signFor(x, digits)}${currency}${digits}`;
 }
 
 export function signedR(x: number | null): string {
-  return known(x) ? `${sign(x)}${Math.abs(x).toFixed(2)} R` : '—';
+  return known(x) ? `${signedText(x, Math.abs(x).toFixed(2))} R` : '—';
 }
 
 export function netEffect(summary: OverrideSummary, currency: string): string {

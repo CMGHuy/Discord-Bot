@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { AnalyticsStore } from '../../../stores/analytics.store';
 import { ConnectionStore } from '../../../stores/connection.store';
-import { AttributionTab, TAKEN_CAPTION } from './attribution';
+import { AttributionTab, TAKEN_CAPTION, rLabel, rateLabel } from './attribution';
 import { Hint } from '../../../ui/hint';
 import { PERFORMANCE_CAVEAT } from '../../../ui/stat-tile';
 
@@ -218,5 +218,21 @@ describe('AttributionTab hint and tooltip copy (A4 audit)', () => {
       min_cell_n: 20, scope: {}, n: 30 }) });
     const text = await tooltipText(fixture, 'sb-heat-grid td.sb-hit');
     expect(text).toContain('0.25R');
+  });
+
+  it('labels a negative ExpR and rate with a true minus, a gain unsigned (v240 §1)', () => {
+    expect(rLabel(-0.25)).toBe('−0.25R');
+    expect(rLabel(0.25)).toBe('0.25R');
+    expect(rLabel(-0.001)).toBe('0.00R');
+    expect(rateLabel(-1.25)).toBe('−1.3%');
+    expect(rateLabel(55)).toBe('55.0%');
+  });
+
+  it('Contribution tooltip prints a losing strategy with a true minus', async () => {
+    const { fixture } = render({ strategies: signal({ contribution: [{ strategy: 'RSI', total_r: -2.5, n: 30 }],
+      cumulative: {}, strategies: [], scope: {}, n: 30 }) });
+    const text = await tooltipText(fixture, 'sb-waterfall rect.hit');
+    expect(text).toContain('−2.50R');
+    expect(text).not.toContain('-2.50R');
   });
 });

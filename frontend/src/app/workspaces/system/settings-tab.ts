@@ -435,13 +435,13 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
     /* -- SR63: badges and the legend --------------------------------- */
     .field-count {
       margin-left: var(--space-6);
-      color: var(--text-faint);
+      color: var(--text-muted);
       font-size: var(--text-micro);
       font-variant-numeric: tabular-nums;
     }
     .legend {
       margin-bottom: var(--space-8);
-      color: var(--text-faint);
+      color: var(--text-muted);
       font-size: var(--text-micro);
     }
     .legend-dot {
@@ -454,17 +454,18 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
       vertical-align: middle;
     }
     .default-badge {
-      color: var(--text-faint);
+      color: var(--text-muted);
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-micro);
     }
-    .asymmetry { color: var(--text-faint); font-size: var(--text-micro); }
+    .asymmetry { color: var(--text-muted); font-size: var(--text-micro); }
 
     /* -- SR56: finding a setting ------------------------------------- */
     .find { margin-bottom: var(--space-10); }
     .find .found {
       margin-left: auto;
-      color: var(--text-faint);
+      color: var(--text-muted);
       font-size: var(--text-chip);
       font-variant-numeric: tabular-nums;
     }
@@ -502,8 +503,9 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
     .meta { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-4); }
     .meta-badges { align-self: stretch; display: flex; flex-wrap: wrap; gap: var(--space-6); }
     .key {
-      color: var(--text-faint);
+      color: var(--text-muted);
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-chip);
     }
     /* A pill rather than plain text, at the same --text-chip scale as .key
@@ -518,7 +520,7 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
       font-size: var(--text-chip);
       cursor: help;
     }
-    .secret { color: var(--text-faint); font-size: var(--text-chip); }
+    .secret { color: var(--text-muted); font-size: var(--text-chip); }
     /* v95 D3: min-height: var(--control-h) added -- this resets a live
        config field (store.resetField), and 20px was a misfire waiting to
        happen on a touch screen. Kept at --text-chip scale and a hairline
@@ -568,7 +570,7 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
     }
     .category-rail button { justify-content: space-between; text-align: left; }
     .category-rail button.active { background: var(--surface-raised); color: var(--text); }
-    .category-rail span { color: var(--text-faint); font-family: var(--font-mono); }
+    .category-rail span { color: var(--text-muted); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
     .stale-form {
       padding: var(--space-8) var(--space-14);
@@ -598,11 +600,11 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
 
     .audit { display: grid; gap: var(--space-6); font-size: var(--text-table); }
     .audit li { display: flex; gap: var(--space-10); }
-    .audit-ts { color: var(--text-faint); white-space: nowrap; }
+    .audit-ts { color: var(--text-muted); white-space: nowrap; }
     .audit-changes { display: grid; gap: var(--space-4); }
-    .audit-change { color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--text-chip); }
+    .audit-change { color: var(--text-secondary); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-chip); }
 
-    .none { color: var(--text-faint); font-size: var(--text-table); }
+    .none { color: var(--text-muted); font-size: var(--text-table); }
 
     .export { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
     .export:hover { text-decoration: underline; }
@@ -617,6 +619,7 @@ export const SETTINGS_RESTART_HINT = 'Restart required to take effect.';
       border-radius: var(--control-radius);
       color: var(--text);
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-chip);
       resize: vertical;
     }

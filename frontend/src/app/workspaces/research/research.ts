@@ -1,3 +1,4 @@
+import { fixed as formatFixed } from '../../ui/format';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -47,7 +48,7 @@ export const VERDICT_TONE: Record<string, ChipTone> = {
 };
 
 const fixed = (value: number | null, digits: number): string | null =>
-  value === null ? null : value.toFixed(digits);
+  value === null ? null : formatFixed(value, digits);
 
 /**
  * Research — every pre-registration this repo has measured, and the badge
@@ -195,16 +196,16 @@ const fixed = (value: number | null, digits: number): string | null =>
   styles: `
     :host { display: block; min-width: 0; }
     .research-body { display: grid; gap: var(--space-14); min-width: 0; }
-    .caption, .disclaimer { margin: 0; color: var(--text-faint); font-size: var(--text-micro); }
+    .caption, .disclaimer { margin: 0; color: var(--text-muted); font-size: var(--text-micro); }
     .verdicts { display: flex; flex-wrap: wrap; gap: var(--space-6); }
     .verdict.on { color: var(--accent); }
     .tier { display: inline-flex; align-items: center; gap: var(--space-8); flex-wrap: wrap; }
-    .aside { color: var(--text-faint); font-size: var(--text-micro); }
+    .aside { color: var(--text-muted); font-size: var(--text-micro); }
     .detail { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-6) var(--space-14); margin: 0; }
     .detail dt { color: var(--text-muted); }
     .detail dd { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8); }
-    .record { font-family: var(--font-mono); overflow-wrap: anywhere; }
-    .record.missing { text-decoration: line-through; color: var(--text-faint); }
+    .record { font-family: var(--font-mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .record.missing { text-decoration: line-through; color: var(--text-muted); }
   `,
 })
 export class Research {

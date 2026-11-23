@@ -286,6 +286,22 @@ describe('PlanCell', () => {
     expect(f.nativeElement.querySelector('[title]').getAttribute('title'))
       .toContain('floor 1.3R · price — · headroom —');
   });
+
+  it('prints a negative trail R with a true minus (v240 §1)', () => {
+    const f = TestBed.createComponent(PlanCell);
+    f.componentRef.setInput('entry', 121.0);
+    f.componentRef.setInput('target', null);
+    f.componentRef.setInput('stop', 113.33);
+    f.componentRef.setInput('stopKind', 'trailing');
+    f.componentRef.setInput('targetIsBankedTp1', true);
+    f.componentRef.setInput('floorR', 1.33);
+    f.componentRef.setInput('priceR', 0.9);
+    f.componentRef.setInput('headroomR', -0.43);
+    f.detectChanges();
+    const title = f.nativeElement.querySelector('[title]').getAttribute('title');
+    expect(title).toContain('floor 1.3R · price 0.9R · headroom −0.4R');
+    expect(title).not.toContain('-0.4R');
+  });
 });
 
 describe('bankedLegPct / bankedLegAmount', () => {

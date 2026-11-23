@@ -14,7 +14,7 @@ import { MIN_SAMPLE_N, PERFORMANCE_CAVEAT, StatTile } from '../../../ui/stat-til
 import { Spinner } from '../../../ui/spinner';
 import { StatStrip } from '../../../ui/stat-strip';
 import { PortfolioValue } from './portfolio-value';
-import { MINUS, amount, pct } from '../../../ui/format';
+import { amount, fixed, pct } from '../../../ui/format';
 import { Realized } from '../../../stores/dashboard.store';
 import {
   ChartTarget,
@@ -268,7 +268,7 @@ export const PERF_BASIS = {
       .mobile-summary > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
       .mobile-summary div { display: flex; justify-content: space-between; gap: var(--space-8); padding: var(--space-6); border-bottom: 1px solid var(--border); font-size: var(--text-table); }
       .mobile-summary span { color: var(--text-secondary); }
-      .mobile-summary strong { font-family: var(--font-mono); }
+      .mobile-summary strong { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
       /* v195 §5.2: the sample under each rate figure, quiet and never toned:
          it says how far to trust the figure, not whether it is good. */
       .mobile-summary strong .n { display: block; color: var(--text-secondary); font-size: var(--text-chip); font-weight: 400; text-align: right; }
@@ -374,8 +374,9 @@ export class TradingPerformance {
   /** Same rule as MetricCard: no value is an em dash, never a zero. */
   protected fmtFigure(value: number | null, unit: string, decimals: number): string {
     if (value === null) return '—';
-    // v195 §1.1: a negative ExpR carries a true minus; positives unchanged.
-    return `${value < 0 ? MINUS : ''}${Math.abs(value).toFixed(decimals)}${unit}`;
+    // v195 §1.1 / v240 Decision 10: a true minus on a loss, none on a gain
+    // or on a value that rounds to zero (`fixed`).
+    return `${fixed(value, decimals)}${unit}`;
   }
   /** An em dash alone reads as broken: say why, in the scope's own words.
    *  All has no hint: nothing closed at all is its own answer. */

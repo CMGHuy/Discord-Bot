@@ -40,7 +40,7 @@ import { num, pct } from '../../../ui/format';
     table { width: 100%; border-collapse: collapse; font-size: var(--text-table); }
     th {
       text-align: left;
-      color: var(--text-faint);
+      color: var(--text-muted);
       font-size: var(--text-micro);
       text-transform: uppercase;
       letter-spacing: 0.1em;
@@ -49,7 +49,7 @@ import { num, pct } from '../../../ui/format';
     }
     td { padding: var(--space-4) 0; font-variant-numeric: tabular-nums; }
     td.price, td.change, th:not(:first-child) { text-align: right; }
-    .symbol { color: var(--accent); font-family: var(--font-mono); text-decoration: none; }
+    .symbol { color: var(--accent); font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-decoration: none; }
     .symbol:hover { text-decoration: underline; }
     .change.pos { color: var(--pos); }
     .change.neg { color: var(--neg); }

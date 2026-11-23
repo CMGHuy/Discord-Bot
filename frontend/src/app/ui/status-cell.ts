@@ -135,7 +135,7 @@ export const STATUS_STALE_HINT = "This position's price could not be freshly fet
       align-self: center;
       width: 72px;
       height: 4px;
-      border-radius: var(--radius-sm);
+      border-radius: var(--pill-radius);
       background: var(--surface-raised);
       overflow: hidden;
     }
@@ -177,11 +177,11 @@ export const STATUS_STALE_HINT = "This position's price could not be freshly fet
 
     /* Motion = Off steadies the dot and the fill: styles/motion.css. */
 
-    .end { font-family: var(--font-mono); font-size: var(--text-chip); }
+    .end { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-chip); }
     .end.neg { color: var(--neg); }
     .end.pos { color: var(--pos); }
-    .pct { font-family: var(--font-mono); font-size: var(--text-table); color: var(--text-secondary); }
-    .hint { font-size: var(--text-chip); color: var(--text-faint); }
+    .pct { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-table); color: var(--text-secondary); }
+    .hint { font-size: var(--text-chip); color: var(--text-muted); }
     /* --warn is the design system's designated token for stale data (see
        tokens.css's own legend) -- distinct from the plain --text-faint
        "no price" hint, because this bar DID get a number, just not

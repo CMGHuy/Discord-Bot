@@ -457,6 +457,24 @@ describe('TradeDetail — the cohort risk chip (v86 C8)', () => {
     expect(hint).toContain('−0.38R');
   });
 
+  it('prints a zero cohort expectancy unsigned (v240 Decision 10)', () => {
+    const el = renderHeader('COHORT_POOR', {
+      win_rate: 50, expectancy_r: 0, n_live: 10, n_backtest: 40, run_date: '2026-09-14',
+    });
+    const hint = el.querySelector('.tags > sb-chip + sb-hint [role="tooltip"]')!.textContent!;
+    expect(hint).toContain('50.0% WR / 0.00R');
+    expect(hint).not.toContain('+0.00R');
+  });
+
+  it('prints a rounded-away cohort loss unsigned (v240 Decision 10)', () => {
+    const el = renderHeader('COHORT_POOR', {
+      win_rate: 50, expectancy_r: -0.004, n_live: 10, n_backtest: 40, run_date: '2026-09-14',
+    });
+    const hint = el.querySelector('.tags > sb-chip + sb-hint [role="tooltip"]')!.textContent!;
+    expect(hint).toContain('50.0% WR / 0.00R');
+    expect(hint).not.toContain('−0.00R');
+  });
+
   it('renders a positive-toned chip for COHORT_STRONG', () => {
     const el = renderHeader('COHORT_STRONG', { win_rate: 71, expectancy_r: 0.6 });
     const chip = el.querySelector('.tags > sb-chip .chip');

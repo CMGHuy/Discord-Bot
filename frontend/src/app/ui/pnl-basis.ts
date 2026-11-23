@@ -9,7 +9,7 @@ export const PNL_BASIS_LABEL = 'pre-tax, before modelled frictions';
   styles: `
     .pnl-basis {
       font-size: var(--text-micro);
-      color: var(--text-faint);
+      color: var(--text-muted);
       white-space: normal;
       overflow-wrap: anywhere;
     }

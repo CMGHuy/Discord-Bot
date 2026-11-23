@@ -51,6 +51,15 @@ describe('runner endings helpers', () => {
     expect(rows[4].cells.every((c) => c === '—')).toBe(true);
   });
 
+  it('prints a zero or rounded-away R unsigned (v240 Decision 10)', () => {
+    const row = { ...BLOCK.rows[0], avg_r: 0, median_r: -0.004, total_r: 0.004, gave_back: -0.004 };
+    const cells = scorecardRows({ ...BLOCK, rows: [row] })[0].cells;
+    expect(cells.slice(0, 3)).toEqual(['0.00R', '0.00R', '0.00R']);
+    expect(cells[6]).toBe('0.00R');
+    const loss = scorecardRows({ ...BLOCK, rows: [{ ...row, avg_r: -0.3, gave_back: -0.3 }] })[0].cells;
+    expect([loss[0], loss[6]]).toEqual(['−0.30R', '−0.30R']);
+  });
+
   it('draws one odds bar per level with its N, every ending listed, empty ones not grown', () => {
     const bars = oddsBars(BLOCK);
     expect(bars.map((b) => [b.label, b.n, b.thin])).toEqual([

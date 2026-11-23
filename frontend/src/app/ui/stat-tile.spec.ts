@@ -129,7 +129,7 @@ describe('StatTile: one variant everywhere (v179 §3.3)', () => {
     expect(value).toContain('letter-spacing: var(--figure-tracking);');
     expect(value).toContain('font-variant-numeric: tabular-nums;');
     expect(value).not.toContain('var(--font-num)');
-    expect(SOURCE).toMatch(/\.sample, \.secondary \{ font-family: var\(--font-num\); \}/);
+    expect(SOURCE).toMatch(/\.sample, \.secondary \{ font-family: var\(--font-num\); font-variant-numeric: tabular-nums; \}/);
     const el = render({ secondary: '+1,240.00 €', sample: 412 });
     expect(el.querySelector('.value')!.classList).not.toContain('num');
     expect(el.querySelector('.secondary')!.classList).toContain('num');

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { resolveToken } from './testing/resolve-token';
 import { allSources, stripComments } from './testing/all-sources';
-import { GROUND_INK_TOKENS, NAVY_SELECTOR, navyRepoints, resolveTokenIn } from './testing/theme-tokens';
+import { NAVY_SELECTOR, NAVY_TOKENS, navyRepoints, resolveTokenIn } from './testing/theme-tokens';
 
 /**
  * The token file is asserted as TEXT, not through a mounted component.
@@ -39,6 +39,7 @@ const REQUIRED = [
   '--surface-overlay',
   '--border',
   '--border-strong',
+  '--control-border',
   '--scrim',
 
   '--text',
@@ -91,6 +92,7 @@ const REQUIRED = [
   '--panel-radius',
   '--control-radius',
   '--chip-radius',
+  '--pill-radius',
   '--radius-sm',
   '--panel-bg',
   '--panel-border',
@@ -368,37 +370,53 @@ describe('v195 §1.1: the Graphite palette', () => {
 });
 
 /**
- * v225: Dark blue (Navy) beside Graphite. One tier-2 block,
- * `:root[data-theme="navy"]`, re-points exactly the ground and ink tokens
- * to the midnight/frost palette; every other colour is shared, so a gain,
- * a loss or a warning reads the same in both themes.
+ * v225, v240: Dark blue (Navy) beside Graphite. One tier-2 block,
+ * `:root[data-theme="navy"]`, re-points exactly NAVY_TOKENS -- the ground,
+ * ink, accent, control border and P&L tokens -- to the doctena-* palette
+ * (spec v240 §1). Every other colour is shared, so a warning, an info chip
+ * or a chart series reads the same in both themes.
  */
-describe('v225: the Navy ground', () => {
+describe('v240: the Navy block (doctena night)', () => {
   const NAVY: [token: string, palette: string, value: string][] = [
-    ['--bg', '--midnight-950', '#070c18'],
-    ['--surface', '--midnight-900', '#0c1424'],
-    ['--surface-raised', '--midnight-850', '#121c32'],
-    ['--surface-overlay', '--midnight-800', '#172440'],
-    ['--overlay-dim', '--midnight-950-a72', 'rgba(7, 12, 24, 0.72)'],
-    ['--border', '--midnight-750', '#182540'],
-    ['--border-strong', '--midnight-700', '#233453'],
-    ['--text', '--frost-100', '#e6ecf5'],
-    ['--text-secondary', '--frost-300', '#c9d4e3'],
-    ['--text-muted', '--frost-400', '#9fb0c8'],
-    ['--text-faint', '--midnight-500', '#5f6f8a'],
+    ['--bg', '--doctena-950', '#00131f'],
+    ['--surface', '--doctena-900', '#001e30'],
+    ['--surface-raised', '--doctena-850', '#032a42'],
+    ['--surface-overlay', '--doctena-800', '#073652'],
+    ['--overlay-dim', '--doctena-950-a72', 'rgba(0, 19, 31, 0.72)'],
+    ['--border', '--doctena-750', '#0d3d59'],
+    ['--border-strong', '--doctena-700', '#1d5373'],
+    ['--text', '--doctena-50', '#fafdff'],
+    ['--text-secondary', '--doctena-200', '#c8e1ef'],
+    ['--text-muted', '--doctena-300', '#8fb3c8'],
+    ['--text-faint', '--doctena-500', '#6e94a8'],
+    ['--accent', '--doctena-sky-400', '#5aa9d6'],
+    ['--accent-fill', '--doctena-blue-600', '#0072b0'],
+    ['--accent-fill-hi', '--doctena-blue-700', '#005b8c'],
+    ['--accent-soft', '--doctena-blue-500-a24', 'rgba(50, 142, 192, 0.24)'],
+    ['--control-border', '--doctena-blue-600', '#0072b0'],
+    ['--pos', '--doctena-mint-400', '#53ceb5'],
+    ['--neg', '--doctena-coral-400', '#f07a7a'],
+    ['--pos-soft', '--doctena-mint-400-a14', 'rgba(83, 206, 181, 0.14)'],
+    ['--neg-soft', '--doctena-coral-400-a14', 'rgba(240, 122, 122, 0.14)'],
   ];
-  /* Shared by both themes (spec v225 § Palette). --quality-3 is absent on
-   * purpose: it is var(--text-secondary), so it follows the ink. */
+  /* Shared by both themes. --quality-3 is absent on purpose: it is
+   * var(--text-secondary), so it follows the ink. */
   const SHARED = [
-    '--accent', '--accent-fill', '--accent-fill-hi', '--on-accent',
-    '--pos', '--neg', '--warn', '--info',
-    '--pos-soft', '--neg-soft', '--warn-soft', '--accent-soft', '--info-soft',
-    '--quality-1', '--quality-2', '--quality-4', '--quality-5',
+    '--on-accent', '--warn', '--info', '--warn-soft', '--info-soft',
+    '--quality-2', '--quality-4',
     '--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5', '--chart-6',
     '--scrim-soft', '--shadow-overlay',
   ];
+  /* var() of a re-pointed token, so they follow it into Navy untouched. */
+  const FOLLOWERS: [token: string, source: string][] = [
+    ['--quality-1', '--neg'], ['--quality-5', '--pos'],
+    ['--flash-up-text', '--pos'], ['--flash-down-text', '--neg'],
+    ['--btn-fill', '--accent-fill'], ['--btn-fill-hover', '--accent-fill-hi'],
+    ['--scrim', '--overlay-dim'],
+  ];
   const NAVY_OPEN = /^:root\[data-theme="navy"\] \{/m;
   const block = CSS.slice(CSS.search(NAVY_OPEN)).match(/\{([^}]*)\}/)?.[1] ?? '';
+  const PALETTE = readFileSync(join(process.cwd(), 'src/styles/palette.css'), 'utf8');
 
   it('declares one Navy block, after the tier-2 ground and before the tier-3 banner', () => {
     expect(NAVY_SELECTOR).toBe(':root[data-theme="navy"]');
@@ -408,9 +426,9 @@ describe('v225: the Navy ground', () => {
     expect(at).toBeLessThan(CSS.indexOf(TIER3_BANNER));
   });
 
-  it('re-points exactly the ground and ink tokens, and every one of them', () => {
-    expect([...GROUND_INK_TOKENS].sort()).toEqual(NAVY.map(([name]) => name).sort());
-    expect(Object.keys(navyRepoints()).sort()).toEqual([...GROUND_INK_TOKENS].sort());
+  it('re-points exactly NAVY_TOKENS, in that order, and every one of them', () => {
+    expect([...NAVY_TOKENS]).toEqual(NAVY.map(([name]) => name));
+    expect(Object.keys(navyRepoints())).toEqual([...NAVY_TOKENS]);
   });
 
   for (const [name, palette, value] of NAVY) {
@@ -435,23 +453,43 @@ describe('v225: the Navy ground', () => {
     expect(resolveTokenIn('navy', name)).toBe(resolveToken(name));
   });
 
+  it.each(FOLLOWERS)('%s follows %s into Navy', (name, source) => {
+    expect(resolveTokenIn('navy', name)).toBe(resolveTokenIn('navy', source));
+  });
+
+  it('gives Black a --control-border equal to its strong hairline, so Black controls look as before', () => {
+    expect(CSS).toMatch(/^\s*--control-border:\s*var\(--border-strong\);/m);
+    expect(resolveToken('--control-border')).toBe(resolveToken('--border-strong'));
+  });
+
   it('carries tier-3 tokens built on the ground over to Navy', () => {
-    expect(resolveTokenIn('navy', '--panel-bg')).toBe('#0c1424');
+    expect(resolveTokenIn('navy', '--panel-bg')).toBe('#001e30');
+  });
+
+  it('deletes the v225 midnight and frost ramps: nothing reads them', () => {
+    expect(PALETTE).toMatch(/^\s*--doctena-950:\s*#00131f;/m);
+    for (const source of [stripComments(CSS), stripComments(PALETTE)]) {
+      expect(source).not.toMatch(/--(?:midnight|frost)-\d/);
+    }
+    for (const { name, source } of allSources()) {
+      expect(stripComments(source), name).not.toMatch(/--(?:midnight|frost)-\d/);
+    }
   });
 
   it('keeps the Arctic Navy guard clean of the new palette names', () => {
-    const PALETTE = readFileSync(join(process.cwd(), 'src/styles/palette.css'), 'utf8');
-    expect(PALETTE).toMatch(/^\s*--midnight-950:\s*#070c18;/m);
     for (const source of [CSS, PALETTE, block]) {
       expect(source).not.toMatch(/--(?:navy|slate|sky|teal)-\d/);
     }
   });
 
-  it('states the ground/ink rule in the tokens.css header', () => {
+  it('states the Navy rule in the tokens.css header', () => {
     const header = CSS.slice(0, CSS.indexOf(':root {'));
     expect(header).toMatch(/ground and ink/i);
     expect(header).toContain('data-theme');
     expect(header).toContain('v225');
+    expect(header).toContain('v240');
+    expect(header).toContain('--control-border');
+    expect(header).toMatch(/twenty tokens/i);
     expect(header).toMatch(/no light theme/i);
   });
 });
@@ -473,13 +511,22 @@ describe('v80 D3: type, shape and touch', () => {
 
   /* v167 §3 supersedes v80 D3's single 2px: four targets, all in tier 3,
    * and the two old tokens are gone so no unclassified corner survives.
-   * v195 §1.5: 6px panels, 4px controls and chips, 2px cells. */
+   * v240 §3 keeps the four targets and moves them to doctena's shapes:
+   * 10px panels, 12px controls, pill chips, 6px cells; --pill-radius is
+   * the round end chips and thin bars read. */
   it('defines the four radius targets', () => {
-    expect(TIER3).toMatch(/^\s*--panel-radius:\s*6px;/m);
-    expect(TIER3).toMatch(/^\s*--control-radius:\s*4px;/m);
-    expect(TIER3).toMatch(/^\s*--chip-radius:\s*4px;/m);
-    expect(TIER3).toMatch(/^\s*--radius-sm:\s*2px;/m);
+    expect(TIER3).toMatch(/^\s*--panel-radius:\s*10px;/m);
+    expect(TIER3).toMatch(/^\s*--control-radius:\s*12px;/m);
+    expect(TIER3).toMatch(/^\s*--pill-radius:\s*999px;/m);
+    expect(TIER3).toMatch(/^\s*--chip-radius:\s*var\(--pill-radius\);/m);
+    expect(TIER3).toMatch(/^\s*--radius-sm:\s*6px;/m);
     expect(CSS).not.toMatch(/^\s*--radius(?:-chip)?:/m);
+  });
+
+  it('resolves a chip corner to the pill and a nested panel to 8px (v240 §3)', () => {
+    expect(resolveToken('--chip-radius')).toBe('999px');
+    expect(resolveToken('--pill-radius')).toBe('999px');
+    expect(resolveToken('--panel-inner-radius')).toBe('8px');
   });
 
   /* v195 §1.4: the one row height is the dense 28px on desktop; the touch
@@ -509,15 +556,16 @@ describe('v167 §3: the tier-3 component tokens', () => {
     TIER3.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm'))?.[1].replace(/\s+/g, ' ').trim();
 
   const VALUES: Record<string, string> = {
-    '--panel-radius': '6px',
-    '--control-radius': '4px',
-    '--chip-radius': '4px',
-    '--radius-sm': '2px',
+    '--panel-radius': '10px',
+    '--control-radius': '12px',
+    '--pill-radius': '999px',
+    '--chip-radius': 'var(--pill-radius)',
+    '--radius-sm': '6px',
     '--panel-bg': 'var(--surface)',
     '--panel-border': '1px solid var(--border)',
     '--panel-shadow': 'none',
     '--panel-inner-bg': 'var(--surface-raised)',
-    '--panel-inner-radius': 'var(--control-radius)',
+    '--panel-inner-radius': '8px',
     '--shadow-overlay': '0 16px 40px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4)',
     '--btn-fill': 'var(--accent-fill)',
     '--btn-fill-hover': 'var(--accent-fill-hi)',
@@ -674,10 +722,13 @@ describe('v195: the 12px micro and chip floor', () => {
 });
 
 /** v179 §3.3: every numeric value uses one tabular face, named once. */
+/** v179 §3.3: every numeric value uses one face, named once. v240 §2: that
+ *  face is Jost through --font-mono, which is now an alias of --font-sans. */
 describe('v179: one numeric face', () => {
-  it('declares --font-num as the mono family', () => {
+  it('declares --font-num through --font-mono, which resolves to --font-sans', () => {
     expect(CSS).toMatch(/^\s*--font-num:\s*var\(--font-mono\);/m);
     expect(resolveToken('--font-num')).toBe(resolveToken('--font-mono'));
+    expect(resolveToken('--font-mono')).toBe(resolveToken('--font-sans'));
   });
 });
 

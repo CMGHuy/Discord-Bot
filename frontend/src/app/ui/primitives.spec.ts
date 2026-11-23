@@ -148,12 +148,12 @@ describe('no call site redefines a promoted composite', () => {
 const COLOUR_RE = /(?<!&)#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(/g;
 
 const HEX_ALLOWLIST = new Map<string, string[]>([
-  // The three cold-load copies, in file order: the Graphite theme-color
-  // meta, the Navy --bg held once in index.html's pre-paint script (v225),
-  // and the Graphite inline html/body background. They paint before any
-  // stylesheet has loaded, so they cannot read var(--bg); the cold-load
-  // describes below fail the moment one drifts from palette.css.
-  ['index.html', ['#0d0f12', '#070c18', '#0d0f12']],
+  // The four cold-load copies, in file order: the theme-color meta (Navy,
+  // the default look since v240), NAVY_BG and GRAPHITE_BG in index.html's
+  // pre-paint script, and the inline html/body ground (Navy). They paint
+  // before any stylesheet has loaded, so they cannot read var(--bg); the
+  // cold-load describes below fail the moment one drifts from palette.css.
+  ['index.html', ['#00131f', '#00131f', '#0d0f12', '#00131f']],
 ]);
 
 describe('no colour is declared outside the token files', () => {
@@ -230,21 +230,21 @@ describe('tokens.css holds no hued literal (v167 §5)', () => {
  * them fail here instead of flashing the old ground on a cold load and
  * leaving a stale PWA title bar.
  */
-describe('the cold-load copies equal the resolved --bg (v167 §7)', () => {
-  const bg = resolveToken('--bg').toLowerCase();
+describe('the cold-load copies equal the resolved Navy --bg (v167 §7, v240)', () => {
+  const bg = resolveTokenIn('navy', '--bg').toLowerCase();
   const read = (file: string) => readFileSync(join(process.cwd(), file), 'utf8');
 
-  it('index.html paints the theme-color meta in --bg', () => {
+  it('index.html paints the theme-color meta in the Navy --bg', () => {
     const meta = read('src/index.html').match(/<meta name="theme-color" content="([^"]+)">/);
     expect(meta?.[1].toLowerCase()).toBe(bg);
   });
 
-  it('index.html paints the inline cold-load ground in --bg', () => {
+  it('index.html paints the inline cold-load ground in the Navy --bg', () => {
     const inline = read('src/index.html').match(/<style>html, body \{ background: ([^;]+); \}<\/style>/);
     expect(inline?.[1].toLowerCase()).toBe(bg);
   });
 
-  it("the manifest's theme_color and background_color are --bg", () => {
+  it("the manifest's theme_color and background_color are the Navy --bg", () => {
     const manifest = JSON.parse(read('public/manifest.webmanifest'));
     expect(manifest.theme_color.toLowerCase()).toBe(bg);
     expect(manifest.background_color.toLowerCase()).toBe(bg);
@@ -252,26 +252,30 @@ describe('the cold-load copies equal the resolved --bg (v167 §7)', () => {
 });
 
 /**
- * v225: a browser that chose Dark blue paints Navy from the first frame.
- * index.html's inline script reads ui.theme before the bundle parses and,
- * on exactly 'navy', sets data-theme, the theme-color meta and a Navy
- * ground scoped to html[data-theme="navy"] -- so toggling back to Black
- * later drops it. The manifest stays Graphite.
+ * v225, v240: the chosen look paints from the first frame. index.html's
+ * inline script reads ui.theme before the bundle parses and mirrors
+ * ui/theme.service.ts readTheme: Black only for exactly 'graphite', Navy
+ * otherwise (missing, junk, or a throwing localStorage). It always sets
+ * data-theme. For Black it also swaps the theme-color meta and adds a Black
+ * ground scoped to html[data-theme="graphite"], so a later switch to Dark
+ * blue drops it. The manifest carries the Navy ground, the default.
  */
-describe('the Dark blue cold load (v225)', () => {
+describe('the pre-paint theme script (v225, v240)', () => {
   const INDEX = readFileSync(join(process.cwd(), 'src/index.html'), 'utf8');
   const script = INDEX.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? '';
   const html = document.documentElement;
+  const NAVY = resolveTokenIn('navy', '--bg').toLowerCase();
+  const GRAPHITE = resolveToken('--bg').toLowerCase();
   let meta: HTMLMetaElement;
 
   const run = () => new Function(script)();
   const injected = () =>
-    [...document.head.querySelectorAll('style')].filter((s) => s.textContent!.includes('data-theme="navy"'));
+    [...document.head.querySelectorAll('style')].filter((s) => s.textContent!.includes('data-theme="graphite"'));
 
   beforeEach(() => {
     meta = document.createElement('meta');
     meta.name = 'theme-color';
-    meta.content = resolveToken('--bg');
+    meta.content = '';
     document.head.appendChild(meta);
   });
 
@@ -283,54 +287,66 @@ describe('the Dark blue cold load (v225)', () => {
     vi.restoreAllMocks();
   });
 
-  it('holds the Navy --bg once, equal to the resolved --midnight-950 and Navy --bg', () => {
-    const literal = script.match(/var NAVY_BG = '([^']+)';/)?.[1].toLowerCase();
-    expect(literal).toBe(resolveToken('--midnight-950').toLowerCase());
-    expect(literal).toBe(resolveTokenIn('navy', '--bg').toLowerCase());
-    expect(script.match(/#[0-9a-f]{6}/gi)).toHaveLength(1);
+  it('holds each ground once: NAVY_BG is --doctena-950, GRAPHITE_BG is --graphite-950', () => {
+    const navy = script.match(/var NAVY_BG = '([^']+)';/)?.[1].toLowerCase();
+    const graphite = script.match(/var GRAPHITE_BG = '([^']+)';/)?.[1].toLowerCase();
+    expect(navy).toBe(resolveToken('--doctena-950').toLowerCase());
+    expect(navy).toBe(NAVY);
+    expect(graphite).toBe(resolveToken('--graphite-950').toLowerCase());
+    expect(graphite).toBe(GRAPHITE);
+    expect(script.match(/#[0-9a-f]{6}/gi)).toHaveLength(2);
   });
 
-  it('sits after the theme-color meta and before the inline Graphite style', () => {
+  it('sits after the theme-color meta and before the inline ground style', () => {
     const at = INDEX.indexOf('<script>');
     expect(at).toBeGreaterThan(INDEX.indexOf('<meta name="theme-color"'));
     expect(at).toBeLessThan(INDEX.indexOf('<style>html, body {'));
   });
 
-  it(`acts only on exactly 'navy' under ${THEME_PREF_KEY}, inside try/catch`, () => {
-    expect(script).toContain(`localStorage.getItem('${THEME_PREF_KEY}') === 'navy'`);
+  it(`turns Black only on exactly 'graphite' under ${THEME_PREF_KEY}, reading storage inside try/catch`, () => {
+    expect(script).toContain(`localStorage.getItem('${THEME_PREF_KEY}') === 'graphite'`);
     expect(script).toMatch(/try \{[\s\S]*\} catch \(e\) \{/);
   });
 
-  it('paints Navy when ui.theme is navy: attribute, meta and a scoped ground', () => {
-    localStorage.setItem(THEME_PREF_KEY, 'navy');
+  it('paints Black when ui.theme is graphite: attribute, meta and a scoped ground', () => {
+    localStorage.setItem(THEME_PREF_KEY, 'graphite');
     run();
-    expect(html.dataset['theme']).toBe('navy');
-    expect(meta.content.toLowerCase()).toBe(resolveToken('--midnight-950').toLowerCase());
+    expect(html.dataset['theme']).toBe('graphite');
+    expect(meta.content.toLowerCase()).toBe(GRAPHITE);
     const rules = injected();
     expect(rules).toHaveLength(1);
     expect(rules[0].textContent).toBe(
-      `html[data-theme="navy"], html[data-theme="navy"] body { background: ${resolveToken('--midnight-950')}; }`,
+      `html[data-theme="graphite"], html[data-theme="graphite"] body { background: ${resolveToken('--graphite-950')}; }`,
     );
   });
 
-  it.each([null, 'graphite', 'NAVY', 'navy ', ''])('leaves the page Graphite for %j', (stored) => {
+  it.each([null, 'navy', 'GRAPHITE', 'graphite ', '', 'black'])('paints Navy for %j: attribute and meta, no injected ground', (stored) => {
     if (stored !== null) localStorage.setItem(THEME_PREF_KEY, stored);
     run();
-    expect(html.dataset['theme']).toBeUndefined();
-    expect(meta.content).toBe(resolveToken('--bg'));
+    expect(html.dataset['theme']).toBe('navy');
+    expect(meta.content.toLowerCase()).toBe(NAVY);
     expect(injected()).toHaveLength(0);
   });
 
-  it('swallows a throwing localStorage and leaves the page Graphite', () => {
+  it('swallows a throwing localStorage and paints Navy, the default', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('denied', 'SecurityError'); });
     expect(run).not.toThrow();
-    expect(html.dataset['theme']).toBeUndefined();
+    expect(html.dataset['theme']).toBe('navy');
+    expect(meta.content.toLowerCase()).toBe(NAVY);
   });
 
-  it('says beside the cold-load copies that the manifest stays Graphite', () => {
-    expect(INDEX).toMatch(/manifest\.webmanifest stays Graphite/);
+  it('runs without a theme-color meta in the document', () => {
+    meta.remove();
+    localStorage.setItem(THEME_PREF_KEY, 'graphite');
+    expect(run).not.toThrow();
+    expect(html.dataset['theme']).toBe('graphite');
+  });
+
+  it('says beside the cold-load copies that the manifest takes the Navy ground', () => {
+    expect(INDEX).toMatch(/manifest\.webmanifest takes the Navy ground/);
+    expect(INDEX).not.toMatch(/manifest\.webmanifest stays Graphite/);
     const manifest = JSON.parse(readFileSync(join(process.cwd(), 'public/manifest.webmanifest'), 'utf8'));
-    expect(manifest.theme_color.toLowerCase()).toBe(resolveToken('--bg').toLowerCase());
+    expect(manifest.theme_color.toLowerCase()).toBe(NAVY);
   });
 });
 

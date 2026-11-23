@@ -103,6 +103,9 @@ pytest>=8.0
 # Parallel test execution. Opt-in via `pytest -n auto` (12 cores -> ~3min suite
 # drops well under a minute); deliberately NOT in pytest.ini addopts, see that file.
 pytest-xdist>=3.8
+# v240 §2: fontTools (installed with matplotlib) needs Brotli to open the
+# vendored Jost woff2 files in tests/dev/test_vendored_fonts.py.
+Brotli>=1.1.0
 
 # Static crash-class gate used by `python scripts/dev/testrun.py full`.
 pyflakes==3.4.0

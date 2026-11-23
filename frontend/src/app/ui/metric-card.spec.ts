@@ -207,3 +207,28 @@ describe('sb-metric-card loading and tooltip', () => {
     expect(host.querySelector('sb-hint')).toBeNull();
   });
 });
+
+/* v240 §1: a negative figure carries a true minus, never a hyphen. */
+describe('sb-metric-card true minus (v240)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  function valueText(inputs: Record<string, unknown>): string {
+    const f = TestBed.createComponent(MetricCard);
+    f.componentRef.setInput('label', 'Figure');
+    for (const [key, value] of Object.entries(inputs)) f.componentRef.setInput(key, value);
+    f.detectChanges();
+    return (f.nativeElement as HTMLElement).querySelector('.value')!.textContent!.trim();
+  }
+
+  it('prints a loss with U+2212 and its unit', () => {
+    expect(valueText({ value: -2.5, decimals: 2, unit: 'R' })).toBe('−2.50R');
+    expect(valueText({ value: -12, decimals: 0, unit: '%' })).toBe('−12%');
+  });
+
+  it('prints a gain and a rounded-away loss unsigned', () => {
+    expect(valueText({ value: 2.5, decimals: 2, unit: 'R' })).toBe('2.50R');
+    expect(valueText({ value: -0.004, decimals: 2, unit: '' })).toBe('0.00');
+  });
+});

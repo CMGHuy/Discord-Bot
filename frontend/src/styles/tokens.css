@@ -4,20 +4,24 @@
  * `2026-08-08-v20-admin-design-system-design.md` Decision 3, which are marked
  * as superseded in that document rather than deleted from it.
  *
- * **Dark only. Two dark grounds, no light theme** (spec v225,
- * docs/superpowers/specs/2026-11-10-v225-dark-blue-theme-design.md): Black
- * (Graphite, the bare :root below) and Dark blue (Navy), selected by
- * <html data-theme="navy"> -- no attribute, or any other value, is
- * Graphite. There is still no light theme and no `prefers-color-scheme`
- * block; `data-theme` exists for the ground only. ui/theme.service.ts
- * writes it from the per-browser localStorage key ui.theme.
+ * **Dark only. Two dark looks, no light theme** (spec v225,
+ * docs/superpowers/specs/2026-11-10-v225-dark-blue-theme-design.md, and
+ * spec v240, docs/superpowers/specs/2026-11-23-v240-doctena-night-restyle-design.md):
+ * Black (Graphite, the bare :root below) and Dark blue (Navy, "doctena
+ * night"), selected by <html data-theme="navy">. In CSS, no attribute or
+ * any other value is Graphite; ui/theme.service.ts writes the attribute,
+ * and spec v240 makes Navy the default look. There is
+ * still no light theme and no `prefers-color-scheme` block.
  *
- * The ground and ink are a named list: --bg, --surface, --surface-raised,
- * --surface-overlay, --overlay-dim, --border, --border-strong, --text,
- * --text-secondary, --text-muted, --text-faint. Every token on that list
- * has a Navy value in the :root[data-theme="navy"] block; every token off
- * it is shared by both themes. A new ground or ink token joins the list and
- * gets its Navy value in the same commit (tokens.spec.ts checks both ways).
+ * The Navy list is named, twenty tokens: the ground and ink (--bg,
+ * --surface, --surface-raised, --surface-overlay, --overlay-dim, --border,
+ * --border-strong, --text, --text-secondary, --text-muted, --text-faint),
+ * then the accent (--accent, --accent-fill, --accent-fill-hi,
+ * --accent-soft), --control-border, and P&L (--pos, --neg, --pos-soft,
+ * --neg-soft). Every token on that list has a Navy value in the
+ * :root[data-theme="navy"] block; every token off it is shared by both
+ * themes. A token joins the list with its Navy value in the same commit
+ * (tokens.spec.ts and ui/testing/theme-tokens.ts NAVY_TOKENS check both ways).
  *
  * The bot's Discord chart PNGs share this palette (spec v80 D5):
  * `swingbot/core/charts/chart_style.py`'s THEME names these tokens and
@@ -69,6 +73,12 @@
   --overlay-dim: var(--graphite-950-a72);
   --border: var(--graphite-750);
   --border-strong: var(--graphite-700);
+  /* v240 §1 -- the outline of inputs, selects and segmented controls, a
+   * UI component that WCAG 1.4.11 wants at 3:1 against its ground. Black
+   * keeps its strong hairline (about 1.5:1, a known gap the spec keeps
+   * with Black's colours); Navy re-points it to doctena blue, 3.28:1 on
+   * --surface. --border stays the decorative panel and rule colour. */
+  --control-border: var(--border-strong);
 
   /* -- elevation --------------------------------------------------------
    * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
@@ -206,17 +216,24 @@
    * and a component should be choosing "this is a chip" rather than
    * "this is 10px". A size not on this list is a review defect.
    */
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+  /* v240 §2 -- Jost, self-hosted (styles/fonts.css), is the one face for
+     every piece of text, numbers included. The two fallback families are
+     local faces scaled to Jost's metrics, so a slow load does not shift the
+     layout. --font-mono stays as a name (labels and code samples read it)
+     but is an alias now: there is no mono face. */
+  --font-sans: "Jost", "Jost Fallback", "Jost Fallback Android", system-ui, sans-serif;
+  --font-mono: var(--font-sans);
   /* v179 §3.3 -- the one face for every numeric value (.num, stat values,
-     key/value figures). Mono, tabular: digits align down a column. Named
-     separately from --font-mono so a figure says "I am a number", not "I am
-     code", and the two can part later without a sweep. */
+     key/value figures). Named separately from --font-mono so a figure says
+     "I am a number", not "I am code". Jost is proportional: digits align
+     down a column only through `font-variant-numeric: tabular-nums` (its
+     tnum feature, pinned by tests/dev/test_vendored_fonts.py), which every
+     rule that reads this token sets (v240 §2 gate). */
   --font-num: var(--font-mono);
   /* v186 D4 -- the face for DISPLAY figures: a tile value, a panel total,
-     the portfolio hero. Inter 600 with slight negative tracking; each
+     the portfolio hero. Jost 600 with slight negative tracking; each
      figure rule also sets tabular-nums so a count-up does not jitter.
-     Columns, N= and table cells keep --font-num (mono) so digits align.
+     Columns, N= and table cells keep --font-num so digits align.
      There is no global class: a global .x loses to a component's scoped
      selector, so each component's own figure rule reads these three. */
   --font-figure: var(--font-sans);
@@ -321,8 +338,9 @@
    * Tight radii: terminal, not consumer app.
    * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
    * the corners are the four targets in the tier-3 block at the end of this
-   * file (v195 §1.5: --panel-radius 6px, --control-radius 4px, --chip-radius 4px,
-   * --radius-sm 2px); --radius and --radius-chip are deleted.
+   * file (v240 §3: --panel-radius 10px, --control-radius 12px, --chip-radius
+   * the 999px --pill-radius, --radius-sm 6px); --radius and --radius-chip
+   * are deleted.
    *
    * Motion (spec v168). Entrances run once per route activation and never on
    * a push or a refetch -- the permanent flicker the old "nothing on
@@ -419,24 +437,35 @@
   }
 }
 
-/* v225 -- the Dark blue (Navy) ground, a per-browser choice. Re-points the
- * eleven ground and ink tokens named in the header to the midnight/frost
+/* v225, v240 -- the Dark blue (Navy) look, "doctena night" (spec v240 §1).
+ * Re-points exactly the twenty tokens named in the header to the doctena-*
  * palette and nothing else; var() references only, the hues live in
  * palette.css. Outside the bare :root on purpose -- dump_tokens.py and
  * resolve-token.ts read only `:root`, so the fixture and the Discord PNGs
- * stay Graphite. Never write this selector as part of a `:root, ...` list. */
+ * stay Graphite. Never write this selector as part of a `:root, ...` list,
+ * and never put a closing brace in a comment inside it
+ * (tests/dev/test_dump_tokens.py reads the block up to the first one). */
 :root[data-theme="navy"] {
-  --bg: var(--midnight-950);
-  --surface: var(--midnight-900);
-  --surface-raised: var(--midnight-850);
-  --surface-overlay: var(--midnight-800);
-  --overlay-dim: var(--midnight-950-a72);
-  --border: var(--midnight-750);
-  --border-strong: var(--midnight-700);
-  --text: var(--frost-100);
-  --text-secondary: var(--frost-300);
-  --text-muted: var(--frost-400);
-  --text-faint: var(--midnight-500);
+  --bg: var(--doctena-950);
+  --surface: var(--doctena-900);
+  --surface-raised: var(--doctena-850);
+  --surface-overlay: var(--doctena-800);
+  --overlay-dim: var(--doctena-950-a72);
+  --border: var(--doctena-750);
+  --border-strong: var(--doctena-700);
+  --text: var(--doctena-50);
+  --text-secondary: var(--doctena-200);
+  --text-muted: var(--doctena-300);
+  --text-faint: var(--doctena-500);
+  --accent: var(--doctena-sky-400);
+  --accent-fill: var(--doctena-blue-600);
+  --accent-fill-hi: var(--doctena-blue-700);
+  --accent-soft: var(--doctena-blue-500-a24);
+  --control-border: var(--doctena-blue-600);
+  --pos: var(--doctena-mint-400);
+  --neg: var(--doctena-coral-400);
+  --pos-soft: var(--doctena-mint-400-a14);
+  --neg-soft: var(--doctena-coral-400-a14);
 }
 
 /* Breakpoints are 640 / 1024 / 1440 / 1920.
@@ -467,12 +496,14 @@
  * resolve-token.ts read every top-level :root, and tokens.spec.ts slices
  * tier 3 from this banner to the end. */
 :root {
-  /* The four radius targets (v195 §1.5). Every border-radius in the app is
-   * one of these, or 50% (status dots), 0 (flush edges) or inherit. */
-  --panel-radius: 6px;     /* panels, cards, drawers' inner sections, dialogs */
-  --control-radius: 4px;   /* buttons, inputs, selects, segmented controls */
-  --chip-radius: 4px;      /* chips and tags: squared like a control, not a pill */
-  --radius-sm: 2px;        /* cells, thin bars, swatches, tracks: under ~12px tall */
+  /* The four radius targets (v195 §1.5; v240 §3 values: doctena's shapes).
+   * Every border-radius in the app is one of these, --pill-radius, or 50%
+   * (status dots), 0 (flush edges) or inherit. */
+  --panel-radius: 10px;    /* panels, cards, drawers' inner sections, dialogs */
+  --control-radius: 12px;  /* buttons, inputs, selects, segmented controls */
+  --pill-radius: 999px;    /* fully round ends: chips, tags, bars and tracks under 6px tall */
+  --chip-radius: var(--pill-radius); /* chips and tags are pills (v240 §3) */
+  --radius-sm: 6px;        /* cells, swatches, bars and tracks 6px tall or more */
 
   /* The panel (L1/L2), painted by sb-panel, sb-figure-strip and
    * sb-chart-container. The global .sb-panel class still casts
@@ -482,7 +513,7 @@
   --panel-shadow: none;
   /* A panel nested in a panel: one surface step up, no shadow. */
   --panel-inner-bg: var(--surface-raised);
-  --panel-inner-radius: var(--control-radius);
+  --panel-inner-radius: 8px;
 
   /* Out of flow (L3): dropdown, popover, tooltip, toast, drawer, dialog,
    * through the global .elev-overlay class -- the one shadow v195 keeps. */

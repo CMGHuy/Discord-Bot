@@ -35,7 +35,8 @@ describe('TradeChart', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        { provide: THEME_STORAGE, useValue: { get: () => null, set: () => {} } },
+        // Start in Black: Navy is the default since v240, and these specs flip to Navy.
+        { provide: THEME_STORAGE, useValue: { get: () => 'graphite', set: () => {} } },
       ],
     });
     prefs = TestBed.inject(ChartPrefs);
@@ -78,7 +79,11 @@ describe('TradeChart follows the theme (v225)', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), { provide: THEME_STORAGE, useValue: { get: () => null, set: () => {} } }],
+      providers: [
+        provideZonelessChangeDetection(),
+        // Start in Black: Navy is the default since v240, and these specs flip to Navy.
+        { provide: THEME_STORAGE, useValue: { get: () => 'graphite', set: () => {} } },
+      ],
     });
     style = document.createElement('style');
     style.textContent = NAVY_CSS;

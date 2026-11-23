@@ -36,7 +36,7 @@ import { ABSENT, money, pct } from './format';
     }
   `,
   styles: `
-    .pnl { font-family: var(--font-mono); font-size: var(--text-table); white-space: nowrap; }
+    .pnl { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-table); white-space: nowrap; }
     /* The amount is the second figure: same colour, one step smaller. */
     .amount { font-size: var(--text-chip); }
     .absent { color: var(--text-muted); }

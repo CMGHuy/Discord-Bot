@@ -9,7 +9,7 @@ import { BarList } from '../../../ui/bar-list';
 import { ColumnDef } from '../../../ui/data-table/data-table.types';
 import { DataTable } from '../../../ui/data-table/data-table';
 import { EmptyStateComponent } from '../../../ui/empty-state';
-import { ABSENT, money, num, pct as pctText, rMultiple, share, signed } from '../../../ui/format';
+import { ABSENT, fixed, money, num, pct as pctText, rMultiple, share, signed } from '../../../ui/format';
 import { Histogram } from '../../../ui/histogram';
 import { IncompleteNote } from '../../../ui/incomplete-note';
 import { MarketValue } from '../../../ui/market-value';
@@ -221,12 +221,12 @@ function maxDrawdown(values: readonly number[]): number | null {
     /* v175: the Normal bad luck panel spans both columns; its own two bars
        take the columns from 640px up and stack below. */
     .wide { grid-column: 1 / -1; }
-    .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-faint); min-width: 0; }
+    .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-muted); min-width: 0; }
     .basis-line { margin: var(--space-4) 0 0; min-width: 0; }
     .pane-label { font-size: var(--text-chip); color: var(--text-secondary); margin: var(--space-10) 0 var(--space-4); }
     .benchmark-link-row { font-size: var(--text-chip); margin: var(--space-6) 0 0; }
     .pairs { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-8); margin: var(--space-10) 0 0; }
-    .pairs dt { font-size: var(--text-micro); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.1em; }
+    .pairs dt { font-size: var(--text-micro); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; }
     .pairs dd { margin: var(--space-4) 0 0; color: var(--text); font-variant-numeric: tabular-nums; }
     .pairs .missing dd { color: var(--warn); font-style: italic; }
     @media (max-width: 639px) { .panels { grid-template-columns: 1fr; } }
@@ -411,7 +411,7 @@ export class OverviewTab {
       const present = metric.key in relocated;
       const raw = present ? relocated[metric.key] : undefined;
       const value = typeof raw === 'number' ? raw : null;
-      const text = !present ? 'missing' : value === null ? ABSENT : `${value.toFixed(metric.decimals)}${metric.unit}`;
+      const text = !present ? 'missing' : value === null ? ABSENT : `${fixed(value, metric.decimals)}${metric.unit}`;
       return { key: metric.key, label: metric.label, text, missing: !present };
     });
   });
@@ -420,7 +420,7 @@ export class OverviewTab {
     // Rounded to 1 place: the server's bin edges are the span divided by the
     // bin count, so "-4.688333R" and "-3.346667R" were shipped as floats.
     // `-0` is normalised so a bin starting at zero is not marked negative.
-    .map((b) => ({ label: `${(Math.round(b.lo * 10) / 10 || 0).toFixed(1)}R`, count: b.count })));
+    .map((b) => ({ label: `${fixed(Math.round(b.lo * 10) / 10, 1)}R`, count: b.count })));
   readonly monthBars = computed(() => (this.store.performance()?.calendar ?? [])
     .map((m) => ({ label: m.month, value: m.return_pct, n: m.n })));
   readonly negativeBin = (bin: { label: string }) => bin.label.startsWith('-');

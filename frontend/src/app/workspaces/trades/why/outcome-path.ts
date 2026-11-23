@@ -88,7 +88,7 @@ import { Panel } from '../../../ui/layout';
     }
     .tl-status { color: var(--text); font-weight: 600; }
     .tl-reason { margin-left: var(--space-6); color: var(--text-secondary); }
-    .tl-at { margin-left: var(--space-6); color: var(--text-faint); font-size: var(--text-chip); }
+    .tl-at { margin-left: var(--space-6); color: var(--text-muted); font-size: var(--text-chip); }
   `,
 })
 export class OutcomePath {

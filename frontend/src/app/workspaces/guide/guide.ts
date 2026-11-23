@@ -136,12 +136,12 @@ export const GUIDE_NOTICE = 'Education about a paper-trading tool, not advice: a
     sb-guide .md blockquote { margin: var(--space-10) 0; padding: var(--space-8) var(--space-14); border-left: 2px solid var(--accent); background: var(--surface-raised); }
     sb-guide .md table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
     sb-guide .md th, sb-guide .md td { padding: var(--cell-pad-y) var(--cell-pad-x); border-bottom: 1px solid var(--border); text-align: left; }
-    sb-guide .md pre { max-width: 100%; overflow-x: auto; padding: var(--space-8); background: var(--bg); font-family: var(--font-mono); }
+    sb-guide .md pre { max-width: 100%; overflow-x: auto; padding: var(--space-8); background: var(--bg); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     sb-guide .md details { margin: var(--space-10) 0; padding: 0 var(--space-10); border: 1px solid var(--border); border-radius: var(--control-radius); }
     sb-guide .md summary { display: flex; align-items: center; gap: var(--space-6); min-height: var(--hit-min); color: var(--text-muted); cursor: pointer; list-style: none; }
     sb-guide .md summary::before { content: '▸'; }
     sb-guide .md details[open] > summary::before { content: '▾'; }
-    sb-guide .md .permalink { margin-left: var(--space-6); color: var(--text-faint); text-decoration: none; }
+    sb-guide .md .permalink { margin-left: var(--space-6); color: var(--text-muted); text-decoration: none; }
     sb-guide .guide-bar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-10); min-width: 0; }
     sb-guide .guide-picker { flex: 1 1 100%; min-width: 0; }
     sb-guide .guide-picker .field, sb-guide .guide-picker select { width: 100%; max-width: 100%; }

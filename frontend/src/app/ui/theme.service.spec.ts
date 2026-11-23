@@ -65,9 +65,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('readTheme (v225)', () => {
-  it('defaults to graphite when nothing is stored', () => {
-    expect(readTheme(new MapStorage())).toBe('graphite');
+describe('readTheme (v225, v240: Navy is the default)', () => {
+  it('defaults to navy when nothing is stored', () => {
+    expect(readTheme(new MapStorage())).toBe('navy');
+  });
+
+  it('restores a stored graphite (Black) choice', () => {
+    const storage = new MapStorage();
+    storage.set(THEME_PREF_KEY, 'graphite');
+    expect(readTheme(storage)).toBe('graphite');
   });
 
   it('restores a stored navy choice', () => {
@@ -76,14 +82,14 @@ describe('readTheme (v225)', () => {
     expect(readTheme(storage)).toBe('navy');
   });
 
-  it.each(['graphite', 'NAVY', 'navy ', ' navy', '', 'dark', '{"theme":"navy"}'])('reads %j as graphite', (value) => {
+  it.each(['GRAPHITE', 'graphite ', ' graphite', '', 'black', 'dark', '{"theme":"graphite"}'])('reads %j as navy', (value) => {
     const storage = new MapStorage();
     storage.set(THEME_PREF_KEY, value);
-    expect(readTheme(storage)).toBe('graphite');
+    expect(readTheme(storage)).toBe('navy');
   });
 
-  it('falls back to graphite when the storage throws', () => {
-    expect(readTheme(refusing)).toBe('graphite');
+  it('falls back to navy when the storage throws', () => {
+    expect(readTheme(refusing)).toBe('navy');
   });
 
   it('stores under the per-browser key ui.theme', () => {
@@ -91,80 +97,81 @@ describe('readTheme (v225)', () => {
   });
 });
 
-describe('ThemeService (v225)', () => {
-  it('writes data-theme="graphite" at construction when nothing is stored, and leaves the meta Graphite', () => {
+describe('ThemeService (v225, v240)', () => {
+  it('writes data-theme="navy" at construction when nothing is stored, and paints the meta Navy', () => {
     serviceWith(new MapStorage());
-    expect(attribute()).toBe('graphite');
-    expect(meta.content).toBe(resolveToken('--bg'));
-  });
-
-  it('restores a stored navy choice onto <html> and the theme-color meta', () => {
-    const storage = new MapStorage();
-    storage.set(THEME_PREF_KEY, 'navy');
-    const service = serviceWith(storage);
-    expect(service.theme()).toBe('navy');
     expect(attribute()).toBe('navy');
     expect(meta.content).toBe(resolveTokenIn('navy', '--bg'));
+  });
+
+  it('restores a stored graphite choice onto <html> and the theme-color meta', () => {
+    const storage = new MapStorage();
+    storage.set(THEME_PREF_KEY, 'graphite');
+    const service = serviceWith(storage);
+    expect(service.theme()).toBe('graphite');
+    expect(attribute()).toBe('graphite');
+    expect(meta.content).toBe(resolveToken('--bg'));
   });
 
   it('set() moves the signal, the attribute, the stored key and the meta together', () => {
     const storage = new MapStorage();
     const service = serviceWith(storage);
-    service.set('navy');
-    expect([service.theme(), attribute(), storage.map.get(THEME_PREF_KEY)]).toEqual(['navy', 'navy', 'navy']);
-    expect(meta.content).toBe(resolveTokenIn('navy', '--bg'));
     service.set('graphite');
     expect([service.theme(), attribute(), storage.map.get(THEME_PREF_KEY)]).toEqual(['graphite', 'graphite', 'graphite']);
     expect(meta.content).toBe(resolveToken('--bg'));
+    service.set('navy');
+    expect([service.theme(), attribute(), storage.map.get(THEME_PREF_KEY)]).toEqual(['navy', 'navy', 'navy']);
+    expect(meta.content).toBe(resolveTokenIn('navy', '--bg'));
   });
 
-  it('toggle() flips between the two themes', () => {
+  it('toggle() flips between the two themes, starting from Navy', () => {
     const service = serviceWith(new MapStorage());
     service.toggle();
-    expect(service.theme()).toBe('navy');
-    service.toggle();
     expect(service.theme()).toBe('graphite');
+    service.toggle();
+    expect(service.theme()).toBe('navy');
   });
 
   it('does not rewrite a junk stored value until the user chooses', () => {
     const storage = new MapStorage();
-    storage.set(THEME_PREF_KEY, 'NAVY');
+    storage.set(THEME_PREF_KEY, 'GRAPHITE');
     const service = serviceWith(storage);
-    expect(service.theme()).toBe('graphite');
-    expect(storage.map.get(THEME_PREF_KEY)).toBe('NAVY');
+    expect(service.theme()).toBe('navy');
+    expect(storage.map.get(THEME_PREF_KEY)).toBe('GRAPHITE');
   });
 
-  it('starts graphite, and still switches for the page life, when storage refuses both calls', () => {
+  it('starts navy, and still switches for the page life, when storage refuses both calls', () => {
     const service = serviceWith(refusing);
-    expect(() => service.set('navy')).not.toThrow();
     expect(service.theme()).toBe('navy');
-    expect(attribute()).toBe('navy');
+    expect(() => service.set('graphite')).not.toThrow();
+    expect(service.theme()).toBe('graphite');
+    expect(attribute()).toBe('graphite');
   });
 
   it('switches without a theme-color meta in the document', () => {
     meta.remove();
     const service = serviceWith(new MapStorage());
-    expect(() => service.set('navy')).not.toThrow();
-    expect(attribute()).toBe('navy');
+    expect(() => service.set('graphite')).not.toThrow();
+    expect(attribute()).toBe('graphite');
   });
 });
 
 describe('the default storage is localStorage, guarded', () => {
   it('reads and writes ui.theme through localStorage', () => {
-    localStorage.setItem(THEME_PREF_KEY, 'navy');
-    const service = serviceWith();
-    expect(service.theme()).toBe('navy');
-    service.set('graphite');
-    expect(localStorage.getItem(THEME_PREF_KEY)).toBe('graphite');
-  });
-
-  it('falls back to graphite and keeps working when localStorage throws', () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('denied', 'SecurityError'); });
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError'); });
+    localStorage.setItem(THEME_PREF_KEY, 'graphite');
     const service = serviceWith();
     expect(service.theme()).toBe('graphite');
     service.set('navy');
-    expect(attribute()).toBe('navy');
+    expect(localStorage.getItem(THEME_PREF_KEY)).toBe('navy');
+  });
+
+  it('falls back to navy and keeps working when localStorage throws', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('denied', 'SecurityError'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError'); });
+    const service = serviceWith();
+    expect(service.theme()).toBe('navy');
+    service.set('graphite');
+    expect(attribute()).toBe('graphite');
   });
 });
 

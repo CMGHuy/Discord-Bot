@@ -155,8 +155,9 @@ describe('Breadcrumb (sb-breadcrumb)', () => {
     expect(SOURCE).toMatch(/@media \(max-width: 1023px\) \{\s*li:not\(\.current\) \{ display: none; \}/);
   });
 
-  it('draws the separators in the rule colour and the text in the muted one (correction 13)', () => {
-    expect(SOURCE).toMatch(/\.sep \{[^}]*color: var\(--text-faint\)/);
+  it('draws the separators and the crumbs in the muted colour (v240: --text-faint is never text)', () => {
+    expect(SOURCE).toMatch(/\.sep \{[^}]*color: var\(--text-muted\)/);
     expect(SOURCE).toMatch(/li \{[^}]*color: var\(--text-muted\)/);
+    expect(SOURCE).not.toContain('--text-faint');
   });
 });

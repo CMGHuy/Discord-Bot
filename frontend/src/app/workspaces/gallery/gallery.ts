@@ -958,7 +958,7 @@ interface ContractRow {
     .reference { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); min-width: 0; }
     .rail-demo { display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); }
     .rail-demo:hover, .rail-demo:focus-visible { color: var(--text); }
-    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
+    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; letter-spacing: -0.02em; }
     sb-panel { display: block; }
 
     /* -- elevation demo (v54 Task 29) -- L0-L2 straight from the tokens;
@@ -986,7 +986,7 @@ interface ContractRow {
     }
     /* One line per cell: wrapped, R's bar dropped under its figure and lifted
        it ~10px off the row's line at phone width. The box scrolls instead. */
-    .numerics-demo th.num, .numerics-demo td.num { text-align: right; white-space: nowrap; }
+    .numerics-demo th.num, .numerics-demo td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .numerics-demo thead th {
       color: var(--text-secondary); font-size: var(--text-micro);
       border-bottom: 1px solid var(--border);

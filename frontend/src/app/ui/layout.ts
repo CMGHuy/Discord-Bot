@@ -113,7 +113,7 @@ import { edgeFades, revealActive } from './scroll-rail';
        still share one header height. */
     header.ruled { border-bottom-color: var(--border); }
     /* v186 D1 -- the one panel title, the same declarations as
-       sb-panel-header's h2: sentence case as given, Inter 600. v195 Phase 2:
+       sb-panel-header's h2: sentence case as given, Jost 600. v195 Phase 2:
        at the 13px table step (spec §1.3), a step under the 14px body so the
        figures in the panel, not its label, carry the weight.
        .sb-label (mono caps) is the FIELD and tile label style, not a title. */
@@ -554,7 +554,7 @@ const SWIPE_CLOSE_PX = 80;
       .drawer.elev-overlay { border-radius: var(--panel-radius) var(--panel-radius) 0 0; border-width: 1px 0 0; }
       .drawer { will-change: transform; }
       .body { overscroll-behavior: contain; }
-      .drag-handle { display: block; width: 36px; height: 4px; margin: var(--space-8) auto 0; border-radius: var(--radius-sm); background: var(--border-strong); }
+      .drag-handle { display: block; width: 36px; height: 4px; margin: var(--space-8) auto 0; border-radius: var(--pill-radius); background: var(--border-strong); }
     }
     @media (min-width: 640px) and (max-width: 1023px) {
       .drawer { width: 85vw; }

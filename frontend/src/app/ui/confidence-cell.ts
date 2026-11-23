@@ -54,6 +54,7 @@ import { ABSENT } from './format';
       align-items: center;
       gap: var(--space-4);
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-table);
       white-space: nowrap;
     }

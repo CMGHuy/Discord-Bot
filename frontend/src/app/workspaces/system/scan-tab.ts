@@ -172,7 +172,7 @@ export const SCAN_CONTROLS: ToolbarControl[] = [
     .state.on { color: var(--text); border-color: var(--border-strong); }
     .state.warn { color: var(--warn); border-color: var(--warn); }
 
-    .meta { margin-top: var(--space-8); color: var(--text-faint); font-size: var(--text-chip); }
+    .meta { margin-top: var(--space-8); color: var(--text-muted); font-size: var(--text-chip); }
     .commands { margin-top: var(--space-14); }
     .explain {
       max-width: 60ch;
@@ -181,7 +181,7 @@ export const SCAN_CONTROLS: ToolbarControl[] = [
       font-size: var(--text-table);
       line-height: 1.5;
     }
-    code { font-family: var(--font-mono); color: var(--text); }
+    code { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); }
     .message { margin-top: var(--space-10); color: var(--text-secondary); font-size: var(--text-table); }
     .error { margin-top: var(--space-10); color: var(--neg); font-size: var(--text-table); }
   `,

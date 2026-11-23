@@ -178,7 +178,7 @@ export const LOG_CONTROLS: ToolbarControl[] = [
        for a call-site migration. */
     .hidden-count {
       margin-left: auto;
-      color: var(--text-faint);
+      color: var(--text-muted);
       font-variant-numeric: tabular-nums;
     }
 
@@ -205,6 +205,7 @@ export const LOG_CONTROLS: ToolbarControl[] = [
       border-radius: var(--panel-radius);
       color: var(--text-secondary);
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-chip);
       line-height: 1.5;
       /* Lines are pre-formatted; wrapping them keeps a long traceback
@@ -212,8 +213,8 @@ export const LOG_CONTROLS: ToolbarControl[] = [
       white-space: pre-wrap;
       word-break: break-word;
     }
-    .meta { margin-top: var(--space-6); color: var(--text-faint); font-size: var(--text-chip); }
-    .none { color: var(--text-faint); font-size: var(--text-table); }
+    .meta { margin-top: var(--space-6); color: var(--text-muted); font-size: var(--text-chip); }
+    .none { color: var(--text-muted); font-size: var(--text-table); }
     .message { color: var(--text-secondary); font-size: var(--text-table); }
   `,
 })

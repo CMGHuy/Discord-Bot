@@ -28,6 +28,8 @@ describe('benchmark helpers (v208)', () => {
   it('formats signed percentages and never turns null into 0%', () => {
     expect([signedPct(1.02), signedPct(-0.12), signedPct(0), signedPct(null), signedPct(6.1, 1)])
       .toEqual(['+1.02%', '−0.12%', '0.00%', '—', '+6.1%']);
+    // v240 Decision 10: a value that rounds to zero prints unsigned.
+    expect([signedPct(-0.004), signedPct(0.004), signedPct(-0.04, 1)]).toEqual(['0.00%', '0.00%', '0.0%']);
   });
   it('stamps the time in New York on both sides of the DST change', () => {
     expect(etClock('2026-11-05T15:35:00+00:00')).toBe('10:35');
@@ -395,5 +397,34 @@ describe('BenchmarkTab table, capture and layout (v208)', () => {
     const src = readFileSync(join(process.cwd(), 'src/app/workspaces/analytics/tabs/benchmark.ts'), 'utf8');
     expect(src).toMatch(/\.more\{[^}]*min-height:44px/);
     expect(src).toMatch(/@media \(max-width:639px\)\{[^@]*\.tiles\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
+  });
+});
+
+describe('benchmark drawdowns that round to zero (v240 Decision 10)', () => {
+  it('prints the money and percentage drawdown unsigned', () => {
+    const account = BENCHMARK_FIXTURE.stats['bot_account']!;
+    const p = {
+      ...BENCHMARK_FIXTURE,
+      stats: {
+        ...BENCHMARK_FIXTURE.stats,
+        bot_account: { ...account, money_dd: { value: -0.004, n: 4, reason: null }, max_dd_pct: { value: -0.004, n: 4, reason: null } },
+      },
+    };
+    const tiles = statGroups(p, new Set(['bot_account']), '$')[0].tiles;
+    const value = (label: string) => tiles.find((t) => t.label === label)!.value;
+    expect(value('Drawdown ($)')).toBe('$0.00');
+    expect(value('Max drawdown')).toBe('0.00%');
+  });
+});
+
+describe('benchmark Sharpe signs (v240)', () => {
+  it.each([[-0.25, '−0.25'], [-0.004, '0.00']] as const)('formats %s as %s', (sharpe, expected) => {
+    const account = BENCHMARK_FIXTURE.stats['bot_account']!;
+    const model = {
+      ...BENCHMARK_FIXTURE,
+      stats: { ...BENCHMARK_FIXTURE.stats, bot_account: { ...account, sharpe: { value: sharpe, n: 60, reason: null } } },
+    };
+    const tile = statGroups(model, new Set(['bot_account']), '$')[0].tiles.find(t => t.label === 'Sharpe (rf = 0)');
+    expect(tile?.value).toBe(expected);
   });
 });

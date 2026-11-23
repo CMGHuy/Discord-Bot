@@ -38,7 +38,8 @@ function render(data: EquityCandlesResponse | null, error: string | null = null)
   stub.error.set(error);
   TestBed.configureTestingModule({
     providers: [provideZonelessChangeDetection(), { provide: EquityCandlesStore, useValue: stub },
-      { provide: THEME_STORAGE, useValue: { get: () => null, set: () => {} } }],
+      // Start in Black: Navy is the default since v240, and these specs flip to Navy.
+      { provide: THEME_STORAGE, useValue: { get: () => 'graphite', set: () => {} } }],
   });
   const fixture = TestBed.createComponent(EquityCandles);
   fixture.componentRef.setInput('currency', '€');

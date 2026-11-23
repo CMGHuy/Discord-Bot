@@ -154,7 +154,7 @@ interface DayCell {
     /* A day outside the shown month, filling out the grid's leading/trailing
        week -- present for alignment, not for reading. */
     .cell.dim { background: var(--surface); }
-    .cell.dim .day-num { color: var(--text-faint); }
+    .cell.dim .day-num { color: var(--text-muted); }
     .cell.today { box-shadow: inset 0 0 0 2px var(--accent); }
     .day-num { color: var(--text-secondary); font-size: var(--text-chip); font-variant-numeric: tabular-nums; }
 
@@ -166,14 +166,14 @@ interface DayCell {
       background: var(--surface);
       border-radius: var(--radius-sm);
     }
-    .symbol { color: var(--text); font-family: var(--font-mono); font-size: var(--text-chip); font-weight: 600; }
+    .symbol { color: var(--text); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-chip); font-weight: 600; }
     .time {
       color: var(--text-secondary);
       font-size: var(--text-micro);
       font-variant-numeric: tabular-nums;
       overflow-wrap: anywhere;
     }
-    .est { margin-left: var(--space-4); color: var(--text-faint); font-style: italic; }
+    .est { margin-left: var(--space-4); color: var(--text-muted); font-style: italic; }
 
     .empty { margin-top: var(--space-14); color: var(--text-secondary); font-size: var(--text-table); }
 

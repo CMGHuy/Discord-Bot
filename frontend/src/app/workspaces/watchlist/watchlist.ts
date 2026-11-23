@@ -542,7 +542,7 @@ export const WATCHLIST_OLD_PRINT_HINT =
        survive as overrides -- background/padding/border/focus-ring are now
        the primitive's, and its placeholder loses the old sans-vs-mono
        distinction as a result. */
-    .input { display: block; width: 100%; font-family: var(--font-mono); }
+    .input { display: block; width: 100%; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
     .suggestions {
       position: absolute;
@@ -570,19 +570,19 @@ export const WATCHLIST_OLD_PRINT_HINT =
       font-size: var(--text-table);
       text-align: left;
     }
-    .hit-symbol { font-family: var(--font-mono); }
+    .hit-symbol { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .hit-name { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .hit-have { margin-left: auto; color: var(--text-faint); font-size: var(--register-label); }
+    .hit-have { margin-left: auto; color: var(--text-muted); font-size: var(--register-label); }
 
     .result { margin-top: var(--space-10); color: var(--text-secondary); font-size: var(--text-table); }
 
-    sb-row-link { color: var(--accent); font-family: var(--font-mono); }
+    sb-row-link { color: var(--accent); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
     /* Price + the bar date it came from, stacked -- the .as-of caption is
        what makes a lagging row's tint (data-table.ts's .lagging rule)
        legible rather than mysterious: it names the date that is behind. */
     .price { display: block; font-variant-numeric: tabular-nums; }
-    .as-of { display: block; color: var(--text-faint); font-size: var(--register-label); }
+    .as-of { display: block; color: var(--text-muted); font-size: var(--register-label); }
     .source-badge {
       display: inline-block; margin-top: var(--space-4);
       padding: 0 var(--space-6); border: 1px solid var(--warn); border-radius: var(--chip-radius);

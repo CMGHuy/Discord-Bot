@@ -12,8 +12,10 @@ import { Injectable, InjectionToken, Signal, inject, signal } from '@angular/cor
  * boots). The plan v21 rule "shell preferences go through PreferencesStore" is
  * about account-level settings and does not cover this one.
  *
- * Anything unreadable is Graphite, and a junk stored value is not rewritten
- * until the user chooses.
+ * Navy is the default since v240 (spec 2026-11-23-v240-doctena-night-restyle-design.md
+ * §1): only the exact stored string `graphite` is Black. A missing, junk or
+ * unreadable value is Navy, and a junk stored value is not rewritten until
+ * the user chooses. index.html's pre-paint script applies the same rule.
  */
 export type Theme = 'graphite' | 'navy';
 
@@ -38,9 +40,9 @@ function localStorageTheme(): ThemeStorage {
 
 export const THEME_STORAGE = new InjectionToken<ThemeStorage>('THEME_STORAGE', { providedIn: 'root', factory: localStorageTheme });
 
-/** Navy only for the exact stored string `navy`; everything else is Graphite. */
+/** Graphite only for the exact stored string `graphite`; everything else, a throwing storage included, is Navy (v240). */
 export function readTheme(storage: ThemeStorage): Theme {
-  try { return storage.get(THEME_PREF_KEY) === 'navy' ? 'navy' : 'graphite'; } catch { return 'graphite'; }
+  try { return storage.get(THEME_PREF_KEY) === 'graphite' ? 'graphite' : 'navy'; } catch { return 'navy'; }
 }
 
 @Injectable({ providedIn: 'root' })

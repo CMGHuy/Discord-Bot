@@ -1,4 +1,4 @@
-import { ABSENT, MINUS, amount, riskPct } from './format';
+import { ABSENT, MINUS, amount, lossSign, riskPct } from './format';
 
 /**
  * A risk figure in both units at once -- money and % of account, "1,420 $ ·
@@ -25,9 +25,11 @@ export function riskUnits(
   if (!isFiniteNumber(pct)) return ABSENT;
   const sign = pct < 0 ? MINUS : '';
   const magnitude = Math.abs(pct);
-  const money = isFiniteNumber(balance)
-    ? `${sign}${amount((magnitude / 100) * balance, unit, 0)}`
-    : ABSENT;
+  // v240 Decision 10: the money part rounds to whole units, so a sliver of
+  // headroom past the cap can print "0 $" -- unsigned, never "−0 $". The
+  // percentage part is never a zero (riskPct floors at "<0.01%").
+  const cash = isFiniteNumber(balance) ? amount((magnitude / 100) * balance, unit, 0) : null;
+  const money = cash === null ? ABSENT : `${lossSign(pct, cash)}${cash}`;
   return `${money} · ${sign}${riskPct(magnitude)}`;
 }
 

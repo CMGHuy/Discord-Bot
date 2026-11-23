@@ -188,11 +188,11 @@ describe('ProfileMenu', () => {
     const pressed = () =>
       segments().find((b) => b.getAttribute('aria-pressed') === 'true')!.textContent!.trim();
 
-    it('offers Black and Dark blue under the label "Theme"', () => {
+    it('offers Dark blue and Black under the label "Theme", the default first', () => {
       openMenu();
       expect(control()!.querySelector('[role=group]')!.getAttribute('aria-label')).toBe('Theme');
       expect(el.querySelector('.theme-row .menu-label')!.textContent!.trim()).toBe('Theme');
-      expect(segments().map((b) => b.textContent!.trim())).toEqual(['Black', 'Dark blue']);
+      expect(segments().map((b) => b.textContent!.trim())).toEqual(['Dark blue', 'Black']);
     });
 
     it('sits under Density and directly above Sign out', () => {
@@ -202,12 +202,12 @@ describe('ProfileMenu', () => {
       expect(row.nextElementSibling!.textContent).toContain('Sign out');
     });
 
-    it('defaults to Black and marks the theme it is given', () => {
+    it('defaults to Dark blue and marks the theme it is given', () => {
       openMenu();
-      expect(pressed()).toBe('Black');
-      fixture.componentRef.setInput('theme', 'navy');
-      fixture.detectChanges();
       expect(pressed()).toBe('Dark blue');
+      fixture.componentRef.setInput('theme', 'graphite');
+      fixture.detectChanges();
+      expect(pressed()).toBe('Black');
     });
 
     it('emits the chosen theme and keeps the menu open', () => {
@@ -218,15 +218,15 @@ describe('ProfileMenu', () => {
       fixture.detectChanges();
       segments()[0].click();
       fixture.detectChanges();
-      expect(chosen).toEqual(['navy', 'graphite']);
+      expect(chosen).toEqual(['graphite', 'navy']);
       expect(menu()).not.toBeNull();
     });
 
-    it('reads anything but navy as graphite: the segmented control hands back a string', () => {
+    it('reads anything but graphite as navy: the segmented control hands back a string', () => {
       const chosen: string[] = [];
       fixture.componentInstance.themeChanged.subscribe((theme) => chosen.push(theme));
-      for (const value of ['navy', 'NAVY', 'navy ', '', 'dark']) fixture.componentInstance['onTheme'](value);
-      expect(chosen).toEqual(['navy', 'graphite', 'graphite', 'graphite', 'graphite']);
+      for (const value of ['graphite', 'GRAPHITE', 'graphite ', '', 'dark', 'navy']) fixture.componentInstance['onTheme'](value);
+      expect(chosen).toEqual(['graphite', 'navy', 'navy', 'navy', 'navy', 'navy']);
     });
 
     it('carries no "Desktop only" note: the theme changes every device', () => {

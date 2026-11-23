@@ -611,7 +611,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
        text-decoration cannot: the primitive explicitly resets it to none,
        even on hover, so the old underline becomes the primitive's own
        background-tint hover instead. */
-    sb-row-link { color: var(--accent); font-family: var(--font-mono); }
+    sb-row-link { color: var(--accent); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
     /* Muted, not accent: the glyph flags the leg, it isn't part of the id. */
     sb-row-link .leg-icon { color: var(--text-muted); flex: none; }
@@ -642,10 +642,11 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
        (v80 D4 removed card mode; the wrap hook it fed died with it.) */
     .pnl-plan {
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-table);
       white-space: nowrap;
     }
-    .pnl-plan .sep { color: var(--text-faint); white-space: pre; }
+    .pnl-plan .sep { color: var(--text-muted); white-space: pre; }
     .pnl-plan .tp { color: var(--pos); }
     .pnl-plan .sl { color: var(--neg); }
 

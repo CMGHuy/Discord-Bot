@@ -45,7 +45,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
        20px title step (sb-page's title takes it in Phase 4); level 2 marks
        a section above several panels, so it sits a step above their 13px
        titles. */
-    h1 { margin: 0; font-family: var(--font-sans); font-size: var(--text-title); font-weight: 600; letter-spacing: normal; overflow-wrap: anywhere; }
+    h1 { margin: 0; font-family: var(--font-sans); font-size: var(--text-title); font-weight: 600; letter-spacing: -0.02em; overflow-wrap: anywhere; }
     h2 { margin: 0; font-family: var(--font-sans); font-size: var(--text-subhead); font-weight: 600; letter-spacing: normal; overflow-wrap: anywhere; }
     /* Colour and size come from the global .sb-meta (styles.css). */
     .status { display: inline-flex; align-items: baseline; gap: var(--space-8); }

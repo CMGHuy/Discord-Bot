@@ -375,12 +375,12 @@ const PIN_KEYS = ['ticker', 'symbol'];
        The HEADER above them is deliberately not exempt: "Realized pnl
        amount" is three times the width of the numbers under it, and letting
        it wrap is most of what the change above buys back. */
-    td.num { white-space: nowrap; }
+    td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
     /* Digits line up down the column, so a magnitude is readable without
        reading the number. */
     .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     tbody tr.row > td { height: var(--row-h); }
-    .num.sort, th.num .sort { justify-content: flex-end; }
+    .num.sort, th.num .sort { justify-content: flex-end; font-variant-numeric: tabular-nums; }
 
     .sort {
       display: inline-flex;
@@ -445,7 +445,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
     .row-detail > td { padding: var(--space-10) var(--space-14); background: var(--surface-raised); }
     .detail-item { display: flex; justify-content: space-between; gap: var(--space-10); padding: 2px 0; }
     .detail-label { flex: 0 0 auto; }
-    .detail-value { min-width: 0; text-align: right; font-family: var(--font-mono); }
+    .detail-value { min-width: 0; text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .expander:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 
     .sr-only {
@@ -456,7 +456,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
       white-space: nowrap;
     }
     .phone-sort { display: none; align-items: center; gap: var(--space-8); padding: var(--space-8) var(--space-10); }
-    .phone-sort select { height: var(--control-h); padding: 0 var(--space-8); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--control-radius); color: var(--text); font: inherit; font-size: var(--text-control); }
+    .phone-sort select { height: var(--control-h); padding: 0 var(--space-8); background: var(--surface); border: 1px solid var(--control-border); border-radius: var(--control-radius); color: var(--text); font: inherit; font-size: var(--text-control); }
     .phone .phone-sort { display: flex; }
     .phone .pin { position: sticky; left: 0; z-index: 1; background: var(--surface); }
     .phone thead th.pin { z-index: 3; }
@@ -525,7 +525,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
     /* The first figure on a line goes to the right edge, the rest follow it:
        identity reads left, the number a trader checks reads right. */
     .compact-cell.num { margin-left: auto; font-family: var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
-    .compact-cell.num ~ .compact-cell.num { margin-left: 0; }
+    .compact-cell.num ~ .compact-cell.num { margin-left: 0; font-variant-numeric: tabular-nums; }
     .compact-footer {
       display: flex;
       flex-wrap: wrap;
@@ -536,7 +536,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
       border-top: 1px solid var(--border-strong);
     }
     .compact-total { display: inline-flex; align-items: baseline; gap: var(--space-6); }
-    .compact-total .num { font-family: var(--font-num); font-weight: 600; color: var(--text); }
+    .compact-total .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
   `,
 })
 export class DataTable<T> {

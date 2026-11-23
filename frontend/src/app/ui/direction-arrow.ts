@@ -37,7 +37,7 @@ import { ABSENT } from './format';
     }
     .long  { color: var(--pos); }
     .short { color: var(--neg); }
-    .absent { color: var(--text-faint); }
+    .absent { color: var(--text-muted); }
   `,
 })
 export class DirectionArrow {

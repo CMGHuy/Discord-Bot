@@ -10,7 +10,7 @@ import { Histogram, HistogramBin } from '../../../ui/histogram';
 import { Panel } from '../../../ui/layout';
 import { LineChart, LineChartSeries } from '../../../ui/line-chart';
 import { PanelError } from '../../../ui/panel-error';
-import { MINUS } from '../../../ui/format';
+import { rMultiple } from '../../../ui/format';
 import { PanelHeader } from '../../../ui/panel-header';
 import { SegmentOption, Segmented } from '../../../ui/segmented';
 import { PERFORMANCE_CAVEAT, StatTile, StatTone } from '../../../ui/stat-tile';
@@ -41,8 +41,9 @@ export const DIMENSIONS: SegmentOption[] = [
 const GIVEBACK_BIN = 0.5;
 
 export const pctText = (v: number | null): string => (v === null ? '—' : `${v.toFixed(1)}%`);
-export const rText = (v: number | null): string =>
-  (v === null ? '—' : `${v < 0 ? MINUS : '+'}${Math.abs(v).toFixed(2)}R`);
+/** Signed R to two places, the shared `rMultiple`: no sign on a zero or a
+ *  value that rounds to zero (v240, index Decision 10). */
+export const rText = (v: number | null): string => rMultiple(v);
 const signTone = (v: number | null, pivot: number): StatTone =>
   (v === null || v === pivot ? 'neutral' : v > pivot ? 'pos' : 'neg');
 
@@ -180,7 +181,7 @@ export function monthTrend(rows: readonly PartialsBreakdownRow[]): LineChartSeri
       }
     }
   `,
-  styles: `:host{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-14)}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:var(--space-10)}.tile.hero{outline:1px solid var(--accent);border-radius:var(--panel-radius)}.panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-14)}.wide{grid-column:1/-1}.table-scroll{overflow-x:auto;max-width:100%}.breakdown{width:100%;border-collapse:collapse;font-size:var(--text-table);margin-top:var(--space-10)}.breakdown th,.breakdown td{padding:var(--space-4) var(--space-8);text-align:left;border-bottom:1px solid var(--border)}.breakdown .num{text-align:right;font-variant-numeric:tabular-nums}.breakdown tr.thin td{color:var(--text-faint)}.footer{margin:0;font-size:var(--text-micro);color:var(--text-faint)}@media(max-width:639px){.panels{grid-template-columns:minmax(0,1fr)}}`,
+  styles: `:host{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-14)}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:var(--space-10)}.tile.hero{outline:1px solid var(--accent);border-radius:var(--panel-radius)}.panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-14)}.wide{grid-column:1/-1}.table-scroll{overflow-x:auto;max-width:100%}.breakdown{width:100%;border-collapse:collapse;font-size:var(--text-table);margin-top:var(--space-10)}.breakdown th,.breakdown td{padding:var(--space-4) var(--space-8);text-align:left;border-bottom:1px solid var(--border)}.breakdown .num{text-align:right;font-variant-numeric:tabular-nums}.breakdown tr.thin td{color:var(--text-muted)}.footer{margin:0;font-size:var(--text-micro);color:var(--text-muted)}@media(max-width:639px){.panels{grid-template-columns:minmax(0,1fr)}}`,
 })
 export class PartialsTab {
   readonly store = inject(AnalyticsStore);

@@ -182,6 +182,7 @@ export function placeBeside(
       border: 1px solid currentColor;
       border-radius: 50%;
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-micro);
       line-height: 1;
     }

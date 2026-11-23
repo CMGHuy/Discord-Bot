@@ -89,9 +89,11 @@ describe('SectionHead re-skin (v195)', () => {
     for (const heading of [h1, h2]) {
       expect(heading).toContain('font-family: var(--font-sans)');
       expect(heading).toContain('font-weight: 600');
-      expect(heading).toContain('letter-spacing: normal');
       expect(heading).not.toContain('text-transform');
     }
+    // v240 §3: -0.02em at --text-title and above; the subhead keeps normal.
+    expect(h1).toContain('letter-spacing: -0.02em');
+    expect(h2).toContain('letter-spacing: normal');
     expect(h1).toContain('font-size: var(--text-title)');
     expect(h2).toContain('font-size: var(--text-subhead)');
   });

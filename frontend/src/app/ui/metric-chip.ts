@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { fixed } from './format';
 import { MetricTone } from './metric-card';
 import { CountUp } from './motion/count-up';
 
@@ -58,7 +59,7 @@ import { CountUp } from './motion/count-up';
     .pos { color: var(--pos); }
     .neg { color: var(--neg); }
     .warn { color: var(--warn); }
-    .absent { color: var(--text-faint); }
+    .absent { color: var(--text-muted); }
   `,
 })
 export class MetricChip {
@@ -73,7 +74,7 @@ export class MetricChip {
   protected readonly format = computed(() => {
     const decimals = this.decimals();
     const unit = this.unit();
-    return (value: number) => `${value.toFixed(decimals)}${unit}`;
+    return (value: number) => `${fixed(value, decimals)}${unit}`;
   });
 
   protected readonly valueClass = computed(() => {

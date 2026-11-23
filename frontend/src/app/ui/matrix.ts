@@ -1,3 +1,4 @@
+import { fixed } from './format';
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 /**
@@ -78,7 +79,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
     .b3 { background: var(--quality-3); }
     .b4 { background: var(--quality-4); }
     .b5 { background: var(--quality-5); }
-    .missing { color: var(--text-faint); background: none; }
+    .missing { color: var(--text-muted); background: none; }
     .clustered { outline: 1px solid var(--accent); outline-offset: -1px; }
   `,
 })
@@ -96,7 +97,7 @@ export class Matrix {
 
   protected cellText(r: number, c: number): string {
     const v = this.values()[r]?.[c];
-    return v === null || v === undefined ? '—' : v.toFixed(2);
+    return v === null || v === undefined ? '—' : fixed(v, 2);
   }
 
   protected cellClass(r: number, c: number): string {
@@ -111,7 +112,7 @@ export class Matrix {
     const v = this.values()[r]?.[c];
     const base = v === null || v === undefined
       ? `${row} vs ${col}: not enough overlapping bars`
-      : `${row} vs ${col}: ${v.toFixed(2)}`;
+      : `${row} vs ${col}: ${fixed(v, 2)}`;
     return this.clustered(r, c) ? `${base} — same cluster, sized as one risk` : base;
   }
 

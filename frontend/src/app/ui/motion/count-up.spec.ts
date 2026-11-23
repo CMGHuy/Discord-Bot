@@ -197,7 +197,7 @@ describe('CountUp wired into the KPI primitives (spec amendment 1)', () => {
     f.componentRef.setInput('value', '+$1,240');
     f.detectChanges();
     const value = (f.nativeElement as HTMLElement).querySelector('.value')!;
-    expect(value.textContent).toBe('+$0');
+    expect(value.textContent).toBe('$0');
     finish();
     expect(value.textContent).toBe('+$1,240');
     expect(TestBed.inject(MotionStarts).entries()).toEqual([{ kind: 'count-first', key: 'stat:Total P&L' }]);

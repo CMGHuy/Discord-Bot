@@ -70,7 +70,7 @@ const RUN_COMMAND: Record<ReportTab, string> = {
   styles: `
     :host { display: block; min-width: 0; }
     .report-body { display: grid; gap: var(--space-14); min-width: 0; }
-    .disclaimer { margin: 0; color: var(--text-faint); font-size: var(--text-micro); }
+    .disclaimer { margin: 0; color: var(--text-muted); font-size: var(--text-micro); }
   `,
 })
 export class Reports {

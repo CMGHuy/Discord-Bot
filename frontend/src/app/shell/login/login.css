@@ -20,6 +20,7 @@
 .mark {
   margin: 0;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: var(--text-title);
   font-weight: 700;
   letter-spacing: -0.02em;

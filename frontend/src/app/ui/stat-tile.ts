@@ -131,7 +131,7 @@ export const PERFORMANCE_CAVEAT =
       overflow-wrap: anywhere;
     }
     /* Figures in the numeric face; the hint is prose and stays in the UI font. */
-    .sample, .secondary { font-family: var(--font-num); }
+    .sample, .secondary { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
     .secondary { color: var(--text-secondary); }
     /* The second cue. Opacity alone would be a colour-only signal, which the
        plan forbids; the .flag span puts the same fact in words. */

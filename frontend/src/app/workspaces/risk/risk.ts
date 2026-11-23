@@ -20,7 +20,7 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { ColumnDef, DetailLink, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
 import { Flash } from '../../ui/flash';
-import { ABSENT, amount, dateTime, money, num, riskPct, share, shareCount, text } from '../../ui/format';
+import { ABSENT, MINUS, amount, dateTime, money, num, riskPct, share, shareCount, signed, text } from '../../ui/format';
 import { Hint } from '../../ui/hint';
 import { IncompleteNote } from '../../ui/incomplete-note';
 import { lowerBoundLabel } from '../../ui/lower-bound';
@@ -54,7 +54,8 @@ export function reconciles(values: readonly (number | null | undefined)[], decim
   const factor = 10 ** decimals;
   // Use the same en-US rounding as the displayed share/risk formatters;
   // Math.round(value * factor) disagrees at decimal midpoints such as 1.005.
-  const units = (value: number): number => Math.round(Number(num(value, decimals).replaceAll(',', '')) * factor);
+  const units = (value: number): number =>
+    Math.sign(value) * Math.round(Number(num(Math.abs(value), decimals).replaceAll(',', '')) * factor);
   const roundedRows = values.reduce<number>((sum, value) => sum + units(value ?? 0), 0);
   const total = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
   return roundedRows === units(total);
@@ -70,7 +71,8 @@ export function exposureHint(rows: readonly RiskPosition[]): string {
 /** The exact value behind a "<0.01%" cell; null when the cell already shows it. */
 export function exactRiskText(value: number | null | undefined): string | null {
   if (value === null || value === undefined || value === 0 || Math.abs(value) >= 0.01) return null;
-  return `Exact risk: ${value}% of the account balance.`;
+  const sign = value < 0 ? MINUS : '';
+  return `Exact risk: ${sign}${Math.abs(value)}% of the account balance.`;
 }
 
 export function knownRiskTotal(rows: RiskPosition[]): number | null {
@@ -685,7 +687,7 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
       gap: var(--space-4) var(--space-8); min-width: 0;
     }
     .clock {
-      font-size: var(--text-micro); color: var(--text-faint);
+      font-size: var(--text-micro); color: var(--text-muted);
       font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
     }
     .clock.stale { color: var(--warn); }
@@ -707,7 +709,7 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
     }
     .kill-detail {
       margin-top: var(--space-6);
-      color: var(--text-faint);
+      color: var(--text-muted);
       font-size: var(--text-chip);
     }
     .command-error {
@@ -807,11 +809,11 @@ export function largestCluster<T extends { tickers: readonly string[] }>(cluster
       gap: var(--space-8);
       font-size: var(--text-table);
     }
-    .cluster-index { color: var(--text-faint); font-size: var(--register-label); }
+    .cluster-index { color: var(--text-muted); font-size: var(--register-label); }
 
-    .none { color: var(--text-faint); font-size: var(--text-table); }
+    .none { color: var(--text-muted); font-size: var(--text-table); }
 
-    sb-row-link { color: var(--accent); font-family: var(--font-mono); }
+    sb-row-link { color: var(--accent); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
     @media (max-width: 639px) {
       .clocks { flex-basis: 100%; flex-direction: column; align-items: flex-start; }
@@ -1017,9 +1019,9 @@ export class Risk {
   }
 
   private fmtDrawdownR(value: number | null): string {
-    // A drawdown is a loss: shown negative, not as an unsigned magnitude
-    // that reads like a gain next to "+120.66R" elsewhere.
-    return value === null ? '—' : `${value === 0 ? '' : '−'}${num(Math.abs(value), 2)}R`;
+    // v240 Decision 10: `signed` on the negated magnitude -- a true minus,
+    // and no sign on a drawdown that rounds to 0.00.
+    return value === null ? '—' : `${signed(-Math.abs(value), 2)}R`;
   }
 
   /** The money drawdown under the R figure, negative like it; null (no

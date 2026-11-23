@@ -238,7 +238,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     :host { --lane-w: 4.5rem; }
     @media (max-width: 639px) { :host { --lane-w: 3rem; } }
 
-    .stale code, .muted code { font-family: var(--font-mono); font-size: var(--text-micro); }
+    .stale code, .muted code { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-micro); }
 
     /* .muted itself is forbidden here (the gate blocks redefining the
        selector at all, not just its colour); this only resets the
@@ -250,7 +250,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 
     /* --text-micro, not --register-label -- an eyebrow tag; see
        styles.css's register comment for why an eyebrow must not grow. */
-    .label { font-size: var(--text-micro); color: var(--text-faint);
+    .label { font-size: var(--text-micro); color: var(--text-muted);
               text-transform: uppercase; letter-spacing: .04em; }
 
     /* Chips WRAP and lanes STACK. This is the property the whole design rests
@@ -262,23 +262,24 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
        defaults for this denser, monospaced release-version scale; the
        variant owns background, border and the .on state. */
     .chip {
-      font-family: var(--font-mono); font-size: var(--register-label);
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums; font-size: var(--register-label);
       color: var(--text-muted);
       padding: var(--space-4) var(--space-6);
     }
     .chip strong { color: var(--text); font-weight: 600; }
     .chip.on { color: var(--accent); }
-    .chip.quiet { color: var(--text-faint); cursor: default; }
-    .release-meta, .provenance { margin: var(--space-6) 0 0; display: flex; flex-wrap: wrap; gap: var(--space-8); color: var(--text-faint); font-size: var(--text-micro); }
+    .chip.quiet { color: var(--text-muted); cursor: default; }
+    .release-meta, .provenance { margin: var(--space-6) 0 0; display: flex; flex-wrap: wrap; gap: var(--space-8); color: var(--text-muted); font-size: var(--text-micro); }
     .provenance a { color: var(--accent); }
     .telemetry-cards { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-4) var(--space-14); margin: var(--space-8) 0 0; font-size: var(--text-table); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
     .telemetry-cards strong { color: var(--text); font-weight: 600; }
-    .telemetry-cards .n { color: var(--text-faint); font-size: var(--text-micro); }
+    .telemetry-cards .n { color: var(--text-muted); font-size: var(--text-micro); }
 
     .strip { display: flex; flex-direction: column; gap: var(--space-6);
               position: relative; overflow-x: auto; }
     .lane { display: flex; align-items: center; gap: var(--space-8); }
-    .lane-name { width: var(--lane-w); flex: none; font-family: var(--font-mono);
+    .lane-name { width: var(--lane-w); flex: none; font-family: var(--font-mono); font-variant-numeric: tabular-nums;
                  font-size: var(--register-label); color: var(--text-muted); }
     .track { position: relative; flex: 1; height: 15px; min-width: 0; }
     /* The 2px surface-colour ring is the separator between two segments that
@@ -332,7 +333,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
                 border-radius: var(--control-radius); font-size: var(--text-micro); color: var(--text);
                 display: flex; flex-direction: column; gap: var(--space-4);
                 pointer-events: none; }
-    .tooltip .when { color: var(--text-faint); }
+    .tooltip .when { color: var(--text-muted); }
 
     .legend {
       display: flex; flex-wrap: wrap; gap: var(--register-pad);
@@ -350,14 +351,15 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
     .ticks {
       display: flex; justify-content: space-between;
       margin-left: calc(var(--lane-w) + var(--space-8));
-      font-family: var(--font-mono); font-size: var(--register-label); color: var(--text-faint);
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums; font-size: var(--register-label); color: var(--text-muted);
     }
     .ticks .now { color: var(--text-muted); }
 
     /* Overrides the global .section-help's own margin/colour/size --
        this caption is fainter and smaller than the standard explanatory
        paragraph, and sits flush against the strip above it. */
-    .section-help { margin: 0; color: var(--text-faint); font-size: var(--text-micro); }
+    .section-help { margin: 0; color: var(--text-muted); font-size: var(--text-micro); }
 
     .filtered { margin: 0; font-size: var(--text-table); color: var(--text-secondary); }
     /* Always underlined, not just on hover -- this sits in a sentence and

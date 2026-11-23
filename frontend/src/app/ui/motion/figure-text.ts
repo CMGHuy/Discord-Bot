@@ -1,3 +1,5 @@
+import { MINUS } from '../format';
+
 /**
  * A pre-formatted figure taken apart so it can be counted (spec v168 §3 #3).
  *
@@ -6,7 +8,7 @@
  * Counting it up needs the number back out: the first number in the text is
  * the value, everything before it (sign, currency) the prefix, everything after
  * it the suffix. `formatFigureText(parts, parts.value)` returns the original
- * text exactly.
+ * text with U+2212 for losses and without a sign if it rounds to zero (v240 §1).
  */
 export interface FigureText {
   prefix: string;
@@ -35,11 +37,19 @@ export function parseFigureText(text: string | null): FigureText | null {
   };
 }
 
+/** A sign embedded in the prefix by the page that formatted the figure. */
+const LEADING_SIGN = /^(\s*)([+−-])/;
+
 export function formatFigureText(parts: FigureText, value: number): string {
-  const body = value.toLocaleString('en-US', {
+  const body = Math.abs(value).toLocaleString('en-US', {
     minimumFractionDigits: parts.decimals,
     maximumFractionDigits: parts.decimals,
     useGrouping: parts.grouped,
   });
-  return `${parts.prefix}${body}${parts.suffix}`;
+  // A negative frame keeps a true minus; one that rounds to zero has no sign.
+  const zero = Number(body.replaceAll(',', '')) === 0;
+  const prefix = parts.prefix.replace(LEADING_SIGN, (_, space: string, sign: string) =>
+    space + (zero ? '' : sign === '-' ? MINUS : sign));
+  const sign = value < 0 && !zero && !LEADING_SIGN.test(parts.prefix) ? MINUS : '';
+  return `${prefix}${sign}${body}${parts.suffix}`;
 }

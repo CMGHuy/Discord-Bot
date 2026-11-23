@@ -5,7 +5,8 @@
  * THE ONLY FILE under frontend/src that holds hued colour literals (the
  * exceptions are named in the spec: --chart-1..6 and --quality-4 stay
  * literal in tokens.css, and index.html / manifest.webmanifest carry copies
- * of --bg for the cold load, and index.html one of the Navy --bg (spec v225)).
+ * of the two grounds for the cold load (spec v225, v240; primitives.spec.ts
+ * pins each copy to its palette entry)).
  *
  * A palette name says what a colour IS (hue and step), never what it is
  * FOR. Meaning lives in tokens.css tier 2 (--bg, --accent, --pos ...), which
@@ -37,27 +38,37 @@
   /* rules, dividers and disabled glyphs only -- never text */
   --graphite-500: #6b7280;
 
-  /* v225 Dark blue (Navy) ground, darkest first: tokens.css's
-     :root[data-theme="navy"] block re-points the ground to these. */
-  --midnight-950: #070c18;
-  --midnight-900: #0c1424;
-  --midnight-850: #121c32;
-  --midnight-800: #172440;
-  --midnight-750: #182540;
-  --midnight-700: #233453;
+  /* v240 doctena night, the Dark blue (Navy) look, darkest first.
+     tokens.css's :root[data-theme="navy"] block re-points the ground, ink,
+     accent, control border and P&L tokens to these. Hues from doctena.de,
+     lifted where a contrast gate needed it (spec v240 §1). */
+  --doctena-950: #00131f;
+  --doctena-900: #001e30;
+  --doctena-850: #032a42;
+  --doctena-800: #073652;
+  --doctena-750: #0d3d59;
+  --doctena-700: #1d5373;
   /* rules, dividers and disabled glyphs only -- never text */
-  --midnight-500: #5f6f8a;
+  --doctena-500: #6e94a8;
+  --doctena-300: #8fb3c8;
+  --doctena-200: #c8e1ef;
+  --doctena-50: #fafdff;
+  /* doctena blue: sky-400 is the text-safe accent (doctena's #328ec0 is
+     4.1:1 on the raised surface); blue-600 and blue-700 are the fills
+     under white ink (5.21:1 and 7.30:1) and blue-600 the control border. */
+  --doctena-sky-400: #5aa9d6;
+  --doctena-blue-600: #0072b0;
+  --doctena-blue-700: #005b8c;
+  /* doctena mint for gains; a coral lifted from doctena's error #c52020
+     so a loss reads on a dark ground */
+  --doctena-mint-400: #53ceb5;
+  --doctena-coral-400: #f07a7a;
 
   /* ink */
   --grey-400: #9aa4b2;
   --grey-300: #c9d1d9;
   --grey-100: #e6e8eb;
   --white: #ffffff;
-
-  /* v225 Navy ink, blue-tinted to sit on the midnight ground */
-  --frost-400: #9fb0c8;
-  --frost-300: #c9d4e3;
-  --frost-100: #e6ecf5;
 
   /* steel blue: interactive only. 400 is the text-safe accent; 500 and
      600 are the fills that carry white ink (5.00:1 and 5.74:1). */
@@ -73,7 +84,10 @@
 
   /* alpha entries: tints and the overlay dim */
   --graphite-950-a72: rgba(13, 15, 18, 0.72);
-  --midnight-950-a72: rgba(7, 12, 24, 0.72);
+  --doctena-950-a72: rgba(0, 19, 31, 0.72);
+  --doctena-blue-500-a24: rgba(50, 142, 192, 0.24);
+  --doctena-mint-400-a14: rgba(83, 206, 181, 0.14);
+  --doctena-coral-400-a14: rgba(240, 122, 122, 0.14);
   --green-500-a12: rgba(63, 182, 139, 0.12);
   --red-500-a12: rgba(240, 110, 102, 0.12);
   --amber-500-a12: rgba(210, 153, 34, 0.12);

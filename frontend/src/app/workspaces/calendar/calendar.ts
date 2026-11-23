@@ -392,7 +392,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     :host { display: block; min-width: 0; }
     /* contents: sb-page's actions slot lays the status out. */
     .head-status { display: contents; }
-    .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-faint); min-width: 0; }
+    .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-muted); min-width: 0; }
     .pnl-basis-line { margin: var(--space-6) 0 0; min-width: 0; }
     /* All history beside the month on show: two columns from tablet (640px), one on a phone. */
     .weekday-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-14); grid-column: 1 / -1; }
@@ -452,20 +452,20 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     }
     .week .cell:last-child { border-right: 1px solid var(--border); }
     .dom { color: var(--text-secondary); font-size: var(--text-micro); }
-    .outside .dom { color: var(--text-faint); }
+    .outside .dom { color: var(--text-muted); }
 
     /* Weekends carry no closes, ever. Hatching them says "not a trading day"
        rather than "a trading day that happened to be quiet" -- the same
        distinction the payload makes by omitting empty days. */
     .weekend { background: var(--surface-sunken, transparent); }
-    .weekend .dom { color: var(--text-faint); }
+    .weekend .dom { color: var(--text-muted); }
 
     /* Signed ramp off --heat (0..1), the same [style.--heat] + color-mix
        mechanism the Analytics win-rate heatmap uses. Green/red are reserved
        for P&L direction, which is exactly what this grid shows. */
     .cell.pos { background: color-mix(in srgb, var(--pos) calc(var(--heat, 0) * 55%), transparent); }
     .cell.neg { background: color-mix(in srgb, var(--neg) calc(var(--heat, 0) * 55%), transparent); }
-    .trade-id { font-family: var(--font-mono, monospace); font-size: var(--text-caption, 12px); margin-left: var(--space-6); }
+    .trade-id { font-family: var(--font-mono, monospace); font-variant-numeric: tabular-nums; font-size: var(--text-caption, 12px); margin-left: var(--space-6); }
     .cell.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
 
     /* align-items/padding/colour/font override the link variant's defaults
@@ -479,6 +479,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
       color: var(--text);
       font: inherit;
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-table);
     }
     .value:focus-visible { outline-offset: 1px; }
@@ -499,11 +500,11 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
       text-align: left; cursor: pointer;
     }
     .agenda-hit:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-    .agenda-date { flex: 0 0 6rem; color: var(--text-faint); font-size: var(--text-micro); }
-    .agenda-value { flex: 1 1 auto; text-align: right; font-family: var(--font-mono); color: var(--text); }
+    .agenda-date { flex: 0 0 6rem; color: var(--text-muted); font-size: var(--text-micro); }
+    .agenda-value { flex: 1 1 auto; text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); }
     .agenda-value.pos { color: var(--pos); }
     .agenda-value.neg { color: var(--neg); }
-    .agenda-count { flex: 0 0 auto; color: var(--text-faint); font-size: var(--text-chip); }
+    .agenda-count { flex: 0 0 auto; color: var(--text-muted); font-size: var(--text-chip); }
 
     .dow { width: 100%; border-collapse: collapse; font-size: var(--text-table); }
     .dow th, .dow td { padding: var(--space-6) var(--space-10); border-bottom: 1px solid var(--border); }
@@ -515,11 +516,11 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
       text-transform: uppercase;
       text-align: left;
     }
-    .dow .num { font-family: var(--font-mono); text-align: right; }
+    .dow .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
 
     .day-row { padding: var(--space-10) 0; border-bottom: 1px solid var(--border); }
     .day-row header { display: flex; align-items: baseline; gap: var(--space-8); }
-    .day-row .amount { margin-left: auto; font-family: var(--font-mono); }
+    .day-row .amount { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .day-row .amount.pos { color: var(--pos); }
     .day-row .amount.neg { color: var(--neg); }
     .day-row .meta { margin: var(--space-4) 0 0; color: var(--text-secondary); font-size: var(--text-micro); }
@@ -544,7 +545,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     .day-leaders .leader { display: flex; justify-content: space-between; gap: var(--space-8); white-space: nowrap; }
     .day-leaders .leader.pos { color: var(--pos); }
     .day-leaders .leader.neg { color: var(--neg); }
-    .day-leaders p { margin: var(--space-4) 0; color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--text-table); }
+    .day-leaders p { margin: var(--space-4) 0; color: var(--text-secondary); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-table); }
   `,
 })
 export class Calendar {

@@ -7,7 +7,7 @@ import { BarList, BarListMode, BarRow } from '../../../ui/bar-list';
 import { DataTable } from '../../../ui/data-table/data-table';
 import { DotPlot, DotPoint } from '../../../ui/dot-plot';
 import { Select } from '../../../ui/form-controls';
-import { pct } from '../../../ui/format';
+import { fixed, pct } from '../../../ui/format';
 import { HeatCell, HeatGrid, HeatRamp } from '../../../ui/heat-grid';
 import { Panel } from '../../../ui/layout';
 import { PanelError } from '../../../ui/panel-error';
@@ -51,6 +51,11 @@ function measureValue(
  *  a fill. */
 export const TAKEN_CAPTION =
   'Paper results, R units, pre-tax. Followed records the plan as followed, not your fill.';
+
+/** Chart and tooltip labels for ExpR and a rate, with a true minus on a
+ *  loss (spec v240 §1, `fixed`) and no sign on a gain, as before. */
+export const rLabel = (v: number): string => `${fixed(v, 2)}R`;
+export const rateLabel = (v: number): string => `${fixed(v, 1)}%`;
 
 @Component({
   selector: 'sb-attribution-tab',
@@ -184,18 +189,18 @@ export class AttributionTab {
   protected readonly heatHint =
     'Cell colour ramps from worst to best across the grid; a dotted cell sits below the reliability floor '
     + `and shows only its trade count. ${PERFORMANCE_CAVEAT}`;
-  protected readonly rFormat = (v: number) => `${v.toFixed(2)}R`;
+  protected readonly rFormat = rLabel;
   /** The cell figure with its unit, so the tooltip's "value" says what it is. */
   protected readonly heatFormat = computed<(v: number) => string>(() => {
     const which: HeatMeasure = this.store.heatCell();
-    if (which === 'exp_r') return this.rFormat;
-    return which === 'win_rate' ? (v: number) => `${v.toFixed(1)}%` : (v: number) => String(Math.round(v));
+    if (which === 'exp_r') return rLabel;
+    return which === 'win_rate' ? rateLabel : (v: number) => String(Math.round(v));
   });
 
   protected readonly measureLabel = computed(
     () => this.measureOptions.find((o) => o.value === this.store.measure())?.label ?? 'ExpR');
   protected readonly measureFormat = computed<(v: number) => string>(
-    () => (this.store.measure() === 'win_rate' ? (v: number) => `${v.toFixed(1)}%` : (v: number) => `${v.toFixed(2)}R`));
+    () => (this.store.measure() === 'win_rate' ? rateLabel : rLabel));
   protected readonly pctFormat = (v: number) => pct(v);
   /** A win rate is a level against a 0-100 scale, not a signed delta from
    *  zero -- the same distinction `rate()` draws against `signed()`

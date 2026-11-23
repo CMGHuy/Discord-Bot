@@ -73,9 +73,10 @@ describe('Chip (v80 D4)', () => {
   });
 });
 
-/* v195 Phase 2: a chip is flat. Its 4px corner is the --chip-radius token
- * (V195-3); a quality band is told by its text colour and its label, never
- * by a border mixed from a valence hue. */
+/* v195 Phase 2: a chip is flat. Its corner is the --chip-radius token
+ * (V195-3), a pill since v240 §3 (var(--pill-radius)); a quality band is
+ * told by its text colour and its label, never by a border mixed from a
+ * valence hue. */
 describe('Chip is flat (v195 Phase 2)', () => {
   it('mixes no colour and gives each quality band its text colour only', () => {
     expect(SOURCE).not.toContain('color-mix(');

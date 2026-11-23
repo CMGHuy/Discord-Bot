@@ -187,7 +187,10 @@ describe('rText', () => {
   it('signs a loss with the true minus, keeps zero and a gain', () => {
     expect(rText(-0.3)).toBe('−0.30R');
     expect(rText(-0.3)).not.toContain('-');
-    expect(rText(0)).toBe('+0.00R');
+    // v240 Decision 10: a zero, or a value that rounds to zero, has no sign.
+    expect(rText(0)).toBe('0.00R');
+    expect(rText(-0.004)).toBe('0.00R');
+    expect(rText(0.004)).toBe('0.00R');
     expect(rText(0.32)).toBe('+0.32R');
     expect(rText(null)).toBe('—');
   });
