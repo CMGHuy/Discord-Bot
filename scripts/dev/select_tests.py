@@ -248,6 +248,10 @@ REGISTRY_PREFIXES = (
 # test_no_path_a_test_reads_is_classified_inert fails when a test starts
 # naming a data file this table (or the inert rule) mis-routes.
 DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    # V239-1 research policy is named by the context-only CSV reader audit.
+    ("scripts/research/README.md", ("tests/backtest_scripts/test_context_stems_never_listed.py",)),
+    # v239: exact-date SPY/VIX fixture consumed by the raw regime replay.
+    ("tests/fixtures/regime/spy_vix_replay.csv", ("tests/regime/test_bear_regime_replay.py",)),
     # v161: the generator role skills, the playbook and the trade-scout skill
     # are read by tests/scout/ shape tests as well as tests/hooks/. Narrower
     # rows first (first match wins), repeating the broad row's target.
