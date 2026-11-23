@@ -18,6 +18,7 @@ import { filter } from 'rxjs';
 import { Drawer } from '../layout';
 import { EmptyStateComponent } from '../empty-state';
 import { Hint } from '../hint';
+import { Icon } from '../icon';
 import { PaginationComponent } from '../pagination';
 import { Viewport, ViewportService } from '../breakpoints';
 import { isInline } from '../priority';
@@ -72,7 +73,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
 @Component({
   selector: 'sb-data-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, EmptyStateComponent, Hint, PaginationComponent, Drawer, RouterLink],
+  imports: [NgTemplateOutlet, EmptyStateComponent, Hint, Icon, PaginationComponent, Drawer, RouterLink],
   template: `
     <div class="wrap" [class.phone]="phone()" [attr.aria-busy]="loading()">
       @if (showSpinner()) {
@@ -169,7 +170,7 @@ const PIN_KEYS = ['ticker', 'symbol'];
                     [attr.aria-label]="(isExpanded(row) ? 'Show less for ' : 'Show more for ') + rowLabel(row)"
                     (click)="toggleExpanded(row)"
                   >
-                    {{ isExpanded(row) ? '▾' : '▸' }}
+                    <sb-icon [name]="isExpanded(row) ? 'down' : 'expand'" title="" />
                   </button>
                 </td>
               }
@@ -438,7 +439,6 @@ const PIN_KEYS = ['ticker', 'symbol'];
       border: 0;
       color: var(--text-muted);
       cursor: pointer;
-      font-size: var(--text-body);
     }
     .expander:hover { color: var(--text); }
     .detail-toggle { min-height: var(--control-h); min-width: var(--control-h); }

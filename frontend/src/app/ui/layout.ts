@@ -39,7 +39,7 @@ import { edgeFades, revealActive } from './scroll-rail';
 @Component({
   selector: 'sb-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Hint],
+  imports: [Hint, Icon],
   template: `
     <section class="panel sb-panel">
       @if (heading(); as text) {
@@ -62,7 +62,7 @@ import { edgeFades, revealActive } from './scroll-rail';
                 [attr.aria-expanded]="expanded()"
                 [attr.aria-label]="(expanded() ? 'Collapse ' : 'Expand ') + text"
                 (click)="expanded.set(!expanded())"
-              >{{ expanded() ? '▾' : '▸' }}</button>
+              ><sb-icon [name]="expanded() ? 'down' : 'expand'" title="" /></button>
             }
           </div>
         </header>
@@ -460,7 +460,7 @@ const SWIPE_CLOSE_PX = 80;
 @Component({
   selector: 'sb-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FocusTrap],
+  imports: [FocusTrap, Icon],
   template: `
     <!-- (cancel) is Escape: it is prevented and routed through requestClose()
          so the exit plays; the native close then fires (close) once. -->
@@ -476,7 +476,7 @@ const SWIPE_CLOSE_PX = 80;
           <header>
             <h2>{{ heading() }}</h2>
             <ng-content select="[drawer-header]" />
-            <button type="button" class="close" aria-label="Close" (click)="requestClose()">×</button>
+            <button type="button" class="close" aria-label="Close" (click)="requestClose()"><sb-icon name="close" title="" /></button>
           </header>
           <div class="body"><ng-content /></div>
         </div>
@@ -538,7 +538,6 @@ const SWIPE_CLOSE_PX = 80;
       background: none;
       border: 0;
       color: var(--text-muted);
-      font-size: var(--text-title);
       line-height: 1;
       cursor: pointer;
     }

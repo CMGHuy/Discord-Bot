@@ -16,6 +16,11 @@ const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/layout.ts'), 'utf8')
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const rule = (selector: string) => SOURCE.match(new RegExp(`${esc(selector)}\\s*\\{[^}]*\\}`))?.[0] ?? '';
 
+/** icon.ts drawings (V241-1, V241-2). sb-icon's `name` leaves no DOM trace. */
+const CLOSE_D = 'M6 6l12 12 M18 6 6 18';
+const EXPAND_D = 'M9 6l6 6-6 6';
+const DOWN_D = 'M6 9l6 6 6-6';
+
 @Component({ imports: [TabBar], template: `<sb-tab-bar [tabs]="tabs" [active]="'plans'" />` })
 class TabHost {
   readonly tabs: Tab[] = [
@@ -228,6 +233,25 @@ describe('sb-panel collapse', () => {
     expect(el().querySelector('button.panel-toggle')!.getAttribute('aria-expanded'))
       .toBe('true');
     expect(el().querySelector('.panel-digest')).toBeNull();
+  });
+
+  it('draws the expand chevron while collapsed and the down chevron once open (v240 §4)', () => {
+    host.inlineFrom.set('md'); host.digest.set('3 open');
+    host.viewportAt.set('sm'); fixture.detectChanges();
+    const toggle = () => el().querySelector('button.panel-toggle') as HTMLElement;
+    const drawn = () => toggle().querySelector(':scope > sb-icon svg path')!.getAttribute('d');
+
+    expect(drawn()).toBe(EXPAND_D);
+    expect(toggle().getAttribute('aria-label')).toBe('Expand Watchlist');
+    expect(toggle().textContent!.trim()).toBe('');
+
+    toggle().click();
+    fixture.detectChanges();
+    expect(drawn()).toBe(DOWN_D);
+    expect(toggle().getAttribute('aria-label')).toBe('Collapse Watchlist');
+    // The name is the button's alone: no tooltip, no second name from the icon.
+    expect(toggle().querySelector('sb-icon')!.getAttribute('title')).toBe('');
+    expect(toggle().querySelector('sb-icon svg')!.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('never collapses without a digest — an empty summary is worse than none', () => {
@@ -531,6 +555,33 @@ describe('sb-drawer header slot (v179 §3.2)', () => {
     expect(header).not.toContain('align-items: center');
     expect(header).not.toContain('justify-content: space-between');
     expect(drawerRule('.close')).toContain('margin-left: auto');
+  });
+});
+
+describe('sb-drawer close draws the close icon (v240 §4)', () => {
+  beforeEach(() => {
+    installDialogPolyfill();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideMotion('off')] });
+  });
+
+  it('is the close icon in a button named Close, with no text', () => {
+    const fixture = TestBed.createComponent(DrawerSlotHost);
+    fixture.detectChanges();
+    const close = (fixture.nativeElement as HTMLElement).querySelector('sb-drawer header button.close')!;
+    expect(close.getAttribute('aria-label')).toBe('Close');
+    expect(close.textContent!.trim()).toBe('');
+    const icon = close.querySelector(':scope > sb-icon')!;
+    expect(icon.querySelector('svg path')!.getAttribute('d')).toBe(CLOSE_D);
+    expect(icon.getAttribute('title')).toBe('');
+    expect(icon.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true');
+    expect(close.querySelectorAll('[aria-label]')).toHaveLength(0);
+  });
+
+  it('keeps its touch target and drops the glyph font size', () => {
+    const close = drawerRule('.close');
+    expect(close).toContain('min-width: var(--control-h)');
+    expect(close).toContain('min-height: var(--control-h)');
+    expect(close).not.toContain('font-size');
   });
 });
 

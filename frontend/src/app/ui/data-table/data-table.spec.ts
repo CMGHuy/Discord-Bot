@@ -47,6 +47,10 @@ interface Row {
   held: string;
 }
 
+/** icon.ts drawings (V241-1, V241-2). */
+const EXPAND_D = 'M9 6l6 6-6 6';
+const DOWN_D = 'M6 9l6 6 6-6';
+
 const ROWS: Row[] = [
   { id: 'a', ticker: 'AAPL', pnl: 4.2, held: '3d' },
   { id: 'b', ticker: 'MSFT', pnl: -1.5, held: '11d' },
@@ -788,6 +792,32 @@ describe('DataTable row detail', () => {
     expect(toggle.getAttribute('aria-label')).toContain(ROWS[0].ticker);
   });
 
+  it('draws the expand chevron collapsed and the down chevron expanded (v240 §4)', () => {
+    const toggle = () => el().querySelector('button.detail-toggle') as HTMLElement;
+    const drawn = () => toggle().querySelector(':scope > sb-icon svg path')!.getAttribute('d');
+
+    expect(drawn()).toBe(EXPAND_D);
+    expect(toggle().getAttribute('aria-label')).toMatch(/^Show more for /);
+    expect(toggle().getAttribute('aria-label')).toContain(ROWS[0].ticker);
+    expect(toggle().textContent!.trim()).toBe('');
+
+    toggle().click();
+    fixture.detectChanges();
+    expect(drawn()).toBe(DOWN_D);
+    expect(toggle().getAttribute('aria-label')).toMatch(/^Show less for /);
+    expect(toggle().querySelector('sb-icon')!.getAttribute('title')).toBe('');
+    expect(toggle().querySelector('sb-icon svg')!.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('draws one chevron per row, every one of them an icon', () => {
+    const toggles = [...el().querySelectorAll('button.detail-toggle')];
+    expect(toggles).toHaveLength(ROWS.length);
+    for (const toggle of toggles) {
+      expect(toggle.querySelectorAll('sb-icon')).toHaveLength(1);
+      expect(toggle.textContent!.trim()).toBe('');
+    }
+  });
+
   it('offers no toggle when nothing is demoted', () => {
     host.viewportAt.set('xl');
     fixture.detectChanges();
@@ -1264,6 +1294,13 @@ describe('DataTable header cells are the column-reorder handle (v179 layout audi
 /* -- v195 Phase 2 -- the table look: density rows, hairlines, muted header -- */
 
 describe('DataTable look (v195 Phase 2)', () => {
+  it('sizes the row toggle by its touch target, not by a glyph font size (v240 §4)', () => {
+    const expander = DATA_TABLE_SOURCE.match(/\n\s*\.expander\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(expander).not.toBe('');
+    expect(expander).not.toContain('font-size');
+    expect(DATA_TABLE_SOURCE).toMatch(/\.detail-toggle\s*\{[^}]*min-height: var\(--control-h\);[^}]*min-width: var\(--control-h\)/);
+  });
+
   it('pads every cell with the row-density tokens', () => {
     // Dense 4px/8px, comfortable 10px/14px, touch 10px/10px (tokens.css, V195-6).
     expect(tableRule('th, td')).toContain('padding: var(--cell-pad-y) var(--cell-pad-x)');
