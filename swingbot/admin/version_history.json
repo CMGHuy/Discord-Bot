@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-11-23 14:44:41 UTC",
+  "generated_at": "2026-11-23 15:09:53 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.46.0",
+    "ui": "1.46.1",
     "bot": "2.19.6"
   },
   "releases": [
@@ -2773,6 +2773,19 @@
       },
       "changed": [
         "bot"
+      ]
+    },
+    {
+      "date": "2026-11-23",
+      "last_seen": "2026-11-23",
+      "commit": "3b4f9998",
+      "subject": "release(ui): 1.46.1 -- no Data stale alarm outside the bot's scan session",
+      "versions": {
+        "ui": "1.46.1",
+        "bot": "2.19.6"
+      },
+      "changed": [
+        "ui"
       ]
     }
   ]

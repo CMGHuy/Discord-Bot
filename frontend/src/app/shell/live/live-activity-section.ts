@@ -44,9 +44,10 @@ export function missingText(meta: LiveEventsMeta | null): string | null {
   return words.length ? `Some sources unavailable: ${words.join(', ')}` : 'Some sources unavailable';
 }
 
-/** 'No scan since 09:00 (5h ago)' once the last success is past the 900 s rule; null while fresh. */
-function scanWarning(lastSuccess: string | null, now: Date): string | null {
-  if (!isStale(lastSuccess, now)) return null;
+/** 'No scan since 09:00 (5h ago)' once the last success is past the 900 s rule; null while
+ *  fresh, and null outside the bot's scan session, when no scan is due. */
+function scanWarning(lastSuccess: string | null, now: Date, sessionActive: boolean | null): string | null {
+  if (sessionActive === false || !isStale(lastSuccess, now)) return null;
   const age = scanAge(lastSuccess, now.getTime());
   return age === null ? 'No scan yet' : `No scan since ${timeInZone(lastSuccess, 'Europe/Berlin')} (${age})`;
 }
@@ -66,10 +67,10 @@ function rowOf(e: LiveEvent, now: Date, currency: string): ActivityRow {
 /** What the section shows (spec v202 §6): a missed scan is never a quiet day. */
 export function activityView(
   events: readonly LiveEvent[], meta: LiveEventsMeta | null, loading: boolean,
-  lastSuccess: string | null, now: Date, currency: string,
+  lastSuccess: string | null, now: Date, currency: string, sessionActive: boolean | null = null,
 ): ActivityView {
   const rows = events.map((e) => rowOf(e, now, currency));
-  const warning = scanWarning(lastSuccess, now);
+  const warning = scanWarning(lastSuccess, now, sessionActive);
   const state = activityState(meta, loading);
   return { state, rows, missing: missingText(meta), scanWarning: warning, quiet: state === 'ok' && rows.length === 0 && warning === null };
 }
@@ -142,6 +143,7 @@ export class LiveActivitySection {
   readonly meta = input<LiveEventsMeta | null>(null);
   readonly loading = input(false);
   readonly lastSuccess = input<string | null>(null);
+  readonly sessionActive = input<boolean | null>(null);
   readonly now = input.required<Date>();
   readonly currency = input(DEFAULT_CURRENCY);
   readonly retry = output<void>();
@@ -149,6 +151,6 @@ export class LiveActivitySection {
   protected readonly headingId = `live-activity-${nextId++}`;
   protected readonly logParams = { tab: 'logs' };
   protected readonly view = computed(() => activityView(
-    this.events(), this.meta(), this.loading(), this.lastSuccess(), this.now(), this.currency(),
+    this.events(), this.meta(), this.loading(), this.lastSuccess(), this.now(), this.currency(), this.sessionActive(),
   ));
 }

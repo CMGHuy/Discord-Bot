@@ -27,6 +27,9 @@ def _load(name):
     spec = importlib.util.spec_from_file_location(f"{name}_v162",
                                                   ROOT / "scripts" / "backtest" / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
+    # dataclasses resolves string annotations through sys.modules[cls.__module__];
+    # a script that defines a dataclass (validate_component, v238) fails without it.
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 

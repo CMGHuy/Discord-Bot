@@ -11,7 +11,7 @@ import {
 
 const NOW = new Date('2026-10-29T13:00:00Z');            // 14:00 in Berlin (CET)
 const ago = (min: number) => new Date(NOW.getTime() - min * 60_000).toISOString();
-const calm: LiveWarningInput = { utilisationPct: 50, lastSuccess: ago(2), now: NOW, streamState: 'live', botAlive: true, killswitchOn: false };
+const calm: LiveWarningInput = { utilisationPct: 50, lastSuccess: ago(2), now: NOW, streamState: 'live', botAlive: true, killswitchOn: false, sessionActive: true };
 const heat = (over: Partial<LiveHeat> = {}): LiveHeat => ({
   availability: 'ok', as_of: ago(0), reason: null, open_pct: 4.2, cap_pct: 6, utilisation_pct: 70, open_amount: 2010.4,
   cap_amount: 2893, headroom_pct: 1.8, headroom_amount: 883, balance: 48210, includes_resting: true, ...over,
@@ -46,11 +46,18 @@ describe('liveWarnings', () => {
     [{ killswitchOn: true }, ['killswitch']],
     [{ killswitchOn: null }, []],
   ])('%o -> %o', (change, expected) => expect(liveWarnings({ ...calm, ...change })).toEqual(expected));
+  it('raises no stale warning outside the scan session, however old the last scan', () => {
+    expect(liveWarnings({ ...calm, sessionActive: false, lastSuccess: ago(3000) })).toEqual([]);
+    expect(liveWarnings({ ...calm, sessionActive: false, lastSuccess: null })).toEqual([]);
+  });
+  it('still raises stale when the session is unknown (an older bot without the field)', () => {
+    expect(liveWarnings({ ...calm, sessionActive: null, lastSuccess: ago(20) })).toEqual(['stale']);
+  });
   it('raises no stale alarm before /health answers', () => {
     expect(liveWarnings({ ...calm, botAlive: null, lastSuccess: null })).toEqual([]);
   });
   it('lists every warning at once, in the fixed order', () => {
-    expect(liveWarnings({ utilisationPct: 101, lastSuccess: ago(300), now: NOW, streamState: 'dead', botAlive: false, killswitchOn: true }))
+    expect(liveWarnings({ utilisationPct: 101, lastSuccess: ago(300), now: NOW, streamState: 'dead', botAlive: false, killswitchOn: true, sessionActive: true }))
       .toEqual(['over-cap', 'stale', 'disconnected', 'bot-down', 'killswitch']);
   });
   it('names each warning', () => {
@@ -60,7 +67,7 @@ describe('liveWarnings', () => {
 });
 
 describe('alarmFor: the top bar alarm, in exactly three conditions', () => {
-  const base = { lastSuccess: ago(2), now: NOW, streamState: 'live' as const, botAlive: true };
+  const base = { lastSuccess: ago(2), now: NOW, streamState: 'live' as const, botAlive: true, sessionActive: true };
   it('is null when nothing is wrong, and before /health answers', () => {
     expect(alarmFor(base)).toBeNull();
     expect(alarmFor({ ...base, botAlive: null, lastSuccess: null })).toBeNull();
@@ -69,6 +76,10 @@ describe('alarmFor: the top bar alarm, in exactly three conditions', () => {
     'words a %s-minute-old success as %s', (min, text) => expect(alarmFor({ ...base, lastSuccess: ago(min) })).toEqual({ kind: 'stale', text }));
   it('words a missing success as plain Data stale', () => {
     expect(alarmFor({ ...base, lastSuccess: null })).toEqual({ kind: 'stale', text: 'Data stale' });
+  });
+  it('raises no stale alarm outside the scan session (evenings, weekends)', () => {
+    expect(alarmFor({ ...base, sessionActive: false, lastSuccess: ago(3000) })).toBeNull();
+    expect(alarmFor({ ...base, sessionActive: false, lastSuccess: ago(300), botAlive: false })).toEqual({ kind: 'bot-down', text: 'Bot down' });
   });
   it('puts bot-down over disconnected over stale', () => {
     const all = { ...base, lastSuccess: ago(60), streamState: 'dead' as const, botAlive: false };

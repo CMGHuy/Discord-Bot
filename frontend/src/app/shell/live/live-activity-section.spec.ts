@@ -59,6 +59,11 @@ describe('activityView (spec v202 §6)', () => {
     expect(activityView([ALERT], meta(), false, ago(300), NOW, '€').scanWarning).toBe('No scan since 09:00 (5h ago)');
     expect(activityView([], meta(), false, null, NOW, '€')).toMatchObject({ quiet: false, scanWarning: 'No scan yet' });
   });
+
+  it('reads an old last scan outside the scan session as no warning: no scan was due', () => {
+    expect(activityView([], meta(), false, ago(300), NOW, '€', false)).toMatchObject({ quiet: true, scanWarning: null });
+    expect(activityView([], meta(), false, ago(300), NOW, '€', true).scanWarning).toBe('No scan since 09:00 (5h ago)');
+  });
   it('builds a row per event with its time, tone and P&L parts', () => {
     expect(activityView([event()], meta(), false, ago(2), NOW, '€').rows).toEqual([{
       key: `${ago(6)}|trade_closed|812`, time: '13:54 · 6m ago', text: 'NVDA closed · TP2', tone: 'positive',

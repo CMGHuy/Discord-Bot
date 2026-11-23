@@ -220,6 +220,14 @@ describe('ConnectionStore', () => {
     expect(store.botLastSuccess()).toBe('2026-08-14T08:55:00Z');
   });
 
+  it('keeps whether the bot is in its scan session, null until /system/scan answers', () => {
+    expect(store.botSessionActive()).toBeNull();
+    tick();
+    backend.expectOne('/api/v1/health').flush(HEALTH);
+    backend.expectOne('/api/v1/system/scan').flush({ ...SCAN, bot_session_active: false });
+    expect(store.botSessionActive()).toBe(false);
+  });
+
   it('starts with no last successful tick, which is not the same as an old one', () => {
     expect(store.botLastSuccess()).toBeNull();
     tick();

@@ -340,6 +340,7 @@ export class Shell {
     now: this.liveNow(),
     streamState: this.connection.state(),
     botAlive: this.connection.botAlive(),
+    sessionActive: this.connection.botSessionActive(),
     killswitchOn: this.killswitchOn(),
   }));
   protected readonly heatText = computed(() => heatStripText(this.live.heat(), this.connection.currency()));
@@ -353,6 +354,7 @@ export class Shell {
     now: this.liveNow(),
     streamState: this.connection.state(),
     botAlive: this.connection.botAlive(),
+    sessionActive: this.connection.botSessionActive(),
   }));
 
   constructor() {
