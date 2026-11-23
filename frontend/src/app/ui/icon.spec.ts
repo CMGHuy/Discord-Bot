@@ -2,11 +2,12 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { ICON_NAMES, Icon, IconName } from './icon';
+import { ICON_NAMES, Icon, IconName, IconSize } from './icon';
 
-function render(name: string) {
+function render(name: string, size?: IconSize) {
   const f = TestBed.createComponent(Icon);
   f.componentRef.setInput('name', name as IconName);
+  if (size !== undefined) f.componentRef.setInput('size', size);
   f.detectChanges();
   return f.nativeElement as HTMLElement;
 }
@@ -46,6 +47,33 @@ describe('Icon', () => {
   it.each([...ICON_NAMES])('names %s when the caller gives no title', (name) => {
     // No icon is mute: the default tooltip is the label.
     expect(render(name).getAttribute('title')!.length, name).toBeGreaterThan(0);
+  });
+
+  it('draws 16px by default, the size of a table cell or a line of text', () => {
+    const svg = render('trades').querySelector('svg')!;
+    expect(svg.getAttribute('width')).toBe('16');
+    expect(svg.getAttribute('height')).toBe('16');
+  });
+
+  it.each([16, 20, 24] as const)('sets width and height to %ipx and keeps the 24 viewBox', (size) => {
+    // Size is the caller's only lever: the drawing and its 1.8 stroke stay on
+    // the 24 grid and scale with it, so no caller overrides the svg in CSS.
+    const svg = render('trades', size).querySelector('svg')!;
+    expect(svg.getAttribute('width')).toBe(String(size));
+    expect(svg.getAttribute('height')).toBe(String(size));
+    expect(svg.getAttribute('viewBox')).toBe('0 0 24 24');
+    expect(svg.getAttribute('stroke-width')).toBe('1.8');
+  });
+
+  it('follows a size change after the first render', () => {
+    const f = TestBed.createComponent(Icon);
+    f.componentRef.setInput('name', 'menu');
+    f.detectChanges();
+    f.componentRef.setInput('size', 20);
+    f.detectChanges();
+    const svg = (f.nativeElement as HTMLElement).querySelector('svg')!;
+    expect(svg.getAttribute('width')).toBe('20');
+    expect(svg.getAttribute('height')).toBe('20');
   });
 
   it.each([...FILLED])('draws the filled part of %s as a second, solid path', (name) => {

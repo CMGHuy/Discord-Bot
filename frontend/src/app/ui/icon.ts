@@ -10,7 +10,10 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
  * the dependency's own README.
  *
  * Stroked on a 24×24 grid at 1.8 width with round caps and joins, so the whole
- * set looks like one hand.
+ * set looks like one hand. `size` sets only the rendered width and height
+ * (16 in tables and inline text, 20 in lists, 24 in the rail and the phone tab
+ * bar); the viewBox stays 24, and the stroke scales with it, so one drawing
+ * serves every size. A caller picks a size; it never overrides the svg in CSS.
  *
  * A few icons carry one filled sub-path (`FILLS`): Pending's sand, Opened's
  * broadcast source, Partial's banked half. The svg is `fill="none"`, so the
@@ -54,6 +57,9 @@ export const ICON_NAMES = [
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
+
+/** The sizes an icon draws at: tables and inline text, lists, rail and tab bar. */
+export type IconSize = 16 | 20 | 24;
 
 /** Stroked path data only — every shared attribute lives on the `<svg>` below. */
 const PATHS: Record<IconName, string> = {
@@ -156,8 +162,8 @@ const LABELS: Record<IconName, string> = {
     @if (path(); as d) {
       <svg
         viewBox="0 0 24 24"
-        width="16"
-        height="16"
+        [attr.width]="size()"
+        [attr.height]="size()"
         fill="none"
         stroke="currentColor"
         stroke-width="1.8"
@@ -182,6 +188,8 @@ export class Icon {
   readonly name = input.required<IconName>();
   /** Overrides the default tooltip (the icon's name). */
   readonly title = input<string | undefined>(undefined);
+  /** Rendered width and height in px; the drawing stays on the 24 grid. */
+  readonly size = input<IconSize>(16);
   protected readonly tip = computed(() => this.title() ?? LABELS[this.name()]);
 
   /**
