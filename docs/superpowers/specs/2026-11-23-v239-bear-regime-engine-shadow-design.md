@@ -24,8 +24,8 @@ The partner's goal, 2026-11-23:
 
 The bot has two regime signals today, and neither does this.
 
-- `scanning/regime.py` (SPY vs EMA200) is slow. It read "Bullish" on 11-12
-  and only feeds `score_confidence`. It never gates.
+- `swingbot/core/scanning/regime.py` (SPY vs EMA200) is slow. It read
+  "Bullish" on 11-12 and only feeds `score_confidence`. It never gates.
 - The v209 shock detector (`MARKET_SHOCK_MODE`, shadow) measures **intraday
   breadth crashes** and walks a NORMAL → SHOCK → RECOVERY machine. This week was
   a grind, not a single crash day: **73 of the 74 closed longs carry
@@ -47,48 +47,86 @@ veto) in the slate doc above.
 
 | Area | Change |
 |---|---|
-| `swingbot/core/market/bear_regime.py` (new) | Pure classifier: daily SPY + ^VIX frames → `RegimeDay` |
-| Postgres | New table `market_regime_days` (Alembic revision), one row per session |
+| `swingbot/core/market/bear_regime.py` (new) | Pure classifier: completed daily SPY + ^VIX frames → `RegimeDay` |
+| Postgres | New table `market_regime_days` (Alembic revision), one row per labelled session |
 | Scan pass | Computes or reads today's `RegimeDay` once per pass and stamps every new plan's `entry_context` |
-| Notify queue | One ops-channel notice per state transition (v197/v210 queue) |
+| Notify queue | One ops-channel notice per confirmed state transition (v197/v210 queue) |
 | Discord alerts | One regime line on every alert embed, simple and full |
 | Admin API | `GET /api/v1/market/regime` (current day plus last 60 sessions) |
 | Frontend | Dashboard regime banner; a regime chip on plan cards |
 | Config | `BEAR_REGIME_MODE` (`off` / `shadow` / `live`; `live` behaves exactly like `shadow` in v239) |
 | Reports | `scripts/reports/regime_shadow_report.py`: live would-veto vs the rest |
-| Research | `scripts/research/regime_base_rates.py` + a results doc: SPY 1993→now state base rates |
+| Research | `scripts/research/regime_base_rates.py` + a results doc: SPY state base rates, 1993 → 2026-11-20 |
 
 Nothing blocks, sizes, scores, re-orders or drops a plan. `off` is a byte-identical kill switch.
 
 ## The classifier
 
-Everything is computed from **completed daily bars only**. The day-`t` label
-uses closes through session `t−1`. Live, that is the last completed session
-before the scan's issue time. It is never today's partial bar
-(`no-lookahead` skill).
+### Indexing
 
-Let `C` be the SPY close. `SMA50`, `SMA200` are simple means of `C`.
-`V` is the ^VIX close.
+The label is **for** trading session `D`, the first NYSE session after the last
+completed one. Every input is a completed daily bar. Let `s` be the last
+completed session before `D` (the bar index of the input frame's last row).
+Every rule below indexes from `s`: `C[s]` is the last completed SPY close,
+`C[s−1]` the one before it. Nothing reads a bar dated `D` or later.
+
+- **Live cut.** The live frame from `get_daily_data`
+  (`swingbot/core/marketdata/data.py:39`) can end in today's partial bar
+  (v209 spec, "Track 1"). The engine passes every frame through the existing
+  `completed_frame(df, now)` (`swingbot/core/scanning/strategy_pass.py:33`)
+  before classifying. A test feeds a frame that ends in a partial bar and
+  asserts the label equals the label of the same frame cut by hand.
+- **Calendar.** `D` and `s` come from the NYSE session calendar the refresher
+  already uses (`swingbot/refresher/benchmarks.py:65`,
+  `last_completed_session`). A Saturday or Sunday scan, a holiday, a half-day
+  session, and a scan after the close but before the refresher ran each map to
+  one defined `(s, D)` pair, with one test per case. A half-day session counts
+  as completed after its early close.
+- **Replay convention.** The slate's "CORRECTION from 10-22" means
+  `D = 2026-10-22`, i.e. labelled from `s = 2026-10-21`'s close. The replay
+  fixture uses this convention.
+
+### Rules
+
+`C` is the SPY close. `SMA50`, `SMA200` are simple means of `C`. `H` is the
+SPY high. `V` is the ^VIX close. All are evaluated at `s` unless lagged.
 
 | Output | Rule |
 |---|---|
-| `BEAR` | `C < SMA200` **and** `SMA200[t] < SMA200[t−20]`; **or** `SMA50 < SMA200` **and** `C < SMA200` |
-| `CORRECTION` | not `BEAR`, and `C < SMA50` **and** `SMA50[t] < SMA50[t−5]` **and** `SMA200[t] > SMA200[t−20]` |
+| `BEAR` | `C[s] < SMA200[s]` **and** `SMA200[s] < SMA200[s−20]`; **or** `SMA50[s] < SMA200[s]` **and** `C[s] < SMA200[s]` |
+| `CORRECTION` | not `BEAR`, and `C[s] < SMA50[s]` **and** `SMA50[s] < SMA50[s−5]` **and** `SMA200[s] > SMA200[s−20]` |
 | `NORMAL` | neither |
-| `stress` (bool or `None`) | `V ≥ 25`; `None` when the ^VIX bar is missing or older than the SPY bar |
-| `pullback_trigger` (bool) | state is `CORRECTION` **and** `V ≤ 0.85 × max(V[t−4..t])` **and** `C > SPY high[t−1]` |
+| `UNKNOWN` | fewer than 220 SPY bars; **or** any NaN or non-finite value among the closes feeding `SMA200[s−20..s]`, or in `C[s]`/`H[s−1]`; **or** the SPY frame's last bar is not session `s` (stale) |
+| `stress` | `V[s] ≥ 25`. `None` when no ^VIX bar is dated exactly `s`, or `V[s]` is NaN |
+| `pullback_trigger` | state is `CORRECTION` **and** `V[s] ≤ 0.85 × max(V[s−4..s])` **and** `C[s] > H[s−1]`. `False` when any of the five VIX bars is missing or NaN, and the row records `pullback_reason = "vix_gap"` |
 
 - `BEAR` wins over `CORRECTION`. `CORRECTION` is the "fake" candidate (a dip
   while the long trend still rises), and `BEAR` is the "real" one (the long
   trend itself has turned). The label is a guess until the episode resolves.
   The base-rate study measures how good a guess it is.
+- ^VIX bars are aligned to SPY bars by exact session date. A VIX bar is
+  never forward-filled.
+- Closes are **adjusted** (dividends and splits) in both the live path and
+  the study, the same series the scan's daily frames carry. The row records
+  `provider` and `last_bar_date`, so a later revision is explainable (see
+  Parity).
 - Constants live in module-level `Final`s, not `.env`. Changing one is a new
   idea under the frozen slate rows, not a tuning knob.
-- With fewer than 220 SPY bars, every field is `None` and the state is
-  `UNKNOWN`. This never raises.
-- **This week replayed:** CORRECTION from 10-22, `stress` on 11-17..11-20,
-  never BEAR (SMA200 731.7 is still rising). The plan pins this replay as a
-  test, from a fixture of real SPY/^VIX closes.
+- **The day label is raw.** No hysteresis is applied to `state`, so B7–B9
+  screen exactly these rules. Smoothing applies only to what a person reads:
+  the transition notice, the banner's "since" count and study episodes (see
+  Confirmed transitions).
+- **This week replayed:** CORRECTION from `D = 10-22`, `stress` on
+  `D = 11-17..11-20`, never BEAR (SMA200 731.7 still rising). The plan pins
+  this replay as a test, from a fixture of real SPY/^VIX closes.
+
+### Confirmed transitions
+
+A state change is **confirmed** when the new state (or the new `stress` value)
+holds on two consecutive labelled sessions. A run shorter than two sessions is
+flicker. It is stored in the day rows as it happened, never notified, and in
+the study it is merged into the surrounding episode. A run that reaches two
+sessions becomes the episode and starts its "since" count on its first day.
 
 ### Shadow action, a pure function of the day and the plan direction
 
@@ -99,91 +137,181 @@ Let `C` be the SPY close. `SMA50`, `SMA200` are simple means of `C`.
 | `CORRECTION`, no stress | `caution` | `aligned` |
 | `NORMAL` / `UNKNOWN` | `none` | `none` |
 
-`pullback_trigger` days add `pullback_watch` to the day row and to the
-notice. No plan is created from it in v239: B8 decides that.
+On a `pullback_trigger` day the LONG action is **`pullback_watch`**, and it
+wins over `would_veto`. That day is, by construction, the panic easing inside
+a correction, which is exactly what B8 measures. Telling the partner "would
+not issue" and "pullback watch" on the same day would contradict itself. No
+plan is created from the trigger in v239. B8 decides that.
 
 ## Data and storage
 
-- **Inputs.** SPY daily bars come from the same daily fetch path the scan
-  already uses for `MARKET_REGIME_TICKER` (`compression_context.py:112` reads
-  it). ^VIX daily comes from that same path. The plan-briefer confirms the
-  exact function and that ^VIX daily resolves through it. If it does not, the
-  plan adds ^VIX to that fetch, not to `BENCHMARK_SYMBOLS`, which drives the
-  benchmark page.
-- **`market_regime_days`.** `session_date` (PK, the `t` the label is *for*),
-  `state`, `stress`, `pullback_trigger`, `spy_close`, `sma50`, `sma200`,
-  `sma50_lag5`, `sma200_lag20`, `vix_close`, `computed_at`. Alembic revision
-  `v239_001_market_regime`, following `schema-evolution.md`. Rows are written
-  once per session, on the first scan pass after the prior session completes.
-  A later pass on the same session reads the row and never rewrites it
-  (append-only history; the live/backtest parity check reads it).
+- **Inputs.** SPY and ^VIX daily via `get_daily_data`
+  (`swingbot/core/marketdata/data.py:39`), the same router path the scan's
+  `MARKET_REGIME_TICKER` frame comes from
+  (`swingbot/core/scanning/compression_context.py:99-112`), then
+  `completed_frame`. The plan's first task confirms ^VIX resolves through it
+  on the router (yfinance or Alpaca). If it does not, the plan adds a ^VIX
+  route to that path, never to `BENCHMARK_SYMBOLS` (which drives the
+  benchmark page). The study reads the backtest cache. Parity covers the gap
+  between the two.
+- **`market_regime_days`.** Columns: `session_date` (PK, = `D`), `last_bar_date`
+  (= `s`), `state`, `stress`, `pullback_trigger`, `pullback_reason`,
+  `spy_close`, `sma50`, `sma200`, `sma50_lag5`, `sma200_lag20`, `spy_high_prev`,
+  `vix_close`, `vix_max5`, `provider`, `computed_at`. Alembic revision
+  `v239_001_market_regime`, following `schema-evolution.md`.
+- **Write once, race-free.** The first scan pass that finds no row for `D`
+  computes the day and runs `INSERT … ON CONFLICT (session_date) DO NOTHING`.
+  Only the process whose insert succeeded enqueues a notice. Every later pass,
+  in any process, reads the row. A row is never updated.
+- **Gaps.** If the VM missed sessions, the engine labels only `D`; it never
+  backfills. The transition check compares against the most recent stored
+  row whatever its age. If that row is older than 5 sessions, the notice says
+  "after a gap of N sessions" so a stale comparison is visible.
 - **`entry_context`** gains `bear_regime` (state string) and `regime_action`
   (table above) on every new plan while the mode is not `off`. The key is
   additive. Old records lack it and are never upcast (`schema-evolution.md`).
-- **Transition notice.** When today's state, or its `stress` flag, differs
-  from the previous row, one event goes to the ops channel through the v197
-  notify queue. It carries a plain status embed in the v210 style: headline
-  ("Regime: CORRECTION → BEAR"), the numbers line (SPY, SMA50, SMA200, VIX),
-  the open-long count, and the footer "Shadow: no long blocked, no short
-  issued." A `pullback_trigger` day sends one "pullback watch" notice. Limit:
-  one notice per session.
+- **Transition notice.** On a *confirmed* transition (or a `pullback_trigger`
+  day) one event goes to the ops channel through the v197 notify queue, at
+  most one per session. It carries a plain status embed in the v210 style:
+  - Headline in the shared vocabulary (Surfaces), e.g. "Regime: Correction →
+    Bear".
+  - The numbers line, in the shared number form.
+  - The open-long count and the count of **unfilled bullish plans** issued
+    under the old state, listed one per line (ticker, entry). Someone with
+    resting orders can then decide on them.
+  - Footer: "Shadow: no long blocked, no short issued, no plan cancelled."
 
 ## Surfaces
 
-- **Discord alert line**, on full and simple embeds, every direction, while
-  the mode is not `off` and the state is not `NORMAL`/`UNKNOWN`:
-  - LONG + `would_veto`: `⚠ Bear regime (shadow): BEAR — the regime engine would not issue this long.`
-    In CORRECTION + stress the state word is `CORRECTION · STRESS`.
-  - LONG + `caution`: `Regime: CORRECTION (SMA200 still rising) — dip inside an uptrend.`
-  - SHORT: `Regime: BEAR — short is with the tape.` (or the CORRECTION form).
-  - It is one line, under the plan table and above the disclaimer, and it is
-    never truncated away. The `alert-surface` skill's traps apply: wire it in
-    both embed builders and pin each with a test.
-- **Dashboard banner** on bomeo-capital.com. It is hidden on `NORMAL`. It
-  shows state, `stress`, how many sessions the state has lasted, the
-  SPY-vs-SMA50/SMA200 distances and VIX. On `pullback_trigger` days it adds a
-  "Pullback watch" chip. It sits beside the existing v209 shock pill and
-  never replaces it: the pill is intraday crash, the banner is daily trend.
-  Phone: one wrapped line under the shell header, with the numbers behind a
-  tap. Tablet/desktop: a full-width strip. Touch target ≥ 44 px. Checked at
-  three widths (`ui-design.md`).
-- **Plan cards** get a small chip: `would veto` (red), `caution` (amber),
-  `aligned` (neutral). The chip reads the plan's own stamped `regime_action`,
-  not today's state, so an old card keeps the regime it was issued under.
-- **API.** `GET /api/v1/market/regime` returns `{today: RegimeDay|null,
-  history: RegimeDay[≤60], mode}`. It follows the existing `api_v1` auth.
+### One vocabulary, one number form
+
+| State | Short label (chip, banner title) | Plain words |
+|---|---|---|
+| `BEAR` | `Bear` | trend has turned down |
+| `CORRECTION` + stress | `Correction · Stress` | dip in an uptrend, high volatility |
+| `CORRECTION` | `Correction` | dip in an uptrend |
+| pullback day | `Pullback watch` | panic easing inside a correction |
+| `UNKNOWN` | `No reading` | — |
+
+Numbers always use one form: SPY as a signed % from each average, then VIX as
+a level, e.g. `SPY −5.7% vs SMA200 · −9.3% vs SMA50 · VIX 37.6`. The banner,
+the notice and the API's display fields all use it. No glyphs (⚠ etc.) in any
+surface, so plain-text channels render the same.
+
+### Discord alert line
+
+This is one line on full and simple embeds, every direction, while the mode is
+not `off` and the state is `BEAR` or `CORRECTION`. It sits **directly under
+the plan table, above the chart image and the disclaimer**. It is **at most 80
+characters**, a cap each state × direction case asserts in the embed tests.
+
+| Case | Line |
+|---|---|
+| LONG `would_veto` | `Regime: Bear (shadow) — engine would skip this long` |
+| LONG `would_veto`, stress | `Regime: Correction · Stress (shadow) — would skip long` |
+| LONG `caution` | `Regime: Correction — dip in an uptrend` |
+| LONG `pullback_watch` | `Regime: Pullback watch — panic easing in a correction` |
+| SHORT `aligned` | `Regime: Bear — with the tape; squeeze risk on rebounds` |
+
+The shadow wording says what the engine *would* do and gives no order
+instruction. The bot never advises on a placed order, and the plan remains a
+valid plan. The `alert-surface` skill's traps apply: wire the line in both
+builders (`build_embed`, `build_strategy_alert_embed`/`_simple_embed` in
+`alert_embeds.py`) and pin each with a test.
+
+### Dashboard banner (bomeo-capital.com)
+
+- **States.**
+  - Hidden on `NORMAL`, `mode = off`, while loading, and on a fetch error. A
+    fetch error logs to the console and shows nothing, never a stale label.
+  - On `UNKNOWN` it shows a muted single line, "Regime: no reading", and
+    never the prior day's label.
+  - Otherwise it shows the short label, "since N sessions" (confirmed-episode
+    count) and the number form.
+  - On a pullback day it adds a `Pullback watch` chip.
+- **Control.** The collapsed banner is a real `<button>` with `aria-expanded`
+  and keyboard activation. Its accessible name carries the label and the
+  numbers, e.g. "Regime Correction, stress, 6 sessions; SPY −5.7% vs SMA200".
+  Expanding shows the number line and one sentence of plain words.
+- **Neighbours, per width.** The v209 shock pill is phone-only
+  (`frontend/src/app/shell/shock-pill.ts`, hidden from 640 px). Wider screens
+  carry SHOCK/RECOVERY in the tape strip.
+  - **Phone (<640 px):** banner directly under the top bar, below the shock
+    pill. The two read as "intraday: Shock" / "trend: Correction". The banner
+    prefixes "Trend:" so a SHOCK pill above a Correction banner reads as two
+    signals, not a contradiction.
+  - **Tablet/desktop:** a full-width strip directly under the tape strip,
+    same "Trend:" prefix.
+  - Touch target ≥ 44 px at every width.
+
+### Plan-card chip
+
+- Reads the plan's own stamped `regime_action`, never today's state, so an old
+  card keeps the regime it was issued under.
+- `would skip` (red, with a `×` text prefix), `caution` (amber, `!` prefix),
+  `pullback watch` (blue, `↺` prefix), `aligned` (neutral, no prefix). Colour
+  is never the only cue.
+- A legacy card without the key, or with action `none`, shows **no chip**.
+- Placement: on the card's meta row after the direction badge. It wraps onto
+  its own line on a phone and is never truncated.
+
+### API
+
+`GET /api/v1/market/regime` returns `{mode, today: RegimeDay|null, history:
+RegimeDay[≤60], episode: {label, since_sessions}|null}`, with `display` strings
+in the shared vocabulary and number form. It follows the existing `api_v1`
+auth. An empty table gives `today: null, history: []`.
+
+## Parity
+
+A parity test replays `bear_regime.classify` on the backtest cache for every
+stored `market_regime_days` row in a fixture export, and compares states.
+
+- **Tolerance.** A replayed `state` must equal the stored one, except on a
+  **boundary day**: one where any compared quantity
+  (`C − SMA200`, `C − SMA50`, `SMA200[s] − SMA200[s−20]`,
+  `SMA50[s] − SMA50[s−5]`, `SMA50 − SMA200`, `V − 25`) is within 0.1% of the
+  right-hand side. A boundary day mismatch is reported, not failed.
+- **Explaining a mismatch.** The row's `provider` and `last_bar_date` say which
+  input it saw. A non-boundary mismatch fails the test and prints both input
+  closes.
+- **No rewrite.** Stored rows are what the partner saw. A revised close never
+  rewrites a row.
 
 ## Evidence the shadow produces
 
 - **`regime_shadow_report.py`** joins closed main-ledger trades with their
   `entry_context.regime_action`. It prints N, WR, ExpR and sum R for
-  `would_veto` vs `caution` vs `none` (LONG) and `aligned` vs `none` (SHORT),
-  with a stated N floor below which it prints "too few". It is **live
+  `would_veto` vs `caution` vs `pullback_watch` vs `none` (LONG) and `aligned`
+  vs `none` (SHORT). Below N = 30 a row prints "too few". It is **live
   monitoring, not a screen.** No figure from it licenses a gate: the B9 screen
   does (`pooled-numbers` skill).
-- **Base-rate study** (`regime_base_rates.py`, results doc
-  `docs/superpowers/results/2026-11-23-v239-regime-base-rates.md`). It runs
-  over SPY + ^VIX daily from 1993 to the last completed session (one fetch
-  into the backtest cache, checkpointed per year per CLAUDE.md § Long runs),
-  and reports:
-  - Episodes per state: count, median and IQR duration.
-  - **CORRECTION → BEAR conversion rate**, and how many sessions the switch
-    took. Named episodes: 2000, 2008, 2022 converted; 2010, 2011, 2018, 2020
-    the plan checks.
-  - SPY forward 5/20/60-session returns from each state's first day and from
-    `pullback_trigger` days.
-  - The same table split by `stress`.
-
-  This tells the partner how much the "fake" label deserves to be trusted. It
-  is a description of SPY, not a strategy result, and it moves no gate.
+- **Base-rate study.** Script `scripts/research/regime_base_rates.py`, results
+  doc `docs/superpowers/results/2026-11-23-v239-regime-base-rates.md`.
+  - **Window:** first labelled session (1993-01-29 + 220 SPY bars) through
+    **2026-11-20**, fixed. Data: SPY and ^VIX daily, adjusted, from one fetch
+    into the backtest cache. The script refuses to run if the cache files'
+    SHA-256 differs from the hashes it recorded at its first run. Command,
+    end date and hashes go into the results doc. Checkpointed per year
+    (CLAUDE.md § Long runs).
+  - **Episodes:** confirmed runs per the rule above.
+  - **Reports:**
+    - Episodes per state: count, median and IQR duration.
+    - **CORRECTION → BEAR conversion rate**, and how many sessions the switch
+      took, with each named episode's outcome: 2000, 2008, 2022 (expected to
+      convert) and 2010, 2011, 2018, 2020 (to be checked).
+    - SPY forward 5/20/60-session returns from each episode's first day and
+      from `pullback_trigger` days.
+    - The same table split by `stress`.
+  - It describes SPY, not a strategy. It moves no gate.
 
 ## Config
 
-`BEAR_REGIME_MODE`: a `select` in the config schema, section "Market Shock" or
-a new "Bear Regime" section, default `shadow`. `off` means no row, no stamp,
-no line, no notice, banner hidden. `live` is identical to `shadow` until a
-screened follow-on spec, and its help text says so. An unknown value falls
-back to `off`, mirroring `MARKET_SHOCK_MODE` (`config.py:1593`).
+`BEAR_REGIME_MODE`: a `select` in the config schema, new section "Bear Regime",
+default `shadow`. `off` means no fetch, no row, no stamp, no line, no notice,
+banner hidden. `live` is identical to `shadow` until a screened follow-on
+spec, and its help text says so. An unknown value falls back to `off`,
+mirroring `MARKET_SHOCK_MODE` (`swingbot/config.py:1593`).
 
 ## Rollback
 
@@ -192,8 +320,9 @@ a separate downgrade revision and is never needed for rollback.
 
 ## Non-goals
 
-- Blocking any long, issuing any new short, or creating a pullback plan. B9,
-  B7 and B8 decide those, through screen v2 (slate order step 6).
+- Blocking any long, issuing any new short, cancelling a plan, or creating a
+  pullback plan. B9, B7 and B8 decide those, through screen v2 (slate order
+  step 6).
 - VIX term structure (B1, needs ^VIX3M). Breadth (v209 already owns it).
 - Changing `regime.py`, `score_confidence` or the v209 machine.
 - Tuning the classifier constants on live results.
@@ -202,30 +331,109 @@ a separate downgrade revision and is never needed for rollback.
 
 - **The label lags.** SMA200 slope turns late. 2022 would have read
   CORRECTION for weeks before BEAR. The base-rate study quantifies the lag.
-  The banner says "Correction (dip in uptrend)", never "safe".
-- **Data gaps.** A missing ^VIX bar gives `stress=None`. The line then omits
-  stress and never assumes calm. A stale SPY bar gives `UNKNOWN`, never the
-  prior day's label.
+  The banner never says "safe".
+- **Data gaps.** A missing ^VIX bar gives `stress = None`. The line then omits
+  stress and never assumes calm. A stale SPY bar or a NaN gives `UNKNOWN`,
+  never the prior day's label.
 - **Alert-line noise.** In a long CORRECTION every long alert carries the
   line. That is the point: the partner trades from these alerts.
-- **Shadow drift from the screen.** B9 must use these exact state rules. A
-  parity test replays `bear_regime.classify` on the backtest cache and
-  compares it with stored `market_regime_days` rows for the same sessions.
+- **Shorts read as encouraged.** `aligned` describes the tape, not the trade.
+  The SHORT line carries a squeeze caveat. Borrow and fees stay the
+  partner's call, as they are today.
+- **Shadow drift from the screen.** B9 must use these exact raw rules. See
+  Parity.
 
 ## Testing
 
-- Pure classifier: each rule boundary, BEAR-over-CORRECTION precedence,
-  `UNKNOWN` under 220 bars, `stress=None` on a missing or stale VIX,
-  `pullback_trigger` only in CORRECTION, the 10-22..11-20 replay fixture, and
-  a no-lookahead test (appending a future bar never changes day `t`).
-- Store: write-once per session, read-back, migration up/down.
-- Scan wiring: the stamp is present in shadow and absent in off; `off`
-  leaves `entry_context` byte-identical.
-- Embeds: every state × direction line in both builders; the length budget
-  stays intact.
-- Notice: transition-only, one per session, pullback-watch event.
-- API: shape, empty table, auth.
-- Frontend: banner per state including hidden on NORMAL, chip per action,
-  and three-width layout specs.
-- Reports: the shadow report on fixture trades incl. the N floor; the
-  base-rate script on a small synthetic series with known episodes.
+- **Classifier:**
+  - each rule boundary and BEAR-over-CORRECTION precedence
+  - `UNKNOWN` under 220 bars, on an injected NaN, and on a stale SPY frame
+  - `stress = None` on a missing or misdated VIX bar
+  - `pullback_trigger` only in CORRECTION, `False` with `vix_gap` on a VIX
+    hole, and `C[s] > H[s−1]` firing on a crafted series
+  - the `D = 10-22 .. 11-20` replay fixture
+  - no-lookahead: appending a bar after `s` never changes the label for `D`
+  - a frame ending in a partial bar equals the hand-cut frame
+- **Calendar:** weekend, holiday, half-day and after-close-before-refresher
+  cases.
+- **Store:** insert-once under two concurrent writers (exactly one notice),
+  read-back, migration up/down, a gap of more than 5 sessions in the notice
+  text.
+- **Transitions:** single-session flicker stores but never notifies; a
+  two-session run notifies once; a pullback day notifies.
+- **Mode `off`, byte-identical:** `entry_context`, embed bytes for both
+  builders, and no `market_regime_days` write and no fetch during a scan
+  pass.
+- **Embeds:** every state × direction line in full and simple embeds,
+  ≤ 80 characters, placed under the plan table.
+- **API:** shape, empty table, `mode = off`, auth.
+- **Frontend (unit):**
+  - the banner in each state (hidden on NORMAL, off, loading and error;
+    "no reading" on UNKNOWN)
+  - the banner's keyboard toggle and `aria-expanded`
+  - the chip for each action, legacy cards without a chip, and the text
+    prefixes
+- **Layout:** banner and chip checked at phone, tablet and desktop with
+  `node frontend/scripts/layout-audit.mjs` (Playwright only), incl. phone
+  wrapping of the chip and the pill + banner stack.
+- **Reports:** shadow report on fixture trades incl. the N = 30 floor; the
+  base-rate script on a synthetic series with known episodes and flicker,
+  and its hash refusal.
+
+## Panel review
+
+Spec review, 2026-11-23, on c344f1f9. Every finding was applied in this
+revision.
+
+- veteran-trader 1: `C > H[t−1]` can never fire, because `C` is already
+  `t−1`. **Applied:** all rules index from `s`, and the trigger is
+  `C[s] > H[s−1]` with a firing test.
+- veteran-trader 2 / quant-engineer: the VIX max window included bar `t`.
+  **Applied:** `max(V[s−4..s])`.
+- veteran-trader 3: a pullback day contradicts a would-veto line.
+  **Applied:** `pullback_watch` wins over `would_veto`.
+- veteran-trader 4: the shadow line gives no instruction. **Applied:** the
+  wording says what the engine would do. The bot never advises on placed
+  orders, and the spec says so.
+- veteran-trader 5: the notice ignores resting entries from the old state.
+  **Applied:** the notice lists unfilled bullish plans issued under the old
+  state.
+- veteran-trader 6: `aligned` encourages shorts. **Applied:** squeeze caveat
+  on the SHORT line, and a Risks entry.
+- quant-engineer 1 (BLOCKING): the partial bar is not removed live.
+  **Applied:** `completed_frame` cut, plus a partial-bar test.
+- quant-engineer 2 (BLOCKING): write-once rows vs a replay with revised
+  adjusted closes. **Applied:** `provider`/`last_bar_date` stored, adjusted
+  closes on both sides, boundary-day tolerance, no rewrite.
+- quant-engineer 3 (BLOCKING): no NaN rule. **Applied:** a NaN or non-finite
+  input gives `UNKNOWN`, with a test.
+- quant-engineer 4: VIX alignment and gaps. **Applied:** exact session-date
+  match, no forward fill, `vix_gap` reason.
+- quant-engineer 5: weekend, holiday and half-day mapping. **Applied:**
+  `(s, D)` from `last_completed_session`, one test per case, and the replay
+  convention stated.
+- quant-engineer 6: write and notice race; gaps. **Applied:** `ON CONFLICT DO
+  NOTHING`, notice only from the winning insert, no backfill, gap text.
+- quant-engineer 7: no hysteresis. **Applied:** raw day label (screen parity),
+  with two-session confirmation for notices, the banner count and study
+  episodes.
+- quant-engineer 8: study reproducibility. **Applied:** fixed end
+  2026-11-20, hashes, command, refusal on hash change.
+- quant-engineer 9: fetch path unconfirmed. **Applied:** named `get_daily_data`
+  + `completed_frame` with full paths; ^VIX routing is confirmed in task 1.
+- quant-engineer 10: `off` is pinned only on `entry_context`. **Applied:**
+  embeds, DB writes and fetches pinned too.
+- ux-designer 1: disclosure semantics. **Applied:** `<button>`,
+  `aria-expanded`, accessible name, keyboard test.
+- ux-designer 2: the pill is phone-only. **Applied:** per-width neighbours and
+  a "Trend:" prefix.
+- ux-designer 3: incomplete banner states. **Applied:** loading, error, off,
+  UNKNOWN and null are all defined and tested.
+- ux-designer 4: chip legacy case, colour-only cue, layout audit.
+  **Applied:** no chip on legacy cards, text prefixes, placement, layout
+  audit.
+- ux-designer 5: no length number. **Applied:** an 80-character cap per line,
+  asserted, and the placement stated.
+- ux-designer 6: vocabulary and glyphs. **Applied:** one vocabulary table, no
+  glyphs.
+- ux-designer 7: number form. **Applied:** one signed-% form everywhere.
