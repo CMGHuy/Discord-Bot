@@ -37,12 +37,13 @@ import { LiveHeatSection } from './live-heat-section';
       <sb-live-bot
         [botAlive]="connection.botAlive()" [botHealthy]="connection.botHealthy()" [scanRunning]="connection.scanRunning()"
         [lastSuccess]="connection.botLastSuccess()" [lastSeen]="connection.botLastSeen()" [streamState]="connection.state()"
-        [marketActive]="connection.marketActive()" [killswitch]="live.killswitch()" [now]="now()" />
+        [marketActive]="connection.marketActive()" [sessionActive]="connection.botSessionActive()" [killswitch]="live.killswitch()" [now]="now()" />
       <sb-live-awaiting [awaiting]="live.awaiting()" [loading]="live.loading()" [now]="now()" />
       <sb-live-heat [heat]="live.heat()" [loading]="live.loading()" [currency]="connection.currency()" [now]="now()"
                     (retry)="live.retry()" />
       <sb-live-activity [events]="live.events()" [meta]="live.eventsMeta()" [loading]="live.loading()"
-                        [lastSuccess]="connection.botLastSuccess()" [now]="now()" [currency]="connection.currency()"
+                        [lastSuccess]="connection.botLastSuccess()" [sessionActive]="connection.botSessionActive()"
+                        [now]="now()" [currency]="connection.currency()"
                         (retry)="live.retry()" />
     </div>
   `,

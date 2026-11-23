@@ -48,6 +48,12 @@ describe('botRows (spec v202 §4 Bot, §6)', () => {
     expect(value(stale, 'freshness')).toMatchObject({ value: 'Scan 5h ago', warn: true });
   });
 
+  it('does not warn on an old last scan outside the scan session, and still says when it was', () => {
+    const offSession = { ...healthy, lastSuccess: ago(300), lastSeen: ago(1), sessionActive: false };
+    expect(value(offSession, 'last-scan')).toMatchObject({ value: '09:00 · 5h ago', warn: false });
+    expect(value(offSession, 'freshness').warn).toBe(false);
+  });
+
   it('ages the data row from the last heartbeat when no tick ever succeeded', () => {
     expect(value({ ...healthy, lastSuccess: null, lastSeen: ago(2) }, 'freshness').value).toBe('Scan 2m ago');
     expect(value({ ...healthy, lastSuccess: null, lastSeen: null }, 'freshness')).toMatchObject({ value: 'No scan yet', warn: true });

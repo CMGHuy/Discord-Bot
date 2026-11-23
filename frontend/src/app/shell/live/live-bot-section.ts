@@ -4,7 +4,7 @@ import { LiveKillswitch } from '../../api/models';
 import { ConnectionState } from '../../stores/connection.store';
 import { ABSENT, timeInZone } from '../../ui/format';
 import { scanAge } from '../freshness-chip';
-import { isStale, liveTime } from './live-state';
+import { liveTime, scanStale } from './live-state';
 
 export interface BotRow { key: string; label: string; value: string; warn: boolean; }
 
@@ -12,6 +12,8 @@ export interface BotSectionInput {
   botAlive: boolean | null; botHealthy: boolean | null; scanRunning: boolean;
   lastSuccess: string | null; lastSeen: string | null; streamState: ConnectionState;
   marketActive: boolean | null; killswitch: LiveKillswitch | null; now: Date;
+  /** False outside the bot's scan session: an old last scan is not stale then. */
+  sessionActive?: boolean | null;
 }
 
 const STREAM_WORDS: Readonly<Record<ConnectionState, string>> = {
@@ -48,7 +50,7 @@ export function killswitchText(k: LiveKillswitch | null): string {
 
 /** The Bot section's rows, in order, each with its words and warning tone. */
 export function botRows(i: BotSectionInput): BotRow[] {
-  const stale = i.botAlive !== null && isStale(i.lastSuccess, i.now);
+  const stale = scanStale({ ...i, sessionActive: i.sessionActive ?? null });
   return [
     { key: 'scanner', label: 'Scanner', value: scannerWord(i), warn: i.botAlive === false || i.botHealthy === false },
     { key: 'last-scan', label: 'Last scan', value: liveTime(i.lastSuccess, i.now), warn: stale },
@@ -101,6 +103,7 @@ export class LiveBotSection {
   readonly lastSeen = input<string | null>(null);
   readonly streamState = input.required<ConnectionState>();
   readonly marketActive = input<boolean | null>(null);
+  readonly sessionActive = input<boolean | null>(null);
   readonly killswitch = input<LiveKillswitch | null>(null);
   readonly now = input.required<Date>();
 
@@ -109,5 +112,6 @@ export class LiveBotSection {
     botAlive: this.botAlive(), botHealthy: this.botHealthy(), scanRunning: this.scanRunning(),
     lastSuccess: this.lastSuccess(), lastSeen: this.lastSeen(), streamState: this.streamState(),
     marketActive: this.marketActive(), killswitch: this.killswitch(), now: this.now(),
+    sessionActive: this.sessionActive(),
   }));
 }

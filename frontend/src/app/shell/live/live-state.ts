@@ -14,6 +14,9 @@ export type LiveWarning = 'heat-near-cap' | 'over-cap' | 'stale' | 'disconnected
 export interface LiveWarningInput {
   utilisationPct: number | null; lastSuccess: string | null; now: Date;
   streamState: ConnectionState; botAlive: boolean | null; killswitchOn: boolean | null;
+  /** The heartbeat's `session_active`: false outside the bot's scan session,
+   *  when no scan is due and an old last success is expected, not stale. */
+  sessionActive: boolean | null;
 }
 
 export type AlarmKind = 'bot-down' | 'disconnected' | 'stale';
@@ -37,15 +40,24 @@ export function heatTone(utilisationPct: number | null): HeatTone {
   return utilisationPct >= NEAR_CAP_PCT ? 'near' : 'ok';
 }
 
+export interface ScanStaleInput {
+  botAlive: boolean | null; lastSuccess: string | null; now: Date; sessionActive: boolean | null;
+}
+
+/** The bot's scans are stale: past the 900 s rule once /health has answered
+ *  (a cold load is not an alarm),
+ *  and only while the bot is in its scan session -- out of session it does
+ *  not scan, so evenings and weekends would otherwise always read stale. */
+export function scanStale(i: ScanStaleInput): boolean {
+  return i.botAlive !== null && i.sessionActive !== false && isStale(i.lastSuccess, i.now);
+}
+
 const disconnected = (state: ConnectionState) => state === 'dead' || state === 'degraded';
-/** Stale counts only once /health has answered: a cold load is not an alarm. */
-const staleAfterHealth = (i: { botAlive: boolean | null; lastSuccess: string | null; now: Date }) =>
-  i.botAlive !== null && isStale(i.lastSuccess, i.now);
 
 const WARNING_RULES: readonly (readonly [LiveWarning, (i: LiveWarningInput) => boolean])[] = [
   ['heat-near-cap', (i) => heatTone(i.utilisationPct) === 'near'],
   ['over-cap', (i) => heatTone(i.utilisationPct) === 'over'],
-  ['stale', staleAfterHealth],
+  ['stale', scanStale],
   ['disconnected', (i) => disconnected(i.streamState)],
   ['bot-down', (i) => i.botAlive === false],
   ['killswitch', (i) => i.killswitchOn === true],
@@ -79,7 +91,7 @@ type AlarmInput = Omit<LiveWarningInput, 'utilisationPct' | 'killswitchOn'>;
 const ALARM_RULES: readonly (readonly [AlarmKind, (i: AlarmInput) => boolean, (i: AlarmInput) => string])[] = [
   ['bot-down', (i) => i.botAlive === false, () => 'Bot down'],
   ['disconnected', (i) => disconnected(i.streamState), () => 'Disconnected'],
-  ['stale', staleAfterHealth, (i) => staleText(i.lastSuccess, i.now)],
+  ['stale', scanStale, (i) => staleText(i.lastSuccess, i.now)],
 ];
 
 /** The top bar's alarm (spec v202 §3): only while it applies, else null. */
