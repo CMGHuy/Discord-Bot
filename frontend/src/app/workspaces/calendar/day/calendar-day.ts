@@ -251,18 +251,18 @@ function sign(value: number | null): 'pos' | 'neg' | null {
     .compare { display: grid; gap: var(--space-8); margin: 0 0 var(--space-10); }
     .compare div { display: flex; justify-content: space-between; gap: var(--space-10); }
     .compare dt { color: var(--text-secondary); }
-    .compare dd { margin: 0; color: var(--text); font-family: var(--font-mono); text-align: right; }
+    .compare dd { margin: 0; color: var(--text); font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
     .month-line { display: block; margin-bottom: var(--space-8); }
     .month-line .zero { stroke: var(--border-strong); stroke-dasharray: 2 2; }
     .month-line .curve { fill: none; stroke: var(--text-secondary); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
     .month-line .marker { fill: var(--accent); }
     .mtd { margin: var(--space-4) 0 0; font-size: var(--text-table); }
     .month-panel .rank { margin: 0; padding-top: var(--space-4); font-size: var(--text-table); }
-    .mtd span { font-family: var(--font-mono); }
+    .mtd span { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .table-wrap { overflow-x: auto; }
     .breakdown { width: 100%; margin-top: var(--space-10); border-collapse: collapse; font-size: var(--text-table); }
     .breakdown th, .breakdown td { padding: var(--space-4) var(--space-6); text-align: left; }
-    .breakdown .num { text-align: right; font-family: var(--font-mono); }
+    .breakdown .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .breakdown .r-head { cursor: help; }
     .breakdown .win.withheld { color: var(--text-secondary); }
     .breakdown .bar { width: 30%; }

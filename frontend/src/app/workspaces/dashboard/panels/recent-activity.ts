@@ -86,7 +86,7 @@ const STATUS_LABEL: Record<string, string> = {
        it so this cannot drift back into implying win/loss, which a plan
        simply having opened or closed is not. */
     sb-icon { color: var(--text-muted); cursor: inherit; }
-    .ticker { font-family: var(--font-mono); color: var(--text); font-weight: 600; }
+    .ticker { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
     /* 1fr with no min-width: 0 is a min-content floor -- a long detail string
        widens the row instead of ellipsising inside it (v95 A4). */
     .detail {
@@ -97,8 +97,8 @@ const STATUS_LABEL: Record<string, string> = {
     }
     .detail.pos { color: var(--pos); }
     .detail.neg { color: var(--neg); }
-    .at { color: var(--text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .empty { margin: 0; color: var(--text-faint); font-size: var(--text-chip); }
+    .at { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .empty { margin: 0; color: var(--text-muted); font-size: var(--text-chip); }
     .all-link { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
     .all-link:hover { text-decoration: underline; }
   `,

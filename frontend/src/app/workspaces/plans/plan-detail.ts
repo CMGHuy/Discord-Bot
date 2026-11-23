@@ -304,9 +304,10 @@ export function shortOrderNotes(
     }
     .ticker {
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
     }
     .loading-title {
-      color: var(--text-faint);
+      color: var(--text-muted);
     }
     .tags {
       display: flex;

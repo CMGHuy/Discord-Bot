@@ -97,7 +97,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
     header { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8); }
     .direction, .setup, .leg { color: var(--text-secondary); font-size: var(--text-table); }
     .leg { font-size: var(--text-micro); }
-    .figures { display: inline-flex; gap: var(--space-10); margin-left: auto; font-family: var(--font-mono); }
+    .figures { display: inline-flex; gap: var(--space-10); margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .pnl.pos, .r.pos { color: var(--pos); }
     .pnl.neg, .r.neg { color: var(--neg); }
     .r { cursor: help; }
@@ -106,6 +106,7 @@ function sign(value: number | null): 'pos' | 'neg' | null {
       margin: var(--space-4) 0 0;
       color: var(--text-secondary);
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-micro);
       overflow-wrap: anywhere;
     }

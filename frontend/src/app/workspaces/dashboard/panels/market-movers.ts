@@ -46,11 +46,11 @@ type MoverTab = 'gainers' | 'losers';
       gap: var(--space-4) var(--space-14);
     }
     .movers li { display: flex; justify-content: space-between; gap: var(--space-8); font-size: var(--text-table); }
-    .symbol { font-family: var(--font-mono); color: var(--text); }
+    .symbol { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); }
     .change { font-variant-numeric: tabular-nums; }
     .change.pos { color: var(--pos); }
     .change.neg { color: var(--neg); }
-    .empty { color: var(--text-faint); font-size: var(--text-chip); }
+    .empty { color: var(--text-muted); font-size: var(--text-chip); }
   `,
 })
 export class MarketMovers {

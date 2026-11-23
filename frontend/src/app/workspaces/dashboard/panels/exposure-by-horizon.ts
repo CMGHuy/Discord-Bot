@@ -35,7 +35,7 @@ import { TradesStore } from '../../../stores/trades.store';
   `,
   styles: `
     :host { display: block; }
-    .empty { margin: 0; color: var(--text-faint); font-size: var(--text-chip); }
+    .empty { margin: 0; color: var(--text-muted); font-size: var(--text-chip); }
   `,
 })
 export class ExposureByHorizon {

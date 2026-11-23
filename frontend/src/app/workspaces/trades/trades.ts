@@ -697,12 +697,12 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
     .count { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
     .fx-caveat { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
     /* Last close shown while there is no live quote: muted, never the live colour. */
-    .last-close { color: var(--text-faint); display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-4); }
-    .last-close-value { font-family: var(--font-mono); }
+    .last-close { color: var(--text-muted); display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-4); }
+    .last-close-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .last-close-tag { font-size: var(--text-micro); }
     .leg { display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
 
-    sb-row-link { color: var(--accent); font-family: var(--font-mono); }
+    sb-row-link { color: var(--accent); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
     /* Muted, not accent: the glyph flags the leg, it isn't part of the id. */
     sb-row-link .leg-icon { color: var(--text-muted); flex: none; }
