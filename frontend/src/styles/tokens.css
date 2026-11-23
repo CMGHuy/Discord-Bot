@@ -50,7 +50,7 @@
    * is a review defect.
    *
    * The one recorded exception is direction: LONG uses --pos and SHORT uses
-   * --neg, though a short is not "bad". The glyph (▲/▼) is the primary
+   * --neg, though a short is not "bad". The icon (rising/falling arrow) is the primary
    * signal there and the colour only reinforces it, and every trading
    * platform renders direction this way — breaking the convention to satisfy
    * an internal rule would be worse, not more consistent.

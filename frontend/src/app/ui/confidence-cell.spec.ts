@@ -60,9 +60,13 @@ describe('ConfidenceCell', () => {
     // to save width; every other call site leaves `direction` unset and
     // gets exactly the old markup (the test above).
     const el = render(4, 78, 'bullish');
-    const arrow = el.querySelector('sb-direction-arrow');
+    const arrow = el.querySelector('sb-direction-arrow')!;
     expect(arrow).not.toBeNull();
-    expect(text(el)).toBe('▲ Lv4 · 78');
+    // The arrow is an icon now (v240 §4): it adds no text, and it leads.
+    expect(el.querySelector('.conf')!.firstElementChild).toBe(arrow);
+    expect(arrow.querySelector('svg')).not.toBeNull();
+    expect(arrow.querySelector('[aria-label]')!.getAttribute('aria-label')).toBe('Long (bullish)');
+    expect(text(el)).toBe('Lv4 · 78');
   });
 
   it('still shows the direction arrow when there is no confidence level yet', () => {
@@ -71,8 +75,10 @@ describe('ConfidenceCell', () => {
     // arrow on level() too would silently lose the only direction info the
     // row has left, now that there is no separate Direction column.
     const el = render(null, null, 'bearish');
-    expect(el.querySelector('sb-direction-arrow')).not.toBeNull();
-    expect(text(el)).toBe('▼ —');
+    const arrow = el.querySelector('sb-direction-arrow')!;
+    expect(arrow).not.toBeNull();
+    expect(arrow.querySelector('[aria-label]')!.getAttribute('aria-label')).toBe('Short (bearish)');
+    expect(text(el)).toBe('—');
   });
 
   it('bands level 4 on the monotonic ramp, not on info blue', () => {

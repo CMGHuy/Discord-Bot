@@ -139,8 +139,12 @@ describe('the gallery renders', () => {
     expect(rows).toHaveLength(4);
     expect(rows.map((r) => r.querySelector('td:last-child')!.textContent!.trim()))
       .toEqual(['4d 2h 15m', '4d 0h 5m', '3h 0m', '45m']);
-    expect(cell(rows[0], 'sb-direction-arrow')).toBe('▲');
-    expect(cell(rows[1], 'sb-direction-arrow')).toBe('▼');
+    // Direction is an icon now (v240 §4): no text, the name on the cell.
+    const arrowName = (row: Element) =>
+      row.querySelector('sb-direction-arrow [aria-label]')!.getAttribute('aria-label');
+    expect(cell(rows[0], 'sb-direction-arrow')).toBe('');
+    expect(arrowName(rows[0])).toBe('Long (bullish)');
+    expect(arrowName(rows[1])).toBe('Short (bearish)');
     expect(cell(rows[0], 'sb-pnl-cell')).toBe('+4.20% (+9.80 €)');
     expect(cell(rows[2], 'sb-pnl-cell')).toBe('+0.40%');
     expect(cell(rows[3], 'sb-pnl-cell')).toBe('—');

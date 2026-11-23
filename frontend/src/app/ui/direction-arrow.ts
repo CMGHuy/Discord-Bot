@@ -1,9 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { ABSENT } from './format';
+import { Icon, IconName } from './icon';
 
 /**
- * Direction as a single glyph — spec v18 Decision 4.
+ * Direction as a single icon — spec v18 Decision 4, drawn by v240 §4: the
+ * `long` / `short` trend arrows replaced the ▲ / ▼ text glyphs, whose shape
+ * changed with the font and sat off the baseline.
  *
  * **The one recorded exception to the valence rule.** Everywhere else green
  * and red mean money made and money lost; here they mean long and short,
@@ -12,29 +15,31 @@ import { ABSENT } from './format';
  * bug, and it is written down so nobody "fixes" it later by making both
  * arrows grey.
  *
- * The glyph is the entire content of the cell, so the accessible name is
+ * The icon is the entire content of the cell, so the accessible name is
  * load-bearing rather than a nicety: without it the column is silent to a
- * screen reader and the shape carries everything.
+ * screen reader and the shape carries everything. The icon is aria-hidden
+ * with an empty title; the span is `role="img"` so its aria-label is
+ * announced although it holds no text.
  */
 @Component({
   selector: 'sb-direction-arrow',
+  imports: [Icon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (label(); as text) {
-      <span class="arrow" [class]="cls()" [title]="text" [attr.aria-label]="text">
-        {{ glyph() }}
+      <span class="arrow" [class]="cls()" role="img" [title]="text" [attr.aria-label]="text">
+        <sb-icon [name]="icon()" title="" />
       </span>
     } @else {
       <span class="absent" aria-hidden="true">{{ absent }}</span>
     }
   `,
   styles: `
-    .arrow {
-      font-weight: 700;
-      font-size: var(--text-subhead);
-      cursor: help;
-      line-height: 1;
-    }
+    /* An svg has no text baseline: in a baseline-aligned flex row (Recent
+       Activity) the arrow centres on the row as sb-icon does, and inline in
+       text (the confidence cell) it centres on the line. */
+    :host { display: inline-flex; align-self: center; vertical-align: middle; }
+    .arrow { display: inline-flex; line-height: 0; cursor: help; }
     .long  { color: var(--pos); }
     .short { color: var(--neg); }
     .absent { color: var(--text-muted); }
@@ -48,7 +53,8 @@ export class DirectionArrow {
   private readonly isLong = computed(() => this.direction() === 'bullish');
   private readonly isShort = computed(() => this.direction() === 'bearish');
 
-  protected readonly glyph = computed(() => (this.isLong() ? '▲' : this.isShort() ? '▼' : ABSENT));
+  /** Read only when `label()` is set, i.e. for a long or a short. */
+  protected readonly icon = computed<IconName>(() => (this.isLong() ? 'long' : 'short'));
   protected readonly cls = computed(() => (this.isLong() ? 'long' : 'short'));
 
   /** Null for an unknown direction, which is what selects the dash branch. */
