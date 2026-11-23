@@ -9,7 +9,7 @@ import { BarList } from '../../../ui/bar-list';
 import { ColumnDef } from '../../../ui/data-table/data-table.types';
 import { DataTable } from '../../../ui/data-table/data-table';
 import { EmptyStateComponent } from '../../../ui/empty-state';
-import { ABSENT, money, num, pct as pctText, rMultiple, share, signed } from '../../../ui/format';
+import { ABSENT, fixed, money, num, pct as pctText, rMultiple, share, signed } from '../../../ui/format';
 import { Histogram } from '../../../ui/histogram';
 import { IncompleteNote } from '../../../ui/incomplete-note';
 import { MarketValue } from '../../../ui/market-value';
@@ -411,7 +411,7 @@ export class OverviewTab {
       const present = metric.key in relocated;
       const raw = present ? relocated[metric.key] : undefined;
       const value = typeof raw === 'number' ? raw : null;
-      const text = !present ? 'missing' : value === null ? ABSENT : `${value.toFixed(metric.decimals)}${metric.unit}`;
+      const text = !present ? 'missing' : value === null ? ABSENT : `${fixed(value, metric.decimals)}${metric.unit}`;
       return { key: metric.key, label: metric.label, text, missing: !present };
     });
   });
@@ -420,7 +420,7 @@ export class OverviewTab {
     // Rounded to 1 place: the server's bin edges are the span divided by the
     // bin count, so "-4.688333R" and "-3.346667R" were shipped as floats.
     // `-0` is normalised so a bin starting at zero is not marked negative.
-    .map((b) => ({ label: `${(Math.round(b.lo * 10) / 10 || 0).toFixed(1)}R`, count: b.count })));
+    .map((b) => ({ label: `${fixed(Math.round(b.lo * 10) / 10, 1)}R`, count: b.count })));
   readonly monthBars = computed(() => (this.store.performance()?.calendar ?? [])
     .map((m) => ({ label: m.month, value: m.return_pct, n: m.n })));
   readonly negativeBin = (bin: { label: string }) => bin.label.startsWith('-');

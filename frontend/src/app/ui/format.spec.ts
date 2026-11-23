@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MINUS, amount, fixed, held, lossSign, money, pct, quantity, rMultiple, riskPct, shareCount, signFor, signed, timeInZone } from './format';
+import { MINUS, amount, fixed, held, lossSign, money, num, pct, quantity, rMultiple, riskPct, shareCount, signFor, signed, timeInZone } from './format';
 
 /* No prior spec file existed for format.ts; timeInZone is new (Watchlist
  * Earnings calendar) and carries real cross-timezone/DST behaviour worth
@@ -95,8 +95,9 @@ describe('amount (v85: the hero balance figure needs grouped thousands)', () => 
     expect(amount(997480.01, '€')).toBe('997,480.01 €');
   });
 
-  it('carries no sign -- it names a level, not a movement', () => {
-    expect(amount(-5, '€')).toBe('-5.00 €');
+  it('prints a true minus for a negative balance and leaves rounded zero unsigned', () => {
+    expect(amount(-5, '€')).toBe('−5.00 €');
+    expect(amount(-0.004, '€')).toBe('0.00 €');
   });
 
   it('renders absence as the em dash, not as zero', () => {
@@ -327,5 +328,18 @@ describe('v240: signFor and lossSign', () => {
     expect(lossSign(-0.4, '0 $')).toBe('');
     expect(lossSign(0, '0.00')).toBe('');
     expect(lossSign(-0, '0.00')).toBe('');
+  });
+});
+
+describe('plain grouping and quantity signs (v240)', () => {
+  it('preserves grouping and uses a true minus for a visible loss', () => {
+    expect(num(-1234.56)).toBe('−1,234.56');
+    expect(quantity(-1234.5)).toBe('−1,234.5');
+  });
+
+  it('prints a negative number that rounds away without a sign', () => {
+    expect(num(-0.004)).toBe('0.00');
+    expect(num(-0)).toBe('0.00');
+    expect(quantity(-0.004)).toBe('0');
   });
 });

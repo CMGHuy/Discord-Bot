@@ -1,3 +1,4 @@
+import { fixed } from '../../../ui/format';
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { LiveLossRow } from '../../../api/models';
 import { AnalyticsStore, DriftRow } from '../../../stores/analytics.store';
@@ -49,8 +50,8 @@ import {
 export class EdgeTab {
   readonly store = inject(AnalyticsStore);
   readonly performance = computed(() => this.store.performance());
-  readonly pct = (value: number) => `${value.toFixed(1)}%`;
-  readonly r = (value: number) => `${value.toFixed(2)}R`;
+  readonly pct = (value: number) => `${fixed(value, 1)}%`;
+  readonly r = (value: number) => `${fixed(value, 2)}R`;
   readonly rollingWr = computed<LineChartSeries[]>(() => [{ name: 'Win rate', points: (this.performance()?.rolling_wr ?? []).map((point) => ({ date: point.date, value: point.win_rate })) }]);
   readonly rollingExpR = computed<LineChartSeries[]>(() => [{ name: 'ExpR', points: (this.performance()?.rolling_exp_r ?? []).map((point) => ({ date: point.date, value: point.exp_r })) }]);
   readonly strategyPanes = computed<MultiplePane[]>(() =>

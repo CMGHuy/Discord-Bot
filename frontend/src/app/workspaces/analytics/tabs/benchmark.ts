@@ -8,7 +8,7 @@ import { EmptyStateComponent } from '../../../ui/empty-state';
 import { PanelError } from '../../../ui/panel-error';
 import { Segmented } from '../../../ui/segmented';
 import { AnalyticsBenchmark, BenchmarkDailyRow, BenchmarkEstimate, BenchmarkIndexKey, BenchmarkKey, BenchmarkPoint, BenchmarkRange, BenchmarkSeriesStats, BenchmarkStat, BenchmarkVs } from '../../../api/models';
-import { lossSign, num, pct as formatPct } from '../../../ui/format';
+import { fixed, lossSign, num, pct as formatPct } from '../../../ui/format';
 import { Button } from '../../../ui/button';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { LineChart, LineChartSeries } from '../../../ui/line-chart';
@@ -117,7 +117,7 @@ function returnTiles(stats: BenchmarkSeriesStats): BenchmarkTile[] {
 }
 
 function sharpeTile(stats: BenchmarkSeriesStats): BenchmarkTile {
-  return tile('Sharpe (rf = 0)', stats.sharpe, (v) => v.toFixed(2), 'Annualised (252), rf = 0, sample std.');
+  return tile('Sharpe (rf = 0)', stats.sharpe, (v) => fixed(v, 2), 'Annualised (252), rf = 0, sample std.');
 }
 
 function botTiles(stats: BenchmarkSeriesStats, currency: string): BenchmarkTile[] {
@@ -130,7 +130,7 @@ function botTiles(stats: BenchmarkSeriesStats, currency: string): BenchmarkTile[
 }
 
 function betaText(value: number, estimate: BenchmarkEstimate): string {
-  return `β ${value.toFixed(2)}${estimate.se == null ? '' : ` ± ${estimate.se.toFixed(2)}`}`;
+  return `β ${fixed(value, 2)}${estimate.se == null ? '' : ` ± ${estimate.se.toFixed(2)}`}`;
 }
 
 function alphaTile(alpha: BenchmarkEstimate): BenchmarkTile {
@@ -138,7 +138,7 @@ function alphaTile(alpha: BenchmarkEstimate): BenchmarkTile {
     ? 'Headline cell: SPY over the whole live book. Annualised Jensen alpha, rf = 0; indicative, not evidence of edge. The t-statistic uses unadjusted OLS errors, assuming independent, constant-variance observations.'
     : `${ALPHA_CELLS_HINT}: annualised Jensen alpha, rf = 0; indicative, not evidence of edge. The t-statistic uses unadjusted OLS errors, assuming independent, constant-variance observations.`;
   return { ...tile('Alpha (rf = 0)', alpha,
-    (v) => `α ${signedPct(v, 1)}${alpha.t == null ? '' : ` (t ${alpha.t.toFixed(1)})`}`, hint), bold: !!alpha.headline };
+    (v) => `α ${signedPct(v, 1)}${alpha.t == null ? '' : ` (t ${fixed(alpha.t, 1)})`}`, hint), bold: !!alpha.headline };
 }
 
 function indexTiles(stats: BenchmarkSeriesStats, key: BenchmarkIndexKey, vs: BenchmarkVs | undefined): BenchmarkTile[] {
@@ -236,9 +236,9 @@ export function dailyVisible(visible: ReadonlySet<string>): string[] {
 export function captureTiles(p: AnalyticsBenchmark): BenchmarkTile[] {
   const c = p.capture;
   return [
-    { ...tile('Up capture', c.up_pct, (v) => `${v.toFixed(1)}%`, CAPTURE_FORMULA), sample: c.up_n },
-    { ...tile('Down capture', c.down_pct, (v) => `${v.toFixed(1)}%`, DOWN_FORMULA), sample: c.down_n },
-    { ...tile('Capture ratio', c.ratio, (v) => `${v.toFixed(2)}×`, 'Up capture ÷ down capture.'), sample: c.up_n + c.down_n },
+    { ...tile('Up capture', c.up_pct, (v) => `${fixed(v, 1)}%`, CAPTURE_FORMULA), sample: c.up_n },
+    { ...tile('Down capture', c.down_pct, (v) => `${fixed(v, 1)}%`, DOWN_FORMULA), sample: c.down_n },
+    { ...tile('Capture ratio', c.ratio, (v) => `${fixed(v, 2)}×`, 'Up capture ÷ down capture.'), sample: c.up_n + c.down_n },
   ];
 }
 

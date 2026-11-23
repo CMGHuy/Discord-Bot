@@ -83,6 +83,14 @@ describe('EdgeTab', () => {
     expect(el.textContent).toContain('all-time');
   });
 
+  it('formats losses and rounded zeros in the rolling R charts', () => {
+    const { fixture } = render(stub());
+    const format = fixture.componentInstance.r;
+    expect(format(-0.25)).toBe('−0.25R');
+    expect(format(-0.004)).toBe('0.00R');
+    expect(format(0.25)).toBe('0.25R');
+  });
+
   // A screenshot pass (v94 V2) once caught 2/3 * 100 = 66.66666... rendered
   // raw in the Calibration deciles panel, overflowing its container -- the
   // fix rounds a decile's win rate to one decimal before it reaches the bar.

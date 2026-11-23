@@ -5,6 +5,10 @@ function figure(value: number | null, tone: FigureTone = 'plain', extra: { unit?
 @Component({ imports: [Figure, FigureStrip], template: `<sb-figure-strip>@for (n of figures(); track n) { <sb-figure [label]="'F' + n" [value]="n" /> }</sb-figure-strip>` }) class StripHost { readonly figures = signal([1, 2, 3]); }
 describe('Figure (v80 D4)', () => { beforeEach(() => TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] })); const value = (e: HTMLElement) => e.querySelector('.value')!;
   it('labels and formats with unit', () => { const e = figure(54.23, 'plain', { unit: '%', decimals: 1 }); expect(e.querySelector('.sb-label')!.textContent!.trim()).toBe('Expectancy'); expect(value(e).textContent!.trim()).toBe('54.2%'); });
+  it('shows a grouped drawdown with a true minus and leaves a rounded zero unsigned', () => {
+    expect(value(figure(-1234.56)).textContent?.trim()).toBe('−1,234.56');
+    expect(value(figure(-0.004)).textContent?.trim()).toBe('0.00');
+  });
   it('colours P&L by sign but not zero/plain', () => { expect(value(figure(.21, 'pnl')).classList).toContain('pos'); expect(value(figure(-.4, 'pnl')).classList).toContain('neg'); expect(value(figure(0, 'pnl')).className).not.toMatch(/pos|neg/); expect(value(figure(-3)).className).not.toMatch(/pos|neg/); });
   it('uses caution and absent states', () => { expect(value(figure(82, 'caution')).classList).toContain('warn'); expect(value(figure(null, 'pnl', { unit: '%' })).textContent!.trim()).toBe('—'); });
   it('shows optional subline', () => { expect(figure(1, 'plain', { sub: 'n = 184' }).querySelector('.sub')!.textContent!.trim()).toBe('n = 184'); }); });

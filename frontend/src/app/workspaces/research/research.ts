@@ -1,3 +1,4 @@
+import { fixed as formatFixed } from '../../ui/format';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -47,7 +48,7 @@ export const VERDICT_TONE: Record<string, ChipTone> = {
 };
 
 const fixed = (value: number | null, digits: number): string | null =>
-  value === null ? null : value.toFixed(digits);
+  value === null ? null : formatFixed(value, digits);
 
 /**
  * Research — every pre-registration this repo has measured, and the badge

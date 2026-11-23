@@ -71,7 +71,7 @@ export function pct(value: number | null | undefined, decimals = 2): string {
  *  the position. Same reasoning as `analytics.columns.ts`'s `rate()`. */
 export function share(value: number | null | undefined, decimals = 0): string {
   if (value === null || value === undefined) return ABSENT;
-  return `${value.toFixed(decimals)}%`;
+  return `${fixed(value, decimals)}%`;
 }
 
 /** Grouped thousands, fixed decimals, locale pinned to en-US -- like the
@@ -79,10 +79,11 @@ export function share(value: number | null | undefined, decimals = 0): string {
  *  differently machine to machine (comma/period swapped, different grouping)
  *  for a value that must read the same everywhere. */
 function grouped(value: number, decimals: number): string {
-  return value.toLocaleString('en-US', {
+  const magnitude = Math.abs(value).toLocaleString('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
+  return `${lossSign(value, magnitude)}${magnitude}`;
 }
 
 /** A share count: grouped thousands, en-US, up to `maxDecimals` places and no
@@ -91,7 +92,8 @@ function grouped(value: number, decimals: number): string {
  *  ceiling, not a fixed width. */
 export function quantity(value: number | null | undefined, maxDecimals = 2): string {
   if (value === null || value === undefined) return ABSENT;
-  return value.toLocaleString('en-US', { maximumFractionDigits: maxDecimals });
+  const magnitude = Math.abs(value).toLocaleString('en-US', { maximumFractionDigits: maxDecimals });
+  return `${lossSign(value, magnitude)}${magnitude}`;
 }
 
 /** v194 B4: the one share-count formatter for Risk, trade detail and the

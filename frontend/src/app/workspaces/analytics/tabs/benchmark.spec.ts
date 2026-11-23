@@ -416,3 +416,15 @@ describe('benchmark drawdowns that round to zero (v240 Decision 10)', () => {
     expect(value('Max drawdown')).toBe('0.00%');
   });
 });
+
+describe('benchmark Sharpe signs (v240)', () => {
+  it.each([[-0.25, '−0.25'], [-0.004, '0.00']] as const)('formats %s as %s', (sharpe, expected) => {
+    const account = BENCHMARK_FIXTURE.stats['bot_account']!;
+    const model = {
+      ...BENCHMARK_FIXTURE,
+      stats: { ...BENCHMARK_FIXTURE.stats, bot_account: { ...account, sharpe: { value: sharpe, n: 60, reason: null } } },
+    };
+    const tile = statGroups(model, new Set(['bot_account']), '$')[0].tiles.find(t => t.label === 'Sharpe (rf = 0)');
+    expect(tile?.value).toBe(expected);
+  });
+});

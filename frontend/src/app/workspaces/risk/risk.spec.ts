@@ -638,7 +638,7 @@ describe('Risk exposure helpers (v194 B4/B5)', () => {
 
   it('gives an exact value only for a tiny non-zero risk', () => {
     expect(exactRiskText(0.002)).toContain('0.002%');
-    expect(exactRiskText(-0.002)).toContain('-0.002%');
+    expect(exactRiskText(-0.002)).toContain('−0.002%');
     for (const shown of [0, 0.01, 3, null]) expect(exactRiskText(shown)).toBeNull();
   });
 });

@@ -1,3 +1,4 @@
+import { fixed } from './format';
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
 import { CHART_CHROME, token } from './chart/chart-frame';
@@ -174,7 +175,7 @@ export class LineChart {
   readonly referenceLine = input<number | null>(null);
   /** v208: opt-in 0 baseline, independent of the existing reference line. */
   readonly zeroLine = input(false);
-  readonly valueFormat = input<(value: number) => string>((v) => v.toFixed(2));
+  readonly valueFormat = input<(value: number) => string>((v) => fixed(v, 2));
 
   readonly hoverDetail = input(false);
 

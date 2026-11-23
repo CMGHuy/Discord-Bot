@@ -1,3 +1,4 @@
+import { fixed } from '../../ui/format';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 
 import {
@@ -181,6 +182,6 @@ export class AttributionTab {
   protected readonly interval = formatInterval;
 
   protected rho(reading: ReadingView): string {
-    return reading.rho === null ? '—' : reading.rho.toFixed(2);
+    return reading.rho === null ? '—' : fixed(reading.rho, 2);
   }
 }
