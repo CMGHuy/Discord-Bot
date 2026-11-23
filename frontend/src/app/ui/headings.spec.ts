@@ -23,7 +23,6 @@ const HEADINGS: [file: string, selector: string][] = [
 
 /** Title-size rules that are not headings: nothing to tighten. */
 const NOT_HEADINGS: [file: string, selector: string, why: string][] = [
-  ['app/ui/layout.ts', '.close', "the drawer's close glyph, one character"],
   ['app/ui/figure.ts', '.value', "the @container size step of a display figure; the base .value rule tracks"],
 ];
 

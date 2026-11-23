@@ -219,6 +219,7 @@ const NOT_CONTROL_ROWS = new Set([
   // Text and figures. Baseline or centre on running text is correct.
   'head', 'meta', 'cell', 'count', 'figures', 'tags',
   'jobhead', // a chip beside a timestamp
+  'icon-set', // v241: the gallery's icon specimens in a wrapping row -- drawings, not controls
   'leg', // v194 B3: a "Leg N of M" label beside its info glyph -- text, not controls
   'guide-bar', // v236: the Guide's phone picker / tablet Contents button -- one control alone in its row, nothing to bottom-align
   'toc-heading', // v236: a text link row in the Guide's contents list, not a control row

@@ -22,7 +22,7 @@ export interface TitleSite {
 
 /** Elements whose `title` is a component input rendering visible heading
  *  text, not a tooltip. */
-export const TITLE_INPUT_ELEMENTS: readonly string[] = ['sb-panel-header', 'sb-empty-state', 'sb-confirm-dialog'];
+export const TITLE_INPUT_ELEMENTS: readonly string[] = ['sb-panel-header', 'sb-empty-state', 'sb-confirm-dialog', 'sb-icon'];
 
 export const TITLE_ALLOW: readonly TitleSite[] = [
   // -- shell ---------------------------------------------------------------
@@ -43,9 +43,7 @@ export const TITLE_ALLOW: readonly TitleSite[] = [
   { file: 'ui/status-cell.ts', binding: '[title]="row().status_label"', kind: 'echo', note: 'the status label the cell prints' },
   // -- calendar --------------------------------------------------------------
   // -- cancels / dashboard ---------------------------------------------------
-  { file: 'workspaces/dashboard/dashboard.ts', binding: 'title="Trailing stop"', kind: 'control-name', note: 'names the trailing-stop icon' },
   { file: 'workspaces/dashboard/panels/equity-candles.ts', binding: 'title="Back to today: chart and figures"', kind: 'control-name', note: 'reset button, beside its aria-label' },
-  { file: 'workspaces/dashboard/panels/recent-activity.ts', binding: '[title]="statusLabel(event)"', kind: 'control-name', note: 'status icon, beside its aria-label' },
   // -- research / system -----------------------------------------------------
   { file: 'workspaces/research/research.ts', binding: '[attr.title]="row.hypothesis"', kind: 'echo', note: 'full text of a truncated hypothesis' },
   { file: 'workspaces/system/settings-tab.ts', binding: 'title="Default value"', kind: 'echo', note: 'names the default badge the row prints' },
@@ -54,7 +52,6 @@ export const TITLE_ALLOW: readonly TitleSite[] = [
   // -- trades ----------------------------------------------------------------
   { file: 'workspaces/trades/trade-detail.ts', binding: "[title]=\"'Trade ID: ' + trade.id\"", kind: 'echo', note: 'the id printed beside it' },
   { file: 'workspaces/trades/trades.ts', binding: "[title]=\"'No live quote -- last close, ' + (row.last_close_date ?? 'date unknown')\"", kind: 'echo', note: 'restates the greyed "close MM-DD" tag the cell prints' },
-  { file: 'workspaces/trades/trades.ts', binding: 'title="Trailing stop"', kind: 'control-name', note: 'names the trailing-stop icon' },
   // -- versions / watchlist --------------------------------------------------
   { file: 'workspaces/versions/versions.ts', binding: "[attr.title]=\"component + ' ' + version + ' — click to filter'\"", kind: 'control-name', note: 'filter chip button: names what a click does' },
 ];
