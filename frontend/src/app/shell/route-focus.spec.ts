@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { focusWorkspaceHeading } from './route-focus';
+import { createHeadingFocuser, focusWorkspaceHeading } from './route-focus';
+
+describe('createHeadingFocuser', () => {
+  it('leaves focus alone when the page opens, then focuses the heading on later route changes', () => {
+    document.body.innerHTML = '<main class="workspace"><h1>Dashboard</h1></main>';
+    const focus = createHeadingFocuser(document);
+    focus();
+    expect(document.activeElement?.tagName).toBe('BODY');
+    focus();
+    expect(document.activeElement?.tagName).toBe('H1');
+  });
+});
 
 describe('focusWorkspaceHeading', () => {
   it('moves focus to the workspace heading', () => {
