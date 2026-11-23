@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-23 14:44:21 UTC",
+  "generated_at": "2026-11-23 14:44:41 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.46.0",
-    "bot": "2.19.5"
+    "bot": "2.19.6"
   },
   "releases": [
     {
@@ -2760,6 +2760,19 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-11-23",
+      "last_seen": "2026-11-23",
+      "commit": "4567b5d3",
+      "subject": "release(bot): 2.19.6 -- vendored Jost fonts and font-file test dependency (v240)",
+      "versions": {
+        "ui": "1.46.0",
+        "bot": "2.19.6"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]
