@@ -418,9 +418,7 @@ Then check no other spec or template pinned the old drawing or grid: `git grep -
 
 ```bash
 git add frontend/src/app/ui/icon.ts frontend/src/app/ui/icon.spec.ts frontend/src/app/workspaces/dashboard/panels/recent-activity.spec.ts
-git commit -m "feat(ui): sb-icon on the 24 grid at 1.8 -- filled sub-paths, all 27 names redrawn (V241-1)
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat(ui): sb-icon on the 24 grid at 1.8 -- filled sub-paths, all 27 names redrawn (V241-1)"
 ```
 
 **Controller note:** `recent-activity.spec.ts` pins the `partial` and `opened` path data (l.61, l.69-70), so the redraw cannot land green without it; the index ledger row for V241-1 should list it (V241-3 edits the same file afterwards, already sequential).
@@ -562,9 +560,7 @@ Expected: PASS, 0 failed (recent-activity's callers bind no `size` yet and keep 
 
 ```bash
 git add frontend/src/app/ui/icon.ts frontend/src/app/ui/icon.spec.ts
-git commit -m "feat(ui): sb-icon size input -- 16, 20 or 24px over the fixed 24 viewBox (V241-1b)
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat(ui): sb-icon size input -- 16, 20 or 24px over the fixed 24 viewBox (V241-1b)"
 ```
 
 
@@ -800,9 +796,7 @@ Expected: PASS, 0 failed. (The unique-glyph test proves `partial`'s bare circle,
 
 ```bash
 git add frontend/src/app/ui/icon.ts frontend/src/app/ui/icon.spec.ts frontend/src/app/workspaces/gallery/gallery.ts frontend/src/app/workspaces/gallery/gallery.spec.ts
-git commit -m "feat(ui): nine new icons (info, long, short, close, edit, up, down, plus, minus); gallery shows the full set at 16/20/24 (V241-2)
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat(ui): nine new icons (info, long, short, close, edit, up, down, plus, minus); gallery shows the full set at 16/20/24 (V241-2)"
 ```
 
 
@@ -1035,9 +1029,7 @@ The rail exists at tablet and desktop, the tab bar on a phone. Build and look, p
 
 ```bash
 git add frontend/src/app/shell/shell.html frontend/src/app/shell/shell.css frontend/src/app/shell/shell.spec.ts frontend/src/app/shell/phone-tab-bar.ts frontend/src/app/shell/phone-tab-bar.spec.ts frontend/src/app/shell/profile-menu.ts frontend/src/app/shell/profile-menu.spec.ts frontend/src/app/workspaces/dashboard/panels/recent-activity.ts frontend/src/app/workspaces/dashboard/panels/recent-activity.spec.ts
-git commit -m "feat(ui): icon sizes per surface -- rail and tab bar 24, lists 20; drop the shell.css svg override (V241-3)
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat(ui): icon sizes per surface -- rail and tab bar 24, lists 20; drop the shell.css svg override (V241-3)"
 ```
 
 
@@ -1331,8 +1323,6 @@ Per `docs/claude/ui-design.md` (Playwright only, `.env` admin credentials loaded
 
 ```bash
 git add frontend/src/app/ui/direction-arrow.ts frontend/src/app/ui/direction-arrow.spec.ts frontend/src/app/ui/confidence-cell.spec.ts frontend/src/app/workspaces/gallery/gallery.spec.ts frontend/src/styles/tokens.css
-git commit -m "feat(ui): direction arrows draw the long/short trend icons, named as role=img (V241-4)
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat(ui): direction arrows draw the long/short trend icons, named as role=img (V241-4)"
 ```
 
