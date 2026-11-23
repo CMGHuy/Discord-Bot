@@ -278,9 +278,9 @@ At most 2 implementers at once (session rule).
 
 ## What follows
 
-- **Follow-on evidence plan (not written yet):** the SPY base-rate study
+- **Follow-on evidence plan: [v244](2026-11-23-v244-bear-regime-evidence.md)** (written 2026-11-23): the SPY base-rate study
   (`scripts/research/regime_base_rates.py`, results doc
-  `docs/superpowers/results/<date>-<vN>-regime-base-rates.md`, hash-pinned on
+  `docs/superpowers/results/2026-11-23-v244-regime-base-rates.md`, hash-pinned on
   V239-1's `data/backtest_cache_regime/`, checkpointed per year) and the
   shadow report (`scripts/reports/regime_shadow_report.py`, live monitoring,
   never a screen). It depends on V239-1..3 and, for the report, on trades
