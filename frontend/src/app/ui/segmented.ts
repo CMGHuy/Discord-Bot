@@ -17,7 +17,7 @@ export interface SegmentOption { value: string; label: string; count?: number; }
     </div>`,
   styles: `
     :host { display: block; min-width: 0; max-width: 100%; }
-    .track { display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: thin; border: 1px solid var(--border-strong); border-radius: var(--control-radius); }
+    .track { display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: thin; border: 1px solid var(--control-border); border-radius: var(--control-radius); }
     .segment { flex: 0 0 auto; display: inline-flex; align-items: center; gap: var(--space-6); min-height: var(--control-h); min-width: var(--hit-min); justify-content: center; padding: 0 var(--space-10); background: transparent; border: 0; border-left: 1px solid var(--border); color: var(--text-secondary); font: inherit; font-size: var(--text-table); font-weight: 500; white-space: nowrap; cursor: pointer; transition: color var(--transition), background var(--transition); }
     .segment:first-child { border-left: 0; }
     /* v195 Phase 2: hover is the raised step; the accent tint is the selected segment's alone. */

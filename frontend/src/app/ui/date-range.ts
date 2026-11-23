@@ -44,7 +44,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
       height: var(--control-h);
       padding: 0 var(--space-8);
       background: var(--surface);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--control-border);
       border-radius: var(--control-radius);
       color: var(--text);
       font: inherit;

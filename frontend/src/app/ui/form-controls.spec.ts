@@ -85,16 +85,16 @@ describe('v80 D4: form controls', () => {
 
 /* v195 Phase 2: since V195-3 a panel is the flat --surface, so a field on
  * --surface had no fill step left against it. Fields sit one step down, on
- * the --bg well, behind the strong hairline; the accent is the focus ring
- * and the checkbox tick only. */
+ * the --bg well, behind the control border (v240: --control-border, 3:1 in
+ * Navy); the accent is the focus ring and the checkbox tick only. */
 describe('v195 Phase 2: flat fields', () => {
   const field = (tag: 'select' | 'input') => SOURCE.match(new RegExp(`\\n {4}${tag} \\{[^}]*\\}`))?.[0] ?? '';
 
-  it('fills the select and the text input with the --bg well behind the strong hairline', () => {
+  it('fills the select and the text input with the --bg well behind the control border', () => {
     for (const tag of ['select', 'input'] as const) {
       const rule = field(tag);
       expect(rule, tag).toContain('background: var(--bg);');
-      expect(rule, tag).toContain('border: 1px solid var(--border-strong);');
+      expect(rule, tag).toContain('border: 1px solid var(--control-border);');
       expect(rule, tag).toContain('border-radius: var(--control-radius);');
       expect(rule, tag).toContain('transition: border-color var(--transition);');
     }
