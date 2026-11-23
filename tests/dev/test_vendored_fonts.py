@@ -68,3 +68,10 @@ def test_the_latin_subset_maps_every_digit_and_the_true_minus():
 
 def test_the_inter_file_the_discord_charts_name_is_still_vendored():
     assert (VENDOR / "inter" / "inter-500.woff2").is_file()
+
+
+def test_jetbrains_mono_is_gone_with_its_last_reader():
+    """Spec v240 §2: fonts.css was its only reader; deleted after the tnum check."""
+    assert not (VENDOR / "jetbrains-mono").exists()
+    fonts_css = (ROOT / "frontend/src/styles/fonts.css").read_text(encoding="utf-8")
+    assert "jetbrains" not in fonts_css.lower()

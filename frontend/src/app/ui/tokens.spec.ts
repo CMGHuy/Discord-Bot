@@ -674,10 +674,13 @@ describe('v195: the 12px micro and chip floor', () => {
 });
 
 /** v179 §3.3: every numeric value uses one tabular face, named once. */
+/** v179 §3.3: every numeric value uses one face, named once. v240 §2: that
+ *  face is Jost through --font-mono, which is now an alias of --font-sans. */
 describe('v179: one numeric face', () => {
-  it('declares --font-num as the mono family', () => {
+  it('declares --font-num through --font-mono, which resolves to --font-sans', () => {
     expect(CSS).toMatch(/^\s*--font-num:\s*var\(--font-mono\);/m);
     expect(resolveToken('--font-num')).toBe(resolveToken('--font-mono'));
+    expect(resolveToken('--font-mono')).toBe(resolveToken('--font-sans'));
   });
 });
 

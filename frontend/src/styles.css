@@ -112,9 +112,9 @@ a:hover {
 
 /* v80 D3 -- the one label style. Eleven files hand-built uppercase labels
  * with four different letter-spacings; this is the single definition every
- * component uses now and every workspace moves to in Migration. Mono 500:
- * JetBrains Mono is self-hosted at 400/500/700, and a 600 would be
- * synthesised. */
+ * component uses now and every workspace moves to in Migration. Weight 500
+ * in --font-mono, which is Jost since v240 (a variable face: every weight
+ * exists, nothing is synthesised). */
 .sb-label {
   font-family: var(--font-mono);
   font-size: var(--text-micro);

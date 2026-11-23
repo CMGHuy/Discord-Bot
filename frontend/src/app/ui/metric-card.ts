@@ -109,8 +109,8 @@ function toneClass(tone: MetricTone, value: number): string {
          --register-figure to the rung its density picked; the fallback is
          what this card rendered before the registers existed, so a card with
          no register ancestor (not yet migrated, or deliberately opted out)
-         is unchanged. v186 D4: Inter 600 like every display figure (was 700
-         in the code face). */
+         is unchanged. v186 D4: 600 like every display figure (was 700
+         in the old code face); Jost since v240. */
       font-size: var(--register-figure, var(--text-metric));
       line-height: 1.1;
       /* v168: the number counts up once when the route is entered, and eases

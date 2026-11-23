@@ -206,17 +206,24 @@
    * and a component should be choosing "this is a chip" rather than
    * "this is 10px". A size not on this list is a review defect.
    */
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+  /* v240 §2 -- Jost, self-hosted (styles/fonts.css), is the one face for
+     every piece of text, numbers included. The two fallback families are
+     local faces scaled to Jost's metrics, so a slow load does not shift the
+     layout. --font-mono stays as a name (labels and code samples read it)
+     but is an alias now: there is no mono face. */
+  --font-sans: "Jost", "Jost Fallback", "Jost Fallback Android", system-ui, sans-serif;
+  --font-mono: var(--font-sans);
   /* v179 §3.3 -- the one face for every numeric value (.num, stat values,
-     key/value figures). Mono, tabular: digits align down a column. Named
-     separately from --font-mono so a figure says "I am a number", not "I am
-     code", and the two can part later without a sweep. */
+     key/value figures). Named separately from --font-mono so a figure says
+     "I am a number", not "I am code". Jost is proportional: digits align
+     down a column only through `font-variant-numeric: tabular-nums` (its
+     tnum feature, pinned by tests/dev/test_vendored_fonts.py), which every
+     rule that reads this token sets (v240 §2 gate). */
   --font-num: var(--font-mono);
   /* v186 D4 -- the face for DISPLAY figures: a tile value, a panel total,
-     the portfolio hero. Inter 600 with slight negative tracking; each
+     the portfolio hero. Jost 600 with slight negative tracking; each
      figure rule also sets tabular-nums so a count-up does not jitter.
-     Columns, N= and table cells keep --font-num (mono) so digits align.
+     Columns, N= and table cells keep --font-num so digits align.
      There is no global class: a global .x loses to a component's scoped
      selector, so each component's own figure rule reads these three. */
   --font-figure: var(--font-sans);
