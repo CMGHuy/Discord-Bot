@@ -23,8 +23,8 @@ description = "OHLCV fetch and cache"
 paths = ["tests/marketdata/"]
 
 [suites.market-signals]
-description = "the market layer: indicators, entry signals, ATR band"
-paths = ["tests/market/"]
+description = "the market layer: indicators, entry signals, ATR band, the v239 bear-regime engine"
+paths = ["tests/market/", "tests/regime/"]
 
 [suites.scanning]
 description = "the scan engine and everything it posts"

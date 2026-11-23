@@ -39,6 +39,8 @@ data/backtest_cache/
 # v102's extended 2010-2025 OHLCV cache (BACKTEST_CACHE_DIR); rebuilt by
 # scripts/data/fetch_backtest_data.py --start 2010-01-01 --end 2025-12-31.
 data/backtest_cache_ext/
+# v239 study cache (SPY + ^VIX 1993 -> 2026-11-20), hash-pinned by manifest.json
+data/backtest_cache_regime/
 # v162 section 5: the frozen yfinance inputs of the re-baseline (and its
 # 2016-truncated copy), rebuilt by scripts/data/snapshot_backtest_cache.py.
 data/backtest_cache_snapshot_v162*/
