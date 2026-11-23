@@ -1,6 +1,6 @@
-# v242 — Doctena night, plan 2 of 5: Icons (index)
+# v241 — Doctena night, plan 2 of 5: Icons (index)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V242-3" -A 400 <part file>`); never read a part whole.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V241-3" -A 400 <part file>`); never read a part whole.
 
 **Bump:** ui minor
 **Edge:** none (integrity)
@@ -8,7 +8,7 @@
 **Spec:** [2026-11-23-v240-doctena-night-restyle-design.md](../specs/2026-11-23-v240-doctena-night-restyle-design.md) — plan 2 of its "What follows" list (§4, the icon lines of §8–§11). Its `### Corrections from the plan 2 code brief (2026-11-23)` section overrides the text above it and the mockups.
 **Brief:** `.superpowers/briefs/v240-plan2-icons.md`
 **Runs after:** plan 1, [v240 theme and type](2026-11-23-v240-doctena-night-theme-and-type_0-index.md) (19 tasks). Plans 1 to 5 run strictly in order, one worktree at a time.
-**Number:** this plan is v242, not v241. The repo counter (`/new-doc` Step 2) reads `(v241)` from two commit subjects (`fdca0ef4`, `c1946a17`) written before plan 1 was renumbered to v240, so v241 counts as claimed.
+**Number:** v241 (partner, 2026-11-23). Commits `fdca0ef4` and `c1946a17` also say `(v241)`; they are plan 1's index and part 1 from before that plan was renumbered to v240, so the counter would skip v241. This plan was briefly v242 (`f974abc0`, `a50cb948`); plan 3 takes v242.
 
 ## Goal
 
@@ -57,7 +57,7 @@ standalone close `×`) reappears in a template or stylesheet.
   `0 0 24 24` at every size; `size` sets only `width`/`height`.
 - **Callers pick a size, never override the svg in CSS.** The one override
   (`shell.css:89`, `.rail-pill sb-icon svg {width:24px; height:24px}`) is
-  deleted in favour of `size="24"`.
+  deleted in favour of `[size]="24"`.
 - **Glyph sites swap in place.** Each site keeps its element, class and
   accessible name; only the glyph text becomes `<sb-icon ... title="" />`
   (empty `title` so the icon adds no tooltip of its own inside a labelled
@@ -131,16 +131,16 @@ standalone close `×`) reappears in a template or stylesheet.
 - V240-6 / V240-7: `export function styleRules(name: string, source: string): StyleRule[]`
   and `export type StyleRule = { selector: string; body: string }` in
   `frontend/src/app/ui/testing/style-rules.ts` (`.ts` `styles:` literals and
-  `.css` files; escaped backticks handled). V242-3, V242-6 and V242-7 read
+  `.css` files; escaped backticks handled). V241-3, V241-6 and V241-7 read
   CSS rules through it.
 - V240-8: `sb-button` text is uppercase; icon variants reset it. The
-  watchlist tape toggle (`variant="ghost"`) holds an icon after V242-7.
+  watchlist tape toggle (`variant="ghost"`) holds an icon after V241-7.
 - V240-9 / V240-16: `ui/type-gates.spec.ts` runs with no pending lists.
-  V242-5 deletes `hint.ts`'s `.glyph` rule (the only `--font-mono` rule this
+  V241-5 deletes `hint.ts`'s `.glyph` rule (the only `--font-mono` rule this
   plan removes), which can only reduce offenders.
 - V240-10: `NAV_FILES` in `ui/money-colour.spec.ts`; `direction-arrow.ts`
   is not a nav file and keeps `--pos`/`--neg`.
-- V240-3 / V240-5 edit `ui/primitives.spec.ts`; V242-7 edits only its
+- V240-3 / V240-5 edit `ui/primitives.spec.ts`; V241-7 edits only its
   `(?<!&)` comment afterwards.
 - Existing (not plan 1): `allSources(): Source[]` and `stripComments(source)`
   in `frontend/src/app/ui/testing/all-sources.ts`.
@@ -150,18 +150,18 @@ standalone close `×`) reappears in a template or stylesheet.
 The plan runs **in id order in one worktree** (the spec's five plans are
 strictly sequential). Sequential edges and their reasons:
 
-- V242-1 → V242-2: both edit `ui/icon.ts` and `ui/icon.spec.ts`.
-- V242-1 → V242-3: V242-3 consumes the `size` input.
-- V242-2 → V242-4, V242-5, V242-6, V242-7: they consume the new names
+- V241-1 → V241-2: both edit `ui/icon.ts` and `ui/icon.spec.ts`.
+- V241-1 → V241-3: V241-3 consumes the `size` input.
+- V241-2 → V241-4, V241-5, V241-6, V241-7: they consume the new names
   (`long`, `short`, `info`, `close`, `down`, `up`, `plus`, `minus`).
-- V242-2 → V242-4: both edit `workspaces/gallery/gallery.spec.ts`.
-- V242-3 → V242-5: both edit `shell/shell.html` (and possibly
+- V241-2 → V241-4: both edit `workspaces/gallery/gallery.spec.ts`.
+- V241-3 → V241-5: both edit `shell/shell.html` (and possibly
   `shell.spec.ts`).
-- V242-4, V242-5, V242-6, V242-7 → V242-8: the gate asserts the glyphs are
+- V241-4, V241-5, V241-6, V241-7 → V241-8: the gate asserts the glyphs are
   gone and reads the swapped sources.
 
-Safe to run in parallel if the controller wants to: **V242-4 ∥ V242-6 ∥
-V242-7** after V242-2 (disjoint files: direction arrow, confidence cell,
+Safe to run in parallel if the controller wants to: **V241-4 ∥ V241-6 ∥
+V241-7** after V241-2 (disjoint files: direction arrow, confidence cell,
 gallery spec and the `tokens.css` comment vs `layout.ts`/`data-table.ts` vs
 watchlist, versions, guide and `primitives.spec.ts`; no contract between
 them).
@@ -170,21 +170,22 @@ them).
 
 | ID | Title | Part | Model | Files (C create, M modify) | Symbols for later tasks |
 |---|---|---|---|---|---|
-| V242-1 | `sb-icon` on the 24 grid: `size` input, filled sub-paths, 1.8 stroke, all 27 names redrawn | 1 | sonnet | M `frontend/src/app/ui/icon.ts`, M `frontend/src/app/ui/icon.spec.ts` | `export type IconSize = 16 \| 20 \| 24`; `Icon.size = input<IconSize>(16)`; `const FILLS: Partial<Record<IconName, string>>` (`pending`, `opened`, `partial`); second `<path class="fill">` |
-| V242-2 | Nine new names, their labels, and the full set in the gallery | 1 | haiku | M `frontend/src/app/ui/icon.ts`, M `frontend/src/app/ui/icon.spec.ts`, M `frontend/src/app/workspaces/gallery/gallery.ts`, M `frontend/src/app/workspaces/gallery/gallery.spec.ts` | `IconName` gains `'info' \| 'long' \| 'short' \| 'close' \| 'edit' \| 'up' \| 'down' \| 'plus' \| 'minus'`; gallery `iconNames: readonly IconName[] = ICON_NAMES` |
-| V242-3 | Sizes per surface: rail and tab bar 24, lists 20; the `shell.css` svg override deleted | 1 | sonnet | M `frontend/src/app/shell/shell.html`, M `frontend/src/app/shell/shell.css`, M `frontend/src/app/shell/shell.spec.ts`, M `frontend/src/app/shell/phone-tab-bar.ts`, M `frontend/src/app/shell/phone-tab-bar.spec.ts`, M `frontend/src/app/shell/profile-menu.ts`, M `frontend/src/app/shell/profile-menu.spec.ts`, M `frontend/src/app/workspaces/dashboard/panels/recent-activity.ts`, M `frontend/src/app/workspaces/dashboard/panels/recent-activity.spec.ts` | none |
-| V242-4 | Direction arrows draw `long`/`short` icons | 1 | sonnet | M `frontend/src/app/ui/direction-arrow.ts`, M `frontend/src/app/ui/direction-arrow.spec.ts`, M `frontend/src/app/ui/confidence-cell.spec.ts`, M `frontend/src/app/workspaces/gallery/gallery.spec.ts`, M `frontend/src/styles/tokens.css` (line-49 comment only) | `.arrow` span keeps `aria-label`/`title` and holds `<sb-icon [name]="icon()" title="" />` |
-| V242-5 | `sb-hint` draws the `info` icon; the `glyph` input is deleted | 2 | sonnet | M `frontend/src/app/ui/hint.ts`, M `frontend/src/app/ui/hint.spec.ts`, M `frontend/src/app/shell/shell.html` (line 45), M `frontend/src/app/shell/shell.spec.ts` (only if it pins `glyph="v"`), M `frontend/src/app/workspaces/dashboard/dashboard.ts` (line 312), M `frontend/src/app/workspaces/dashboard/dashboard.spec.ts` (only if it pins `?`) | `button.trigger > sb-icon[name=info]` |
-| V242-6 | Drawer close, panel toggle and row-detail toggle draw icons | 2 | sonnet | M `frontend/src/app/ui/layout.ts`, M `frontend/src/app/ui/layout.spec.ts`, M `frontend/src/app/ui/data-table/data-table.ts`, M `frontend/src/app/ui/data-table/data-table.spec.ts` | `button.close > sb-icon[name=close]`; `button.panel-toggle` / `button.detail-toggle` hold `sb-icon` `down` (expanded) or `expand` (collapsed) |
-| V242-7 | Tape toggle, versions "now" marker and the Guide's fold marker | 2 | sonnet | M `frontend/src/app/workspaces/watchlist/watchlist.ts`, M `frontend/src/app/workspaces/watchlist/watchlist.spec.ts`, M `frontend/src/app/workspaces/versions/versions.ts`, M `frontend/src/app/workspaces/versions/versions.spec.ts`, M `frontend/src/app/workspaces/guide/guide.ts`, M `frontend/src/app/workspaces/guide/guide.spec.ts`, M `frontend/src/app/ui/primitives.spec.ts` (the `(?<!&)` comment only) | `button.tape-toggle > sb-icon` `plus`/`minus`; `.ticks .now > sb-icon[name=up]` |
-| V242-8 | Glyph gate and accessible-name guard | 2 | sonnet | C `frontend/src/app/ui/icon-glyphs.spec.ts` | `REPLACED_GLYPHS` and `GUARDED_SITES` consts in that spec |
+| V241-1 | `sb-icon` on the 24 grid: filled sub-paths, 1.8 stroke, all 27 names redrawn (svg fixed at 16px) | 1 | sonnet | M `frontend/src/app/ui/icon.ts`, M `frontend/src/app/ui/icon.spec.ts`, M `frontend/src/app/workspaces/dashboard/panels/recent-activity.spec.ts` (old `partial`/`opened` path pins) | `const FILLS: Partial<Record<IconName, string>>` (`pending`, `opened`, `partial`); second `<path class="fill">` |
+| V241-1b | `size` input: `IconSize`, width/height binding | 1 | sonnet | M `frontend/src/app/ui/icon.ts`, M `frontend/src/app/ui/icon.spec.ts` | `export type IconSize = 16 \| 20 \| 24`; `Icon.size = input<IconSize>(16)` |
+| V241-2 | Nine new names, their labels, and the full set in the gallery | 1 | haiku | M `frontend/src/app/ui/icon.ts`, M `frontend/src/app/ui/icon.spec.ts`, M `frontend/src/app/workspaces/gallery/gallery.ts`, M `frontend/src/app/workspaces/gallery/gallery.spec.ts` | `IconName` gains `'info' \| 'long' \| 'short' \| 'close' \| 'edit' \| 'up' \| 'down' \| 'plus' \| 'minus'`; gallery `iconNames: readonly IconName[] = ICON_NAMES` |
+| V241-3 | Sizes per surface: rail and tab bar 24, lists 20; the `shell.css` svg override deleted | 1 | sonnet | M `frontend/src/app/shell/shell.html`, M `frontend/src/app/shell/shell.css`, M `frontend/src/app/shell/shell.spec.ts`, M `frontend/src/app/shell/phone-tab-bar.ts`, M `frontend/src/app/shell/phone-tab-bar.spec.ts`, M `frontend/src/app/shell/profile-menu.ts`, M `frontend/src/app/shell/profile-menu.spec.ts`, M `frontend/src/app/workspaces/dashboard/panels/recent-activity.ts`, M `frontend/src/app/workspaces/dashboard/panels/recent-activity.spec.ts` | none |
+| V241-4 | Direction arrows draw `long`/`short` icons | 1 | sonnet | M `frontend/src/app/ui/direction-arrow.ts`, M `frontend/src/app/ui/direction-arrow.spec.ts`, M `frontend/src/app/ui/confidence-cell.spec.ts`, M `frontend/src/app/workspaces/gallery/gallery.spec.ts`, M `frontend/src/styles/tokens.css` (line-49 comment only) | `.arrow` span keeps `aria-label`/`title` and holds `<sb-icon [name]="icon()" title="" />` |
+| V241-5 | `sb-hint` draws the `info` icon; the `glyph` input is deleted | 2 | sonnet | M `frontend/src/app/ui/hint.ts`, M `frontend/src/app/ui/hint.spec.ts`, M `frontend/src/app/shell/shell.html` (line 45), M `frontend/src/app/shell/shell.spec.ts` (only if it pins `glyph="v"`), M `frontend/src/app/workspaces/dashboard/dashboard.ts` (line 312), M `frontend/src/app/workspaces/dashboard/dashboard.spec.ts` (only if it pins `?`) | `button.trigger > sb-icon[name=info]` |
+| V241-6 | Drawer close, panel toggle and row-detail toggle draw icons | 2 | sonnet | M `frontend/src/app/ui/layout.ts`, M `frontend/src/app/ui/layout.spec.ts`, M `frontend/src/app/ui/data-table/data-table.ts`, M `frontend/src/app/ui/data-table/data-table.spec.ts` | `button.close > sb-icon[name=close]`; `button.panel-toggle` / `button.detail-toggle` hold `sb-icon` `down` (expanded) or `expand` (collapsed) |
+| V241-7 | Tape toggle, versions "now" marker and the Guide's fold marker | 2 | sonnet | M `frontend/src/app/workspaces/watchlist/watchlist.ts`, M `frontend/src/app/workspaces/watchlist/watchlist.spec.ts`, M `frontend/src/app/workspaces/versions/versions.ts`, M `frontend/src/app/workspaces/versions/versions.spec.ts`, M `frontend/src/app/workspaces/guide/guide.ts`, M `frontend/src/app/workspaces/guide/guide.spec.ts`, M `frontend/src/app/ui/primitives.spec.ts` (the `(?<!&)` comment only) | `button.tape-toggle > sb-icon` `plus`/`minus`; `.ticks .now > sb-icon[name=up]` |
+| V241-8 | Glyph gate and accessible-name guard | 2 | sonnet | C `frontend/src/app/ui/icon-glyphs.spec.ts` | `REPLACED_GLYPHS` and `GUARDED_SITES` consts in that spec |
 
 ## Parts
 
 | Part | File | Tasks | Scope |
 |---|---|---|---|
-| 1 | `2026-11-23-v242-doctena-night-icons_1-icon-set.md` | V242-1..V242-4 | The 24-grid component with `size` and fills, the full redraw, the new names, sizes per surface, direction arrows |
-| 2 | `2026-11-23-v242-doctena-night-icons_2-glyph-swaps.md` | V242-5..V242-8 | Help trigger, drawer close and toggles, tape toggle, versions and Guide markers, the glyph gate |
+| 1 | `2026-11-23-v241-doctena-night-icons_1-icon-set.md` | V241-1..V241-4 (with V241-1b) | The 24-grid component with `size` and fills, the full redraw, the new names, sizes per surface, direction arrows |
+| 2 | `2026-11-23-v241-doctena-night-icons_2-glyph-swaps.md` | V241-5..V241-8 | Help trigger, drawer close and toggles, tape toggle, versions and Guide markers, the glyph gate |
 
 ## Handoff
 
@@ -194,5 +195,5 @@ them).
   `sources:` touches this plan's diff.
 - Open for the controller: Decision 3's tape-toggle mapping (`plus`/`minus`)
   and Decision 5 (`voice-chip.ts` speaker stays hand-rolled).
-- Plan 3 builds the 64px rail on V242-3's `size="24"` rail icons; it must
+- Plan 3 builds the 64px rail on V241-3's `[size]="24"` rail icons; it must
   not restore a CSS svg override.

@@ -1,20 +1,20 @@
-# v242 — Doctena night, plan 2 of 5: Icons — Part 1: the icon set
+# v241 — Doctena night, plan 2 of 5: Icons — Part 1: the icon set
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V242-2" -A 400 <this file>`); never read the file whole.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V241-2" -A 400 <this file>`); never read the file whole.
 
 **Spec:** [2026-11-23-v240-doctena-night-restyle-design.md](../specs/2026-11-23-v240-doctena-night-restyle-design.md) §4 and its `### Corrections from the plan 2 code brief (2026-11-23)` (which wins over earlier text and the mockups).
-**Index:** [2026-11-23-v242-doctena-night-icons_0-index.md](2026-11-23-v242-doctena-night-icons_0-index.md) — Goal, Architecture, Decisions, Global Constraints, Parallelisation and the task ledger live there; every task below implicitly includes its Global Constraints.
+**Index:** [2026-11-23-v241-doctena-night-icons_0-index.md](2026-11-23-v241-doctena-night-icons_0-index.md) — Goal, Architecture, Decisions, Global Constraints, Parallelisation and the task ledger live there; every task below implicitly includes its Global Constraints.
 
-This part: V242-1..V242-4 — the 24-grid `sb-icon` with `size` and filled sub-paths, the redraw of all 27 names, the nine new names and the gallery, sizes per surface, and the direction arrows.
+This part: V241-1..V241-4 — the 24-grid `sb-icon` with `size` and filled sub-paths, the redraw of all 27 names, the nine new names and the gallery, sizes per surface, and the direction arrows.
 
 Verification in every task is the narrow run, from `frontend/`:
 `npx ng test --watch=false --include <spec>` (a 60s `Timeout waiting for worker` is machine load: re-run once). No task runs the full suite; CI does.
 
-**Template note (applies to V242-3 and every later caller):** `frontend/tsconfig.json` has `strictTemplates: true` and `size` is typed `IconSize = 16 | 20 | 24`, so a caller writes `[size]="24"` (a number binding). A static `size="24"` is the string `'24'` and fails the template type check.
+**Template note (applies to V241-3 and every later caller):** `frontend/tsconfig.json` has `strictTemplates: true` and `size` is typed `IconSize = 16 | 20 | 24`, so a caller writes `[size]="24"` (a number binding). A static `size="24"` is the string `'24'` and fails the template type check.
 
 # Phase 1 — the component and the set
 
-### Task V242-1: `sb-icon` on the 24 grid: filled sub-paths, 1.8 stroke, all 27 names redrawn
+### Task V241-1: `sb-icon` on the 24 grid: filled sub-paths, 1.8 stroke, all 27 names redrawn
 
 **Model:** sonnet — one component and its spec, but 27 path strings to copy exactly and a pinned path in a second spec to move with them.
 
@@ -25,7 +25,7 @@ Verification in every task is the narrow run, from `frontend/`:
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
-- Produces: `const FILLS: Partial<Record<IconName, string>>` with `pending`, `opened`, `partial` (module-private); the svg renders a second `<path class="fill" fill="currentColor" stroke="none">` after the stroked path when the name has a fill. `ICON_NAMES` keeps its 27 names in order (V242-2 appends nine). The svg still renders at a fixed 16px (`width="16" height="16"`) until V242-1b adds `size` (this task was split from V242-1 at the 20 KB cap).
+- Produces: `const FILLS: Partial<Record<IconName, string>>` with `pending`, `opened`, `partial` (module-private); the svg renders a second `<path class="fill" fill="currentColor" stroke="none">` after the stroked path when the name has a fill. `ICON_NAMES` keeps its 27 names in order (V241-2 appends nine). The svg still renders at a fixed 16px (`width="16" height="16"`) until V241-1b adds `size` (this task was split from V241-1 at the 20 KB cap).
 
 **Why each drawing:** spec §4's table. `analytics` is the bulb with a rising line (not mockup 4's bars), stroke is 1.8 at every size (not mockup 4's 2.0), no `grip` (spec correction). Path data is copied verbatim from the brief §6 table.
 
@@ -418,15 +418,15 @@ Then check no other spec or template pinned the old drawing or grid: `git grep -
 
 ```bash
 git add frontend/src/app/ui/icon.ts frontend/src/app/ui/icon.spec.ts frontend/src/app/workspaces/dashboard/panels/recent-activity.spec.ts
-git commit -m "feat(ui): sb-icon on the 24 grid at 1.8 -- filled sub-paths, all 27 names redrawn (V242-1)
+git commit -m "feat(ui): sb-icon on the 24 grid at 1.8 -- filled sub-paths, all 27 names redrawn (V241-1)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-**Controller note:** `recent-activity.spec.ts` pins the `partial` and `opened` path data (l.61, l.69-70), so the redraw cannot land green without it; the index ledger row for V242-1 should list it (V242-3 edits the same file afterwards, already sequential).
+**Controller note:** `recent-activity.spec.ts` pins the `partial` and `opened` path data (l.61, l.69-70), so the redraw cannot land green without it; the index ledger row for V241-1 should list it (V241-3 edits the same file afterwards, already sequential).
 
 
-### Task V242-1b: `sb-icon` gains a `size` input (16, 20, 24) over the fixed 24 viewBox
+### Task V241-1b: `sb-icon` gains a `size` input (16, 20, 24) over the fixed 24 viewBox
 
 **Model:** sonnet — a typed input and a template binding, small, but the type is the contract every later caller binds against.
 
@@ -435,10 +435,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `frontend/src/app/ui/icon.spec.ts` (the import, `render`, two new tests)
 
 **Interfaces:**
-- Consumes: V242-1's 24-grid template (`viewBox="0 0 24 24"`, `width="16" height="16"` static) and `icon.spec.ts`'s `render(name)` helper.
-- Produces: `export type IconSize = 16 | 20 | 24;` and `Icon.size = input<IconSize>(16)`; the svg's `width` and `height` attributes equal `size()`. V242-2 (gallery) and V242-3 (callers, `[size]="24"` / `[size]="20"`) consume both.
+- Consumes: V241-1's 24-grid template (`viewBox="0 0 24 24"`, `width="16" height="16"` static) and `icon.spec.ts`'s `render(name)` helper.
+- Produces: `export type IconSize = 16 | 20 | 24;` and `Icon.size = input<IconSize>(16)`; the svg's `width` and `height` attributes equal `size()`. V241-2 (gallery) and V241-3 (callers, `[size]="24"` / `[size]="20"`) consume both.
 
-This is the `size` half of the ledger's V242-1, split off at the 20 KB task cap (`SPLIT: V242-1 -> V242-1b`); the controller adds its ledger row directly below V242-1.
+This is the `size` half of the ledger's V241-1, split off at the 20 KB task cap (`SPLIT: V241-1 -> V241-1b`); the controller adds its ledger row directly below V241-1.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -562,13 +562,13 @@ Expected: PASS, 0 failed (recent-activity's callers bind no `size` yet and keep 
 
 ```bash
 git add frontend/src/app/ui/icon.ts frontend/src/app/ui/icon.spec.ts
-git commit -m "feat(ui): sb-icon size input -- 16, 20 or 24px over the fixed 24 viewBox (V242-1b)
+git commit -m "feat(ui): sb-icon size input -- 16, 20 or 24px over the fixed 24 viewBox (V241-1b)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 
-### Task V242-2: Nine new names, their labels, and the full set in the gallery
+### Task V241-2: Nine new names, their labels, and the full set in the gallery
 
 **Model:** haiku — appending nine verbatim path strings, nine labels and a gallery list; every value is given below.
 
@@ -579,8 +579,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `frontend/src/app/workspaces/gallery/gallery.spec.ts` (the import of `ICON_NAMES`, one new test)
 
 **Interfaces:**
-- Consumes: V242-1's `PATHS` (24 grid) and V242-1b's `export type IconSize = 16 | 20 | 24` and `Icon.size` input.
-- Produces: `IconName` gains `'info' | 'long' | 'short' | 'close' | 'edit' | 'up' | 'down' | 'plus' | 'minus'` (appended to `ICON_NAMES` in that order, 36 names). V242-4 consumes `long`/`short`; part 2 consumes `info`, `close`, `down`, `expand`, `up`, `plus`, `minus`. Gallery: `protected readonly iconNames: readonly IconName[] = ICON_NAMES;` and `protected readonly iconSizes: readonly IconSize[] = [16, 20, 24];`, rendered as one `div.icon-set` row per size.
+- Consumes: V241-1's `PATHS` (24 grid) and V241-1b's `export type IconSize = 16 | 20 | 24` and `Icon.size` input.
+- Produces: `IconName` gains `'info' | 'long' | 'short' | 'close' | 'edit' | 'up' | 'down' | 'plus' | 'minus'` (appended to `ICON_NAMES` in that order, 36 names). V241-4 consumes `long`/`short`; part 2 consumes `info`, `close`, `down`, `expand`, `up`, `plus`, `minus`. Gallery: `protected readonly iconNames: readonly IconName[] = ICON_NAMES;` and `protected readonly iconSizes: readonly IconSize[] = [16, 20, 24];`, rendered as one `div.icon-set` row per size.
 
 Index Decision 7 fixes the labels; Decision 6 (and the spec correction): no `grip`.
 
@@ -800,7 +800,7 @@ Expected: PASS, 0 failed. (The unique-glyph test proves `partial`'s bare circle,
 
 ```bash
 git add frontend/src/app/ui/icon.ts frontend/src/app/ui/icon.spec.ts frontend/src/app/workspaces/gallery/gallery.ts frontend/src/app/workspaces/gallery/gallery.spec.ts
-git commit -m "feat(ui): nine new icons (info, long, short, close, edit, up, down, plus, minus); gallery shows the full set at 16/20/24 (V242-2)
+git commit -m "feat(ui): nine new icons (info, long, short, close, edit, up, down, plus, minus); gallery shows the full set at 16/20/24 (V241-2)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -808,7 +808,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 # Phase 2 — callers
 
-### Task V242-3: Sizes per surface: rail and tab bar 24, lists 20; the `shell.css` svg override deleted
+### Task V241-3: Sizes per surface: rail and tab bar 24, lists 20; the `shell.css` svg override deleted
 
 **Model:** sonnet — five components and their specs, one CSS deletion whose pin moves to `styleRules`; mechanical but spread across the shell.
 
@@ -826,7 +826,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Line numbers are from main before plan 1; plan 1 edits some of these files, so find each site by the quoted text.
 
 **Interfaces:**
-- Consumes: V242-1b's `Icon.size = input<IconSize>(16)` (`IconSize = 16 | 20 | 24`); plan 1 V240-6's `styleRules(name: string, source: string): StyleRule[]` and `StyleRule = { selector: string; body: string }` from `frontend/src/app/ui/testing/style-rules.ts`.
+- Consumes: V241-1b's `Icon.size = input<IconSize>(16)` (`IconSize = 16 | 20 | 24`); plan 1 V240-6's `styleRules(name: string, source: string): StyleRule[]` and `StyleRule = { selector: string; body: string }` from `frontend/src/app/ui/testing/style-rules.ts`.
 - Produces: rail brand and rail-pill icons at `[size]="24"` with no CSS override (plan 3 builds its 64px rail on this and must not restore a CSS svg override); nothing a later task in this plan consumes.
 
 Index Decision 2: `24` on the rail pills, the rail brand and the phone tab bar; `20` on the recent-activity status icon and the profile-menu items; every other caller keeps the default `16` (the phone top-bar brand at `shell.html` l.58 included). `strictTemplates` is on, so every caller writes `[size]="24"`, never `size="24"`.
@@ -1035,13 +1035,13 @@ The rail exists at tablet and desktop, the tab bar on a phone. Build and look, p
 
 ```bash
 git add frontend/src/app/shell/shell.html frontend/src/app/shell/shell.css frontend/src/app/shell/shell.spec.ts frontend/src/app/shell/phone-tab-bar.ts frontend/src/app/shell/phone-tab-bar.spec.ts frontend/src/app/shell/profile-menu.ts frontend/src/app/shell/profile-menu.spec.ts frontend/src/app/workspaces/dashboard/panels/recent-activity.ts frontend/src/app/workspaces/dashboard/panels/recent-activity.spec.ts
-git commit -m "feat(ui): icon sizes per surface -- rail and tab bar 24, lists 20; drop the shell.css svg override (V242-3)
+git commit -m "feat(ui): icon sizes per surface -- rail and tab bar 24, lists 20; drop the shell.css svg override (V241-3)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 
-### Task V242-4: Direction arrows draw `long`/`short` icons
+### Task V241-4: Direction arrows draw `long`/`short` icons
 
 **Model:** sonnet — one primitive rendered on four surfaces; the accessible name and the colour valence exception must survive the swap, and three specs pin the old glyph text.
 
@@ -1053,8 +1053,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `frontend/src/styles/tokens.css` (the valence-exception comment, l.48-49; comment only)
 
 **Interfaces:**
-- Consumes: V242-2's `long` and `short` names (`IconName`); V242-1b's 16px default size; plan 1 V240-6's `styleRules(name: string, source: string): StyleRule[]` from `frontend/src/app/ui/testing/style-rules.ts`.
-- Produces: `sb-direction-arrow` renders `<span class="arrow long|short" role="img" [title] [attr.aria-label]><sb-icon [name]="icon()" title="" /></span>`; `aria-label`/`title` stay `'Long (bullish)'` / `'Short (bearish)'`; unknown direction still renders the `ABSENT` dash. V242-8's accessible-name guard reads this source.
+- Consumes: V241-2's `long` and `short` names (`IconName`); V241-1b's 16px default size; plan 1 V240-6's `styleRules(name: string, source: string): StyleRule[]` from `frontend/src/app/ui/testing/style-rules.ts`.
+- Produces: `sb-direction-arrow` renders `<span class="arrow long|short" role="img" [title] [attr.aria-label]><sb-icon [name]="icon()" title="" /></span>`; `aria-label`/`title` stay `'Long (bullish)'` / `'Short (bearish)'`; unknown direction still renders the `ABSENT` dash. V241-8's accessible-name guard reads this source.
 
 **Why `role="img"`:** the cell used to hold the text `▲`, which a screen reader read out. Once the content is an `aria-hidden` svg, the span has no text, and an `aria-label` on a role-less `<span>` is ignored by most screen readers — the column would go silent, which is exactly what the component's header comment forbids. `role="img"` makes the span a named graphic, so the name it already carries is announced. Colour stays `--pos`/`--neg` (spec §1, the recorded valence exception; `direction-arrow.ts` is not a `NAV_FILES` entry in `money-colour.spec.ts`).
 
@@ -1074,7 +1074,7 @@ import { styleRules } from './testing/style-rules';
 
 const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/direction-arrow.ts'), 'utf8');
 
-/** The `long` and `short` drawings from icon.ts (V242-2). sb-icon's `name`
+/** The `long` and `short` drawings from icon.ts (V241-2). sb-icon's `name`
  *  is a property binding with no DOM trace, so the drawing is the check. */
 const LONG_D = 'M3 17l6-6 4 4 8-8 M15 7h6v6';
 const SHORT_D = 'M3 7l6 6 4-4 8 8 M15 17h6v-6';
@@ -1321,7 +1321,7 @@ with:
 Run (from `frontend/`): `npx ng test --watch=false --include src/app/ui/direction-arrow.spec.ts --include src/app/ui/confidence-cell.spec.ts --include src/app/workspaces/gallery/gallery.spec.ts --include src/app/workspaces/dashboard/panels/recent-activity.spec.ts --include src/app/ui/money-colour.spec.ts --include src/app/ui/type-gates.spec.ts`
 Expected: PASS, 0 failed (recent-activity, money-colour and type-gates are run because the arrow sits in Recent Activity and its CSS is scanned by both gates).
 
-Then: `git grep -n -E "▲|▼" -- frontend/src ':!*.spec.ts'`. Expected: no output (the versions `&#9650;` reference is V242-7's).
+Then: `git grep -n -E "▲|▼" -- frontend/src ':!*.spec.ts'`. Expected: no output (the versions `&#9650;` reference is V241-7's).
 
 - [ ] **Step 5: Check the three widths**
 
@@ -1331,7 +1331,7 @@ Per `docs/claude/ui-design.md` (Playwright only, `.env` admin credentials loaded
 
 ```bash
 git add frontend/src/app/ui/direction-arrow.ts frontend/src/app/ui/direction-arrow.spec.ts frontend/src/app/ui/confidence-cell.spec.ts frontend/src/app/workspaces/gallery/gallery.spec.ts frontend/src/styles/tokens.css
-git commit -m "feat(ui): direction arrows draw the long/short trend icons, named as role=img (V242-4)
+git commit -m "feat(ui): direction arrows draw the long/short trend icons, named as role=img (V241-4)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
