@@ -30,11 +30,12 @@ const DENSITY_OPTIONS: SegmentOption[] = [
   { value: 'comfortable', label: 'Comfortable' },
 ];
 
-/** The two grounds, in the order the control shows them (spec v225). The
- *  stored values stay `graphite` | `navy`; the labels are what a user reads. */
+/** The two grounds, in the order the control shows them: Dark blue first,
+ *  since it is the default (spec v240 §1). The stored values stay
+ *  `graphite` | `navy`; the labels are what a user reads. */
 const THEME_OPTIONS: SegmentOption[] = [
-  { value: 'graphite', label: 'Black' },
   { value: 'navy', label: 'Dark blue' },
+  { value: 'graphite', label: 'Black' },
 ];
 
 /**
@@ -264,15 +265,15 @@ export class ProfileMenu {
     this.densityChanged.emit(value === 'comfortable' ? 'comfortable' : 'dense');
   }
 
-  /** The current ground, owned by the shell's ThemeService (spec v225). */
-  readonly theme = input<Theme>('graphite');
+  /** The current ground, owned by the shell's ThemeService (spec v225); Navy by default (v240). */
+  readonly theme = input<Theme>('navy');
   readonly themeChanged = output<Theme>();
 
   protected readonly themeOptions = THEME_OPTIONS;
 
-  /** Validated, not trusted: anything but exactly 'navy' is the default. */
+  /** Validated, not trusted: anything but exactly 'graphite' is the default, Navy (v240). */
   protected onTheme(value: string): void {
-    this.themeChanged.emit(value === 'navy' ? 'navy' : 'graphite');
+    this.themeChanged.emit(value === 'graphite' ? 'graphite' : 'navy');
   }
 
   protected readonly open = signal(false);

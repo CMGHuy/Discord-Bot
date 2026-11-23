@@ -226,8 +226,9 @@ describe('CommandPalette (v195 §3.1)', () => {
     await type(fixture, el, 'theme');
     expect(optionLabels(el)).toEqual(['Switch theme']);
     await press(fixture, el, 'Enter');
-    expect(document.documentElement.dataset['theme']).toBe('navy');
-    expect(stored.get('ui.theme')).toBe('navy');
+    // v240: Dark blue is the default, so the first switch goes to Black.
+    expect(document.documentElement.dataset['theme']).toBe('graphite');
+    expect(stored.get('ui.theme')).toBe('graphite');
     expect(router.url).toBe(before);
     expect(host.closes).toBe(1);
 
@@ -235,8 +236,8 @@ describe('CommandPalette (v195 §3.1)', () => {
     await settle(fixture);
     await type(fixture, el, 'switch');
     await press(fixture, el, 'Enter');
-    expect(document.documentElement.dataset['theme']).toBe('graphite');
-    expect(stored.get('ui.theme')).toBe('graphite');
+    expect(document.documentElement.dataset['theme']).toBe('navy');
+    expect(stored.get('ui.theme')).toBe('navy');
     expect(host.closes).toBe(2);
   });
 

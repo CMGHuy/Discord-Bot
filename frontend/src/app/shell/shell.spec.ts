@@ -846,21 +846,22 @@ describe('shell top-bar cluster (v195 Phase 3)', () => {
     const { fixture, el } = await mount();
     const button = themeButton(el);
     expect(button.getAttribute('aria-label')).toBe('Dark blue theme');
-    expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(html.dataset['theme']).toBe('graphite');
-
-    button.click();
-    await settle(fixture);
+    // v240: Dark blue is the default, so the bar starts pressed.
     expect(button.getAttribute('aria-pressed')).toBe('true');
     expect(html.dataset['theme']).toBe('navy');
-    expect(stored.get('ui.theme')).toBe('navy');
-    expect(button.getAttribute('aria-label')).toBe('Dark blue theme');
 
     button.click();
     await settle(fixture);
     expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(html.dataset['theme']).toBe('graphite');
     expect(stored.get('ui.theme')).toBe('graphite');
+    expect(button.getAttribute('aria-label')).toBe('Dark blue theme');
+
+    button.click();
+    await settle(fixture);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(html.dataset['theme']).toBe('navy');
+    expect(stored.get('ui.theme')).toBe('navy');
   });
 
   it('starts pressed when this browser stored Dark blue', async () => {
@@ -868,6 +869,13 @@ describe('shell top-bar cluster (v195 Phase 3)', () => {
     const { el } = await mount();
     expect(themeButton(el).getAttribute('aria-pressed')).toBe('true');
     expect(html.dataset['theme']).toBe('navy');
+  });
+
+  it('starts unpressed when this browser stored Black', async () => {
+    stored.set('ui.theme', 'graphite');
+    const { el } = await mount();
+    expect(themeButton(el).getAttribute('aria-pressed')).toBe('false');
+    expect(html.dataset['theme']).toBe('graphite');
   });
 
   it('is a 44px-hit icon button with the theme glyph and an anchored "Dark blue theme" hint', async () => {
@@ -941,30 +949,30 @@ describe('v225: one theme across the bar button and the profile menu', () => {
 
   it('writes ui.theme and data-theme from the menu row, and the bar button follows', async () => {
     const { fixture, el } = await mount();
-    expect(html.dataset['theme']).toBe('graphite');
-    await openMenu(fixture, el);
-    segment(el, 'Dark blue').click();
-    await settle(fixture);
     expect(html.dataset['theme']).toBe('navy');
-    expect(stored.get('ui.theme')).toBe('navy');
-    expect(pressedSegment(el)).toBe('Dark blue');
-    expect(barButton(el)!.getAttribute('aria-pressed')).toBe('true');
+    await openMenu(fixture, el);
+    segment(el, 'Black').click();
+    await settle(fixture);
+    expect(html.dataset['theme']).toBe('graphite');
+    expect(stored.get('ui.theme')).toBe('graphite');
+    expect(pressedSegment(el)).toBe('Black');
+    expect(barButton(el)!.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('moves the pressed segment when the bar button is clicked, and the bar when the menu is', async () => {
     const { fixture, el } = await mount();
     await openMenu(fixture, el);
-    expect(pressedSegment(el)).toBe('Black');
+    expect(pressedSegment(el)).toBe('Dark blue');
     barButton(el)!.click();
     await settle(fixture);
-    expect(html.dataset['theme']).toBe('navy');
+    expect(html.dataset['theme']).toBe('graphite');
     // A click outside the menu closes it (ProfileMenu's document click); reopen to read it.
     if (!el.querySelector('sb-profile-menu [role=menu]')) await openMenu(fixture, el);
-    expect(pressedSegment(el)).toBe('Dark blue');
-    segment(el, 'Black').click();
+    expect(pressedSegment(el)).toBe('Black');
+    segment(el, 'Dark blue').click();
     await settle(fixture);
-    expect(barButton(el)!.getAttribute('aria-pressed')).toBe('false');
-    expect(stored.get('ui.theme')).toBe('graphite');
+    expect(barButton(el)!.getAttribute('aria-pressed')).toBe('true');
+    expect(stored.get('ui.theme')).toBe('navy');
   });
 
   it('keeps the Theme row on a phone, where it is the only switch', async () => {
@@ -974,10 +982,10 @@ describe('v225: one theme across the bar button and the profile menu', () => {
     const { fixture, el } = await mount();
     expect(barButton(el)).toBeNull();
     await openMenu(fixture, el);
-    segment(el, 'Dark blue').click();
+    segment(el, 'Black').click();
     await settle(fixture);
-    expect(html.dataset['theme']).toBe('navy');
-    expect(stored.get('ui.theme')).toBe('navy');
+    expect(html.dataset['theme']).toBe('graphite');
+    expect(stored.get('ui.theme')).toBe('graphite');
   });
 });
 
