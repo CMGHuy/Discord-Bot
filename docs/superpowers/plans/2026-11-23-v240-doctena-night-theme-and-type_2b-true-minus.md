@@ -28,6 +28,14 @@ helpers to print an unsigned zero (`pct(-0.004)` is `0.00%`, never
 `−0.00%` or `+0.00%`) and moves the pins that assert today's signed zero
 (`format.spec.ts`, `status-cell.spec.ts`).
 
+V240-12b and V240-12c (added 2026-11-23, Decision 10 widened) carry the
+same rule to the thirteen local signed formatters outside `format.ts`
+that a hand-built `'+'`/`MINUS` scan found: they route each through a
+`format.ts` helper (`rMultiple`, `pct`, `signed`, `fixed`) or, where the
+magnitude's own format must stay byte-identical, through `signFor` (made
+public by V240-12b) and the new loss-only `lossSign`. Both run after
+V240-11; V240-12c after V240-12b.
+
 # Phase 6: The true minus
 
 ### Task V240-11: True minus I: `fixed()`, `riskPct`, no signed zero in `pct`/`money`/`rMultiple`/`signed`, `metric-card`, `metric-chip`, `plan-cell` `formatR`
@@ -700,3 +708,554 @@ git commit -m "fix(v240): a true minus in the stat-tile count-up, attribution ch
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+
+### Task V240-12b: No signed zero I: `signFor` public, `lossSign`; partials `rText`, runner-endings, calendar `cellValue`, benchmark, trade-detail cohort tooltip
+**Model:** sonnet — six files each with a pinned spec to move, two exported helpers other tasks consume; no design judgement.
+
+**Files:**
+- Modify: `frontend/src/app/ui/format.ts` (`signFor`, added private by V240-11 after `fixed`)
+- Modify: `frontend/src/app/ui/format.spec.ts`
+- Modify: `frontend/src/app/workspaces/analytics/tabs/partials.ts` (import line 13, `rText` lines 44–45)
+- Modify: `frontend/src/app/workspaces/analytics/tabs/partials.spec.ts` (`describe('rText', …)`, line 190)
+- Modify: `frontend/src/app/workspaces/analytics/tabs/runner-endings.ts` (import line 6, `signedR`/`plainR` lines 55–58)
+- Modify: `frontend/src/app/workspaces/analytics/tabs/runner-endings.spec.ts`
+- Modify: `frontend/src/app/workspaces/calendar/calendar.helpers.ts` (import line 14, `plusOrMinus` lines 24–25, `cellValue` lines 45–52)
+- Modify: `frontend/src/app/workspaces/calendar/calendar.helpers.spec.ts` (lines 70–80)
+- Modify: `frontend/src/app/workspaces/analytics/tabs/benchmark.ts` (import line 11, `signedPct` lines 41–45, local `money` lines 100–102)
+- Modify: `frontend/src/app/workspaces/analytics/tabs/benchmark.spec.ts`
+- Modify: `frontend/src/app/workspaces/trades/trade-detail.ts` (import line 26, `cohortTooltip` line 815)
+- Modify: `frontend/src/app/workspaces/trades/trade-detail.spec.ts` (`describe('TradeDetail — the cohort risk chip (v86 C8)', …)`)
+
+**Interfaces:**
+- Consumes (V240-11): `fixed(value, decimals)`, the private
+  `signFor(value, magnitude)`, and `pct`/`rMultiple`/`signed` printing an
+  unsigned zero for a value that rounds to zero.
+- Produces (V240-12c consumes both):
+  `export function signFor(value: number, magnitude: string): string` —
+  `'+'` on a gain, `MINUS` on a loss, `''` on zero, and `''` whenever
+  `magnitude` holds no non-zero digit.
+  `export function lossSign(value: number, magnitude: string): string` —
+  `MINUS` for a loss whose `magnitude` holds a non-zero digit, otherwise
+  `''` (never a `+`): for sites that print a loss signed and a gain bare.
+
+Why: index Decision 10 (partner, 2026-11-23) — no figure anywhere prints a
+signed zero. These five files build their own sign: `partials.ts` `rText`,
+`runner-endings.ts` `signedR` and the calendar cell print `+0.00R` (and
+`+0`) for an exact zero; every one of them, plus `runner-endings.ts`
+`plainR`, `benchmark.ts` `signedPct`/`money` and the trade-detail cohort
+tooltip, prints `+0.00` or `−0.00` for a value that rounds to zero. Each
+site's text is already what a `format.ts` helper prints (`rMultiple`,
+`pct`, `signed`, `fixed`) except `benchmark.ts`'s money, whose currency
+sits between sign and digits, so it takes `lossSign`. Only the text moves;
+a cell's tone (`pos`/`neg`) is unchanged.
+
+- [ ] **Step 1: Write the failing helper tests**
+
+In `frontend/src/app/ui/format.spec.ts`, add `lossSign` and `signFor` to
+the import from `'./format'` (alphabetical: `lossSign` after `held`,
+`signFor` after `signed`). Append at the end of the file:
+
+```ts
+/* v240 V240-12b: signFor and lossSign are the sign rule the local
+ * formatters outside format.ts share (index Decision 10). */
+describe('v240: signFor and lossSign', () => {
+  it('signFor signs a printed magnitude only when it holds a non-zero digit', () => {
+    expect(signFor(1.2, '1.20')).toBe('+');
+    expect(signFor(-1.2, '1.20')).toBe(MINUS);
+    expect(signFor(-0.004, '0.00')).toBe('');
+    expect(signFor(0.004, '0.00')).toBe('');
+    expect(signFor(0, '0')).toBe('');
+    expect(signFor(-0, '0.00')).toBe('');
+    expect(signFor(-0.001, '<0.01')).toBe(MINUS);
+  });
+
+  it('lossSign puts a true minus on a visible loss and nothing else', () => {
+    expect(lossSign(-1.2, '1.20')).toBe(MINUS);
+    expect(lossSign(-1234.5, '1,234.50')).toBe(MINUS);
+    expect(lossSign(1.2, '1.20')).toBe('');
+    expect(lossSign(-0.004, '0.00')).toBe('');
+    expect(lossSign(-0.4, '0 $')).toBe('');
+    expect(lossSign(0, '0.00')).toBe('');
+    expect(lossSign(-0, '0.00')).toBe('');
+  });
+});
+```
+
+- [ ] **Step 2: Write the failing site tests**
+
+`frontend/src/app/workspaces/analytics/tabs/partials.spec.ts`, in
+`describe('rText', …)`: replace `expect(rText(0)).toBe('+0.00R');`
+(line 190) with:
+
+```ts
+    // v240 Decision 10: a zero, or a value that rounds to zero, has no sign.
+    expect(rText(0)).toBe('0.00R');
+    expect(rText(-0.004)).toBe('0.00R');
+    expect(rText(0.004)).toBe('0.00R');
+```
+
+`frontend/src/app/workspaces/analytics/tabs/runner-endings.spec.ts`,
+inside `describe('runner endings helpers', …)`, directly after the test
+`it('lays out the scorecard: four endings summing to 100%, then the set-apart Giveback row', …)`:
+
+```ts
+  it('prints a zero or rounded-away R unsigned (v240 Decision 10)', () => {
+    const row = { ...BLOCK.rows[0], avg_r: 0, median_r: -0.004, total_r: 0.004, gave_back: -0.004 };
+    const cells = scorecardRows({ ...BLOCK, rows: [row] })[0].cells;
+    expect(cells.slice(0, 3)).toEqual(['0.00R', '0.00R', '0.00R']);
+    expect(cells[6]).toBe('0.00R');
+    const loss = scorecardRows({ ...BLOCK, rows: [{ ...row, avg_r: -0.3, gave_back: -0.3 }] })[0].cells;
+    expect([loss[0], loss[6]]).toEqual(['−0.30R', '−0.30R']);
+  });
+```
+
+`frontend/src/app/workspaces/calendar/calendar.helpers.spec.ts`: replace
+the test
+`it('signs a losing day with the true minus; zero and a gain keep the plus', …)`
+(lines 70–80) with:
+
+```ts
+  it('signs a losing day with the true minus and a gain with a plus; a zero has no sign (v240 Decision 10)', () => {
+    const loss = { ...DAY, net_r: -0.6, net_pnl_amount: -1234 };
+    expect(cellValue(loss, 'r').text).toBe('−0.60R');
+    expect(cellValue(loss, 'currency').text).toBe('−1,234');
+    expect(cellValue(loss, 'r').text).not.toContain('-');
+    expect(cellValue(loss, 'currency').text).not.toContain('-');
+    const flat = { ...DAY, net_r: 0, net_pnl_amount: 0 };
+    expect(cellValue(flat, 'r').text).toBe('0.00R');
+    expect(cellValue(flat, 'currency').text).toBe('0');
+    const tiny = { ...DAY, net_r: -0.004, net_pnl_amount: -0.4 };
+    expect(cellValue(tiny, 'r').text).toBe('0.00R');
+    expect(cellValue(tiny, 'currency').text).toBe('0');
+    expect(cellValue({ ...DAY, net_r: 0.004, net_pnl_amount: 0.4 }, 'r').text).toBe('0.00R');
+    expect(cellValue(DAY, 'currency').text).toBe('+480');
+  });
+```
+
+`frontend/src/app/workspaces/analytics/tabs/benchmark.spec.ts`: in the
+`signedPct` test (lines 29–30), directly after its `.toEqual([...]);` add:
+
+```ts
+    // v240 Decision 10: a value that rounds to zero prints unsigned.
+    expect([signedPct(-0.004), signedPct(0.004), signedPct(-0.04, 1)]).toEqual(['0.00%', '0.00%', '0.0%']);
+```
+
+and append at the end of the file:
+
+```ts
+describe('benchmark drawdowns that round to zero (v240 Decision 10)', () => {
+  it('prints the money and percentage drawdown unsigned', () => {
+    const account = BENCHMARK_FIXTURE.stats['bot_account']!;
+    const p = {
+      ...BENCHMARK_FIXTURE,
+      stats: {
+        ...BENCHMARK_FIXTURE.stats,
+        bot_account: { ...account, money_dd: { value: -0.004, n: 4, reason: null }, max_dd_pct: { value: -0.004, n: 4, reason: null } },
+      },
+    };
+    const tiles = statGroups(p, new Set(['bot_account']), '$')[0].tiles;
+    const value = (label: string) => tiles.find((t) => t.label === label)!.value;
+    expect(value('Drawdown ($)')).toBe('$0.00');
+    expect(value('Max drawdown')).toBe('0.00%');
+  });
+});
+```
+
+(`statGroups` and `BENCHMARK_FIXTURE` are already imported by the file;
+the existing `'−$41.50'` pin stays.)
+
+`frontend/src/app/workspaces/trades/trade-detail.spec.ts`, inside
+`describe('TradeDetail — the cohort risk chip (v86 C8)', …)`, directly
+after `it('renders a danger-toned chip for COHORT_POOR', …)`:
+
+```ts
+  it('prints a zero cohort expectancy unsigned (v240 Decision 10)', () => {
+    const el = renderHeader('COHORT_POOR', {
+      win_rate: 50, expectancy_r: 0, n_live: 10, n_backtest: 40, run_date: '2026-09-14',
+    });
+    const hint = el.querySelector('.tags > sb-chip + sb-hint [role="tooltip"]')!.textContent!;
+    expect(hint).toContain('50.0% WR / 0.00R');
+    expect(hint).not.toContain('+0.00R');
+  });
+
+  it('prints a rounded-away cohort loss unsigned (v240 Decision 10)', () => {
+    const el = renderHeader('COHORT_POOR', {
+      win_rate: 50, expectancy_r: -0.004, n_live: 10, n_backtest: 40, run_date: '2026-09-14',
+    });
+    const hint = el.querySelector('.tags > sb-chip + sb-hint [role="tooltip"]')!.textContent!;
+    expect(hint).toContain('50.0% WR / 0.00R');
+    expect(hint).not.toContain('−0.00R');
+  });
+```
+
+- [ ] **Step 3: Run them to verify they fail**
+
+Run: `cd frontend && npx ng test --watch=false --include src/app/ui/format.spec.ts --include src/app/workspaces/analytics/tabs/partials.spec.ts --include src/app/workspaces/analytics/tabs/runner-endings.spec.ts --include src/app/workspaces/calendar/calendar.helpers.spec.ts --include src/app/workspaces/analytics/tabs/benchmark.spec.ts --include src/app/workspaces/trades/trade-detail.spec.ts`
+Expected: FAIL — `format.spec.ts` does not compile (`signFor` is not
+exported, `lossSign` does not exist); `rText(0)` is `'+0.00R'`; the
+runner-endings cells read `'+0.00R'`/`'−0.00R'`; the flat calendar cell
+reads `'+0.00R'` and `'+0'`; `signedPct(0.004)` is `'+0.00%'`; the
+drawdown tile reads `'−$0.00'`; the cohort hint reads `'+0.00R'` and
+`'−0.00R'`.
+
+- [ ] **Step 4: Export `signFor` and add `lossSign`**
+
+In `frontend/src/app/ui/format.ts`, change V240-11's
+`function signFor(value: number, magnitude: string): string {` to
+`export function signFor(value: number, magnitude: string): string {`
+(its doc comment and body stay), and directly after it add:
+
+```ts
+/** The sign for a figure that shows a loss signed and a gain bare (a
+ *  drawdown, an expectancy, a plain number): a true minus on a loss whose
+ *  printed magnitude holds a non-zero digit, nothing otherwise -- so a loss
+ *  that rounds away prints an unsigned zero (v240, index Decision 10). */
+export function lossSign(value: number, magnitude: string): string {
+  return value < 0 ? signFor(value, magnitude) : '';
+}
+```
+
+- [ ] **Step 5: Route the five sites through `format.ts`**
+
+`frontend/src/app/workspaces/analytics/tabs/partials.ts`: change line 13
+`import { MINUS } from '../../../ui/format';` to
+`import { rMultiple } from '../../../ui/format';` and replace `rText`
+(lines 44–45) with:
+
+```ts
+/** Signed R to two places, the shared `rMultiple`: no sign on a zero or a
+ *  value that rounds to zero (v240, index Decision 10). */
+export const rText = (v: number | null): string => rMultiple(v);
+```
+
+`frontend/src/app/workspaces/analytics/tabs/runner-endings.ts`: change
+line 6 to `import { ABSENT, fixed, rMultiple } from '../../../ui/format';`
+and replace `signedR` and `plainR` (lines 55–58) with:
+
+```ts
+/** v240 Decision 10: the shared rules, so a zero or a value that rounds to
+ *  zero prints unsigned. `signedR` signs both ways (`rMultiple`); `plainR`
+ *  signs only a loss (`fixed`). `rMultiple(null)` is ABSENT. */
+const signedR = (v: number | null): string => rMultiple(v);
+const plainR = (v: number | null): string => (v === null ? ABSENT : `${fixed(v, 2)}R`);
+```
+
+`frontend/src/app/workspaces/calendar/calendar.helpers.ts`: change line 14
+to `import { rMultiple, signed } from '../../ui/format';`, delete
+`plusOrMinus` and its comment (lines 24–25), and in `cellValue` replace
+the two returns after `if (value === null) …`:
+
+```ts
+  if (metric === 'r') return {
+    value, text: rMultiple(value),
+    tone: value > 0 ? 'pos' : value < 0 ? 'neg' : 'neutral',
+  };
+  return {
+    value, text: signed(value, 0),
+    tone: value > 0 ? 'pos' : value < 0 ? 'neg' : 'neutral',
+  };
+```
+
+(`signed` groups like `num`, so `+480` and `−1,234` are unchanged; a zero
+or a value that rounds away prints `0.00R` / `0`.)
+
+`frontend/src/app/workspaces/analytics/tabs/benchmark.ts`: change line 11
+to `import { lossSign, num, pct as formatPct } from '../../../ui/format';`
+(aliased: the file destructures a `pct` field at line 389). Replace
+`signedPct` (lines 41–45) with:
+
+```ts
+export function signedPct(value: number | null, dp = 2): string {
+  // v240 Decision 10: format.ts's `pct`, so a value that rounds to zero
+  // prints unsigned; `pct(null)` is the em dash this always returned.
+  return formatPct(value, dp);
+}
+```
+
+and the local `money` (lines 100–102) with:
+
+```ts
+function money(value: number, currency: string): string {
+  const magnitude = num(Math.abs(value), 2);
+  return `${lossSign(value, magnitude)}${currency}${magnitude}`;
+}
+```
+
+`frontend/src/app/workspaces/trades/trade-detail.ts`: change line 26
+`import { MINUS } from '../../ui/format';` to
+`import { rMultiple } from '../../ui/format';` and in `cohortTooltip`
+replace line 815 with:
+
+```ts
+      `${rMultiple(expectancyR)} (n=${n}, frozen ${runDate})`
+```
+
+- [ ] **Step 6: Run the specs to verify they pass**
+
+Run: `cd frontend && npx ng test --watch=false --include src/app/ui/format.spec.ts --include src/app/workspaces/analytics/tabs/partials.spec.ts --include src/app/workspaces/analytics/tabs/runner-endings.spec.ts --include src/app/workspaces/calendar/calendar.helpers.spec.ts --include src/app/workspaces/calendar/calendar.spec.ts --include src/app/workspaces/analytics/tabs/benchmark.spec.ts --include src/app/workspaces/trades/trade-detail.spec.ts`
+Expected: PASS. (`calendar.spec.ts` renders `cellValue` and carries no
+`+0` pin at b00e9859; it runs here as the consumer.)
+
+Then confirm no hand-built sign is left in these five files:
+`cd frontend && git grep -n "MINUS\|'+'" -- src/app/workspaces/analytics/tabs/partials.ts src/app/workspaces/analytics/tabs/runner-endings.ts src/app/workspaces/calendar/calendar.helpers.ts src/app/workspaces/analytics/tabs/benchmark.ts src/app/workspaces/trades/trade-detail.ts`
+Expected: no output.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add frontend/src/app/ui/format.ts frontend/src/app/ui/format.spec.ts \
+  frontend/src/app/workspaces/analytics/tabs/partials.ts frontend/src/app/workspaces/analytics/tabs/partials.spec.ts \
+  frontend/src/app/workspaces/analytics/tabs/runner-endings.ts frontend/src/app/workspaces/analytics/tabs/runner-endings.spec.ts \
+  frontend/src/app/workspaces/calendar/calendar.helpers.ts frontend/src/app/workspaces/calendar/calendar.helpers.spec.ts \
+  frontend/src/app/workspaces/analytics/tabs/benchmark.ts frontend/src/app/workspaces/analytics/tabs/benchmark.spec.ts \
+  frontend/src/app/workspaces/trades/trade-detail.ts frontend/src/app/workspaces/trades/trade-detail.spec.ts
+git commit -m "fix(v240): no signed zero in partials, runner endings, calendar cells, benchmark tiles and the cohort tooltip -- signFor public, lossSign
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Task V240-12c: No signed zero II: override-fidelity model, live activity, equity drawdown, trading-performance figure, risk drawdown R, `riskUnits`
+**Model:** sonnet — six small formatter swaps across model, component and shared files, each with a spec to extend; two go through mounted components.
+
+**Files:**
+- Modify: `frontend/src/app/workspaces/analytics/tabs/override-fidelity.model.ts` (import line 4, local `MINUS`/`sign` lines 40–43, `magnitude` lines 46–48, `fixed2` lines 50–52, `signedUsd` lines 57–59, `signedR` lines 61–63)
+- Modify: `frontend/src/app/workspaces/analytics/tabs/override-fidelity.model.spec.ts`
+- Modify: `frontend/src/app/shell/live/live-activity-section.ts` (import line 4, `signOf` lines 22–25, `pnlParts` lines 27–34)
+- Modify: `frontend/src/app/shell/live/live-activity-section.spec.ts`
+- Modify: `frontend/src/app/workspaces/dashboard/panels/equity-candles.model.ts` (import line 4, `drawdownPart` line 181)
+- Modify: `frontend/src/app/workspaces/dashboard/panels/equity-candles.model.spec.ts`
+- Modify: `frontend/src/app/workspaces/dashboard/panels/trading-performance.ts` (import line 17, `fmtFigure` lines 374–379)
+- Modify: `frontend/src/app/workspaces/dashboard/panels/trading-performance.spec.ts`
+- Modify: `frontend/src/app/workspaces/risk/risk.ts` (import line 23, `fmtDrawdownR` lines 1019–1023)
+- Modify: `frontend/src/app/workspaces/risk/risk.spec.ts`
+- Modify: `frontend/src/app/ui/risk-units.ts` (import line 1, `riskUnits` body lines 25–31)
+- Modify: `frontend/src/app/ui/risk-units.spec.ts`
+
+**Interfaces:**
+- Consumes: `signFor(value, magnitude)` and `lossSign(value, magnitude)`
+  (V240-12b, exported from `ui/format.ts`); `fixed(value, decimals)`
+  (V240-11); `signed(value, decimals)` with V240-11's unsigned zero.
+- Produces: none.
+
+Why: index Decision 10 — no figure anywhere prints a signed zero. These six
+sites build a sign by hand and print `+0.00`/`−0.00` (or `−0 $`) for a
+value that rounds to zero: the override-fidelity model's `sign` (behind
+`fixed2`, `signedUsd`, `signedR`), the live activity R (`+0.0R`), the
+equity-range drawdown (`−0.00%`), the trading-performance expectancy
+(`−0.00R`), the Risk page's R drawdown (`−0.00R`) and `riskUnits`'s money
+part (`−0 $`). Where a `format.ts` helper prints the same text (`fixed`,
+`signed`), the site calls it; where the magnitude's own format must stay
+byte-identical (currency in front, one decimal, a space before `R`), it
+keeps its magnitude and takes the sign from `signFor`/`lossSign`. Only
+the text moves; tones are unchanged.
+
+- [ ] **Step 1: Write the failing tests**
+
+`frontend/src/app/workspaces/analytics/tabs/override-fidelity.model.spec.ts`,
+inside `describe('override-fidelity model', …)`, directly after the test
+that pins `signedUsd(59.35, '$')` (line 23):
+
+```ts
+  it('prints a delta that rounds to zero unsigned (v240 Decision 10)', () => {
+    expect(signedUsd(-0.004, '$')).toBe('$0.00');
+    expect(signedUsd(0.004, '€')).toBe('€0.00');
+    expect(signedR(-0.004)).toBe('0.00 R');
+    expect(signedR(0.004)).toBe('0.00 R');
+    expect(signedR(0.006)).toBe('+0.01 R');
+    expect(recordedLine({ ...VERDICT_RECORDED_COST, mean_delta_r: -0.004 })).toContain('mean 0.00 R per override');
+  });
+```
+
+(`recordedLine` and `VERDICT_RECORDED_COST`, a recorded verdict, are
+already imported.)
+
+`frontend/src/app/shell/live/live-activity-section.spec.ts`, directly after
+`it('signs a loss with a true minus and keeps the amount unsigned', …)`:
+
+```ts
+  it('prints an R that rounds to zero unsigned (v240 Decision 10)', () => {
+    expect(pnlParts({ r: -0.04, amount: -3 }, '€')!.r).toBe('0.0R');
+    expect(pnlParts({ r: 0.04, amount: 3 }, '€')!.r).toBe('0.0R');
+    expect(pnlParts({ r: 0, amount: 0 }, '€')!.r).toBe('0.0R');
+    expect(pnlParts({ r: 0.05, amount: 3 }, '€')!.r).toBe('+0.1R');
+  });
+```
+
+`frontend/src/app/workspaces/dashboard/panels/equity-candles.model.spec.ts`,
+directly after `it('shows drawdown as a loss whichever sign the stats carry', …)`:
+
+```ts
+  it('prints a drawdown that rounds to zero unsigned (v240 Decision 10)', () => {
+    const parts = rangeReadoutParts(
+      { change: 0, changePct: 0, high: 1, low: 1, maxDrawdownPct: 0.004 }, '€');
+    expect(parts[3].text).toBe(`${RANGE_LABELS.drawdown} 0.00%`);
+  });
+```
+
+`frontend/src/app/workspaces/dashboard/panels/trading-performance.spec.ts`,
+in `describe('trading performance panel', …)`, directly after the test
+whose body asserts `expect(text).toContain('−0.16R');` (line 184):
+
+```ts
+  it('prints an expectancy that rounds to zero unsigned (v240 Decision 10)', () => {
+    const el = render({
+      winRate: 49.1, winRateN: 12, expectancyR: -0.004, payoffRatio: 2.34,
+      todayRealized: TODAY_BLOCK, currency: '€',
+    });
+    const text = el.querySelector('.mobile-summary')!.textContent ?? '';
+    expect(text).toContain('0.00R');
+    expect(text).not.toContain('−0.00R');
+  });
+```
+
+`frontend/src/app/workspaces/risk/risk.spec.ts`, inside
+`describe('Risk metric basis and money drawdown (v194 B8)', …)`, directly
+after `it('shows the money drawdown under the R figure, negative, in the account currency', …)`:
+
+```ts
+  it('prints an R drawdown that rounds to zero unsigned, a real one with a true minus (v240 Decision 10)', async () => {
+    const tiny = await renderWithMetrics({ max_drawdown_r: { value: 0.004, n: 782 } });
+    const tinyText = tileHost(tiny, RISK_DRAWDOWN_LABEL).querySelector('.value')!.textContent!;
+    expect(tinyText).toContain('0.00R');
+    expect(tinyText).not.toMatch(/[−-]0\.00R/);
+    const real = await renderWithMetrics();
+    expect(tileHost(real, RISK_DRAWDOWN_LABEL).querySelector('.value')!.textContent!).toContain('−8.40R');
+  });
+```
+
+`frontend/src/app/ui/risk-units.spec.ts`, inside `describe('riskUnits', …)`,
+directly after
+`it('puts one true minus on each part of a negative figure (headroom past the cap)', …)`:
+
+```ts
+  it('prints a money part that rounds to zero unsigned (v240 Decision 10)', () => {
+    expect(riskUnits(-0.001, 10_000, '$')).toBe(`0 $ · ${MINUS}<0.01%`);
+    expect(riskUnits(-1.42, 100_000, '$')).toBe(`${MINUS}1,420 $ · ${MINUS}1.42%`);
+  });
+```
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Run: `cd frontend && npx ng test --watch=false --include src/app/workspaces/analytics/tabs/override-fidelity.model.spec.ts --include src/app/shell/live/live-activity-section.spec.ts --include src/app/workspaces/dashboard/panels/equity-candles.model.spec.ts --include src/app/workspaces/dashboard/panels/trading-performance.spec.ts --include src/app/workspaces/risk/risk.spec.ts --include src/app/ui/risk-units.spec.ts`
+Expected: FAIL — `signedUsd(-0.004, '$')` is `'−$0.00'`, `signedR(0.004)`
+is `'+0.00 R'`, the recorded line reads `mean −0.00 R`; `pnlParts` gives
+`'−0.0R'`/`'+0.0R'`; the drawdown reads `−0.00%`; the summary holds
+`'−0.00R'`; the Risk tile holds `'−0.00R'`; `riskUnits` gives
+`'−0 $ · −<0.01%'`. (Each "real loss" line already passes.)
+
+- [ ] **Step 3: Implement**
+
+`frontend/src/app/workspaces/analytics/tabs/override-fidelity.model.ts`:
+change line 4 to `import { num, signFor } from '../../../ui/format';`,
+delete the local `const MINUS = '−';` (line 40), `const sign = …` (line
+43) and `function magnitude` (lines 46–48), then replace `fixed2`,
+`signedUsd` and `signedR` with:
+
+```ts
+/** A signed figure from a magnitude already formatted: `signFor` gives '+'
+ *  on a gain, a true minus on a loss and nothing on a zero or a value that
+ *  rounds to zero (v240, index Decision 10). */
+const signedText = (x: number, magnitude: string): string => `${signFor(x, magnitude)}${magnitude}`;
+
+function fixed2(x: number | null): string {
+  return known(x) ? signedText(x, Math.abs(x).toFixed(2)) : '—';
+}
+
+export function signedUsd(x: number | null, currency: string): string {
+  if (!known(x)) return '—';
+  const digits = num(Math.abs(x), 2);
+  return `${signFor(x, digits)}${currency}${digits}`;
+}
+
+export function signedR(x: number | null): string {
+  return known(x) ? `${signedText(x, Math.abs(x).toFixed(2))} R` : '—';
+}
+```
+
+(`plural` and `be`, between them today, stay where they are.)
+
+`frontend/src/app/shell/live/live-activity-section.ts`: change line 4 to
+`import { amount, signFor, timeInZone } from '../../ui/format';`, delete
+`signOf` (lines 22–25) and replace `pnlParts`'s body with:
+
+```ts
+  if (pnl === null) return null;
+  // v240 Decision 10: an R that rounds to zero at one decimal prints unsigned.
+  const r = Math.abs(pnl.r).toFixed(1);
+  return {
+    r: `${signFor(pnl.r, r)}${r}R`,
+    amount: pnl.amount === null ? null : amount(Math.abs(pnl.amount), currency, 0),
+  };
+```
+
+`frontend/src/app/workspaces/dashboard/panels/equity-candles.model.ts`:
+change line 4 to `import { money, num, pct, signed } from '../../../ui/format';`
+and replace line 181 (with the `v195 §1.1` comment above it) with:
+
+```ts
+  // v195 §1.1 / v240 Decision 10: `signed` keeps num's Intl rounding, signs
+  // the loss with a true minus, and prints a drawdown that rounds away as 0.00.
+  return { text: `${RANGE_LABELS.drawdown} ${signed(loss)}%`, tone: drawdownTone(pctValue) };
+```
+
+`frontend/src/app/workspaces/dashboard/panels/trading-performance.ts`:
+change line 17 to `import { amount, fixed, pct } from '../../../ui/format';`
+and replace `fmtFigure`'s last two lines with:
+
+```ts
+    // v195 §1.1 / v240 Decision 10: a true minus on a loss, none on a gain
+    // or on a value that rounds to zero (`fixed`).
+    return `${fixed(value, decimals)}${unit}`;
+```
+
+`frontend/src/app/workspaces/risk/risk.ts`: add `signed` to the line 23
+import (after `shareCount`) and replace `fmtDrawdownR`'s return with:
+
+```ts
+    // v240 Decision 10: `signed` on the negated magnitude -- a true minus,
+    // and no sign on a drawdown that rounds to 0.00.
+    return value === null ? '—' : `${signed(-Math.abs(value), 2)}R`;
+```
+
+`frontend/src/app/ui/risk-units.ts`: change its import to
+`import { ABSENT, MINUS, amount, lossSign, riskPct } from './format';`, and replace the `money` constant (the three lines from
+`const money = isFiniteNumber(balance)`) with:
+
+```ts
+  // v240 Decision 10: the money part rounds to whole units, so a sliver of
+  // headroom past the cap can print "0 $" -- unsigned, never "−0 $". The
+  // percentage part is never a zero (riskPct floors at "<0.01%").
+  const cash = isFiniteNumber(balance) ? amount((magnitude / 100) * balance, unit, 0) : null;
+  const money = cash === null ? ABSENT : `${lossSign(pct, cash)}${cash}`;
+```
+
+(the `return` line is unchanged).
+
+- [ ] **Step 4: Run the specs to verify they pass**
+
+Run: `cd frontend && npx ng test --watch=false --include src/app/workspaces/analytics/tabs/override-fidelity.model.spec.ts --include src/app/workspaces/analytics/tabs/override-fidelity-panel.spec.ts --include src/app/shell/live/live-activity-section.spec.ts --include src/app/workspaces/dashboard/panels/equity-candles.model.spec.ts --include src/app/workspaces/dashboard/panels/trading-performance.spec.ts --include src/app/workspaces/risk/risk.spec.ts --include src/app/ui/risk-units.spec.ts`
+Expected: PASS. (`override-fidelity-panel.spec.ts` renders the model's
+text and runs here as its consumer.)
+
+Then confirm no hand-built sign is left at the thirteen Decision 10 sites
+(this task's six and V240-12b's five files):
+`cd frontend && git grep -n "MINUS :\|? '+'\|'−'" -- src/app/workspaces/analytics/tabs/override-fidelity.model.ts src/app/shell/live/live-activity-section.ts src/app/workspaces/dashboard/panels/equity-candles.model.ts src/app/workspaces/dashboard/panels/trading-performance.ts src/app/workspaces/risk/risk.ts src/app/ui/risk-units.ts`
+Expected: only `risk-units.ts`'s `const sign = pct < 0 ? MINUS : '';`
+(the percentage part, which never prints a zero).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add frontend/src/app/workspaces/analytics/tabs/override-fidelity.model.ts \
+  frontend/src/app/workspaces/analytics/tabs/override-fidelity.model.spec.ts \
+  frontend/src/app/shell/live/live-activity-section.ts frontend/src/app/shell/live/live-activity-section.spec.ts \
+  frontend/src/app/workspaces/dashboard/panels/equity-candles.model.ts \
+  frontend/src/app/workspaces/dashboard/panels/equity-candles.model.spec.ts \
+  frontend/src/app/workspaces/dashboard/panels/trading-performance.ts \
+  frontend/src/app/workspaces/dashboard/panels/trading-performance.spec.ts \
+  frontend/src/app/workspaces/risk/risk.ts frontend/src/app/workspaces/risk/risk.spec.ts \
+  frontend/src/app/ui/risk-units.ts frontend/src/app/ui/risk-units.spec.ts
+git commit -m "fix(v240): no signed zero in the override-fidelity text, live activity R, equity and Risk drawdowns, the expectancy figure and riskUnits
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```

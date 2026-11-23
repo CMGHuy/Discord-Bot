@@ -152,10 +152,24 @@ Jost and the new shapes in both themes with nothing scrolling sideways.
     or `+0.00` (`pct(-0.004)` is `0.00%`). One private
     `signFor(value, magnitude)` signs only a printed magnitude holding a
     non-zero digit. V240-11 does it and moves the pins of today's signed
-    zero (`format.spec.ts`, `status-cell.spec.ts:75`). The local
-    formatters `partials.ts` `rText` and `calendar.helpers.ts` `cellValue`
-    (`+0.00R` on an exact zero) are outside `format.ts` and not in this
-    plan.
+    zero (`format.spec.ts`, `status-cell.spec.ts:75`). The rule covers
+    the local signed formatters outside `format.ts` too (partner,
+    2026-11-23: no figure anywhere prints a signed zero). A scan of every
+    `'+'` and `MINUS` built by hand in `frontend/src/app` (specs excluded)
+    found thirteen more, routed through the `format.ts` helpers (`rMultiple`,
+    `pct`, `signed`, `fixed`) or, where the magnitude's own format must stay
+    byte-identical, through `signFor` (made public) and a new loss-only
+    `lossSign`: V240-12b fixes `partials.ts` `rText`, `runner-endings.ts`
+    `signedR`/`plainR`, `calendar.helpers.ts` `cellValue` (`+0.00R`, `+0`),
+    `benchmark.ts` `signedPct` and its money drawdown, and the
+    `trade-detail.ts` cohort tooltip; V240-12c fixes
+    `override-fidelity.model.ts` (`fixed2`, `signedUsd`, `signedR`),
+    `live-activity-section.ts` `pnlParts`, `equity-candles.model.ts`
+    `drawdownPart`, `trading-performance.ts` `fmtFigure`, `risk.ts`
+    `fmtDrawdownR` and `risk-units.ts`'s money part. `cancels.helpers.ts`
+    `rText` already is `rMultiple` (V240-11 covers it) and `tape.ts` is
+    V240-12's. Only the text moves: a cell's tone (`pos`/`neg`) on a
+    rounded-away value is unchanged.
 11. **`NUM_FACE` accepts a `var()` fallback**
     (`var\(--font-(?:num|mono)\s*(?:,[^)]*)?\)`), so
     `calendar.ts`'s `.trade-id { font-family: var(--font-mono, monospace) }`
@@ -240,6 +254,14 @@ it, and their reasons:
 - V240-9 → V240-13 → V240-14 → V240-15 → V240-16: every sweep edits the
   pending sets in `ui/type-gates.spec.ts`, and V240-16 deletes them.
 - V240-11 → V240-12: V240-12 consumes `fixed()` from V240-11.
+- V240-11 → V240-12b: V240-12b exports V240-11's private `signFor` and
+  edits `ui/format.ts` and `format.spec.ts` after it. V240-12b → V240-12c:
+  V240-12c consumes `signFor` and `lossSign`. (V240-12 ∥ V240-12b would be
+  file-disjoint; the plan runs them in id order anyway.)
+- V240-12b/12c → V240-14, V240-15: the sweeps restyle the same files
+  (`analytics/tabs/{partials,runner-endings,benchmark}.ts`,
+  `trades/trade-detail.ts`, `risk/risk.ts`, `dashboard/panels/*`), so the
+  formatter fixes land first.
 - V240-13 also edits `ui/plan-cell.ts`, `ui/metric-chip.ts` (V240-11) and
   `ui/button.ts` (V240-8), so it runs after both.
 
@@ -266,6 +288,8 @@ disjoint files), both after V240-9.
 | V240-10 | Money-colour scan: nav, brand, active and focus never read `--pos`/`--neg` | 2 | sonnet | C `frontend/src/app/ui/money-colour.spec.ts` (plus any offending rule it finds, swapped to `--accent`) | `NAV_FILES: readonly string[]` const in `money-colour.spec.ts` (plan 3 appends its editor file) |
 | V240-11 | True minus I: `fixed()`, `riskPct`, no signed zero in `pct`/`money`/`rMultiple`/`signed`, `metric-card`, `metric-chip`, `plan-cell` `formatR` | 2 | sonnet | M `frontend/src/app/ui/format.ts`, M `frontend/src/app/ui/format.spec.ts`, M `frontend/src/app/ui/status-cell.spec.ts`, M `frontend/src/app/ui/metric-card.ts`, M `frontend/src/app/ui/metric-card.spec.ts`, M `frontend/src/app/ui/metric-chip.ts`, C `frontend/src/app/ui/metric-chip.spec.ts`, M `frontend/src/app/ui/plan-cell.ts`, M `frontend/src/app/ui/plan-cell.spec.ts` | `export function fixed(value: number, decimals: number): string` in `ui/format.ts` (loss → `MINUS` + `abs.toFixed`; gain/zero → no sign; a value that rounds to zero → unsigned zero); `pct`/`money`/`rMultiple`/`signed` print an unsigned zero for a value that rounds to zero (Decision 10) |
 | V240-12 | True minus II: `figure-text` count-up, `attribution.ts`, `tape.ts` `signed` | 2 | sonnet | M `frontend/src/app/ui/motion/figure-text.ts`, M `frontend/src/app/ui/motion/figure-text.spec.ts`, M `frontend/src/app/workspaces/analytics/tabs/attribution.ts`, M `frontend/src/app/workspaces/analytics/tabs/attribution.spec.ts`, M `frontend/src/app/shell/tape/tape.ts`, M `frontend/src/app/shell/tape/tape.spec.ts` | none |
+| V240-12b | No signed zero I: `signFor` public, `lossSign`; partials `rText`, runner-endings, calendar `cellValue`, benchmark, trade-detail cohort tooltip | 2b | sonnet | M `frontend/src/app/ui/format.ts`, M `frontend/src/app/ui/format.spec.ts`, M `frontend/src/app/workspaces/analytics/tabs/partials.ts`, M `frontend/src/app/workspaces/analytics/tabs/partials.spec.ts`, M `frontend/src/app/workspaces/analytics/tabs/runner-endings.ts`, M `frontend/src/app/workspaces/analytics/tabs/runner-endings.spec.ts`, M `frontend/src/app/workspaces/calendar/calendar.helpers.ts`, M `frontend/src/app/workspaces/calendar/calendar.helpers.spec.ts`, M `frontend/src/app/workspaces/analytics/tabs/benchmark.ts`, M `frontend/src/app/workspaces/analytics/tabs/benchmark.spec.ts`, M `frontend/src/app/workspaces/trades/trade-detail.ts`, M `frontend/src/app/workspaces/trades/trade-detail.spec.ts` | `export function signFor(value: number, magnitude: string): string` (was private in V240-11: `+`/`MINUS`/none, none when `magnitude` holds no non-zero digit); `export function lossSign(value: number, magnitude: string): string` (`MINUS` for a loss whose magnitude holds a non-zero digit, else `''`), both in `ui/format.ts` |
+| V240-12c | No signed zero II: override-fidelity model, live activity, equity drawdown, trading-performance figure, risk drawdown R, `riskUnits` | 2b | sonnet | M `frontend/src/app/workspaces/analytics/tabs/override-fidelity.model.ts`, M `frontend/src/app/workspaces/analytics/tabs/override-fidelity.model.spec.ts`, M `frontend/src/app/shell/live/live-activity-section.ts`, M `frontend/src/app/shell/live/live-activity-section.spec.ts`, M `frontend/src/app/workspaces/dashboard/panels/equity-candles.model.ts`, M `frontend/src/app/workspaces/dashboard/panels/equity-candles.model.spec.ts`, M `frontend/src/app/workspaces/dashboard/panels/trading-performance.ts`, M `frontend/src/app/workspaces/dashboard/panels/trading-performance.spec.ts`, M `frontend/src/app/workspaces/risk/risk.ts`, M `frontend/src/app/workspaces/risk/risk.spec.ts`, M `frontend/src/app/ui/risk-units.ts`, M `frontend/src/app/ui/risk-units.spec.ts` | none |
 | V240-13 | Sweep 1: `app/ui/`, `app/shell/`, `styles.css` | 3 | sonnet | M offending files under `frontend/src/app/ui/`, `frontend/src/app/shell/` and `frontend/src/styles.css` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | removes every `app/ui/`, `app/shell/`, `styles.css` entry from both pending sets |
 | V240-14 | Sweep 2: analytics, reports, research, cancels, guide, gallery | 3 | haiku | M offending files under `frontend/src/app/workspaces/{analytics,reports,research,cancels,guide,gallery}/` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | removes those entries |
 | V240-15 | Sweep 3: dashboard, calendar, trades, plans, risk | 3 | haiku | M offending files under `frontend/src/app/workspaces/{dashboard,calendar,trades,plans,risk}/` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | removes those entries |
@@ -278,7 +302,7 @@ disjoint files), both after V240-9.
 | 1 | `2026-11-23-v240-doctena-night-theme-and-type_1-fonts-and-colours.md` | V240-1..V240-4 (with V240-3b) | Jost vendoring and `tnum` test, fonts.css and font tokens, JetBrains Mono removal, the doctena palette and Navy block, the default flip at runtime |
 | 1b | `2026-11-23-v240-doctena-night-theme-and-type_1b-cold-load-and-controls.md` | V240-5..V240-6 | The Navy default at cold load, `styleRules` and the `--control-border` readers |
 | 2 | `2026-11-23-v240-doctena-night-theme-and-type_2-shapes-and-rules.md` | V240-7..V240-10 | Radius tokens and pills, uppercase buttons and heading tracking, the type and money-colour gates |
-| 2b | `2026-11-23-v240-doctena-night-theme-and-type_2b-true-minus.md` | V240-11..V240-12 | `fixed()` and the seven true-minus sites |
+| 2b | `2026-11-23-v240-doctena-night-theme-and-type_2b-true-minus.md` | V240-11..V240-12 (with V240-12b, V240-12c) | `fixed()` and the seven true-minus sites; no signed zero in the thirteen local signed formatters |
 | 3 | `2026-11-23-v240-doctena-night-theme-and-type_3-type-sweeps.md` | V240-13..V240-16 | The four area sweeps that empty the type gates' pending lists |
 
 Offender snapshot for the part 3 writer (scan at `ff4f6025`, rough parser;
