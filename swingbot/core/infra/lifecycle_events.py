@@ -1,12 +1,14 @@
 """Immutable lifecycle rendering snapshots; no database or network access."""
 from copy import deepcopy
-from datetime import datetime
+from datetime import date, datetime
 from uuid import NAMESPACE_URL, uuid5
 
 from swingbot.core.market.shock import LABELS, SHOCK
 
-#: v210: the v197 queue's event kinds; market_shock is a status notice, not a lifecycle event.
-KINDS = ("trade_closed", "plan_transition", "market_shock")
+#: v210/v239: the v197 queue's event kinds; market_shock and bear_regime are status
+#: notices, not lifecycle events.
+KINDS = ("trade_closed", "plan_transition", "market_shock", "bear_regime")
+REGIME_NOTICE_KINDS = ("transition", "pullback")
 
 
 def _identity(transition_id, kind):
@@ -37,8 +39,9 @@ def _validate_trade(payload):
 def _validate_payload(kind, payload):
     if not isinstance(payload, dict):
         raise ValueError("invalid_payload")
-    if kind == "market_shock":
-        _validate_shock_payload(payload)
+    validator = _STATUS_VALIDATORS.get(kind)
+    if validator is not None:
+        validator(payload)
         return
     required = ("ticker", "direction", "prior_status", "new_status", "reason", "occurred_at")
     if any(not isinstance(payload.get(key), str) or not payload[key] for key in required):
@@ -75,6 +78,49 @@ def _validate_shock_payload(payload):
     entry = payload.get("entry_into_shock")
     if not isinstance(entry, bool) or entry != (label == SHOCK):
         raise ValueError("invalid_entry_flag")
+
+
+def _count_or_none(value) -> bool:
+    return value is None or (isinstance(value, int) and not isinstance(value, bool)
+                             and value >= 0)
+
+
+def _iso_day(value) -> None:
+    try:
+        date.fromisoformat(value)
+    except (TypeError, ValueError):
+        raise ValueError("invalid_session_date") from None
+
+
+def _validate_regime_lists(payload):
+    if not (_count_or_none(payload.get("open_longs"))
+            and _count_or_none(payload.get("gap_sessions"))):
+        raise ValueError("invalid_regime_counts")
+    unfilled = payload.get("unfilled")
+    if unfilled is not None and not (isinstance(unfilled, list)
+                                     and all(isinstance(row, dict) for row in unfilled)):
+        raise ValueError("invalid_unfilled")
+    if not isinstance(payload.get("pullback", False), bool):
+        raise ValueError("invalid_pullback_flag")
+
+
+def _validate_regime_payload(payload):
+    """v239: a bear-regime notice (regime_notices.notice_payload)."""
+    kind, new, old = payload.get("kind"), payload.get("new_label"), payload.get("old_label")
+    if kind not in REGIME_NOTICE_KINDS:
+        raise ValueError("invalid_regime_notice_kind")
+    if not (isinstance(new, str) and new) or not (old is None or isinstance(old, str)):
+        raise ValueError("invalid_regime_label")
+    if kind == "transition" and old == new:
+        raise ValueError("regime_notice_without_transition")
+    _aware(payload.get("occurred_at"))
+    _iso_day(payload.get("session_date"))
+    _validate_regime_lists(payload)
+
+
+#: Status notices carry their own payload shape (no ticker, no lifecycle fields).
+_STATUS_VALIDATORS = {"market_shock": _validate_shock_payload,
+                      "bear_regime": _validate_regime_payload}
 
 
 def validate_event(event: dict) -> None:

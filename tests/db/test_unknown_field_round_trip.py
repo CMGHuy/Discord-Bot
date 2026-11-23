@@ -126,6 +126,8 @@ NOT_REPOSITORY_BACKED = {
                        "doc is stored whole; its round trip is tests/db/test_v204_admin_snapshots.py",
     "feed_posts": "append-only spoken-headline log written by FeedPostsRepository.insert with "
                   "doc {} and read as promoted columns; tests/db/test_feed_posts_repository.py",
+    "market_regime_days": "write-once (insert_once only, ON CONFLICT DO NOTHING); promoted columns plus "
+                          "doc {unknown_reason}; its round trip is tests/db/test_market_regime_repository.py",
 }
 
 #: Tables whose rows need the probe plan first (a foreign key into plans).

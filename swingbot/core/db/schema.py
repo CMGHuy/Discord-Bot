@@ -529,6 +529,31 @@ market_shock_state = register(sa.Table("market_shock_state", METADATA,
      "last_notice_at"))
 
 
+# v239: the bear-regime engine's day labels (core/market/bear_regime.py). One
+# write-once row per NYSE session, keyed by the session the label is FOR (D),
+# inserted only by repositories/market_regime.insert_once (ON CONFLICT DO
+# NOTHING); never updated, never backfilled. doc holds {"unknown_reason"}.
+# No SSE trigger.
+_REGIME_FLOATS = ("spy_close", "sma50", "sma200", "sma50_lag5", "sma200_lag20",
+                  "spy_high_prev", "vix_close", "vix_max5")
+market_regime_days = register(sa.Table("market_regime_days", METADATA,
+    sa.Column("session_date", sa.Date, primary_key=True),
+    sa.Column("last_bar_date", sa.Date),
+    sa.Column("state", sa.Text, nullable=False),
+    sa.Column("stress", sa.Boolean),
+    sa.Column("pullback_trigger", sa.Boolean, nullable=False),
+    sa.Column("pullback_reason", sa.Text),
+    *[sa.Column(name, sa.Float(53)) for name in _REGIME_FLOATS],
+    sa.Column("spy_provider", sa.Text),
+    sa.Column("vix_provider", sa.Text),
+    sa.Column("computed_at", sa.TIMESTAMP(timezone=True), nullable=False),
+    *standard_columns(),
+    sa.CheckConstraint("state IN ('BEAR', 'CORRECTION', 'NORMAL', 'UNKNOWN')",
+                       name="market_regime_days_state")),
+    ("last_bar_date", "state", "stress", "pullback_trigger", "pullback_reason",
+     *_REGIME_FLOATS, "spy_provider", "vix_provider", "computed_at"))
+
+
 #: Why each promoted column is a column and not a `doc` field. A promotion
 #: costs a migration forever after, so each names what needs it: identity,
 #: a foreign key, an index a hot query uses, or a NOT NULL the database must
@@ -783,5 +808,23 @@ PROMOTION_REASONS: dict[str, dict[str, str]] = {
         "kind": "NOT NULL Kind member name; the SPA's per-kind voice filter",
         "ticker": "ticker spoken in the headline; NULL for a post without one",
         "headline": "NOT NULL spoken text, served as is by GET /feed-posts",
+    },
+    "market_regime_days": {
+        "last_bar_date": "date of the last SPY bar the label read (s unless stale); parity input",
+        "state": "NOT NULL BEAR/CORRECTION/NORMAL/UNKNOWN; episodes, banner, notice, shadow SQL",
+        "stress": "VIX close >= 25 on s; NULL when no ^VIX bar is dated s",
+        "pullback_trigger": "NOT NULL panic-easing day inside a correction; notice and banner chip",
+        "pullback_reason": "vix_gap when a VIX bar of the 5-bar window is missing; else NULL",
+        "spy_close": "SPY close at s; the number line and parity",
+        "sma50": "SMA50 at s; the number line and parity",
+        "sma200": "SMA200 at s; the number line and parity",
+        "sma50_lag5": "SMA50 at s-5; the CORRECTION slope test and parity",
+        "sma200_lag20": "SMA200 at s-20; the BEAR/CORRECTION slope tests and parity",
+        "spy_high_prev": "SPY high at s-1; the pullback trigger and parity",
+        "vix_close": "^VIX close at s; stress, the number line and parity",
+        "vix_max5": "max ^VIX close over s-4..s; the pullback trigger",
+        "spy_provider": "source of the SPY frame (alpaca/yfinance); explains a parity mismatch",
+        "vix_provider": "source of the ^VIX frame (yfinance); explains a parity mismatch",
+        "computed_at": "NOT NULL time the label was computed; read-back and audit",
     },
 }

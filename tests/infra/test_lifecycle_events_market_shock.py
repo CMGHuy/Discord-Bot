@@ -30,8 +30,8 @@ def event(kind="market_shock", **over):
                       occurred_at=AT, payload=payload(**over))
 
 
-def test_kinds_gain_market_shock_last():
-    assert lifecycle_events.KINDS == ("trade_closed", "plan_transition", "market_shock")
+    assert lifecycle_events.KINDS == ("trade_closed", "plan_transition", "market_shock",
+                                      "bear_regime")   # v239 appends bear_regime
 
 
 def test_a_valid_shock_event_is_deliverable_and_needs_no_ticker():
