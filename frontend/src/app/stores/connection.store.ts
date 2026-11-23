@@ -56,6 +56,10 @@ interface ConnectionStateSlice {
    * completed one, distinct from an old time.
    */
   botLastSuccess: string | null;
+  /** The heartbeat's `session_active`: false outside the bot's scan session,
+   *  which is what keeps an old `botLastSuccess` from reading as stale then.
+   *  Null until /system/scan answers or when the bot never reported. */
+  botSessionActive: boolean | null;
   /** Null when the bot has never completed a tick -- distinct from false. */
   botHealthy: boolean | null;
   /** True when the most recent poll for bot liveness failed. */
@@ -103,6 +107,7 @@ export const ConnectionStore = signalStore(
     botAlive: null,
     botLastSeen: null,
     botLastSuccess: null,
+    botSessionActive: null,
     botHealthy: null,
     unreachable: false,
     health: null,
@@ -170,6 +175,7 @@ export const ConnectionStore = signalStore(
             botHealthy: scan.bot_healthy,
             botLastSeen: scan.bot_last_seen,
             botLastSuccess: scan.bot_last_success,
+            botSessionActive: scan.bot_session_active ?? null,
             scanRunning: scan.running,
             scanProgress: scan.progress,
             unreachable: false,
