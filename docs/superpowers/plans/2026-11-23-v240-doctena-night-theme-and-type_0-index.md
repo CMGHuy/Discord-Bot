@@ -1,6 +1,6 @@
-# v241 — Doctena night, plan 1 of 5: Theme and type (index)
+# v240 — Doctena night, plan 1 of 5: Theme and type (index)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V241-7" -A 400 <part file>`); never read a part whole.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V240-7" -A 400 <part file>`); never read a part whole.
 
 **Bump:** ui minor, bot patch
 **Edge:** none (integrity)
@@ -85,14 +85,14 @@ Jost and the new shapes in both themes with nothing scrolling sideways.
   the two metric-matched fallback families. `vendor/jetbrains-mono/` is
   deleted; `vendor/inter/` stays for `chart_style.py:20`.
 - **Gates share one parser.** `frontend/src/app/ui/testing/style-rules.ts`
-  (V241-6) turns a source into `{ selector, body }` rules, reading only real
+  (V240-6) turns a source into `{ selector, body }` rules, reading only real
   style text: a `.css` file whole, a `.ts` file's `styles:` template
   literals, nothing from `.html`. It strips comments with `stripComments`
   from `all-sources.ts`. The control-border, thin-bar radius, type and
   money-colour gates all use it, so a TS code block is never mistaken for a
   CSS rule.
 - **Fixture rule.** Every task that changes a bare-`:root` declaration in
-  `palette.css` or `tokens.css` (V241-2, V241-3, V241-7) runs
+  `palette.css` or `tokens.css` (V240-2, V240-3, V240-7) runs
   `python scripts/dev/dump_tokens.py` and commits
   `tests/charts/resolved_tokens.json` in the same commit.
 
@@ -210,59 +210,62 @@ The plan runs **in id order in one worktree** (spec: plans 1 to 5 are
 strictly sequential; one worktree at a time). The sequential edges inside
 it, and their reasons:
 
-- V241-2 → V241-3 → V241-7: all three edit `tokens.css` and regenerate
+- V240-2 → V240-3 → V240-7: all three edit `tokens.css` and regenerate
   `tests/charts/resolved_tokens.json`, a single generated file.
-  V241-1 → V241-2: the spec says JetBrains Mono is deleted only after the
+  V240-1 → V240-2: the spec says JetBrains Mono is deleted only after the
   `tnum` check exists.
-- V241-3 → V241-5: the pre-boot literals are pinned to the Navy `--bg` that
-  V241-3 sets, and both edit `index.html` and `primitives.spec.ts`.
-  V241-4 → V241-5: the script mirrors `readTheme`'s inverted rule, and both
+- V240-3 → V240-3b: same files (`contrast.spec.ts`, `tokens.spec.ts`, `tokens.css`); 3b gates what 3 sets.
+- V240-3 → V240-5: the pre-boot literals are pinned to the Navy `--bg` that
+  V240-3 sets, and both edit `index.html` and `primitives.spec.ts`.
+  V240-4 → V240-5: the script mirrors `readTheme`'s inverted rule, and both
   rewrite default-theme tests.
-- V241-6 → V241-7, V241-9, V241-10: they consume `styleRules` (contract).
-- V241-7 ∥ V241-8 is not allowed: both edit `ui/layout.ts`.
-- V241-9 → V241-13 → V241-14 → V241-15 → V241-16: every sweep edits the
-  pending sets in `ui/type-gates.spec.ts`, and V241-16 deletes them.
-- V241-11 → V241-12: V241-12 consumes `fixed()` from V241-11.
-- V241-13 also edits `ui/plan-cell.ts`, `ui/metric-chip.ts` (V241-11) and
-  `ui/button.ts` (V241-8), so it runs after both.
+- V240-6 → V240-7, V240-9, V240-10: they consume `styleRules` (contract).
+- V240-7 ∥ V240-8 is not allowed: both edit `ui/layout.ts`.
+- V240-9 → V240-13 → V240-14 → V240-15 → V240-16: every sweep edits the
+  pending sets in `ui/type-gates.spec.ts`, and V240-16 deletes them.
+- V240-11 → V240-12: V240-12 consumes `fixed()` from V240-11.
+- V240-13 also edits `ui/plan-cell.ts`, `ui/metric-chip.ts` (V240-11) and
+  `ui/button.ts` (V240-8), so it runs after both.
 
-Safe to run in parallel if the controller wants to: **V241-1 ∥ V241-3 ∥
-V241-4** (disjoint files: vendor/requirements/tests/dev vs styles and
+Safe to run in parallel if the controller wants to: **V240-1 ∥ V240-3 ∥
+V240-4** (disjoint files: vendor/requirements/tests/dev vs styles and
 theme-tokens vs theme.service/profile-menu/shell specs, and no contract
-between them). Also **V241-10 ∥ V241-11** (spec-only scan vs formatters;
-disjoint files), both after V241-9.
+between them). Also **V240-10 ∥ V240-11** (spec-only scan vs formatters;
+disjoint files), both after V240-9.
 
 ## Task ledger
 
 | ID | Title | Part | Model | Files (C create, M modify, D delete) | Symbols for later tasks |
 |---|---|---|---|---|---|
-| V241-1 | Vendor Jost and pin `tnum` in a Python test | 1 | haiku | C `swingbot/admin/static/vendor/jost/jost-latin-wght-normal.woff2`, C `swingbot/admin/static/vendor/jost/jost-latin-ext-wght-normal.woff2`, C `swingbot/admin/static/vendor/jost/LICENSE.txt`, C `tests/dev/test_vendored_fonts.py`, M `requirements.txt` | `tests/dev/test_vendored_fonts.py` constants `VENDOR = ROOT / "swingbot/admin/static/vendor"`, `JOST_LATIN`, `JOST_LATIN_EXT`; V241-2 adds a "jetbrains-mono is gone" test to this file |
-| V241-2 | Jost in `fonts.css` with metric-matched fallbacks; font tokens; JetBrains Mono removed | 1 | sonnet | M `frontend/src/styles/fonts.css`, M `frontend/src/styles/tokens.css`, M `frontend/src/styles.css`, M `frontend/src/app/ui/layout.ts`, M `frontend/src/app/ui/metric-card.ts`, C `frontend/src/app/ui/fonts.spec.ts`, M `frontend/src/app/ui/tokens.spec.ts`, M `tests/dev/test_vendored_fonts.py`, M `tests/charts/resolved_tokens.json`, D `swingbot/admin/static/vendor/jetbrains-mono/` | `--font-sans`, `--font-mono` values (Global Constraints); `.sb-label` keeps `font-family: var(--font-mono)` |
-| V241-3 | Doctena night palette: `doctena-*` ramp, the 20-token Navy block, `--control-border`, contrast | 1 | sonnet | M `frontend/src/styles/palette.css`, M `frontend/src/styles/tokens.css`, M `frontend/src/app/ui/testing/theme-tokens.ts`, M `frontend/src/app/ui/tokens.spec.ts`, M `frontend/src/app/ui/contrast.spec.ts`, M `frontend/src/index.html` (the `NAVY_BG` literal only), M `frontend/src/app/ui/primitives.spec.ts` (`--midnight-950` pins and the `HEX_ALLOWLIST` entry only), M `tests/charts/resolved_tokens.json` | `NAVY_TOKENS: readonly string[]` exported from `ui/testing/theme-tokens.ts` (replaces `GROUND_INK_TOKENS`); `--control-border` token (bare `var(--border-strong)`, Navy `var(--doctena-blue-600)`); palette names in Global Constraints |
-| V241-4 | Navy is the default at runtime: `readTheme`, profile menu, shell and palette specs | 1 | sonnet | M `frontend/src/app/ui/theme.service.ts`, M `frontend/src/app/ui/theme.service.spec.ts`, M `frontend/src/app/shell/profile-menu.ts`, M `frontend/src/app/shell/profile-menu.spec.ts`, M `frontend/src/app/shell/shell.spec.ts`, M `frontend/src/app/shell/palette/command-palette.spec.ts` | `readTheme(storage): Theme` returns `'graphite'` only for `'graphite'`; `ProfileMenu.theme = input<Theme>('navy')` |
-| V241-5 | Cold load in Navy: pre-boot script with `GRAPHITE_BG`, static meta, inline ground, web manifest | 1 | sonnet | M `frontend/src/index.html`, M `frontend/public/manifest.webmanifest`, M `frontend/src/app/ui/primitives.spec.ts` | index.html script vars `NAVY_BG = '#00131f'`, `GRAPHITE_BG = '#0d0f12'`; comment phrase `manifest.webmanifest takes the Navy ground` |
-| V241-6 | `styleRules` parser; `--control-border` on inputs, selects and segmented controls | 1 | sonnet | C `frontend/src/app/ui/testing/style-rules.ts`, C `frontend/src/app/ui/testing/style-rules.spec.ts`, C `frontend/src/app/ui/control-border.spec.ts`, M `frontend/src/app/ui/form-controls.ts`, M `frontend/src/app/ui/form-controls.spec.ts`, M `frontend/src/app/ui/segmented.ts`, M `frontend/src/app/ui/date-range.ts`, M `frontend/src/app/ui/pagination.ts`, M `frontend/src/app/ui/data-table/data-table.ts` | `export type StyleRule = { selector: string; body: string }`; `export function styleRules(name: string, source: string): StyleRule[]` (`.css` whole file; `.ts` every `styles:` template literal, single or array; `.html` → `[]`; comments stripped; selector trimmed to its last line) |
-| V241-7 | Radius tokens, `--pill-radius`, thin bars on pills | 2 | sonnet | M `frontend/src/styles/tokens.css`, M `frontend/src/app/ui/tokens.spec.ts`, M `frontend/src/app/ui/chip.spec.ts`, C `frontend/src/app/ui/radius.spec.ts`, M `frontend/src/app/ui/layout.ts`, M `frontend/src/app/ui/magnitude.ts`, M `tests/charts/resolved_tokens.json` (and any other `--radius-sm` reader with `height` under 6px the new gate finds) | `--pill-radius: 999px` |
-| V241-8 | Uppercase buttons; −0.02em on headings at `--text-title` and above | 2 | sonnet | M `frontend/src/app/ui/button.ts`, M `frontend/src/app/ui/button.spec.ts`, M `frontend/src/app/ui/page.ts`, M `frontend/src/app/ui/section-head.ts`, M `frontend/src/app/ui/layout.ts`, M `frontend/src/app/workspaces/gallery/gallery.ts`, M `frontend/src/app/workspaces/dashboard/panels/portfolio-value.ts`, M `frontend/src/app/workspaces/plans/plan-detail.ts`, M `frontend/src/app/workspaces/trades/trade-detail.ts`, M `frontend/src/app/workspaces/trades/outcome-strip.ts`, C `frontend/src/app/ui/headings.spec.ts` | none |
-| V241-9 | Type gates: `tabular-nums` on numeric rules, no text in `--text-faint` (with pending lists) | 2 | sonnet | C `frontend/src/app/ui/type-gates.spec.ts` | `TABULAR_PENDING: ReadonlySet<string>` and `FAINT_PENDING: ReadonlySet<string>` (file names relative to `src/`, as `allSources()` names them), consts in `type-gates.spec.ts`; each holds exactly today's offenders; two tests per gate: every file outside the set passes, every file in the set still offends |
-| V241-10 | Money-colour scan: nav, brand, active and focus never read `--pos`/`--neg` | 2 | sonnet | C `frontend/src/app/ui/money-colour.spec.ts` (plus any offending rule it finds, swapped to `--accent`) | `NAV_FILES: readonly string[]` const in `money-colour.spec.ts` (plan 3 appends its editor file) |
-| V241-11 | True minus I: `fixed()`, `riskPct`, `metric-card`, `metric-chip`, `plan-cell` `formatR` | 2 | sonnet | M `frontend/src/app/ui/format.ts`, M `frontend/src/app/ui/format.spec.ts`, M `frontend/src/app/ui/metric-card.ts`, M `frontend/src/app/ui/metric-card.spec.ts`, M `frontend/src/app/ui/metric-chip.ts`, M `frontend/src/app/ui/metric-chip.spec.ts`, M `frontend/src/app/ui/plan-cell.ts`, M `frontend/src/app/ui/plan-cell.spec.ts` | `export function fixed(value: number, decimals: number): string` in `ui/format.ts` (loss → `MINUS` + `abs.toFixed`; gain/zero → no sign; a value that rounds to zero → unsigned zero) |
-| V241-12 | True minus II: `figure-text` count-up, `attribution.ts`, `tape.ts` `signed` | 2 | sonnet | M `frontend/src/app/ui/motion/figure-text.ts`, M `frontend/src/app/ui/motion/figure-text.spec.ts`, M `frontend/src/app/workspaces/analytics/tabs/attribution.ts`, M `frontend/src/app/workspaces/analytics/tabs/attribution.spec.ts`, M `frontend/src/app/shell/tape/tape.ts`, M `frontend/src/app/shell/tape/tape.spec.ts` | none |
-| V241-13 | Sweep 1: `app/ui/`, `app/shell/`, `styles.css` | 3 | sonnet | M offending files under `frontend/src/app/ui/`, `frontend/src/app/shell/` and `frontend/src/styles.css` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | removes every `app/ui/`, `app/shell/`, `styles.css` entry from both pending sets |
-| V241-14 | Sweep 2: analytics, reports, research, cancels, guide, gallery | 3 | haiku | M offending files under `frontend/src/app/workspaces/{analytics,reports,research,cancels,guide,gallery}/` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | removes those entries |
-| V241-15 | Sweep 3: dashboard, calendar, trades, plans, risk | 3 | haiku | M offending files under `frontend/src/app/workspaces/{dashboard,calendar,trades,plans,risk}/` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | removes those entries |
-| V241-16 | Sweep 4: system, versions, watchlist; pending lists deleted | 3 | haiku | M offending files under `frontend/src/app/workspaces/{system,versions,watchlist}/` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | `TABULAR_PENDING`/`FAINT_PENDING` and their "still offends" tests deleted; both gates now run with no exemptions |
+| V240-1 | Vendor Jost and pin `tnum` in a Python test | 1 | haiku | C `swingbot/admin/static/vendor/jost/jost-latin-wght-normal.woff2`, C `swingbot/admin/static/vendor/jost/jost-latin-ext-wght-normal.woff2`, C `swingbot/admin/static/vendor/jost/LICENSE.txt`, C `tests/dev/test_vendored_fonts.py`, M `requirements.txt` | `tests/dev/test_vendored_fonts.py` constants `VENDOR = ROOT / "swingbot/admin/static/vendor"`, `JOST_LATIN`, `JOST_LATIN_EXT`; V240-2 adds a "jetbrains-mono is gone" test to this file |
+| V240-2 | Jost in `fonts.css` with metric-matched fallbacks; font tokens; JetBrains Mono removed | 1 | sonnet | M `frontend/src/styles/fonts.css`, M `frontend/src/styles/tokens.css`, M `frontend/src/styles.css`, M `frontend/src/app/ui/layout.ts`, M `frontend/src/app/ui/metric-card.ts`, C `frontend/src/app/ui/fonts.spec.ts`, M `frontend/src/app/ui/tokens.spec.ts`, M `tests/dev/test_vendored_fonts.py`, M `tests/charts/resolved_tokens.json`, D `swingbot/admin/static/vendor/jetbrains-mono/` | `--font-sans`, `--font-mono` values (Global Constraints); `.sb-label` keeps `font-family: var(--font-mono)` |
+| V240-3 | Doctena night palette: `doctena-*` ramp, the 20-token Navy block, `--control-border`, contrast | 1 | sonnet | M `frontend/src/styles/palette.css`, M `frontend/src/styles/tokens.css`, M `frontend/src/app/ui/testing/theme-tokens.ts`, M `frontend/src/app/ui/tokens.spec.ts`, M `frontend/src/app/ui/contrast.spec.ts`, M `frontend/src/index.html` (the `NAVY_BG` literal only), M `frontend/src/app/ui/primitives.spec.ts` (`--midnight-950` pins and the `HEX_ALLOWLIST` entry only), M `tests/charts/resolved_tokens.json` | `NAVY_TOKENS: readonly string[]` exported from `ui/testing/theme-tokens.ts` (replaces `GROUND_INK_TOKENS`); `--control-border` token (bare `var(--border-strong)`, Navy `var(--doctena-blue-600)`); palette names in Global Constraints |
+| V240-3b | Contrast gates for the divider and the control border; tokens.css header names the Navy list | 1 | haiku | M `frontend/src/app/ui/contrast.spec.ts`, M `frontend/src/app/ui/tokens.spec.ts`, M `frontend/src/styles/tokens.css` (header comment only) | none |
+| V240-4 | Navy is the default at runtime: `readTheme`, profile menu, shell and palette specs | 1 | sonnet | M `frontend/src/app/ui/theme.service.ts`, M `frontend/src/app/ui/theme.service.spec.ts`, M `frontend/src/app/shell/profile-menu.ts`, M `frontend/src/app/shell/profile-menu.spec.ts`, M `frontend/src/app/shell/shell.spec.ts`, M `frontend/src/app/shell/palette/command-palette.spec.ts`, M `frontend/src/app/ui/chart/trade-chart.spec.ts`, M `frontend/src/app/workspaces/dashboard/panels/equity-candles.spec.ts` (theme-storage stubs return `'graphite'`) | `readTheme(storage): Theme` returns `'graphite'` only for `'graphite'`; `ProfileMenu.theme = input<Theme>('navy')` |
+| V240-5 | Cold load in Navy: pre-boot script with `GRAPHITE_BG`, static meta, inline ground, web manifest | 1 | sonnet | M `frontend/src/index.html`, M `frontend/public/manifest.webmanifest`, M `frontend/src/app/ui/primitives.spec.ts` | index.html script vars `NAVY_BG = '#00131f'`, `GRAPHITE_BG = '#0d0f12'`; comment phrase `manifest.webmanifest takes the Navy ground` |
+| V240-6 | `styleRules` parser; `--control-border` on inputs, selects and segmented controls | 1 | sonnet | C `frontend/src/app/ui/testing/style-rules.ts`, C `frontend/src/app/ui/testing/style-rules.spec.ts`, C `frontend/src/app/ui/control-border.spec.ts`, M `frontend/src/app/ui/form-controls.ts`, M `frontend/src/app/ui/form-controls.spec.ts`, M `frontend/src/app/ui/segmented.ts`, M `frontend/src/app/ui/date-range.ts`, M `frontend/src/app/ui/pagination.ts`, M `frontend/src/app/ui/data-table/data-table.ts` | `export type StyleRule = { selector: string; body: string }`; `export function styleRules(name: string, source: string): StyleRule[]` (`.css` whole file; `.ts` every `styles:` template literal, single or array; `.html` → `[]`; comments stripped; selector trimmed to its last line) |
+| V240-7 | Radius tokens, `--pill-radius`, thin bars on pills | 2 | sonnet | M `frontend/src/styles/tokens.css`, M `frontend/src/app/ui/tokens.spec.ts`, M `frontend/src/app/ui/chip.spec.ts`, C `frontend/src/app/ui/radius.spec.ts`, M `frontend/src/app/ui/layout.ts`, M `frontend/src/app/ui/magnitude.ts`, M `tests/charts/resolved_tokens.json` (and any other `--radius-sm` reader with `height` under 6px the new gate finds) | `--pill-radius: 999px` |
+| V240-8 | Uppercase buttons; −0.02em on headings at `--text-title` and above | 2 | sonnet | M `frontend/src/app/ui/button.ts`, M `frontend/src/app/ui/button.spec.ts`, M `frontend/src/app/ui/page.ts`, M `frontend/src/app/ui/section-head.ts`, M `frontend/src/app/ui/layout.ts`, M `frontend/src/app/workspaces/gallery/gallery.ts`, M `frontend/src/app/workspaces/dashboard/panels/portfolio-value.ts`, M `frontend/src/app/workspaces/plans/plan-detail.ts`, M `frontend/src/app/workspaces/trades/trade-detail.ts`, M `frontend/src/app/workspaces/trades/outcome-strip.ts`, C `frontend/src/app/ui/headings.spec.ts` | none |
+| V240-9 | Type gates: `tabular-nums` on numeric rules, no text in `--text-faint` (with pending lists) | 2 | sonnet | C `frontend/src/app/ui/type-gates.spec.ts` | `TABULAR_PENDING: ReadonlySet<string>` and `FAINT_PENDING: ReadonlySet<string>` (file names relative to `src/`, as `allSources()` names them), consts in `type-gates.spec.ts`; each holds exactly today's offenders; two tests per gate: every file outside the set passes, every file in the set still offends |
+| V240-10 | Money-colour scan: nav, brand, active and focus never read `--pos`/`--neg` | 2 | sonnet | C `frontend/src/app/ui/money-colour.spec.ts` (plus any offending rule it finds, swapped to `--accent`) | `NAV_FILES: readonly string[]` const in `money-colour.spec.ts` (plan 3 appends its editor file) |
+| V240-11 | True minus I: `fixed()`, `riskPct`, `metric-card`, `metric-chip`, `plan-cell` `formatR` | 2 | sonnet | M `frontend/src/app/ui/format.ts`, M `frontend/src/app/ui/format.spec.ts`, M `frontend/src/app/ui/metric-card.ts`, M `frontend/src/app/ui/metric-card.spec.ts`, M `frontend/src/app/ui/metric-chip.ts`, M `frontend/src/app/ui/metric-chip.spec.ts`, M `frontend/src/app/ui/plan-cell.ts`, M `frontend/src/app/ui/plan-cell.spec.ts` | `export function fixed(value: number, decimals: number): string` in `ui/format.ts` (loss → `MINUS` + `abs.toFixed`; gain/zero → no sign; a value that rounds to zero → unsigned zero) |
+| V240-12 | True minus II: `figure-text` count-up, `attribution.ts`, `tape.ts` `signed` | 2 | sonnet | M `frontend/src/app/ui/motion/figure-text.ts`, M `frontend/src/app/ui/motion/figure-text.spec.ts`, M `frontend/src/app/workspaces/analytics/tabs/attribution.ts`, M `frontend/src/app/workspaces/analytics/tabs/attribution.spec.ts`, M `frontend/src/app/shell/tape/tape.ts`, M `frontend/src/app/shell/tape/tape.spec.ts` | none |
+| V240-13 | Sweep 1: `app/ui/`, `app/shell/`, `styles.css` | 3 | sonnet | M offending files under `frontend/src/app/ui/`, `frontend/src/app/shell/` and `frontend/src/styles.css` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | removes every `app/ui/`, `app/shell/`, `styles.css` entry from both pending sets |
+| V240-14 | Sweep 2: analytics, reports, research, cancels, guide, gallery | 3 | haiku | M offending files under `frontend/src/app/workspaces/{analytics,reports,research,cancels,guide,gallery}/` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | removes those entries |
+| V240-15 | Sweep 3: dashboard, calendar, trades, plans, risk | 3 | haiku | M offending files under `frontend/src/app/workspaces/{dashboard,calendar,trades,plans,risk}/` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | removes those entries |
+| V240-16 | Sweep 4: system, versions, watchlist; pending lists deleted | 3 | haiku | M offending files under `frontend/src/app/workspaces/{system,versions,watchlist}/` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | `TABULAR_PENDING`/`FAINT_PENDING` and their "still offends" tests deleted; both gates now run with no exemptions |
 
 ## Parts
 
 | Part | File | Tasks | Scope |
 |---|---|---|---|
-| 1 | `2026-11-23-v241-doctena-night-theme-and-type_1-fonts-and-colours.md` | V241-1..V241-6 | Jost vendoring and `tnum` test, fonts.css and font tokens, JetBrains Mono removal, the doctena palette and Navy block, the default flip at runtime and at cold load, `styleRules` and `--control-border` |
-| 2 | `2026-11-23-v241-doctena-night-theme-and-type_2-shapes-and-rules.md` | V241-7..V241-12 | Radius tokens and pills, uppercase buttons and heading tracking, the type and money-colour gates, the seven true-minus sites |
-| 3 | `2026-11-23-v241-doctena-night-theme-and-type_3-type-sweeps.md` | V241-13..V241-16 | The four area sweeps that empty the type gates' pending lists |
+| 1 | `2026-11-23-v240-doctena-night-theme-and-type_1-fonts-and-colours.md` | V240-1..V240-4 (with V240-3b) | Jost vendoring and `tnum` test, fonts.css and font tokens, JetBrains Mono removal, the doctena palette and Navy block, the default flip at runtime |
+| 1b | `2026-11-23-v240-doctena-night-theme-and-type_1b-cold-load-and-controls.md` | V240-5..V240-6 | The Navy default at cold load, `styleRules` and the `--control-border` readers |
+| 2 | `2026-11-23-v240-doctena-night-theme-and-type_2-shapes-and-rules.md` | V240-7..V240-12 | Radius tokens and pills, uppercase buttons and heading tracking, the type and money-colour gates, the seven true-minus sites |
+| 3 | `2026-11-23-v240-doctena-night-theme-and-type_3-type-sweeps.md` | V240-13..V240-16 | The four area sweeps that empty the type gates' pending lists |
 
 Offender snapshot for the part 3 writer (scan at `ff4f6025`, rough parser;
-V241-9's `styleRules` count is authoritative). The `tabular-nums` scan
+V240-9's `styleRules` count is authoritative). The `tabular-nums` scan
 found 67 rules in 39 files and the `--text-faint` text scan found 97 reads
 in 46 files. Per-file detail is in the brief §4. The faint files are
 `shell/breadcrumb`, `ui/{age-hint, bar-list, button, column-picker,

@@ -1,11 +1,11 @@
-# v241 — Doctena night, plan 1 of 5: Theme and type — Part 1: fonts and colours
+# v240 — Doctena night, plan 1 of 5: Theme and type — Part 1: fonts and colours
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V241-3" -A 400 <this file>`); never read the file whole.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V240-3" -A 400 <this file>`); never read the file whole.
 
 **Spec:** [2026-11-23-v240-doctena-night-restyle-design.md](../specs/2026-11-23-v240-doctena-night-restyle-design.md) (§1, §2, §11; its `### Corrections from the plan 1 code brief` section wins over the text above it)
-**Index:** [2026-11-23-v241-doctena-night-theme-and-type_0-index.md](2026-11-23-v241-doctena-night-theme-and-type_0-index.md) holds the Goal, Global Constraints, the "Decisions this index fixes", `## Parallelisation` and the task ledger. Every task below implicitly includes the index's Global Constraints.
+**Index:** [2026-11-23-v240-doctena-night-theme-and-type_0-index.md](2026-11-23-v240-doctena-night-theme-and-type_0-index.md) holds the Goal, Global Constraints, the "Decisions this index fixes", `## Parallelisation` and the task ledger. Every task below implicitly includes the index's Global Constraints.
 
-Tasks V241-1..V241-6: vendor Jost and pin `tnum` in a Python test; Jost in
+Tasks V240-1..V240-6: vendor Jost and pin `tnum` in a Python test; Jost in
 `fonts.css` with metric-matched fallbacks and JetBrains Mono removed; the
 doctena palette and the 20-token Navy block; Navy as the runtime default;
 the Navy cold load; the shared `styleRules` parser and `--control-border` on
@@ -26,7 +26,7 @@ Conventions for every task in this part:
 
 # Phase 1: Fonts
 
-### Task V241-1: Vendor Jost and pin `tnum` in a Python test
+### Task V240-1: Vendor Jost and pin `tnum` in a Python test
 
 **Model:** haiku — copy three files and write one self-contained Python test; no design choice left.
 
@@ -41,8 +41,8 @@ Conventions for every task in this part:
 - Consumes: nothing.
 - Produces: `tests/dev/test_vendored_fonts.py` with module constants
   `ROOT`, `VENDOR = ROOT / "swingbot/admin/static/vendor"`, `JOST_LATIN`,
-  `JOST_LATIN_EXT`, `JOST_LICENSE`. V241-2 appends a "JetBrains Mono is gone"
-  test to this file. The two woff2 paths are what `fonts.css` (V241-2) points
+  `JOST_LATIN_EXT`, `JOST_LICENSE`. V240-2 appends a "JetBrains Mono is gone"
+  test to this file. The two woff2 paths are what `fonts.css` (V240-2) points
   at as `/static/vendor/jost/<file>`.
 
 Why: spec v240 §2 replaces Inter and JetBrains Mono with Jost, self-hosted
@@ -180,12 +180,12 @@ Expected: PASS, 9 passed (the two parametrised tests count twice each).
 
 ```bash
 git add swingbot/admin/static/vendor/jost/ tests/dev/test_vendored_fonts.py requirements.txt
-git commit -m "feat(v241): vendor Jost (OFL 1.1) and pin tnum, wght 100-900 and U+2212 in a fontTools test
+git commit -m "feat(v240): vendor Jost (OFL 1.1) and pin tnum, wght 100-900 and U+2212 in a fontTools test
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task V241-2: Jost in `fonts.css` with metric-matched fallbacks; font tokens; JetBrains Mono removed
+### Task V240-2: Jost in `fonts.css` with metric-matched fallbacks; font tokens; JetBrains Mono removed
 
 **Model:** sonnet — several files and a generated fixture move together; the values are all given, but the fixture and two test languages must stay in step.
 
@@ -202,7 +202,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Delete: `swingbot/admin/static/vendor/jetbrains-mono/` (3 woff2 + `LICENSE.txt`)
 
 **Interfaces:**
-- Consumes: the vendored files and `VENDOR`, `ROOT` from V241-1.
+- Consumes: the vendored files and `VENDOR`, `ROOT` from V240-1.
 - Produces: `--font-sans: "Jost", "Jost Fallback", "Jost Fallback Android", system-ui, sans-serif;`
   and `--font-mono: var(--font-sans);` in the bare `:root`. `--font-num:
   var(--font-mono);` and `--font-figure: var(--font-sans);` are unchanged.
@@ -214,7 +214,7 @@ Why: spec v240 §2. `fonts.css` declares `Jost` once per subset (variable,
 the package) and doctena's four metric-matched fallback faces, so a slow
 font load does not shift the layout (§8). The tokens change once and no
 component changes its `font-family`. JetBrains Mono has no reader once
-`fonts.css` drops it, and V241-1's `tnum` test now exists, so its files go
+`fonts.css` drops it, and V240-1's `tnum` test now exists, so its files go
 (spec §2 "Owners of the old files"). `vendor/inter/` stays for
 `chart_style.py:20`. The bare `:root` font tokens change, so the fixture is
 regenerated in this commit.
@@ -536,7 +536,7 @@ git add frontend/src/styles/fonts.css frontend/src/styles/tokens.css frontend/sr
   frontend/src/app/ui/layout.ts frontend/src/app/ui/metric-card.ts \
   frontend/src/app/ui/fonts.spec.ts frontend/src/app/ui/tokens.spec.ts \
   tests/dev/test_vendored_fonts.py tests/charts/resolved_tokens.json
-git commit -m "feat(v241): Jost with metric-matched fallbacks as the one face; --font-mono aliases --font-sans; JetBrains Mono deleted
+git commit -m "feat(v240): Jost with metric-matched fallbacks as the one face; --font-mono aliases --font-sans; JetBrains Mono deleted
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -545,13 +545,13 @@ The `git rm` in Step 5 already staged the JetBrains Mono deletion.
 
 # Phase 2: Colours and the default theme
 
-### Task V241-3: Doctena night palette: `doctena-*` ramp, the 20-token Navy block, `--control-border`, contrast
+### Task V240-3: Doctena night palette: `doctena-*` ramp, the 20-token Navy block, `--control-border`, contrast
 
 **Model:** sonnet — token, palette, fixture and two specs move together under exact contrast gates; values are given, but the specs must be rewritten coherently.
 
 **Files:**
 - Modify: `frontend/src/styles/palette.css` (header note; `midnight-*`/`frost-*` out, `doctena-*` in; alpha entries)
-- Modify: `frontend/src/styles/tokens.css` (`--control-border` in the bare `:root`; the Navy block and its comment; the header is V241-3b)
+- Modify: `frontend/src/styles/tokens.css` (`--control-border` in the bare `:root`; the Navy block and its comment; the header is V240-3b)
 - Modify: `frontend/src/app/ui/testing/theme-tokens.ts` (`GROUND_INK_TOKENS` → `NAVY_TOKENS`)
 - Modify: `frontend/src/app/ui/tokens.spec.ts` (import, `REQUIRED`, the `v225: the Navy ground` describe)
 - Modify: `frontend/src/index.html` (the `NAVY_BG` literal and the comment naming its palette entry only)
@@ -559,14 +559,14 @@ The `git rm` in Step 5 already staged the JetBrains Mono deletion.
 - Modify: `tests/charts/resolved_tokens.json` (regenerated)
 
 **Interfaces:**
-- Consumes: nothing from earlier tasks (runs after V241-2 because both regenerate the fixture).
+- Consumes: nothing from earlier tasks (runs after V240-2 because both regenerate the fixture).
 - Produces:
   - `export const NAVY_TOKENS: readonly string[]` in `frontend/src/app/ui/testing/theme-tokens.ts`,
     exactly `['--bg', '--surface', '--surface-raised', '--surface-overlay', '--overlay-dim', '--border', '--border-strong', '--text', '--text-secondary', '--text-muted', '--text-faint', '--accent', '--accent-fill', '--accent-fill-hi', '--accent-soft', '--control-border', '--pos', '--neg', '--pos-soft', '--neg-soft']`.
     `GROUND_INK_TOKENS` is deleted (its only reader is `tokens.spec.ts`).
-  - Token `--control-border`: bare `:root` `var(--border-strong)`, Navy `var(--doctena-blue-600)` (`#0072b0`). V241-6 points controls at it.
+  - Token `--control-border`: bare `:root` `var(--border-strong)`, Navy `var(--doctena-blue-600)` (`#0072b0`). V240-6 points controls at it.
   - Palette names and values exactly as in the index's Global Constraints (`--doctena-950` … `--doctena-coral-400-a14`).
-  - `index.html` `var NAVY_BG = '#00131f';` (V241-5 rewrites the rest of the script).
+  - `index.html` `var NAVY_BG = '#00131f';` (V240-5 rewrites the rest of the script).
 
 Why: spec v240 §1 and its corrections. The Navy block grows from the eleven
 ground and ink tokens to twenty: doctena's blue ground and ink, a lifted
@@ -575,7 +575,7 @@ for losses, and their 14% tints (without the tints Navy would keep the old
 green/red tint under the new hues). The `midnight-*`/`frost-*` ramps lose
 their last reader and are deleted. `--text-faint` keeps its divider contract
 (corrections): it is held to the non-text 3:1 threshold here, and the text
-reads that move to `--text-muted` are V241-9 and part 3. `--control-border`
+reads that move to `--text-muted` are V240-9 and part 3. `--control-border`
 must clear 3:1 on `--bg` and `--surface` in Navy (WCAG 1.4.11). Black's
 value is `--border-strong` (about 1.5:1), a known gap the spec keeps with
 Black's colours (index Decision 1), so that gate is Navy-only. Every value
@@ -587,7 +587,7 @@ fill) and record the new value in the commit message; never lower a
 threshold. The bare `:root` gains `--control-border` and the palette
 changes, so the fixture is regenerated. The existing `contrast.spec.ts`
 gates already run over both themes, so they measure the new Navy values in
-this task; V241-3b adds the two new gates (faint as a divider,
+this task; V240-3b adds the two new gates (faint as a divider,
 `--control-border` at 3:1) and rewrites the `tokens.css` header.
 
 - [ ] **Step 1: Rewrite the tests (they fail)**
@@ -893,7 +893,7 @@ In `frontend/src/index.html`, change `var NAVY_BG = '#070c18';` to
 `var NAVY_BG = '#00131f';`, and in the comment above the script change
 `NAVY_BG is a copy of palette.css` / `--midnight-950; primitives.spec.ts pins it.`
 to `NAVY_BG is a copy of palette.css` / `--doctena-950; primitives.spec.ts pins it.`
-Nothing else in `index.html` changes in this task (V241-5 rewrites the cold load).
+Nothing else in `index.html` changes in this task (V240-5 rewrites the cold load).
 
 - [ ] **Step 7: Regenerate the fixture**
 
@@ -928,14 +928,14 @@ git add frontend/src/styles/palette.css frontend/src/styles/tokens.css \
   frontend/src/app/ui/testing/theme-tokens.ts frontend/src/app/ui/tokens.spec.ts \
   frontend/src/index.html \
   frontend/src/app/ui/primitives.spec.ts tests/charts/resolved_tokens.json
-git commit -m "feat(v241): doctena night -- the 20-token Navy block, --control-border, doctena-* palette; midnight/frost deleted
+git commit -m "feat(v240): doctena night -- the 20-token Navy block, --control-border, doctena-* palette; midnight/frost deleted
 
 All Navy values pass their existing gates as specified (no value moved).
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task V241-3b: Contrast gates for the divider and the control border; the tokens.css header names the Navy list
+### Task V240-3b: Contrast gates for the divider and the control border; the tokens.css header names the Navy list
 
 **Model:** haiku — two table-driven contrast gates, one header assertion and a comment rewrite, all given verbatim; no value changes.
 
@@ -945,10 +945,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `frontend/src/styles/tokens.css` (the header comment, lines 7–27, only)
 
 **Interfaces:**
-- Consumes: `--control-border`, the 20-token Navy block and `NAVY_TOKENS` from V241-3; `resolveTokenIn`, `TOKEN_THEMES` from `frontend/src/app/ui/testing/theme-tokens.ts`.
+- Consumes: `--control-border`, the 20-token Navy block and `NAVY_TOKENS` from V240-3; `resolveTokenIn`, `TOKEN_THEMES` from `frontend/src/app/ui/testing/theme-tokens.ts`.
 - Produces: nothing a later task consumes.
 
-Why: split from V241-3 to keep each task under 20 KB. Spec v240 §1 and its
+Why: split from V240-3 to keep each task under 20 KB. Spec v240 §1 and its
 corrections: `--text-faint` keeps its divider contract, so it is held to the
 non-text 3:1 threshold (WCAG 1.4.11) on all four surfaces, in both themes
 (measured: Navy 3.90:1 at worst, on `--surface-overlay`; Graphite 3.23:1).
@@ -1012,7 +1012,7 @@ describe('v240: --control-border clears 3:1 (navy)', () => {
 
 In `frontend/src/app/ui/tokens.spec.ts`, inside
 `describe('v240: the Navy block (doctena night)', ...)`, replace the test
-`'states the ground/ink rule in the tokens.css header'` (written by V241-3) with:
+`'states the ground/ink rule in the tokens.css header'` (written by V240-3) with:
 
 ```ts
   it('states the Navy rule in the tokens.css header', () => {
@@ -1032,7 +1032,7 @@ In `frontend/src/app/ui/tokens.spec.ts`, inside
 Run: `cd frontend && npx ng test --watch=false --include src/app/ui/contrast.spec.ts --include src/app/ui/tokens.spec.ts`
 Expected: the header test FAILS (no `v240`, `--control-border` or "twenty
 tokens" in the header yet). The new contrast gates PASS at once, because
-V241-3 already set values that clear them. If a contrast gate fails, move
+V240-3 already set values that clear them. If a contrast gate fails, move
 that palette value in `palette.css` (a lighter divider, a lighter control
 border), update its `NAVY` row in `tokens.spec.ts`, run
 `python scripts/dev/dump_tokens.py`, stage `palette.css` and
@@ -1081,12 +1081,12 @@ Expected: exit 0 (a comment-only change to `tokens.css`).
 
 ```bash
 git add frontend/src/app/ui/contrast.spec.ts frontend/src/app/ui/tokens.spec.ts frontend/src/styles/tokens.css
-git commit -m "test(v241): --text-faint held to 3:1 as a divider in both themes, --control-border to 3:1 in Navy; tokens.css header names the Navy list
+git commit -m "test(v240): --text-faint held to 3:1 as a divider in both themes, --control-border to 3:1 in Navy; tokens.css header names the Navy list
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task V241-4: Navy is the default at runtime: `readTheme`, profile menu, shell and palette specs
+### Task V240-4: Navy is the default at runtime: `readTheme`, profile menu, shell and palette specs
 
 **Model:** sonnet — a one-line logic inversion whose ripple runs through six spec files; each flipped expectation must be rewritten, not deleted.
 
@@ -1106,7 +1106,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   only for a stored value of exactly `'graphite'`, otherwise `'navy'`
   (missing, junk, or a throwing storage). `ProfileMenu.theme = input<Theme>('navy')`.
   `THEME_OPTIONS` lists Dark blue first; the labels stay `Black` / `Dark blue`.
-  V241-5's pre-boot script mirrors this rule.
+  V240-5's pre-boot script mirrors this rule.
 
 Why: spec v240 §1 "Navy is the default" and §8: anything but exactly
 `'graphite'` is Navy, so a browser that never chose opens in doctena night
@@ -1474,7 +1474,7 @@ git add frontend/src/app/ui/theme.service.ts frontend/src/app/ui/theme.service.s
   frontend/src/app/shell/profile-menu.ts frontend/src/app/shell/profile-menu.spec.ts \
   frontend/src/app/shell/shell.spec.ts frontend/src/app/shell/palette/command-palette.spec.ts \
   frontend/src/app/ui/chart/trade-chart.spec.ts frontend/src/app/workspaces/dashboard/panels/equity-candles.spec.ts
-git commit -m "feat(v241): Navy is the default theme -- only an explicit 'graphite' is Black; Dark blue listed first
+git commit -m "feat(v240): Navy is the default theme -- only an explicit 'graphite' is Black; Dark blue listed first
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```

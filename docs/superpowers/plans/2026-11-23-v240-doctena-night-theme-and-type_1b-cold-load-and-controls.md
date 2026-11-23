@@ -1,15 +1,15 @@
-# v241 — Doctena night, plan 1 of 5: Theme and type — Part 1b: cold load and controls
+# v240 — Doctena night, plan 1 of 5: Theme and type — Part 1b: cold load and controls
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V241-6" -A 400 <this file>`); never read the file whole.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Pull one task at a time (`grep -n "^### Task V240-6" -A 400 <this file>`); never read the file whole.
 
 **Spec:** [2026-11-23-v240-doctena-night-restyle-design.md](../specs/2026-11-23-v240-doctena-night-restyle-design.md) (§1, §11; its `### Corrections from the plan 1 code brief` section wins over the text above it)
-**Index:** [2026-11-23-v241-doctena-night-theme-and-type_0-index.md](2026-11-23-v241-doctena-night-theme-and-type_0-index.md) holds the Goal, Global Constraints, the "Decisions this index fixes", `## Parallelisation` and the task ledger. Every task below implicitly includes the index's Global Constraints.
+**Index:** [2026-11-23-v240-doctena-night-theme-and-type_0-index.md](2026-11-23-v240-doctena-night-theme-and-type_0-index.md) holds the Goal, Global Constraints, the "Decisions this index fixes", `## Parallelisation` and the task ledger. Every task below implicitly includes the index's Global Constraints.
 
-Part 1 overflowed: V241-1..V241-4 fill
-[`_1-fonts-and-colours.md`](2026-11-23-v241-doctena-night-theme-and-type_1-fonts-and-colours.md)
+Part 1 overflowed: V240-1..V240-4 fill
+[`_1-fonts-and-colours.md`](2026-11-23-v240-doctena-night-theme-and-type_1-fonts-and-colours.md)
 to the 1500-line cap, so its last two tasks live here, unchanged in id,
-files and contracts. Run them after V241-4: V241-5 (the Navy cold load) and
-V241-6 (`styleRules` and `--control-border`).
+files and contracts. Run them after V240-4: V240-5 (the Navy cold load) and
+V240-6 (`styleRules` and `--control-border`).
 
 Conventions for every task in this part:
 
@@ -21,7 +21,7 @@ Conventions for every task in this part:
 
 # Phase 2 (continued): the default theme at cold load
 
-### Task V241-5: Cold load in Navy: pre-boot script with `GRAPHITE_BG`, static meta, inline ground, web manifest
+### Task V240-5: Cold load in Navy: pre-boot script with `GRAPHITE_BG`, static meta, inline ground, web manifest
 
 **Model:** sonnet — the pre-paint script and its pinned copies must change together; the script runs before Angular, so its tests execute it directly.
 
@@ -31,8 +31,8 @@ Conventions for every task in this part:
 - Modify: `frontend/src/app/ui/primitives.spec.ts` (`HEX_ALLOWLIST` entry; the `the cold-load copies …` and `the Dark blue cold load (v225)` describes)
 
 **Interfaces:**
-- Consumes: Navy `--bg` = `--doctena-950` = `#00131f` (V241-3); `readTheme`'s
-  rule, Black only for exactly `'graphite'` (V241-4).
+- Consumes: Navy `--bg` = `--doctena-950` = `#00131f` (V240-3); `readTheme`'s
+  rule, Black only for exactly `'graphite'` (V240-4).
 - Produces: the index.html script vars `NAVY_BG = '#00131f'` and
   `GRAPHITE_BG = '#0d0f12'`; the comment phrase
   `manifest.webmanifest takes the Navy ground`. No TypeScript symbol.
@@ -297,14 +297,14 @@ Expected: PASS.
 
 ```bash
 git add frontend/src/index.html frontend/public/manifest.webmanifest frontend/src/app/ui/primitives.spec.ts
-git commit -m "feat(v241): cold load in Navy -- pre-paint script always sets data-theme, GRAPHITE_BG only for an explicit Black; meta, inline ground and manifest take the Navy --bg
+git commit -m "feat(v240): cold load in Navy -- pre-paint script always sets data-theme, GRAPHITE_BG only for an explicit Black; meta, inline ground and manifest take the Navy --bg
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 # Phase 3: The shared style parser and the control border
 
-### Task V241-6: `styleRules` parser; `--control-border` on inputs, selects and segmented controls
+### Task V240-6: `styleRules` parser; `--control-border` on inputs, selects and segmented controls
 
 **Model:** sonnet — a small parser that four later gates depend on, with edge cases (interpolations, arrays, `@media`) that must be pinned exactly.
 
@@ -320,7 +320,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `frontend/src/app/ui/data-table/data-table.ts` (the `.phone-sort select` rule, line 459)
 
 **Interfaces:**
-- Consumes: `--control-border` (V241-3: bare `var(--border-strong)`, Navy
+- Consumes: `--control-border` (V240-3: bare `var(--border-strong)`, Navy
   `var(--doctena-blue-600)`); `stripComments(source: string): string` from
   `frontend/src/app/ui/testing/all-sources.ts`.
 - Produces, in `frontend/src/app/ui/testing/style-rules.ts`:
@@ -334,7 +334,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
     last line, with a comma-continued selector list joined onto one line.
     The body is trimmed. Rules inside `@media`/`@container`/`@keyframes`
     come back as their inner rules.
-  - V241-7 (thin-bar radius), V241-9 (type gates) and V241-10 (money colour)
+  - V240-7 (thin-bar radius), V240-9 (type gates) and V240-10 (money colour)
     import it.
 
 Why: spec v240 §1 gives inputs, selects and segmented controls a visible
@@ -636,7 +636,7 @@ git add frontend/src/app/ui/testing/style-rules.ts frontend/src/app/ui/testing/s
   frontend/src/app/ui/form-controls.spec.ts frontend/src/app/ui/segmented.ts \
   frontend/src/app/ui/date-range.ts frontend/src/app/ui/pagination.ts \
   frontend/src/app/ui/data-table/data-table.ts
-git commit -m "feat(v241): styleRules parser for style gates; inputs, selects and segmented controls outlined in --control-border
+git commit -m "feat(v240): styleRules parser for style gates; inputs, selects and segmented controls outlined in --control-border
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
