@@ -113,23 +113,37 @@ their last readers and are deleted.
 | `--overlay-dim` | `#00131F` at 72% |
 | `--border` / `--border-strong` | `#0D3D59` / `#1D5373` |
 | `--text` / `--text-secondary` / `--text-muted` | `#FAFDFF` / `#C8E1EF` / `#8FB3C8` |
-| `--text-faint` | `#6E94A8` (doctena `#4B748A` measured 3.4:1 on `--surface`; lifted to clear 4.5:1, because it carries captions and hints) |
+| `--text-faint` | `#6E94A8`. Its existing contract holds: a rule and divider colour, never text (`contrast.spec.ts:56-60`, the `tokens.css` comment), held to the non-text threshold. Doctena's `#4B748A` is lifted anyway so dividers read on all four surfaces. Captions and hints use `--text-muted`, which clears 4.5:1; a scan pins that no text rule reads `--text-faint` |
 | `--accent` (accent text, links, nav marker) | `#5AA9D6` (doctena `#328EC0` is 4.1:1 on `--surface-raised`; lifted to clear 4.5:1) |
 | `--accent-fill` / `--accent-fill-hi` | `#0072B0` / `#005B8C` (white text 5.1:1 / 7:1; hover darkens, as doctena's pressed state does) |
 | `--accent-soft` | `#328EC0` at 24% |
-| `--control-border` (new) | `#0072B0`: inputs, selects and segmented controls, 3.4:1 on `--surface` (WCAG 1.4.11). `--border` stays for panels and rules, where it is decorative |
+| `--control-border` (new) | `#0072B0`: inputs, selects and segmented controls, 3.28:1 on `--surface` (WCAG 1.4.11 needs 3:1). `--border` stays for panels and rules, where it is decorative |
 | `--pos` (gains, long) | `#53CEB5` (doctena mint) |
 | `--neg` (losses, short) | `#F07A7A` (doctena error `#C52020`, lifted for a dark ground) |
+| `--pos-soft` / `--neg-soft` | mint / coral at 14%. These are palette alpha entries today, so the Navy block re-points them too, or they keep the old hue |
 
-**Mint and coral mean money and direction, nothing else.** `--pos` and `--neg`
-appear only on signed P&L figures, R multiples, and the long/short direction
-markers (today's convention: green ▲ long, red ▼ short, kept with the new
-arrows). Navigation, the brand, active states, focus rings and non-P&L chips use
-`--accent` or the chip tokens. The colour of a P&L figure comes from its sign,
-never from the trade's direction. Every loss also carries a true minus
-(`−`, U+2212) in money, percent and R figures, so a loss never reads by hue
-alone (red-green colour blindness). The plan adds a source-scan test for the
-first rule and a formatter test for the second.
+The Navy block now re-points more than the eleven ground and ink tokens, so
+`tokens.spec.ts`'s `SHARED` list and its `GROUND_INK_TOKENS` "re-points
+exactly" test are rewritten to the new set.
+
+**Mint never marks navigation.** `--pos` and `--neg` have 157 reads in 69
+files today, and many are good/bad status rather than money: danger and error
+styles, the kill-switch, the shock pill, chip good/bad, flash animations, the
+tape and scan progress. Those keep their meaning. This spec adds one rule:
+navigation, the brand, active and current states and focus rings never read
+`--pos`/`--neg`. They use `--accent`. A source scan pins it over the shell,
+rail, tab bar, More sheet, editor and wordmark files. P&L figures keep taking
+their colour from their sign, never from the trade's direction. Direction
+markers keep today's convention (green ▲ long, red ▼ short), drawn with the
+new arrows.
+
+**Every loss carries a true minus** (`−`, U+2212), so a loss never reads by
+hue alone (red-green colour blindness). `format.ts` already does this in
+`pct`, `money`, `rMultiple` and `signed`. These sites can print an ASCII
+hyphen today and are fixed to use the shared formatters or U+2212: `riskPct`,
+`attribution.ts` `rFormat` and its `toFixed` calls, `metric-card` and
+`metric-chip` `toFixed`, `plan-cell` `formatR`, `tape.ts` `signed`, and the
+`figure-text.ts` count-up. Each gets a test with a negative value.
 
 - **Contrast holds.** `contrast.spec.ts` runs over both themes
   (`theme-tokens.ts`, `TOKEN_THEMES`). Every Navy pair it checks must pass at
@@ -145,10 +159,20 @@ first rule and a formatter test for the second.
   '#070c18'`, pinned to `--midnight-950` by `primitives.spec.ts` (line 156
   and 286–312) and `tokens.spec.ts` (378–444), and the static
   `<meta name="theme-color" content="#0d0f12">` is Graphite. After this
-  change the static meta and the default ground are the doctena `--bg`
-  (`#00131F`). The script gains a `GRAPHITE_BG` literal that it applies only
-  on an explicit `'graphite'`, and both literals are pinned to their tokens by
-  the same tests, re-pointed.
+  change the static meta, the inline cold-load `<style>` ground and the web
+  manifest's `background_color`/`theme_color` all take the doctena `--bg`
+  (`#00131F`), so a default Navy user never sees a Graphite flash. The script
+  gains a `GRAPHITE_BG` literal that it applies only on an explicit
+  `'graphite'`. Both literals are pinned to their tokens by the same tests,
+  re-pointed, and `HEX_ALLOWLIST`'s exact, source-ordered `index.html` entry
+  is updated to match.
+- **The generated fixture changes.** `tests/charts/resolved_tokens.json` is
+  bare-`:root` only, but it holds the `--font-*` tokens, the radii and every
+  palette name. The new radii, fonts, `--control-border`, `--pill-radius` and
+  `doctena-*` ramp, and the deleted `midnight-*`/`frost-*`, all change it, so
+  each such commit reruns `python scripts/dev/dump_tokens.py` and commits the
+  JSON with it. The Navy block must not contain `}` (the block regex in
+  `tests/dev/test_dump_tokens.py`).
 - **The bare `:root` stays Graphite.** `dump_tokens.py` and `resolve-token.ts`
   read only `:root` (v225), so the Discord chart PNGs and the token fixture
   (`tests/charts/resolved_tokens.json`) keep the Black colours. The Discord
@@ -187,9 +211,11 @@ first rule and a formatter test for the second.
   gets, `font-variant-numeric: tabular-nums`. Jost has tabular figures (the
   `tnum` feature), which is what keeps columns aligned without a mono face.
   The plan's first font task confirms `tnum` in the vendored file before
-  anything depends on it. **If `tnum` is missing**, `--font-num` stays on
-  JetBrains Mono (its files are then kept), the rest of the app takes Jost,
-  and the partner is told before the plan goes on.
+  anything depends on it. The plan brief already ran the check (fontTools,
+  2026-11-23): `jost-latin-wght-normal.woff2` has the `tnum` GSUB feature,
+  weights 100–900 and U+2212; the latin-ext file has no digits, so figures
+  always come from the latin file. The plan task re-runs it as a test so a
+  future file swap cannot silently lose `tnum`.
 - **Gate:** a source-scan test fails any rule that reads `--font-num` or
   `--font-mono`, or styles a `.num` cell, without `font-variant-numeric:
   tabular-nums`. Numeric columns stay right-aligned. The three-device check
@@ -207,8 +233,9 @@ Tier-3 tokens in `tokens.css`:
 |---|---|---|
 | `--panel-radius` | 6px | 10px |
 | `--control-radius` | 4px | 12px |
-| `--chip-radius` | 4px | 999px (pill) |
-| `--radius-sm` | 2px | 6px for swatches and cells; bars and tracks under 6px tall keep `999px` ends |
+| `--pill-radius` (new) | – | 999px. The radius gate in `primitives.spec.ts` bans px literals in components, so pills read this token |
+| `--chip-radius` | 4px | `var(--pill-radius)` |
+| `--radius-sm` | 2px | 6px for swatches and cells; bars and tracks under 6px tall use `--pill-radius` |
 | `--panel-inner-radius` | `var(--control-radius)` | 8px |
 | `--panel-shadow` | none | none (D1: flat) |
 
@@ -549,8 +576,11 @@ edge and empty cases included (CLAUDE.md):
 - **Drawers:** for each surface in §7's table, a tablet-width and a
   phone-width test that a tap opens the drawer with the right heading and
   fields, and a desktop-width test that behaviour is unchanged.
-- **Panel-driven gates:** `--pos`/`--neg` read only by P&L, R and direction
-  rules (source scan); every formatted loss carries U+2212; every
+- **Panel-driven gates:** no nav, brand, active-state or focus rule reads
+  `--pos`/`--neg` (source scan over the shell files); no text rule reads
+  `--text-faint`; Jost's `tnum` feature is present in the vendored latin file
+  (fontTools test); every formatted loss carries U+2212, including the seven
+  sites listed in §1; every
   `--font-num`/`.num` rule has `tabular-nums` (source scan); status,
   direction and outcome cells keep an accessible name after the glyph swap;
   `narrowTap` is set explicitly on every `sb-data-table` consumer; an
@@ -638,3 +668,15 @@ Duplicates are merged on one line naming every seat.
 - financial-advisor: drawers must carry badge tier, as-of time and caveats -- applied (§7).
 - financial-advisor: status cells must keep accessible names after the glyph swap -- applied, with a test (§4).
 - financial-advisor: mint/coral must not be confused with chip blues -- applied: the money-colour rule (§1).
+
+### Corrections from the plan 1 code brief (2026-11-23)
+
+The brief for plan 1 read the code the panel could not, and corrected four
+premises: `--text-faint` keeps its non-text (divider) contract and text uses
+`--text-muted`; the whole-app "mint for money only" scan cannot pass (157
+reads in 69 files, many legitimate good/bad status), so the rule narrows to
+navigation, brand, active and focus states; the cold-load inline style and the
+web manifest join the meta in taking the Navy ground; and `--control-border`
+measures 3.28:1, not 3.4:1. It also confirmed Jost's `tnum`, so the JetBrains
+Mono fallback is dropped. It added `--pill-radius`, the Navy `--pos-soft`/`--neg-soft`
+re-point, the fixture regeneration rule, and the seven true-minus sites.
