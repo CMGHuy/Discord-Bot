@@ -34,6 +34,7 @@ describe('LiveDock (v203)', () => {
   const connection = {
     botAlive: signal<boolean | null>(false), botHealthy: signal<boolean | null>(true), scanRunning: signal(false),
     botLastSuccess: signal<string | null>(ago(2)), botLastSeen: signal<string | null>(ago(1)),
+    botSessionActive: signal<boolean | null>(true),
     state: signal<ConnectionState>('live'), marketActive: signal<boolean | null>(true), currency: signal('$'),
   };
 
