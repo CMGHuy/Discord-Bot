@@ -60,6 +60,8 @@ export type ButtonVariant =
       font-family: var(--font-sans);
       font-size: var(--text-table);
       font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
       cursor: pointer;
       transition: background var(--transition), border-color var(--transition),
         color var(--transition), filter var(--dur-base) var(--ease-out),
@@ -213,6 +215,11 @@ export type ButtonVariant =
       font-weight: 500;
     }
     :host(.link:not([disabled]):hover) { text-decoration: underline; }
+
+    /* v240 §3 (index Decision 6): doctena uppercases its text buttons only.
+       Icon controls, filter chips, segmented tabs and inline links keep the
+       label as written. :host(.x) outranks :host, so order is free. */
+    :host(.icon), :host(.danger-icon), :host(.chip), :host(.segment), :host(.link) { text-transform: none; letter-spacing: normal; }
 
     /* v80 D4 -- a finger needs a square target. The same condition as the
        tokens.css touch block (phone and tablet since v179), where

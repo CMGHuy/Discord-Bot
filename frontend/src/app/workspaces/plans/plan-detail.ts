@@ -300,6 +300,7 @@ export function shortOrderNotes(
       gap: var(--space-10);
       font-size: var(--text-title);
       font-weight: 600;
+      letter-spacing: -0.02em;
     }
     .ticker {
       font-family: var(--font-mono);

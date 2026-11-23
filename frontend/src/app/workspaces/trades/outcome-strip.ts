@@ -51,7 +51,7 @@ import { COST_CAPTION, OutcomeTile, PAPER_FILLS_LINE, STALE_FLAG } from './outco
       gap: var(--space-6); padding: var(--space-14);
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--panel-radius);
     }
-    .tile-value { font-size: var(--text-title); overflow-wrap: anywhere; }
+    .tile-value { font-size: var(--text-title); letter-spacing: -0.02em; overflow-wrap: anywhere; }
     .tile-sub { color: var(--text-secondary); font-size: var(--text-table); }
     .tile-caption, .strip-foot, .stale-flag { color: var(--text-muted); font-size: var(--text-micro); }
     .strip-foot { margin: var(--space-8) 0 0; }

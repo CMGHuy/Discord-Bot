@@ -958,7 +958,7 @@ interface ContractRow {
     .reference { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-20); min-width: 0; }
     .rail-demo { display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); }
     .rail-demo:hover, .rail-demo:focus-visible { color: var(--text); }
-    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; }
+    h1 { margin: 0; font-size: var(--text-title); font-weight: 600; letter-spacing: -0.02em; }
     sb-panel { display: block; }
 
     /* -- elevation demo (v54 Task 29) -- L0-L2 straight from the tokens;
