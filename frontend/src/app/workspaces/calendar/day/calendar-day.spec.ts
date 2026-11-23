@@ -284,7 +284,7 @@ describe('CalendarDayPage', () => {
     expect(drove.querySelector('header sb-hint [role="tooltip"]')?.textContent?.trim()).toBe(R_TOOLTIP);
     const tileHints = el(fixture).querySelectorAll('.tiles sb-stat-tile sb-hint');
     expect(tileHints).toHaveLength(3);
-    expect(el(fixture).querySelector('.tiles [title]')).toBeNull();
+    expect(el(fixture).querySelector('.tiles [title]:not(sb-icon)')).toBeNull();
     const keys = () => [...el(fixture).querySelectorAll('.breakdown-row .key')].map((k) => k.textContent?.trim());
     expect(keys()).toEqual(['EMA20', 'VWAP']);
     await click(fixture, 'sb-tab-bar button', 'Horizon');

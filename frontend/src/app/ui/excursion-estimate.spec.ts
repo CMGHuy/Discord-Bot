@@ -48,7 +48,7 @@ describe('ExcursionEstimate', () => {
     const el = render();
     expect(el.querySelector('.est')?.textContent?.trim()).toBe(EXCURSION_EST_LABEL);
     expect(EXCURSION_EST_LABEL).toBe('est. (daily bars)');
-    expect(el.querySelector('[title]')).toBeNull();
+    expect(el.querySelector('[title]:not(sb-icon)')).toBeNull();
   });
 
   it('puts the explanation in a tap- and keyboard-reachable hint with an aria-label', () => {

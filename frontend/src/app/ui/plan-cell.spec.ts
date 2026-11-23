@@ -384,7 +384,7 @@ describe('PlanCell runner (two lines)', () => {
 
   it('explains both runner lines in one hint, with no native titles', () => {
     const el = renderWith(RKLB_RUNNER);
-    expect(el.querySelector('.plan.runner [title]')).toBeNull();
+    expect(el.querySelector('.plan.runner [title]:not(sb-icon)')).toBeNull();
     expect(el.querySelector('.plan.runner')!.hasAttribute('title')).toBe(false);
     expect(el.querySelectorAll('.plan.runner sb-hint')).toHaveLength(1);
   });

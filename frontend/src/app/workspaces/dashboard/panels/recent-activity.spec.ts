@@ -57,7 +57,7 @@ describe('recent activity panel', () => {
     // Asserted via the rendered SVG path data (matching icon.spec.ts's own
     // "partial" path) rather than an icon name, since sb-icon exposes no
     // other observable trace of which name it was given.
-    const path = el.querySelector('sb-icon path')!;
+    const path = el.querySelector('.event-hit > sb-icon path')!;
     expect(path.getAttribute('d')).toBe('M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z');
   });
 
@@ -65,7 +65,7 @@ describe('recent activity panel', () => {
     const el = render({ events: [
       { kind: 'opened', at: '2026-09-11T15:00:00Z', ticker: 'A', direction: null, status: 'WEIRD', detail: '', id: '1' },
     ]});
-    const path = el.querySelector('sb-icon path')!;
+    const path = el.querySelector('.event-hit > sb-icon path')!;
     expect(path.getAttribute('d')).toBe(
       'M8.2 15.8a5.4 5.4 0 0 1 0-7.6 M15.8 8.2a5.4 5.4 0 0 1 0 7.6 M5.4 18.6a9.3 9.3 0 0 1 0-13.2 M18.6 5.4a9.3 9.3 0 0 1 0 13.2',
     );
@@ -75,7 +75,7 @@ describe('recent activity panel', () => {
     const el = render({ events: [
       { kind: 'opened', at: '2026-09-11T15:00:00Z', ticker: 'A', direction: null, status: 'PARTIAL', detail: '', id: '1' },
     ]});
-    const icon = el.querySelector('sb-icon')!;
+    const icon = el.querySelector('.event-hit > sb-icon')!;
     expect(icon.getAttribute('title')).toBe('Partial');
     expect(icon.getAttribute('aria-label')).toBe('Partial');
   });

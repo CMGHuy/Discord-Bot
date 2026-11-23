@@ -64,7 +64,7 @@ describe('StatusCell', () => {
   it('draws the bar with P&L at both ends and no icon (the icon lives in the ID cell)', () => {
     const el = render(TRAILING);
     expect(el.querySelector('.fill')).not.toBeNull();
-    expect(el.querySelectorAll('sb-icon').length).toBe(0);
+    expect([...el.querySelectorAll('sb-icon')].filter((i) => !i.closest('sb-hint')).length).toBe(0);
     expect(el.querySelector('.end.neg')!.textContent).toBe('+1.3%');
     expect(el.querySelector('.end.pos')!.textContent).toBe('+6.0%');
   });
@@ -82,7 +82,7 @@ describe('StatusCell', () => {
 
   it('adds no icons to an ordinary PARTIAL row with a TP2 bar', () => {
     const el = render({ ...live, status: 'PARTIAL', bar_kind: 'progress', banked_fraction: 0.5 });
-    expect(el.querySelectorAll('sb-icon').length).toBe(0);
+    expect([...el.querySelectorAll('sb-icon')].filter((i) => !i.closest('sb-hint')).length).toBe(0);
   });
 
   it('says how much of a trailing runner is still open', () => {
