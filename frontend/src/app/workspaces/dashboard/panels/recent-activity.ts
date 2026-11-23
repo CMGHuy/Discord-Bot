@@ -37,7 +37,7 @@ const STATUS_LABEL: Record<string, string> = {
               <button type="button" class="event-hit" aria-haspopup="dialog"
                       (click)="eventActivate.emit(event)">
                 <sb-icon [name]="icon(event)" [title]="statusLabel(event)"
-                         [attr.aria-label]="statusLabel(event)" />
+                         [attr.aria-label]="statusLabel(event)" [size]="20" />
                 <sb-direction-arrow [direction]="event.direction" />
                 <span class="ticker">{{ event.ticker }}</span>
                 <span class="detail" [class.pos]="(event.r ?? 0) > 0" [class.neg]="(event.r ?? 0) < 0">{{ event.detail }}</span>

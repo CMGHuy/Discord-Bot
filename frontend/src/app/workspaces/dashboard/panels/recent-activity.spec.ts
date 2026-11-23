@@ -80,6 +80,17 @@ describe('recent activity panel', () => {
     expect(icon.getAttribute('aria-label')).toBe('Partial');
   });
 
+  it('draws the status icon at 20px, the list size (v240 §4)', () => {
+    const el = render({ events: [
+      { kind: 'opened', at: '2026-09-11T15:00:00Z', ticker: 'A', direction: null, status: 'PARTIAL', detail: '', id: '1' },
+    ]});
+    // The direct child of the row button: the status icon, not the
+    // direction arrow's own (16px) icon.
+    const svg = el.querySelector('.event-hit > sb-icon svg')!;
+    expect(svg.getAttribute('width')).toBe('20');
+    expect(svg.getAttribute('height')).toBe('20');
+  });
+
   it('says so when there is nothing yet rather than rendering an empty box', () => {
     const el = render({ events: [] });
     expect(el.textContent).toContain('No activity yet');

@@ -98,7 +98,7 @@ const THEME_OPTIONS: SegmentOption[] = [
                 class="zoom"
                 [attr.aria-label]="'Text size ' + zoom() + '%. Click to change.'"
                 (click)="zoomCycled.emit()">
-          <sb-icon name="expand" />
+          <sb-icon name="expand" [size]="20" />
           <span>Aa {{ zoom() }}%</span>
         </button>
         <div class="motion-row" role="none">
@@ -133,7 +133,7 @@ const THEME_OPTIONS: SegmentOption[] = [
           />
         </div>
         <button sb-button variant="ghost" type="button" role="menuitem" (click)="signOut()">
-          <sb-icon name="signout" />
+          <sb-icon name="signout" [size]="20" />
           <span>Sign out</span>
         </button>
       </div>

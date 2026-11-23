@@ -29,6 +29,7 @@ import { ViewportService } from '../ui/breakpoints';
 import { CLOCK } from '../ui/clock';
 import { DENSITY_STORAGE } from '../ui/density.service';
 import { THEME_STORAGE, ThemeStorage } from '../ui/theme.service';
+import { styleRules } from '../ui/testing/style-rules';
 import { provideMotion } from '../ui/motion/motion.service';
 import { NAV_ENTRIES } from './nav';
 import { Shell } from './shell';
@@ -326,7 +327,9 @@ describe('shell navigation', () => {
     const link = css.match(/^\.rail-link \{[^}]*\}/m)?.[0] ?? '';
     expect(link).toContain('width: 64px;');
     expect(link).toContain('min-height: 52px;');
-    expect(css).toMatch(/^\.rail-pill sb-icon svg \{[^}]*width: 24px;[^}]*height: 24px;/m);
+    // The icon draws at 24 through sb-icon's size input (v240 §4); no rule
+    // reaches into the svg to resize it.
+    expect(styleRules('shell.css', css).filter((rule) => /sb-icon\s+svg/.test(rule.selector))).toEqual([]);
     expect(css.match(/^\.rail-label \{[^}]*\}/m)?.[0]).toContain('font-size: var(--text-micro);');
   });
 
@@ -640,6 +643,20 @@ describe('shell labelled rail (v202 §3)', () => {
       expect(link.parentElement!.querySelector('sb-hint'), label).toBeNull();
     }
     expect(el.querySelectorAll('nav.rail ul.nav button')).toHaveLength(0);
+  });
+
+  it('draws the brand and every destination icon at 24px through sb-icon size (v240 §4)', async () => {
+    const { el } = await mount();
+    const svgs = [...el.querySelectorAll(
+      'nav.rail > a.rail-brand > sb-icon svg, nav.rail .rail-pill > sb-icon svg',
+    )];
+    // The brand plus one icon per destination.
+    expect(svgs).toHaveLength(1 + NAV_ENTRIES.length);
+    for (const svg of svgs) {
+      expect(svg.getAttribute('width')).toBe('24');
+      expect(svg.getAttribute('height')).toBe('24');
+      expect(svg.getAttribute('viewBox')).toBe('0 0 24 24');
+    }
   });
 
   it.each([

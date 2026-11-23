@@ -35,7 +35,7 @@ import { PHONE_TABS, phoneTabPathFor } from './nav';
           [class.active]="activePath() === tab.path"
           [attr.aria-current]="activePath() === tab.path ? 'page' : null"
         >
-          <span class="glyph" aria-hidden="true"><sb-icon [name]="tab.icon" /></span>
+          <span class="glyph" aria-hidden="true"><sb-icon [name]="tab.icon" [size]="24" /></span>
           <span class="tab-label">{{ tab.label }}</span>
         </a>
       }
@@ -47,7 +47,7 @@ import { PHONE_TABS, phoneTabPathFor } from './nav';
         [attr.aria-expanded]="moreOpen()"
         (click)="moreRequested.emit()"
       >
-        <span class="glyph" aria-hidden="true"><sb-icon name="more" /></span>
+        <span class="glyph" aria-hidden="true"><sb-icon name="more" [size]="24" /></span>
         <span class="tab-label">More</span>
       </button>
     </nav>

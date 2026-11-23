@@ -33,6 +33,17 @@ describe('ProfileMenu', () => {
     expect(trigger().getAttribute('aria-expanded')).toBe('true');
   });
 
+  it('draws its menu-item icons at 20px, the list size (v240 §4)', () => {
+    openMenu();
+    // Text size and Sign out: the two menu items that carry an icon.
+    const svgs = [...el.querySelectorAll('[role=menuitem] > sb-icon svg')];
+    expect(svgs).toHaveLength(2);
+    for (const svg of svgs) {
+      expect(svg.getAttribute('width')).toBe('20');
+      expect(svg.getAttribute('height')).toBe('20');
+    }
+  });
+
   it('closes on Escape', () => {
     openMenu();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));

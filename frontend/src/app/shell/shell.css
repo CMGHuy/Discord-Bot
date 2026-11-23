@@ -86,7 +86,6 @@
   border-radius: var(--control-radius);
   transition: background var(--transition);
 }
-.rail-pill sb-icon svg { width: 24px; height: 24px; }
 .rail-link:hover .rail-pill { background: var(--surface-raised); }
 
 .rail-label {

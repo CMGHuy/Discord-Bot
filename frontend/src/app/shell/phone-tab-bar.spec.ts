@@ -99,6 +99,16 @@ describe('PhoneTabBar (v195 Phase 3)', () => {
     }
   });
 
+  it('draws each tab icon at 24px, the tab-bar size (v240 §4)', async () => {
+    const { el } = await mount('/dashboard');
+    const svgs = [...el.querySelectorAll('sb-icon svg')];
+    expect(svgs).toHaveLength(5);
+    for (const svg of svgs) {
+      expect(svg.getAttribute('width')).toBe('24');
+      expect(svg.getAttribute('height')).toBe('24');
+    }
+  });
+
   it('sits on the bottom edge at 56px plus the safe-area inset, under the toasts', () => {
     const source = readFileSync(join(process.cwd(), 'src/app/shell/phone-tab-bar.ts'), 'utf8');
     expect(source).toContain('height: calc(56px + env(safe-area-inset-bottom));');

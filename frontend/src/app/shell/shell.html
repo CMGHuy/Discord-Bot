@@ -6,7 +6,7 @@
        (navHere), not routerLinkActive, so /plans/7 lights Trades. -->
   <nav class="rail" aria-label="Primary">
     <a class="rail-brand sb-hit" routerLink="/dashboard" #brand aria-label="Bomeo Capital — go to the Dashboard">
-      <sb-icon name="brand" title="" />
+      <sb-icon name="brand" title="" [size]="24" />
     </a>
     <sb-hint [anchor]="brand" text="Bomeo Capital · Dashboard" />
 
@@ -16,7 +16,7 @@
           <a class="rail-link" [routerLink]="entry.path"
              [class.active]="entry.path === activePath()"
              [attr.aria-current]="entry.path === activePath() ? 'page' : null">
-            <span class="rail-pill"><sb-icon [name]="entry.icon" title="" /></span>
+            <span class="rail-pill"><sb-icon [name]="entry.icon" title="" [size]="24" /></span>
             <span class="rail-label">{{ entry.label }}</span>
           </a>
         </li>
@@ -30,7 +30,7 @@
             <a class="rail-link" [routerLink]="entry.path"
                [class.active]="entry.path === activePath()"
                [attr.aria-current]="entry.path === activePath() ? 'page' : null">
-              <span class="rail-pill"><sb-icon [name]="entry.icon" title="" /></span>
+              <span class="rail-pill"><sb-icon [name]="entry.icon" title="" [size]="24" /></span>
               <span class="rail-label">{{ entry.label }}</span>
             </a>
           </li>
