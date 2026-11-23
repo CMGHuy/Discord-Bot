@@ -6,7 +6,8 @@
 **Index:** [2026-11-23-v240-doctena-night-theme-and-type_0-index.md](2026-11-23-v240-doctena-night-theme-and-type_0-index.md) holds the Goal, Global Constraints, the "Decisions this index fixes", `## Parallelisation` and the task ledger. Every task below implicitly includes the index's Global Constraints.
 
 Part 2 would have passed the 1500-line cap, so its last two tasks live
-here, unchanged in id and contract: V240-11 (`fixed()` and four sites) and
+here, unchanged in id and contract: V240-11 (`fixed()`, four sites and the
+unsigned zero in the four signed helpers) and
 V240-12 (three more sites, consuming `fixed()`). V240-11 may run in
 parallel with V240-10 (index `## Parallelisation`); V240-12 runs after
 V240-11. Conventions:
@@ -19,21 +20,24 @@ V240-11. Conventions:
 
 Scope note for both tasks: spec §1 names seven sites that can print an
 ASCII hyphen on a loss; these two tasks fix exactly those. The existing
-signed helpers (`pct`, `money`, `rMultiple`, `signed`) already print U+2212
-and keep their tested behaviour, including `−0.00` for a tiny loss (pinned
-in `format.spec.ts`'s "prints no hyphen-minus from any signed helper").
+signed helpers (`pct`, `money`, `rMultiple`, `signed`) already print U+2212.
 The new `fixed()` prints no sign on a value that rounds to zero (index
-Decision 9).
+Decision 9), and by partner decision (2026-11-23, index Decision 10) that
+zero rule extends to every formatter: V240-11 also teaches the four signed
+helpers to print an unsigned zero (`pct(-0.004)` is `0.00%`, never
+`−0.00%` or `+0.00%`) and moves the pins that assert today's signed zero
+(`format.spec.ts`, `status-cell.spec.ts`).
 
 # Phase 6: The true minus
 
-### Task V240-11: True minus I: `fixed()`, `riskPct`, `metric-card`, `metric-chip`, `plan-cell` `formatR`
+### Task V240-11: True minus I: `fixed()`, `riskPct`, no signed zero in `pct`/`money`/`rMultiple`/`signed`, `metric-card`, `metric-chip`, `plan-cell` `formatR`
 
-**Model:** sonnet — a new shared formatter and four call sites, each with a negative-value test; small but it sets the contract V240-12 consumes.
+**Model:** sonnet — a new shared formatter, an app-wide change to the four signed helpers and four call sites, each with tests; it sets the contract V240-12 consumes.
 
 **Files:**
-- Modify: `frontend/src/app/ui/format.ts` (new `fixed` after `signOf`, ~line 25; `riskPct`, lines 77–86)
-- Modify: `frontend/src/app/ui/format.spec.ts` (import line 3; `riskPct` describe ~lines 175–178; new describe at the end)
+- Modify: `frontend/src/app/ui/format.ts` (new `fixed` after `signOf`, ~line 25; `riskPct`, lines 77–86; new private `signFor` after `fixed`; `pct` lines 30–36, `money` lines 94–99, `rMultiple` lines 111–114, `signed` lines 210–213, before Step 3's insertion shifts them)
+- Modify: `frontend/src/app/ui/format.spec.ts` (import line 3; `riskPct` describe ~lines 175–178; the `prints no hyphen-minus from any signed helper` loop, ~line 225; two new describes at the end)
+- Modify: `frontend/src/app/ui/status-cell.spec.ts` (line 75: the `−0.0%` pin of a best P&L of −0.04 becomes `0.0%`)
 - Modify: `frontend/src/app/ui/metric-card.ts` (import; `format`, line 159)
 - Modify: `frontend/src/app/ui/metric-card.spec.ts` (new describe at the end)
 - Modify: `frontend/src/app/ui/metric-chip.ts` (import; `format`, line 76)
@@ -50,6 +54,12 @@ Decision 9).
   value that rounds to zero at `decimals` prints an unsigned zero
   (`fixed(-0.004, 2)` is `'0.00'`). No grouping (it replaces `toFixed`
   one for one). V240-12 consumes it.
+- Produces (behaviour, app-wide): `pct`, `money`, `rMultiple` and `signed`
+  print no sign when the formatted magnitude holds no non-zero digit
+  (`pct(-0.004)` → `'0.00%'`, `money(0.004, '€')` → `'0.00 €'`,
+  `rMultiple(-0.004)` → `'0.00R'`, `signed(-0.04, 1)` → `'0.0'`). A value
+  that survives the rounding keeps `+`/`MINUS` as today. Private helper
+  `signFor(value: number, magnitude: string): string` in `format.ts`.
 
 Why: spec §1: every loss carries a true minus (U+2212), so a loss never
 reads by hue alone. These four sites format with `toFixed` or a literal
@@ -61,6 +71,21 @@ The `metric-card`/`metric-chip` format function also runs on every
 count-up frame, so an animating negative figure carries the true minus
 too. `metric-chip.spec.ts` does not exist yet (the ledger said Modify), so
 this task creates it.
+
+Index Decision 10 (partner, 2026-11-23): a value that rounds to zero prints
+unsigned app-wide, not only in `fixed()`, `formatFigureText` and the tape.
+Today `pct(-0.004)` prints `−0.00%` and `pct(0.004)` prints `+0.00%`: a
+sign on a figure that reads as zero claims a loss or gain the reader cannot
+see. The four signed helpers share `signOf`, so one private `signFor`
+(sign only when the printed magnitude has a non-zero digit) fixes all four.
+It tests the formatted text, not the number, so it agrees with whatever
+rounding `toFixed` or `toLocaleString` applied.
+`git grep -n "−0\.0\|-0\.0\|+0\.0" frontend/src` finds one other pin
+of a signed zero from these helpers: `status-cell.spec.ts:75`
+(`pct(-0.04, 1)` → `'−0.0%'`). The grep's other hits are data values,
+letter-spacing, or local formatters outside `format.ts` (`partials.ts`
+`rText`, `calendar.helpers.ts` `cellValue`), which print `+0.00R` for an
+exact zero and are not in this task.
 
 - [ ] **Step 1: Write the failing `fixed` and `riskPct` tests**
 
@@ -167,7 +192,140 @@ Expected: PASS. (`risk-units.ts` calls `riskPct` on a magnitude, never a
 negative, so its spec does not move. If `risk-units.spec.ts` does not
 exist, drop that `--include`.)
 
-- [ ] **Step 5: Write the failing site tests**
+- [ ] **Step 5: Write the failing unsigned-zero tests for the signed helpers**
+
+In `frontend/src/app/ui/format.spec.ts`, in the test
+`it('prints no hyphen-minus from any signed helper', …)` change the loop's
+values from `[-0.004, -1, -2.5, -1234.567]` to:
+
+```ts
+    for (const value of [-1, -2.5, -1234.567]) {
+```
+
+(`-0.004` rounds to zero at every decimals that loop uses, so it now
+prints unsigned and moves to the describe below.)
+
+Append at the end of the file:
+
+```ts
+/* v240 (index Decision 10, partner 2026-11-23): a value that rounds to zero
+ * prints unsigned in every signed helper, as in fixed(): never "−0.00" or
+ * "+0.00", because a zero has no sign. */
+describe('v240: no signed zero from any signed helper', () => {
+  it('prints a loss that rounds to zero unsigned', () => {
+    expect(pct(-0.004)).toBe('0.00%');
+    expect(pct(-0.4, 0)).toBe('0%');
+    expect(money(-0.004, '€')).toBe('0.00 €');
+    expect(money(-0.4, '$', 0)).toBe('0 $');
+    expect(rMultiple(-0.004)).toBe('0.00R');
+    expect(signed(-0.004)).toBe('0.00');
+    expect(signed(-0.04, 1)).toBe('0.0');
+  });
+
+  it('prints a gain that rounds to zero unsigned', () => {
+    expect(pct(0.004)).toBe('0.00%');
+    expect(money(0.004, '€')).toBe('0.00 €');
+    expect(rMultiple(0.004)).toBe('0.00R');
+    expect(signed(0.004)).toBe('0.00');
+  });
+
+  it('keeps the sign on the smallest value that does not round away', () => {
+    expect(pct(-0.006)).toBe('−0.01%');
+    expect(money(-0.006, '€')).toBe('−0.01 €');
+    expect(rMultiple(0.006)).toBe('+0.01R');
+    expect(signed(-0.006)).toBe('−0.01');
+    expect(money(-1234567.891, '$')).toBe('−1,234,567.89 $');
+  });
+
+  it('prints no sign at all on any rounded-away value', () => {
+    for (const value of [-0.004, 0.004, -0, 0]) {
+      for (const text of [pct(value), pct(value, 0), money(value, '$'), money(value, '€', 0), rMultiple(value), signed(value)]) {
+        expect(text, `${value} -> ${text}`).not.toMatch(/^[+−-]/);
+      }
+    }
+  });
+});
+```
+
+In `frontend/src/app/ui/status-cell.spec.ts`, in the test
+`it('signs a negative trailing stop and best P&L with the true minus; zero and positive unchanged', …)`,
+replace line 75 with:
+
+```ts
+    // v240 Decision 10: a best P&L of −0.04 rounds to zero at one decimal,
+    // so it prints unsigned.
+    expect(neg.querySelector('.end.pos')!.textContent).toBe('0.0%');
+```
+
+- [ ] **Step 6: Run them to verify they fail**
+
+Run: `cd frontend && npx ng test --watch=false --include src/app/ui/format.spec.ts --include src/app/ui/status-cell.spec.ts`
+Expected: FAIL — `pct(-0.004)` is `'−0.00%'`, `pct(0.004)` is `'+0.00%'`,
+`signed(-0.004)` is `'−0.00'`, and the status cell prints `'−0.0%'`.
+
+- [ ] **Step 7: Add `signFor` and route the four helpers through it**
+
+In `frontend/src/app/ui/format.ts`, directly after `fixed` (Step 3) add:
+
+```ts
+/** The sign for a magnitude already formatted: `signOf`, except none when
+ *  the printed text holds no non-zero digit. A value that rounds to zero
+ *  prints unsigned ("0.00", never "−0.00" or "+0.00"), because a zero has
+ *  no sign (v240, index Decision 10). Testing the text, not the number,
+ *  keeps it in step with whatever rounding toFixed or toLocaleString did. */
+function signFor(value: number, magnitude: string): string {
+  return /[1-9]/.test(magnitude) ? signOf(value) : '';
+}
+```
+
+Replace the body of `pct` with:
+
+```ts
+  if (value === null || value === undefined) return ABSENT;
+  const magnitude = Math.abs(value).toFixed(decimals);
+  return `${signFor(value, magnitude)}${magnitude}%`;
+```
+
+Replace the body of `money` with (its v195 comment stays):
+
+```ts
+  if (value === null || value === undefined) return ABSENT;
+  // v195 correction 5: the sign is ours (a true minus) and the magnitude is
+  // toLocaleString's -- which would otherwise print a hyphen-minus itself.
+  const magnitude = grouped(Math.abs(value), decimals);
+  return `${signFor(value, magnitude)}${magnitude} ${unit}`;
+```
+
+Replace the body of `rMultiple` with:
+
+```ts
+  if (value === null || value === undefined) return ABSENT;
+  const magnitude = Math.abs(value).toFixed(2);
+  return `${signFor(value, magnitude)}${magnitude}R`;
+```
+
+Replace the body of `signed` with:
+
+```ts
+  if (typeof value !== 'number' || !Number.isFinite(value)) return ABSENT;
+  const magnitude = num(Math.abs(value), decimals);
+  return `${signFor(value, magnitude)}${magnitude}`;
+```
+
+`signOf` keeps its doc comment and is now called only by `signFor`.
+
+- [ ] **Step 8: Run the format and status-cell specs to verify they pass**
+
+Run: `cd frontend && npx ng test --watch=false --include src/app/ui/format.spec.ts --include src/app/ui/status-cell.spec.ts`
+Expected: PASS.
+
+Then confirm no other spec pins a signed zero from these helpers:
+`git grep -n "−0\.0\|-0\.0\|+0\.0" -- "frontend/src/*.spec.ts"`
+Expected: only data values, `letter-spacing`, and the two local
+formatters named above (`partials.spec.ts:190`,
+`calendar.helpers.spec.ts:77-78`); no `'−0.0…'` text pin left.
+
+- [ ] **Step 9: Write the failing site tests**
 
 Append to `frontend/src/app/ui/metric-card.spec.ts`:
 
@@ -262,13 +420,13 @@ In `frontend/src/app/ui/plan-cell.spec.ts`, directly after the test
   });
 ```
 
-- [ ] **Step 6: Run them to verify they fail**
+- [ ] **Step 10: Run them to verify they fail**
 
 Run: `cd frontend && npx ng test --watch=false --include src/app/ui/metric-card.spec.ts --include src/app/ui/metric-chip.spec.ts --include src/app/ui/plan-cell.spec.ts`
 Expected: FAIL — `'-2.50R'` (hyphen) where `'−2.50R'` is expected,
 `'-0.00'` for the rounded-away loss, and `headroom -0.4R` in the plan cell.
 
-- [ ] **Step 7: Point the three sites at `fixed`**
+- [ ] **Step 11: Point the three sites at `fixed`**
 
 `frontend/src/app/ui/metric-card.ts`: add `import { fixed } from './format';`
 directly above `import { Hint } from './hint';`, and change line 159 to:
@@ -292,9 +450,9 @@ line 353 to:
 const formatR = (value: number | null): string => value === null ? '—' : `${fixed(value, 1)}R`;
 ```
 
-- [ ] **Step 8: Run the specs to verify they pass**
+- [ ] **Step 12: Run the specs to verify they pass**
 
-Run: `cd frontend && npx ng test --watch=false --include src/app/ui/format.spec.ts --include src/app/ui/metric-card.spec.ts --include src/app/ui/metric-chip.spec.ts --include src/app/ui/plan-cell.spec.ts`
+Run: `cd frontend && npx ng test --watch=false --include src/app/ui/format.spec.ts --include src/app/ui/status-cell.spec.ts --include src/app/ui/metric-card.spec.ts --include src/app/ui/metric-chip.spec.ts --include src/app/ui/plan-cell.spec.ts`
 Expected: PASS.
 
 Then confirm the sites carry no `toFixed` left:
@@ -303,14 +461,15 @@ Expected: no `toFixed(decimals)` in metric-card/metric-chip and no
 `toFixed(1)}R` in plan-cell. (Other `toFixed` calls in plan-cell that
 format unsigned levels stay.)
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
 git add frontend/src/app/ui/format.ts frontend/src/app/ui/format.spec.ts \
+  frontend/src/app/ui/status-cell.spec.ts \
   frontend/src/app/ui/metric-card.ts frontend/src/app/ui/metric-card.spec.ts \
   frontend/src/app/ui/metric-chip.ts frontend/src/app/ui/metric-chip.spec.ts \
   frontend/src/app/ui/plan-cell.ts frontend/src/app/ui/plan-cell.spec.ts
-git commit -m "fix(v240): a true minus on plain numbers -- fixed() in format.ts; riskPct, metric card and chip, plan-cell R labels
+git commit -m "fix(v240): a true minus on plain numbers and no signed zero -- fixed() and signFor() in format.ts; riskPct, metric card and chip, plan-cell R labels
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```

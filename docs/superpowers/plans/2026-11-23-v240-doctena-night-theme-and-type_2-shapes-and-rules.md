@@ -690,10 +690,21 @@ Blind spots, closed here rather than left open:
   None exists today.
 - `.html` files hold no style rules (`index.html`'s inline cold-load style
   reads no font or faint token).
+- **A face read through a fallback.** `calendar/calendar.ts:468`
+  `.trade-id { font-family: var(--font-mono, monospace); … }` names the
+  face with a `var()` fallback, which a bare `var\(--font-(?:num|mono)\)`
+  misses. `NUM_FACE` therefore accepts an optional fallback:
+  `var\(--font-(?:num|mono)\s*(?:,[^)]*)?\)`, with a predicate test for
+  the fallback form. A re-scan with the widened pattern
+  (`git grep -nE "var\(--font-(num|mono)\s*," -- frontend/src ':!*.spec.ts'`)
+  finds that one rule and no other.
 
 Today's offenders (scan with this task's predicates at `4bf4df0c`, after
-V240-7's parser fix): `tabular-nums` 66 rules in 39 files, `--text-faint`
-as text 97 rules in 46 files. They match the index's snapshot.
+V240-7's parser fix, `NUM_FACE` widened): `tabular-nums` 67 rules in 39
+files (66 with the bare pattern, plus `calendar.ts`'s `.trade-id`;
+`calendar.ts` was already pending for other rules, so the file count does
+not move and `TABULAR_PENDING` gains no line), `--text-faint` as text 97
+rules in 46 files. They match the index's snapshot.
 
 - [ ] **Step 1: Write the failing `withChartChrome` test**
 
@@ -874,7 +885,9 @@ const FAINT_PENDING: ReadonlySet<string> = new Set([
   'app/workspaces/watchlist/watchlist.ts',
 ]);
 
-const NUM_FACE = /var\(--font-(?:num|mono)\)/;
+/* A numeric face, with or without a var() fallback:
+ * `var(--font-mono, monospace)` (calendar.ts .trade-id) counts too. */
+const NUM_FACE = /var\(--font-(?:num|mono)\s*(?:,[^)]*)?\)/;
 const NUM_CELL = /\.num(?![\w-])/;
 const TABULAR = /font-variant-numeric:[^;]*tabular-nums/;
 const FAINT_TEXT = /(?:^|[\s;{])color\s*:[^;]*var\(--text-faint\)/;
@@ -918,6 +931,13 @@ describe('v240 type gates: the predicates', () => {
     expect(offenders(tabular, rules('.a { font-family: var(--font-num); }'))).toEqual(['.a']);
     expect(offenders(tabular, rules('.b { font-family: var(--font-mono); }'))).toEqual(['.b']);
     expect(offenders(tabular, rules('td.num { text-align: right; }'))).toEqual(['td.num']);
+  });
+
+  it('tabular sees a numeric face behind a var() fallback', () => {
+    expect(offenders(tabular, rules('.d { font-family: var(--font-mono, monospace); }'))).toEqual(['.d']);
+    expect(offenders(tabular, rules('.e { font-family: var(--font-num , ui-monospace, monospace); }'))).toEqual(['.e']);
+    expect(offenders(tabular, rules('.f { font-family: var(--font-mono, monospace); font-variant-numeric: tabular-nums; }'))).toEqual([]);
+    expect(offenders(tabular, rules('.g { font-family: var(--font-numeric, monospace); }'))).toEqual([]);
   });
 
   it('tabular passes the same rules with tabular-nums, and ignores .number and .num-x', () => {

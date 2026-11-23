@@ -145,6 +145,22 @@ Jost and the new shapes in both themes with nothing scrolling sideways.
 9. **A shared `fixed(value, decimals)` formatter** goes in `format.ts` for
    the plain-number true-minus sites. It prints no `+` on gains (those
    sites never printed one) and never prints `−0.00`.
+10. **The zero-sign rule extends to every formatter** (partner decision,
+    2026-11-23). A value that rounds to zero prints unsigned app-wide, not
+    only in `fixed()`, `formatFigureText` and the tape: `pct`, `money`,
+    `rMultiple` and `signed` in `ui/format.ts` print `0.00`, never `−0.00`
+    or `+0.00` (`pct(-0.004)` is `0.00%`). One private
+    `signFor(value, magnitude)` signs only a printed magnitude holding a
+    non-zero digit. V240-11 does it and moves the pins of today's signed
+    zero (`format.spec.ts`, `status-cell.spec.ts:75`). The local
+    formatters `partials.ts` `rText` and `calendar.helpers.ts` `cellValue`
+    (`+0.00R` on an exact zero) are outside `format.ts` and not in this
+    plan.
+11. **`NUM_FACE` accepts a `var()` fallback**
+    (`var\(--font-(?:num|mono)\s*(?:,[^)]*)?\)`), so
+    `calendar.ts`'s `.trade-id { font-family: var(--font-mono, monospace) }`
+    is gated (V240-9) and fixed in V240-15. The tabular offender count is
+    67 rules in 39 files (`calendar.ts` was already pending).
 
 ## Global Constraints
 
@@ -246,14 +262,14 @@ disjoint files), both after V240-9.
 | V240-6 | `styleRules` parser; `--control-border` on inputs, selects and segmented controls | 1 | sonnet | C `frontend/src/app/ui/testing/style-rules.ts`, C `frontend/src/app/ui/testing/style-rules.spec.ts`, C `frontend/src/app/ui/control-border.spec.ts`, M `frontend/src/app/ui/form-controls.ts`, M `frontend/src/app/ui/form-controls.spec.ts`, M `frontend/src/app/ui/segmented.ts`, M `frontend/src/app/ui/date-range.ts`, M `frontend/src/app/ui/pagination.ts`, M `frontend/src/app/ui/data-table/data-table.ts` | `export type StyleRule = { selector: string; body: string }`; `export function styleRules(name: string, source: string): StyleRule[]` (`.css` whole file; `.ts` every `styles:` template literal, single or array; `.html` → `[]`; comments stripped; selector trimmed to its last line) |
 | V240-7 | Radius tokens, `--pill-radius`, thin bars on pills | 2 | sonnet | M `frontend/src/styles/tokens.css`, M `frontend/src/app/ui/tokens.spec.ts`, M `frontend/src/app/ui/chip.spec.ts`, C `frontend/src/app/ui/radius.spec.ts`, M `frontend/src/app/ui/layout.ts`, M `frontend/src/app/ui/magnitude.ts`, M `tests/charts/resolved_tokens.json`, M `frontend/src/app/ui/testing/style-rules.ts`, M `frontend/src/app/ui/testing/style-rules.spec.ts` (`closingBacktick`: escaped backticks no longer end a styles block), M `frontend/src/app/shell/scan-progress.css`, M `frontend/src/app/ui/chart-tooltip.ts`, M `frontend/src/app/ui/status-cell.ts`, M `frontend/src/app/ui/status-indicator.ts` | `--pill-radius: 999px` |
 | V240-8 | Uppercase buttons; −0.02em on headings at `--text-title` and above | 2 | sonnet | M `frontend/src/app/ui/button.ts`, M `frontend/src/app/ui/button.spec.ts`, M `frontend/src/app/ui/page.ts`, M `frontend/src/app/ui/section-head.ts`, M `frontend/src/app/ui/section-head.spec.ts`, M `frontend/src/app/workspaces/gallery/gallery.ts`, M `frontend/src/app/workspaces/plans/plan-detail.ts`, M `frontend/src/app/workspaces/trades/trade-detail.ts`, M `frontend/src/app/workspaces/trades/outcome-strip.ts`, C `frontend/src/app/ui/headings.spec.ts` | none |
-| V240-9 | Type gates: `tabular-nums` on numeric rules, no text in `--text-faint` (with pending lists) | 2 | sonnet | C `frontend/src/app/ui/type-gates.spec.ts`, M `frontend/src/app/ui/testing/style-rules.ts`, M `frontend/src/app/ui/testing/style-rules.spec.ts` | `export function withChartChrome(source: string): string` in `ui/testing/style-rules.ts` (V240-10 consumes it); `TABULAR_PENDING: ReadonlySet<string>` and `FAINT_PENDING: ReadonlySet<string>` (file names relative to `src/`, as `allSources()` names them), consts in `type-gates.spec.ts`; each holds exactly today's offenders; two tests per gate: every file outside the set passes, every file in the set still offends |
+| V240-9 | Type gates: `tabular-nums` on numeric rules, no text in `--text-faint` (with pending lists) | 2 | sonnet | C `frontend/src/app/ui/type-gates.spec.ts`, M `frontend/src/app/ui/testing/style-rules.ts`, M `frontend/src/app/ui/testing/style-rules.spec.ts` | `export function withChartChrome(source: string): string` in `ui/testing/style-rules.ts` (V240-10 consumes it); `NUM_FACE = /var\(--font-(?:num|mono)\s*(?:,[^)]*)?\)/` (accepts a fallback; V240-16 reuses it); `TABULAR_PENDING: ReadonlySet<string>` and `FAINT_PENDING: ReadonlySet<string>` (file names relative to `src/`, as `allSources()` names them), consts in `type-gates.spec.ts`; each holds exactly today's offenders; two tests per gate: every file outside the set passes, every file in the set still offends |
 | V240-10 | Money-colour scan: nav, brand, active and focus never read `--pos`/`--neg` | 2 | sonnet | C `frontend/src/app/ui/money-colour.spec.ts` (plus any offending rule it finds, swapped to `--accent`) | `NAV_FILES: readonly string[]` const in `money-colour.spec.ts` (plan 3 appends its editor file) |
-| V240-11 | True minus I: `fixed()`, `riskPct`, `metric-card`, `metric-chip`, `plan-cell` `formatR` | 2 | sonnet | M `frontend/src/app/ui/format.ts`, M `frontend/src/app/ui/format.spec.ts`, M `frontend/src/app/ui/metric-card.ts`, M `frontend/src/app/ui/metric-card.spec.ts`, M `frontend/src/app/ui/metric-chip.ts`, C `frontend/src/app/ui/metric-chip.spec.ts`, M `frontend/src/app/ui/plan-cell.ts`, M `frontend/src/app/ui/plan-cell.spec.ts` | `export function fixed(value: number, decimals: number): string` in `ui/format.ts` (loss → `MINUS` + `abs.toFixed`; gain/zero → no sign; a value that rounds to zero → unsigned zero) |
+| V240-11 | True minus I: `fixed()`, `riskPct`, no signed zero in `pct`/`money`/`rMultiple`/`signed`, `metric-card`, `metric-chip`, `plan-cell` `formatR` | 2 | sonnet | M `frontend/src/app/ui/format.ts`, M `frontend/src/app/ui/format.spec.ts`, M `frontend/src/app/ui/status-cell.spec.ts`, M `frontend/src/app/ui/metric-card.ts`, M `frontend/src/app/ui/metric-card.spec.ts`, M `frontend/src/app/ui/metric-chip.ts`, C `frontend/src/app/ui/metric-chip.spec.ts`, M `frontend/src/app/ui/plan-cell.ts`, M `frontend/src/app/ui/plan-cell.spec.ts` | `export function fixed(value: number, decimals: number): string` in `ui/format.ts` (loss → `MINUS` + `abs.toFixed`; gain/zero → no sign; a value that rounds to zero → unsigned zero); `pct`/`money`/`rMultiple`/`signed` print an unsigned zero for a value that rounds to zero (Decision 10) |
 | V240-12 | True minus II: `figure-text` count-up, `attribution.ts`, `tape.ts` `signed` | 2 | sonnet | M `frontend/src/app/ui/motion/figure-text.ts`, M `frontend/src/app/ui/motion/figure-text.spec.ts`, M `frontend/src/app/workspaces/analytics/tabs/attribution.ts`, M `frontend/src/app/workspaces/analytics/tabs/attribution.spec.ts`, M `frontend/src/app/shell/tape/tape.ts`, M `frontend/src/app/shell/tape/tape.spec.ts` | none |
 | V240-13 | Sweep 1: `app/ui/`, `app/shell/`, `styles.css` | 3 | sonnet | M offending files under `frontend/src/app/ui/`, `frontend/src/app/shell/` and `frontend/src/styles.css` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | removes every `app/ui/`, `app/shell/`, `styles.css` entry from both pending sets |
 | V240-14 | Sweep 2: analytics, reports, research, cancels, guide, gallery | 3 | haiku | M offending files under `frontend/src/app/workspaces/{analytics,reports,research,cancels,guide,gallery}/` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | removes those entries |
 | V240-15 | Sweep 3: dashboard, calendar, trades, plans, risk | 3 | haiku | M offending files under `frontend/src/app/workspaces/{dashboard,calendar,trades,plans,risk}/` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | removes those entries |
-| V240-16 | Sweep 4: system, versions, watchlist; pending lists deleted | 3 | haiku | M offending files under `frontend/src/app/workspaces/{system,versions,watchlist}/` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts` | `TABULAR_PENDING`/`FAINT_PENDING` and their "still offends" tests deleted; both gates now run with no exemptions |
+| V240-16 | Sweep 4: system, versions, watchlist; pending lists deleted | 3 | haiku | M offending files under `frontend/src/app/workspaces/{system,versions,watchlist}/` (list in the task), their pinned specs, M `frontend/src/app/ui/type-gates.spec.ts`, M `frontend/src/app/ui/contrast.spec.ts` (`V186_FILES` comment: the faint gate now covers all text) | `TABULAR_PENDING`/`FAINT_PENDING` and their "still offends" tests deleted; both gates now run with no exemptions |
 
 ## Parts
 
@@ -267,7 +283,8 @@ disjoint files), both after V240-9.
 
 Offender snapshot for the part 3 writer (scan at `ff4f6025`, rough parser;
 V240-9's `styleRules` count is authoritative). The `tabular-nums` scan
-found 67 rules in 39 files and the `--text-faint` text scan found 97 reads
+found 67 rules in 39 files (with Decision 11's fallback-aware `NUM_FACE`;
+`calendar.ts`'s `.trade-id` is the 67th) and the `--text-faint` text scan found 97 reads
 in 46 files. Per-file detail is in the brief §4. The faint files are
 `shell/breadcrumb`, `ui/{age-hint, bar-list, button, column-picker,
 direction-arrow, freshness, market-value, matrix, metric-chip, plan-cell,

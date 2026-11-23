@@ -516,7 +516,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task V240-15: Sweep 3: dashboard, calendar, trades, plans, risk
 
-**Model:** haiku — a scripted colour swap with a count check plus 22 one-declaration additions listed verbatim; no logic, no spec pin moves.
+**Model:** haiku — a scripted colour swap with a count check plus 24 one-declaration additions listed verbatim; no logic, no spec pin moves.
 
 **Files:**
 - Modify (faint): `frontend/src/app/workspaces/calendar/calendar.ts`, `frontend/src/app/workspaces/dashboard/dashboard.ts`, `frontend/src/app/workspaces/dashboard/panels/equity-candles.ts`, `frontend/src/app/workspaces/dashboard/panels/exposure-by-horizon.ts`, `frontend/src/app/workspaces/dashboard/panels/market-movers.ts`, `frontend/src/app/workspaces/dashboard/panels/recent-activity.ts`, `frontend/src/app/workspaces/dashboard/panels/watchlist-panel.ts`, `frontend/src/app/workspaces/plans/plan-detail.ts`, `frontend/src/app/workspaces/risk/risk.ts`, `frontend/src/app/workspaces/trades/trade-detail.ts`, `frontend/src/app/workspaces/trades/trades.ts`, `frontend/src/app/workspaces/trades/why/outcome-path.ts`
@@ -532,6 +532,9 @@ day values and agenda amounts, the trade cards' prices, the tickers and
 P&L plans in every table. Under Jost's proportional digits they only line
 up with `tabular-nums`. Their quiet text (as-of stamps, empty-panel lines,
 weekend dates, the trade id, the note state) moves to `--text-muted`.
+`calendar.ts`'s `.trade-id` reads its face through a fallback
+(`var(--font-mono, monospace)`); V240-9's widened `NUM_FACE` flags it, so
+it is listed with the calendar's one-line rules below.
 Specs touched: none pin these rules (checked at `146b4600`; the DOM specs
 query `.ticker`, `.trade-id`, `.as-of` and the like by class only).
 
@@ -646,9 +649,10 @@ line directly below the `font-family` line shown, same indentation.
 One-line rules: replace each rule with the line below, keeping the file's
 own leading indentation. Paths are under `frontend/src/app/workspaces/`.
 
-`calendar/calendar.ts` (503, 518, 522, 547):
+`calendar/calendar.ts` (468, 503, 518, 522, 547):
 
 ```css
+    .trade-id { font-family: var(--font-mono, monospace); font-variant-numeric: tabular-nums; font-size: var(--text-caption, 12px); margin-left: var(--space-6); }
     .agenda-value { flex: 1 1 auto; text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); }
     .dow .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
     .day-row .amount { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -769,12 +773,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ### Task V240-16: Sweep 4: system, versions, watchlist; pending lists deleted
 
-**Model:** haiku — the last scripted colour swap and 16 listed one-declaration additions, then a deletion in one spec file whose replacement code is given whole.
+**Model:** haiku — the last scripted colour swap and 16 listed one-declaration additions, then a deletion in one spec file whose replacement code is given whole, and one stale comment.
 
 **Files:**
 - Modify (faint): `frontend/src/app/workspaces/system/logs-tab.ts`, `frontend/src/app/workspaces/system/scan-tab.ts`, `frontend/src/app/workspaces/system/settings-tab.ts`, `frontend/src/app/workspaces/versions/versions.ts`, `frontend/src/app/workspaces/watchlist/earnings-calendar.ts`, `frontend/src/app/workspaces/watchlist/watchlist.ts`
 - Modify (tabular): `frontend/src/app/workspaces/system/logs-tab.ts`, `frontend/src/app/workspaces/system/scan-tab.ts`, `frontend/src/app/workspaces/system/settings-tab.ts`, `frontend/src/app/workspaces/versions/versions.ts`, `frontend/src/app/workspaces/watchlist/earnings-calendar.ts`, `frontend/src/app/workspaces/watchlist/ticker-detail.ts`, `frontend/src/app/workspaces/watchlist/watchlist.ts`
 - Modify: `frontend/src/app/ui/type-gates.spec.ts` (pending sets, their tests and the `pending` field deleted; one coverage test added)
+- Modify: `frontend/src/app/ui/contrast.spec.ts` (the `V186_FILES` JSDoc, ~lines 117–123, comment only)
 
 **Interfaces:**
 - Consumes: `frontend/src/app/ui/type-gates.spec.ts` after V240-15: `TABULAR_PENDING` holds exactly the 7 entries and `FAINT_PENDING` exactly the 6 entries this task fixes; `Gate`, `GATES`, `SOURCES`, `offenders`, `NUM_FACE`, `NUM_CELL` as V240-9 wrote them.
@@ -783,8 +788,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Why: the last three areas, then the scaffolding goes. Once no file is
 pending, a pending set can only ever be used to excuse a new offender, so
 it is deleted rather than left empty. A coverage test makes sure the
-tabular gate still has numeric rules to look at (77 at `146b4600`), so a
-parser regression that finds no rules cannot pass the gate silently.
+tabular gate still has numeric rules to look at (78 at `146b4600` with
+V240-9's widened `NUM_FACE`), so a parser regression that finds no rules
+cannot pass the gate silently. `contrast.spec.ts`'s `V186_FILES` comment
+still says the other `--text-faint` uses are later specs' work; after this
+task the faint gate covers all text, so the comment says so.
 
 - [ ] **Step 1: Delete the pending machinery (red)**
 
@@ -842,7 +850,7 @@ for (const gate of GATES) {
 }
 
 describe('v240 type gates: they still have something to check', () => {
-  it('finds the numeric rules (77 at 146b4600), so an empty parse cannot pass', () => {
+  it('finds the numeric rules (78 at 146b4600), so an empty parse cannot pass', () => {
     const numeric = SOURCES.flatMap(({ rules }) => rules)
       .filter((rule) => NUM_FACE.test(rule.body) || NUM_CELL.test(rule.selector));
     expect(numeric.length).toBeGreaterThanOrEqual(70);
@@ -1014,10 +1022,31 @@ Expected: FAIL naming `app/workspaces/watchlist/watchlist.ts`, then
 `app/workspaces/system/scan-tab.ts`. Undo each change by hand and re-run:
 PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Bring the `V186_FILES` comment up to date**
+
+In `frontend/src/app/ui/contrast.spec.ts`, replace the JSDoc directly above
+`const V186_FILES = [` (from `/**` through ` */`, ~lines 117–123) with:
+
+```ts
+/**
+ * v186 (D2, D3, D4): no text in the primitives v186 touched is painted in
+ * --text-faint, the rule and divider colour above. A SOURCE scan, because
+ * jsdom does not resolve a component's var() chain. Scoped to these files on
+ * purpose (spec v186 § Testing). Since v240 the faint gate in
+ * type-gates.spec.ts covers all text: every style rule, template and inline
+ * style in src/, with no pending list. This list stays as v186's own pin.
+ */
+```
+
+Comment only; the list and its tests do not change.
+
+Run: `cd frontend && npx ng test --watch=false --include src/app/ui/contrast.spec.ts --include src/app/ui/type-gates.spec.ts`
+Expected: PASS.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add frontend/src/app/ui/type-gates.spec.ts \
+git add frontend/src/app/ui/type-gates.spec.ts frontend/src/app/ui/contrast.spec.ts \
   frontend/src/app/workspaces/system/logs-tab.ts frontend/src/app/workspaces/system/scan-tab.ts \
   frontend/src/app/workspaces/system/settings-tab.ts frontend/src/app/workspaces/versions/versions.ts \
   frontend/src/app/workspaces/watchlist/earnings-calendar.ts frontend/src/app/workspaces/watchlist/ticker-detail.ts \
