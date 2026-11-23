@@ -16,100 +16,12 @@ import { StyleRule, styleRules, withChartChrome } from './testing/style-rules';
  *   rule's `color` reads it; captions and hints use --text-muted (index
  *   Decision 3). border-color, background and fill stay legal.
  *
- * Each gate starts with a pending set of today's offenders. Part 3's sweep
- * tasks remove entries by area and V240-16 deletes both sets. A pending file
- * must still offend, so the sets never hold a fixed file.
+ * Both gates started (V240-9) with a pending set of the offenders they
+ * found; part 3's sweeps emptied it area by area and V240-16 deleted it.
+ * They now run over every source with no exemptions: fix the rule, never
+ * add one back.
  */
-const TABULAR_PENDING: ReadonlySet<string> = new Set([
-  'app/shell/login/login.css',
-  'app/shell/shell.css',
-  'app/ui/async.ts',
-  'app/ui/chip.ts',
-  'app/ui/confidence-cell.ts',
-  'app/ui/data-table/data-table.ts',
-  'app/ui/hint.ts',
-  'app/ui/panel-header.ts',
-  'app/ui/plan-cell.ts',
-  'app/ui/pnl-cell.ts',
-  'app/ui/stat-tile.ts',
-  'app/ui/status-cell.ts',
-  'app/workspaces/analytics/tabs/tuning.ts',
-  'app/workspaces/calendar/calendar.ts',
-  'app/workspaces/calendar/day/calendar-day.ts',
-  'app/workspaces/calendar/day/day-trade-card.ts',
-  'app/workspaces/calendar/day/trade-sparkline.ts',
-  'app/workspaces/cancels/cancels-summary.ts',
-  'app/workspaces/dashboard/dashboard.ts',
-  'app/workspaces/dashboard/panels/market-movers.ts',
-  'app/workspaces/dashboard/panels/recent-activity.ts',
-  'app/workspaces/dashboard/panels/trading-performance.ts',
-  'app/workspaces/dashboard/panels/watchlist-panel.ts',
-  'app/workspaces/gallery/gallery.ts',
-  'app/workspaces/guide/guide.ts',
-  'app/workspaces/plans/plan-detail.ts',
-  'app/workspaces/reports/gates-tab.ts',
-  'app/workspaces/research/research.ts',
-  'app/workspaces/risk/risk.ts',
-  'app/workspaces/system/logs-tab.ts',
-  'app/workspaces/system/scan-tab.ts',
-  'app/workspaces/system/settings-tab.ts',
-  'app/workspaces/trades/trade-detail.ts',
-  'app/workspaces/trades/trades.ts',
-  'app/workspaces/versions/versions.ts',
-  'app/workspaces/watchlist/earnings-calendar.ts',
-  'app/workspaces/watchlist/ticker-detail.ts',
-  'app/workspaces/watchlist/watchlist.ts',
-  'styles.css',
-]);
 
-const FAINT_PENDING: ReadonlySet<string> = new Set([
-  'app/shell/breadcrumb.ts',
-  'app/ui/age-hint.ts',
-  'app/ui/bar-list.ts',
-  'app/ui/button.ts',
-  'app/ui/column-picker.ts',
-  'app/ui/direction-arrow.ts',
-  'app/ui/freshness.ts',
-  'app/ui/market-value.ts',
-  'app/ui/matrix.ts',
-  'app/ui/metric-chip.ts',
-  'app/ui/plan-cell.ts',
-  'app/ui/pnl-basis.ts',
-  'app/ui/share-bar.ts',
-  'app/ui/status-cell.ts',
-  'app/workspaces/analytics/tabs/benchmark.ts',
-  'app/workspaces/analytics/tabs/execution.ts',
-  'app/workspaces/analytics/tabs/override-fidelity-panel.ts',
-  'app/workspaces/analytics/tabs/overview.ts',
-  'app/workspaces/analytics/tabs/partials.ts',
-  'app/workspaces/analytics/tabs/pipeline.ts',
-  'app/workspaces/analytics/tabs/runner-endings.ts',
-  'app/workspaces/analytics/tabs/variance-band-panel.ts',
-  'app/workspaces/calendar/calendar.ts',
-  'app/workspaces/cancels/cancels-summary.ts',
-  'app/workspaces/dashboard/dashboard.ts',
-  'app/workspaces/dashboard/panels/equity-candles.ts',
-  'app/workspaces/dashboard/panels/exposure-by-horizon.ts',
-  'app/workspaces/dashboard/panels/market-movers.ts',
-  'app/workspaces/dashboard/panels/recent-activity.ts',
-  'app/workspaces/dashboard/panels/watchlist-panel.ts',
-  'app/workspaces/guide/guide.ts',
-  'app/workspaces/plans/plan-detail.ts',
-  'app/workspaces/reports/attribution-tab.ts',
-  'app/workspaces/reports/gates-tab.ts',
-  'app/workspaces/reports/reports.ts',
-  'app/workspaces/research/research.ts',
-  'app/workspaces/risk/risk.ts',
-  'app/workspaces/system/logs-tab.ts',
-  'app/workspaces/system/scan-tab.ts',
-  'app/workspaces/system/settings-tab.ts',
-  'app/workspaces/trades/trade-detail.ts',
-  'app/workspaces/trades/trades.ts',
-  'app/workspaces/trades/why/outcome-path.ts',
-  'app/workspaces/versions/versions.ts',
-  'app/workspaces/watchlist/earnings-calendar.ts',
-  'app/workspaces/watchlist/watchlist.ts',
-]);
 
 /* A numeric face, with or without a var() fallback:
  * `var(--font-mono, monospace)` (calendar.ts .trade-id) counts too. */
@@ -121,7 +33,6 @@ const FAINT_TEXT = /(?:^|[\s;{])color\s*:[^;]*var\(--text-faint\)/;
 type Gate = {
   id: string;
   rule: string;
-  pending: ReadonlySet<string>;
   offends: (rule: StyleRule) => boolean;
 };
 
@@ -129,13 +40,11 @@ const GATES: Gate[] = [
   {
     id: 'tabular',
     rule: 'sets tabular-nums on every --font-num, --font-mono and .num rule',
-    pending: TABULAR_PENDING,
     offends: (rule) => (NUM_FACE.test(rule.body) || NUM_CELL.test(rule.selector)) && !TABULAR.test(rule.body),
   },
   {
     id: 'faint',
     rule: 'paints no text in --text-faint',
-    pending: FAINT_PENDING,
     offends: (rule) => FAINT_TEXT.test(rule.body),
   },
 ];
@@ -182,23 +91,20 @@ describe('v240 type gates: the predicates', () => {
 for (const gate of GATES) {
   describe(`v240 type gate: ${gate.id}`, () => {
     for (const { name, rules } of SOURCES) {
-      if (gate.pending.has(name)) {
-        it(`${name} is pending and still offends (a sweep removes it)`, () => {
-          expect(offenders(gate, rules)).not.toEqual([]);
-        });
-      } else {
-        it(`${name} ${gate.rule}`, () => {
-          expect(offenders(gate, rules)).toEqual([]);
-        });
-      }
+      it(`${name} ${gate.rule}`, () => {
+        expect(offenders(gate, rules)).toEqual([]);
+      });
     }
-
-    it('names only scanned files in its pending set', () => {
-      const scanned = new Set(SOURCES.map(({ name }) => name));
-      expect([...gate.pending].filter((name) => !scanned.has(name))).toEqual([]);
-    });
   });
 }
+
+describe('v240 type gates: they still have something to check', () => {
+  it('finds the numeric rules (78 at 146b4600), so an empty parse cannot pass', () => {
+    const numeric = SOURCES.flatMap(({ rules }) => rules)
+      .filter((rule) => NUM_FACE.test(rule.body) || NUM_CELL.test(rule.selector));
+    expect(numeric.length).toBeGreaterThanOrEqual(70);
+  });
+});
 
 describe('v240 type gates: nothing hides from them', () => {
   /* The seven chart components whose styles interpolate CHART_CHROME. */

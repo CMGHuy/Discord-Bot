@@ -150,7 +150,7 @@ export const TICKER_TRADES_CAP = 25;
       font-size: var(--text-table);
     }
 
-    sb-row-link { color: var(--accent); font-family: var(--font-mono); }
+    sb-row-link { color: var(--accent); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
   `,
 })
 export class TickerDetail {
