@@ -159,6 +159,41 @@ still needs its own screen verdict. Parameters frozen 2026-11-23.
 
 B1–B6 are all long vetoes or long triggers, so they form one BH family.
 
+### B7–B9 — the regime engine's three actions (frozen 2026-11-23)
+
+The partner's goal on 2026-11-23: detect a bear market or a sharp downtrend
+and stop issuing longs; tell a fake decline (a correction inside an uptrend)
+from a real one; on a fake one prepare the pullback buy, on a real one issue
+shorts. The classifier ships in shadow under its own spec, dated 2026-11-23.
+Each action below goes live only through its own screen verdict.
+
+The classifier states come from the prior session's close (SPY daily, ^VIX
+daily):
+
+- CORRECTION: SPY close < SMA50, SMA50[t] < SMA50[t−5] and SMA200[t] >
+  SMA200[t−20].
+- BEAR: close < SMA200 and SMA200[t] < SMA200[t−20], or SMA50 < SMA200 with
+  close < SMA200. BEAR wins over CORRECTION.
+- STRESS: ^VIX close ≥ 25 (an overlay on either state).
+
+- **B9 `regime_engine_long_veto`, avoid mode.** Claim: long entries on BEAR
+  days, or on CORRECTION days with STRESS on, underperform the matched null.
+  This is the screen that licenses switching the live long veto on.
+- **B8 `correction_release_long`, entry.** In CORRECTION, ^VIX closes ≥ 15%
+  below its 5-session high and SPY closes above its prior session's high.
+  Buy at the next open: SPY, QQQ, and screen-universe names above their own
+  SMA200. One event per CORRECTION episode per ticker. Overlaps B3 (B3 has no
+  state gate, B8 has no VIX-stretch threshold). Both stay in the family.
+- **B7 `bear_state_rally_fail_short`, entry (short).** While SPY is in BEAR:
+  the ticker closes below its SMA50, which sits below its SMA200. Within
+  the last 3 sessions the high came within 0.5 ATR14 of SMA20 from below.
+  Then the close drops below the prior session's low. Short at the next open.
+  This is a new idea, not a re-run: it is gated on the BEAR state and none of
+  the closed short pre-registrations in §3 was. The 2010–2019 window holds
+  little BEAR time (2011, 2015–16, late 2018), so expect `UNDERPOWERED`
+  unless screen v2's window reaches 2008 or 2022. That would be a
+  measured answer, not a reason to loosen it.
+
 ## 5. Order
 
 1. Screen v2 lands (v238, then the v230 batch re-screen, which includes B2).
@@ -166,9 +201,12 @@ B1–B6 are all long vetoes or long triggers, so they form one BH family.
 3. Screen B3, then B4 and B5.
 4. B2 gets a spec only if `screen2-uptrend_pullback` passes.
 5. B6 waits for a replayed bot book.
+6. B9, then B8 and B7, once the shadow engine is live (the engine is not a
+   prerequisite of the screens, but they share its state definitions).
 
-Not a hypothesis, and not on this slate: a display-only Correction/Stress tag
-on LONG alerts (`Edge: none`) gets its own spec, dated 2026-11-23.
+Not a hypothesis: the shadow regime engine (classifier, shadow log, alert
+and site surfaces, base-rate study) has its own spec, dated 2026-11-23,
+`Edge: none (integrity)`.
 
 No integrity follow-up: an earlier reading that the regime line stopped logging
 after 11-12 came from searching one rotated log file. It logs on every scan.
