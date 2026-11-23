@@ -92,6 +92,7 @@ const REQUIRED = [
   '--panel-radius',
   '--control-radius',
   '--chip-radius',
+  '--pill-radius',
   '--radius-sm',
   '--panel-bg',
   '--panel-border',
@@ -510,13 +511,22 @@ describe('v80 D3: type, shape and touch', () => {
 
   /* v167 §3 supersedes v80 D3's single 2px: four targets, all in tier 3,
    * and the two old tokens are gone so no unclassified corner survives.
-   * v195 §1.5: 6px panels, 4px controls and chips, 2px cells. */
+   * v240 §3 keeps the four targets and moves them to doctena's shapes:
+   * 10px panels, 12px controls, pill chips, 6px cells; --pill-radius is
+   * the round end chips and thin bars read. */
   it('defines the four radius targets', () => {
-    expect(TIER3).toMatch(/^\s*--panel-radius:\s*6px;/m);
-    expect(TIER3).toMatch(/^\s*--control-radius:\s*4px;/m);
-    expect(TIER3).toMatch(/^\s*--chip-radius:\s*4px;/m);
-    expect(TIER3).toMatch(/^\s*--radius-sm:\s*2px;/m);
+    expect(TIER3).toMatch(/^\s*--panel-radius:\s*10px;/m);
+    expect(TIER3).toMatch(/^\s*--control-radius:\s*12px;/m);
+    expect(TIER3).toMatch(/^\s*--pill-radius:\s*999px;/m);
+    expect(TIER3).toMatch(/^\s*--chip-radius:\s*var\(--pill-radius\);/m);
+    expect(TIER3).toMatch(/^\s*--radius-sm:\s*6px;/m);
     expect(CSS).not.toMatch(/^\s*--radius(?:-chip)?:/m);
+  });
+
+  it('resolves a chip corner to the pill and a nested panel to 8px (v240 §3)', () => {
+    expect(resolveToken('--chip-radius')).toBe('999px');
+    expect(resolveToken('--pill-radius')).toBe('999px');
+    expect(resolveToken('--panel-inner-radius')).toBe('8px');
   });
 
   /* v195 §1.4: the one row height is the dense 28px on desktop; the touch
@@ -546,15 +556,16 @@ describe('v167 §3: the tier-3 component tokens', () => {
     TIER3.match(new RegExp(`^\\s*${name}:\\s*([^;]+);`, 'm'))?.[1].replace(/\s+/g, ' ').trim();
 
   const VALUES: Record<string, string> = {
-    '--panel-radius': '6px',
-    '--control-radius': '4px',
-    '--chip-radius': '4px',
-    '--radius-sm': '2px',
+    '--panel-radius': '10px',
+    '--control-radius': '12px',
+    '--pill-radius': '999px',
+    '--chip-radius': 'var(--pill-radius)',
+    '--radius-sm': '6px',
     '--panel-bg': 'var(--surface)',
     '--panel-border': '1px solid var(--border)',
     '--panel-shadow': 'none',
     '--panel-inner-bg': 'var(--surface-raised)',
-    '--panel-inner-radius': 'var(--control-radius)',
+    '--panel-inner-radius': '8px',
     '--shadow-overlay': '0 16px 40px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .4)',
     '--btn-fill': 'var(--accent-fill)',
     '--btn-fill-hover': 'var(--accent-fill-hi)',

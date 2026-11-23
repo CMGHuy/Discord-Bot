@@ -63,6 +63,14 @@ function literalAt(source: string, from: number): { text: string; end: number } 
   let at = from;
   while (at < source.length && /[\s,]/.test(source[at])) at++;
   if (source[at] !== '`') return null;
-  const close = source.indexOf('`', at + 1);
+  const close = closingBacktick(source, at + 1);
   return close < 0 ? null : { text: source.slice(at + 1, close), end: close + 1 };
+}
+
+/** The next unescaped backtick from `from`, or -1. A comment inside a
+ * styles literal may quote code as \`icon\` (button.ts does). */
+function closingBacktick(source: string, from: number): number {
+  let close = source.indexOf('`', from);
+  while (close > 0 && source[close - 1] === '\\') close = source.indexOf('`', close + 1);
+  return close;
 }

@@ -135,7 +135,7 @@ export const STATUS_STALE_HINT = "This position's price could not be freshly fet
       align-self: center;
       width: 72px;
       height: 4px;
-      border-radius: var(--radius-sm);
+      border-radius: var(--pill-radius);
       background: var(--surface-raised);
       overflow: hidden;
     }

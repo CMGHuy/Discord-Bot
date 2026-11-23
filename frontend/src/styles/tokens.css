@@ -338,8 +338,9 @@
    * Tight radii: terminal, not consumer app.
    * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
    * the corners are the four targets in the tier-3 block at the end of this
-   * file (v195 §1.5: --panel-radius 6px, --control-radius 4px, --chip-radius 4px,
-   * --radius-sm 2px); --radius and --radius-chip are deleted.
+   * file (v240 §3: --panel-radius 10px, --control-radius 12px, --chip-radius
+   * the 999px --pill-radius, --radius-sm 6px); --radius and --radius-chip
+   * are deleted.
    *
    * Motion (spec v168). Entrances run once per route activation and never on
    * a push or a refetch -- the permanent flicker the old "nothing on
@@ -495,12 +496,14 @@
  * resolve-token.ts read every top-level :root, and tokens.spec.ts slices
  * tier 3 from this banner to the end. */
 :root {
-  /* The four radius targets (v195 §1.5). Every border-radius in the app is
-   * one of these, or 50% (status dots), 0 (flush edges) or inherit. */
-  --panel-radius: 6px;     /* panels, cards, drawers' inner sections, dialogs */
-  --control-radius: 4px;   /* buttons, inputs, selects, segmented controls */
-  --chip-radius: 4px;      /* chips and tags: squared like a control, not a pill */
-  --radius-sm: 2px;        /* cells, thin bars, swatches, tracks: under ~12px tall */
+  /* The four radius targets (v195 §1.5; v240 §3 values: doctena's shapes).
+   * Every border-radius in the app is one of these, --pill-radius, or 50%
+   * (status dots), 0 (flush edges) or inherit. */
+  --panel-radius: 10px;    /* panels, cards, drawers' inner sections, dialogs */
+  --control-radius: 12px;  /* buttons, inputs, selects, segmented controls */
+  --pill-radius: 999px;    /* fully round ends: chips, tags, bars and tracks under 6px tall */
+  --chip-radius: var(--pill-radius); /* chips and tags are pills (v240 §3) */
+  --radius-sm: 6px;        /* cells, swatches, bars and tracks 6px tall or more */
 
   /* The panel (L1/L2), painted by sb-panel, sb-figure-strip and
    * sb-chart-container. The global .sb-panel class still casts
@@ -510,7 +513,7 @@
   --panel-shadow: none;
   /* A panel nested in a panel: one surface step up, no shadow. */
   --panel-inner-bg: var(--surface-raised);
-  --panel-inner-radius: var(--control-radius);
+  --panel-inner-radius: 8px;
 
   /* Out of flow (L3): dropdown, popover, tooltip, toast, drawer, dialog,
    * through the global .elev-overlay class -- the one shadow v195 keeps. */

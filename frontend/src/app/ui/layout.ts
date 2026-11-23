@@ -554,7 +554,7 @@ const SWIPE_CLOSE_PX = 80;
       .drawer.elev-overlay { border-radius: var(--panel-radius) var(--panel-radius) 0 0; border-width: 1px 0 0; }
       .drawer { will-change: transform; }
       .body { overscroll-behavior: contain; }
-      .drag-handle { display: block; width: 36px; height: 4px; margin: var(--space-8) auto 0; border-radius: var(--radius-sm); background: var(--border-strong); }
+      .drag-handle { display: block; width: 36px; height: 4px; margin: var(--space-8) auto 0; border-radius: var(--pill-radius); background: var(--border-strong); }
     }
     @media (min-width: 640px) and (max-width: 1023px) {
       .drawer { width: 85vw; }

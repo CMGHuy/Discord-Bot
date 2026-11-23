@@ -68,4 +68,21 @@ describe('styleRules (v240)', () => {
     const host = styleRules('app/ui/button.ts', source).find((rule) => rule.selector === ':host');
     expect(host?.body).toContain('border-radius: var(--control-radius);');
   });
+
+  it('reads past an escaped backtick that a comment quotes inside the literal', () => {
+    const ts = 'styles: `\n  /* the \\`icon\\` variant */\n  .a { x: 1; }\n  .b { y: 2; }\n`, x = `.ghost { z: 3; }`';
+    expect(styleRules('app/ui/x.ts', ts)).toEqual([
+      { selector: '.a', body: 'x: 1;' },
+      { selector: '.b', body: 'y: 2;' },
+    ]);
+  });
+
+  it("reads button.ts's rules after its escaped-backtick comments", () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/ui/button.ts'), 'utf8');
+    const selectors = styleRules('app/ui/button.ts', source).map((rule) => rule.selector);
+    expect(selectors).toContain(':host(.danger-icon)');
+    expect(selectors).toContain(':host(.chip)');
+    expect(selectors).toContain(':host(.segment)');
+    expect(selectors).toContain(':host(.link)');
+  });
 });
