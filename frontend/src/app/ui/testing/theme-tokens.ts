@@ -23,10 +23,16 @@ export const TOKEN_THEMES: readonly TokenTheme[] = ['graphite', 'navy'];
 
 export const NAVY_SELECTOR = ':root[data-theme="navy"]';
 
-/** The ground and ink: the only tokens the Navy block re-points (tokens.css header). */
-export const GROUND_INK_TOKENS: readonly string[] = [
+/**
+ * The tokens the Navy block re-points, in tokens.css order: the ground and
+ * ink (v225), then the accent, the control border and P&L (v240 §1). Every
+ * other token is shared by both themes (tokens.css header).
+ */
+export const NAVY_TOKENS: readonly string[] = [
   '--bg', '--surface', '--surface-raised', '--surface-overlay', '--overlay-dim',
   '--border', '--border-strong', '--text', '--text-secondary', '--text-muted', '--text-faint',
+  '--accent', '--accent-fill', '--accent-fill-hi', '--accent-soft',
+  '--control-border', '--pos', '--neg', '--pos-soft', '--neg-soft',
 ];
 
 const read = (file: string) => readFileSync(join(process.cwd(), file), 'utf8');

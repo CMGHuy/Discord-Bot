@@ -153,7 +153,7 @@ const HEX_ALLOWLIST = new Map<string, string[]>([
   // and the Graphite inline html/body background. They paint before any
   // stylesheet has loaded, so they cannot read var(--bg); the cold-load
   // describes below fail the moment one drifts from palette.css.
-  ['index.html', ['#0d0f12', '#070c18', '#0d0f12']],
+  ['index.html', ['#0d0f12', '#00131f', '#0d0f12']],
 ]);
 
 describe('no colour is declared outside the token files', () => {
@@ -283,9 +283,9 @@ describe('the Dark blue cold load (v225)', () => {
     vi.restoreAllMocks();
   });
 
-  it('holds the Navy --bg once, equal to the resolved --midnight-950 and Navy --bg', () => {
+  it('holds the Navy --bg once, equal to the resolved --doctena-950 and Navy --bg', () => {
     const literal = script.match(/var NAVY_BG = '([^']+)';/)?.[1].toLowerCase();
-    expect(literal).toBe(resolveToken('--midnight-950').toLowerCase());
+    expect(literal).toBe(resolveToken('--doctena-950').toLowerCase());
     expect(literal).toBe(resolveTokenIn('navy', '--bg').toLowerCase());
     expect(script.match(/#[0-9a-f]{6}/gi)).toHaveLength(1);
   });
@@ -305,11 +305,11 @@ describe('the Dark blue cold load (v225)', () => {
     localStorage.setItem(THEME_PREF_KEY, 'navy');
     run();
     expect(html.dataset['theme']).toBe('navy');
-    expect(meta.content.toLowerCase()).toBe(resolveToken('--midnight-950').toLowerCase());
+    expect(meta.content.toLowerCase()).toBe(resolveToken('--doctena-950').toLowerCase());
     const rules = injected();
     expect(rules).toHaveLength(1);
     expect(rules[0].textContent).toBe(
-      `html[data-theme="navy"], html[data-theme="navy"] body { background: ${resolveToken('--midnight-950')}; }`,
+      `html[data-theme="navy"], html[data-theme="navy"] body { background: ${resolveToken('--doctena-950')}; }`,
     );
   });
 

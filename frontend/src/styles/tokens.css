@@ -69,6 +69,12 @@
   --overlay-dim: var(--graphite-950-a72);
   --border: var(--graphite-750);
   --border-strong: var(--graphite-700);
+  /* v240 §1 -- the outline of inputs, selects and segmented controls, a
+   * UI component that WCAG 1.4.11 wants at 3:1 against its ground. Black
+   * keeps its strong hairline (about 1.5:1, a known gap the spec keeps
+   * with Black's colours); Navy re-points it to doctena blue, 3.28:1 on
+   * --surface. --border stays the decorative panel and rule colour. */
+  --control-border: var(--border-strong);
 
   /* -- elevation --------------------------------------------------------
    * Superseded by v167 (docs/superpowers/specs/2026-10-16-v167-arctic-navy-token-foundation-design.md §3):
@@ -426,24 +432,35 @@
   }
 }
 
-/* v225 -- the Dark blue (Navy) ground, a per-browser choice. Re-points the
- * eleven ground and ink tokens named in the header to the midnight/frost
+/* v225, v240 -- the Dark blue (Navy) look, "doctena night" (spec v240 §1).
+ * Re-points exactly the twenty tokens named in the header to the doctena-*
  * palette and nothing else; var() references only, the hues live in
  * palette.css. Outside the bare :root on purpose -- dump_tokens.py and
  * resolve-token.ts read only `:root`, so the fixture and the Discord PNGs
- * stay Graphite. Never write this selector as part of a `:root, ...` list. */
+ * stay Graphite. Never write this selector as part of a `:root, ...` list,
+ * and never put a closing brace in a comment inside it
+ * (tests/dev/test_dump_tokens.py reads the block up to the first one). */
 :root[data-theme="navy"] {
-  --bg: var(--midnight-950);
-  --surface: var(--midnight-900);
-  --surface-raised: var(--midnight-850);
-  --surface-overlay: var(--midnight-800);
-  --overlay-dim: var(--midnight-950-a72);
-  --border: var(--midnight-750);
-  --border-strong: var(--midnight-700);
-  --text: var(--frost-100);
-  --text-secondary: var(--frost-300);
-  --text-muted: var(--frost-400);
-  --text-faint: var(--midnight-500);
+  --bg: var(--doctena-950);
+  --surface: var(--doctena-900);
+  --surface-raised: var(--doctena-850);
+  --surface-overlay: var(--doctena-800);
+  --overlay-dim: var(--doctena-950-a72);
+  --border: var(--doctena-750);
+  --border-strong: var(--doctena-700);
+  --text: var(--doctena-50);
+  --text-secondary: var(--doctena-200);
+  --text-muted: var(--doctena-300);
+  --text-faint: var(--doctena-500);
+  --accent: var(--doctena-sky-400);
+  --accent-fill: var(--doctena-blue-600);
+  --accent-fill-hi: var(--doctena-blue-700);
+  --accent-soft: var(--doctena-blue-500-a24);
+  --control-border: var(--doctena-blue-600);
+  --pos: var(--doctena-mint-400);
+  --neg: var(--doctena-coral-400);
+  --pos-soft: var(--doctena-mint-400-a14);
+  --neg-soft: var(--doctena-coral-400-a14);
 }
 
 /* Breakpoints are 640 / 1024 / 1440 / 1920.
