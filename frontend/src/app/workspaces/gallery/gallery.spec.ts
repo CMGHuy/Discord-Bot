@@ -12,6 +12,7 @@ import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { compactKeys, drawerKeys, openRowDrawer } from '../../ui/data-table/testing/reachability';
 import { Gallery } from './gallery';
 import { Hint } from '../../ui/hint';
+import { ICON_NAMES } from '../../ui/icon';
 import { RouteTitleService } from '../../routing/route-title.service';
 import { PERFORMANCE_CAVEAT, StatTile } from '../../ui/stat-tile';
 
@@ -96,6 +97,21 @@ describe('the gallery renders', () => {
   it('mounts without throwing', () => {
     const fixture = TestBed.createComponent(Gallery);
     expect(() => fixture.detectChanges()).not.toThrow();
+  });
+
+  it('shows the whole icon set at each of the three sizes', () => {
+    // The gallery is where a redraw is reviewed by eye: every name, at the
+    // table (16), list (20) and rail (24) sizes, one wrapping row each.
+    const fixture = TestBed.createComponent(Gallery);
+    fixture.detectChanges();
+    const rows = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.icon-set')];
+    expect(rows).toHaveLength(3);
+    rows.forEach((row, index) => {
+      const size = String([16, 20, 24][index]);
+      const svgs = [...row.querySelectorAll('sb-icon svg')];
+      expect(svgs).toHaveLength(ICON_NAMES.length);
+      for (const svg of svgs) expect(svg.getAttribute('width')).toBe(size);
+    });
   });
 
   it('exhibits every v85 primitive and representative edge states', () => {

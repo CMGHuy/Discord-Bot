@@ -138,6 +138,31 @@ describe('Icon', () => {
     ]);
   });
 
+  it('appends the nine new names after the existing 27, in order (spec §4)', () => {
+    expect(ICON_NAMES).toHaveLength(36);
+    expect(ICON_NAMES.slice(27)).toEqual([
+      'info', 'long', 'short', 'close', 'edit', 'up', 'down', 'plus', 'minus',
+    ]);
+  });
+
+  it.each([
+    ['info', 'Information'],
+    ['long', 'Long'],
+    ['short', 'Short'],
+    ['close', 'Close'],
+    ['edit', 'Edit'],
+    ['up', 'Move up'],
+    ['down', 'Move down'],
+    ['plus', 'Add'],
+    ['minus', 'Remove'],
+  ] as const)('labels %s as "%s" when the caller gives no title', (name, label) => {
+    expect(render(name).getAttribute('title')).toBe(label);
+  });
+
+  it('has no grip: the tab editor has no drag-reorder, so nothing should look draggable', () => {
+    expect(ICON_NAMES as readonly string[]).not.toContain('grip');
+  });
+
   it('draws the destinations as what they mean (spec §4)', () => {
     const d = (name: string) => render(name).querySelector('svg path')!.getAttribute('d');
     // A gauge with a needle, not the old 2x2 grid of panels.

@@ -54,6 +54,16 @@ export const ICON_NAMES = [
   'research',
   'search',
   'theme',
+  // v240 §4: the new names, appended so every existing name keeps its place.
+  'info',
+  'long',
+  'short',
+  'close',
+  'edit',
+  'up',
+  'down',
+  'plus',
+  'minus',
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -130,6 +140,25 @@ const PATHS: Record<IconName, string> = {
   search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z M15.5 15.5 20 20',
   // A crescent moon: the theme toggle (both themes are dark).
   theme: 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z',
+  // A circle with a lowercase i: more information (sb-hint's trigger).
+  info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 11v5.5 M12 7.6v.1',
+  // A trend line rising to an arrowhead: a long position.
+  long: 'M3 17l6-6 4 4 8-8 M15 7h6v6',
+  // A trend line falling to an arrowhead: a short position.
+  short: 'M3 7l6 6 4-4 8 8 M15 17h6v-6',
+  // A plain cross: close a drawer, sheet or dialog (distinct from
+  // `cancelled`'s crossed-out circle).
+  close: 'M6 6l12 12 M18 6 6 18',
+  // A pencil: edit (the tab-bar editor, v240 §6).
+  edit: 'M4 20h4L19 9l-4-4L4 16z M13.5 6.5l4 4',
+  // A chevron pointing up: move up, or the "now" end of a timeline.
+  up: 'M6 15l6-6 6 6',
+  // A chevron pointing down: move down, or an expanded panel or row.
+  down: 'M6 9l6 6 6-6',
+  // A plus: add.
+  plus: 'M12 7v10 M7 12h10',
+  // A minus: remove.
+  minus: 'M7 12h10',
 };
 
 /** The solid part of an icon, drawn after its stroke with `fill="currentColor"`. */
@@ -152,6 +181,8 @@ const LABELS: Record<IconName, string> = {
   cancelled: 'Cancelled', trailing: 'Trailing stop', brand: 'Swingbot',
   reports: 'Reports', research: 'Research', search: 'Search',
   theme: 'Theme',
+  info: 'Information', long: 'Long', short: 'Short', close: 'Close', edit: 'Edit',
+  up: 'Move up', down: 'Move down', plus: 'Add', minus: 'Remove',
 };
 
 @Component({

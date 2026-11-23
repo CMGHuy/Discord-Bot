@@ -39,7 +39,7 @@ import { Gauge } from '../../ui/gauge';
 import { HeatCell, HeatGrid } from '../../ui/heat-grid';
 import { Hint } from '../../ui/hint';
 import { Histogram, HistogramBin } from '../../ui/histogram';
-import { Icon, IconName } from '../../ui/icon';
+import { ICON_NAMES, Icon, IconName, IconSize } from '../../ui/icon';
 import { InlineMd } from '../../ui/inline-md';
 import { ControlRow, Drawer, Panel, Tab, TabBar } from '../../ui/layout';
 import { LineChartSeries } from '../../ui/line-chart';
@@ -713,11 +713,13 @@ interface ContractRow {
     <!-- -- icons -------------------------------------------------------------- -->
     <sb-section-head [heading]="'Icons'" [level]="2" />
     <sb-panel>
-      <sb-control-row>
-        @for (name of iconNames; track name) {
-          <sb-icon [name]="name" />
-        }
-      </sb-control-row>
+      @for (size of iconSizes; track size) {
+        <div class="icon-set">
+          @for (name of iconNames; track name) {
+            <sb-icon [name]="name" [size]="size" />
+          }
+        </div>
+      }
     </sb-panel>
 
     <!-- -- lifecycle diagram ---------------------------------------------------- -->
@@ -960,6 +962,9 @@ interface ContractRow {
     .rail-demo:hover, .rail-demo:focus-visible { color: var(--text); }
     h1 { margin: 0; font-size: var(--text-title); font-weight: 600; letter-spacing: -0.02em; }
     sb-panel { display: block; }
+    /* v240 §4 -- the whole icon set, one wrapping row per size (16, 20, 24). */
+    .icon-set { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-10); }
+    .icon-set + .icon-set { margin-top: var(--space-14); }
 
     /* -- elevation demo (v54 Task 29) -- L0-L2 straight from the tokens;
        L3 is the real global .elev-overlay class, not reimplemented here. */
@@ -1277,10 +1282,9 @@ export class Gallery {
     currency: '$',
   };
 
-  protected readonly iconNames: IconName[] = [
-    'dashboard', 'trades', 'analytics', 'calendar', 'watchlist', 'risk',
-    'system', 'versions', 'collapse', 'expand', 'profile', 'signout', 'menu', 'trash',
-  ];
+  /** Every name, so a new or redrawn icon is reviewed here the day it lands. */
+  protected readonly iconNames: readonly IconName[] = ICON_NAMES;
+  protected readonly iconSizes: readonly IconSize[] = [16, 20, 24];
 
   protected readonly tableRows: GalleryRow[] = [
     { id: '1', ticker: 'AAPL', pnl: 42 },
