@@ -10,6 +10,8 @@ import {
   viewChild,
 } from '@angular/core';
 
+import { Icon } from './icon';
+
 let nextId = 0;
 
 /**
@@ -117,9 +119,14 @@ export function placeBeside(
  * on the anchor closes it, the anchor is described by it, and it sits beside
  * the anchor (placeBeside) as a one-line label. Everything else -- the top
  * layer, the guards, the dialog-close rule -- is the same machinery.
+ *
+ * The trigger always draws the `info` icon (v240 §4): the per-caller letter
+ * (`glyph="v"`, `glyph="?"`) is gone. The icon is aria-hidden with an empty
+ * title, so the button's `label` stays its one accessible name.
  */
 @Component({
   selector: 'sb-hint',
+  imports: [Icon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(mouseenter)': 'hovered.set(true)',
@@ -140,7 +147,7 @@ export function placeBeside(
       [attr.aria-describedby]="id"
       (click)="toggle()"
     >
-      <span class="glyph" aria-hidden="true">{{ glyph() }}</span>
+      <sb-icon name="info" title="" />
     </button>
     }
     <span
@@ -174,18 +181,6 @@ export function placeBeside(
     }
     .trigger:hover, .trigger[aria-expanded='true'] { color: var(--text); }
     .trigger:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-    .glyph {
-      display: inline-grid;
-      place-items: center;
-      width: 14px;
-      height: 14px;
-      border: 1px solid currentColor;
-      border-radius: 50%;
-      font-family: var(--font-mono);
-      font-variant-numeric: tabular-nums;
-      font-size: var(--text-micro);
-      line-height: 1;
-    }
     /* Native path (v194 A1): popover="manual" puts this box in the top
        layer, whose containing block is the viewport whatever the ancestors
        do, so popTop/popLeft -- measured from the trigger's viewport rect --
@@ -225,7 +220,7 @@ export function placeBeside(
     /* No transform: popLeft is the popover's own left edge, already
        centred (or right-aligned for align="left") and clamped inside the
        viewport by clampPopover() -- see reposition() below. */
-    /* A fingertip needs 44px around a 14px glyph (v80 D4; phone and tablet
+    /* A fingertip needs 44px around a 16px icon (v80 D4; phone and tablet
        since v179). A centred ::after, not min-height: a laid-out 44px box
        made every label row holding a hint 44px tall, so its label sat ~5px
        below a hint-less neighbour's in the same KPI row (layout audit,
@@ -242,8 +237,6 @@ export class Hint {
   readonly text = input('');
   /** The trigger's accessible name. Name what it explains: "About expectancy". */
   readonly label = input('More information');
-  /** Default to the familiar information glyph; a nearby question can opt in. */
-  readonly glyph = input('i');
   /** Use the larger overlay only for a compact, non-interactive diagram. */
   readonly wide = input(false);
   /** 50% larger again than `wide` -- for content that is cramped even

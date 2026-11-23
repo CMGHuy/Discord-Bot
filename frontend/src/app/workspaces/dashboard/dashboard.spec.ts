@@ -495,6 +495,12 @@ describe('Dashboard explanatory help', () => {
     const el = fixture.nativeElement as HTMLElement;
     const hint = el.querySelector<HTMLElement>('sb-hint.lifecycle-hint')!;
     expect(hint).not.toBeNull();
+    // v240 §4 correction: the "?" opt-in is gone; this help draws info too.
+    const trigger = hint.querySelector('button.trigger')!;
+    expect(trigger.getAttribute('aria-label')).toBe('About open positions');
+    expect(trigger.querySelector('sb-icon svg path')!.getAttribute('d'))
+      .toBe('M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 11v5.5 M12 7.6v.1');
+    expect(trigger.textContent!.trim()).toBe('');
     hint.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
     expect(el.querySelector<HTMLElement>('sb-hint.lifecycle-hint [role="tooltip"]')!.hasAttribute('data-popover-open')).toBe(true);

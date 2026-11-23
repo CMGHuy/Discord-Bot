@@ -309,7 +309,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
            data is available. -->
       <!-- v201: Refresh asks the refresher for the live rows' prices. -->
       <sb-market-refresh *sbIfAdmin panel-actions [symbols]="liveSymbols()" />
-      <sb-hint panel-actions class="lifecycle-hint" [xl]="true" align="left" glyph="?"
+      <sb-hint panel-actions class="lifecycle-hint" [xl]="true" align="left"
                label="About open positions">
         <span class="hint-heading">Plan lifecycle</span>
         <span class="hint-copy">

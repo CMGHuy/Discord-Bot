@@ -42,7 +42,7 @@
          /health answer: a version that reads 0.0.0 while it waits looks real. -->
     <div class="rail-version" [style.margin-top]="railFoot().length ? null : 'auto'">
       @if (connection.versions()) {
-        <sb-hint class="version" glyph="v" label="Version" align="left" [text]="versionText()" />
+        <sb-hint class="version" label="Version" align="left" [text]="versionText()" />
       }
     </div>
   </nav>

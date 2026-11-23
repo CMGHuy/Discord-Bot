@@ -10,8 +10,12 @@ import { Drawer } from './layout';
 import { provideMotion } from './motion/motion.service';
 import { installDialogPolyfill } from '../testing/dialog-polyfill';
 import { POPOVER_OPEN_ATTR, installPopoverPolyfill } from '../testing/popover-polyfill';
+import { allSources, stripComments } from './testing/all-sources';
 
 const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/hint.ts'), 'utf8');
+
+/** icon.ts's `info` drawing (V241-2): a circle, a stem and a dot. */
+const INFO_D = 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 11v5.5 M12 7.6v.1';
 
 @Component({
   imports: [Hint],
@@ -105,6 +109,45 @@ describe('Hint (v80 D4)', () => {
     expect(isOpen()).toBe(true);
     fire(el().querySelector('.outside')!, new MouseEvent('pointerdown', { bubbles: true }));
     expect(isOpen()).toBe(false);
+  });
+
+  it('draws the info icon in its trigger, not a letter in a circle (v240 §4)', () => {
+    const icon = trigger().querySelector(':scope > sb-icon');
+    expect(icon).not.toBeNull();
+    expect(icon!.querySelector('svg path')!.getAttribute('d')).toBe(INFO_D);
+    // No text left in the button: the shape no longer depends on the font.
+    expect(trigger().textContent!.trim()).toBe('');
+    expect(trigger().querySelector('.glyph')).toBeNull();
+  });
+
+  it('keeps the name on the button and out of the icon', () => {
+    // One name per control: "About expectancy", never "About expectancy Information".
+    expect(trigger().getAttribute('aria-label')).toBe('About expectancy');
+    expect(trigger().getAttribute('aria-describedby')).toBe(pop().id);
+    expect(trigger().getAttribute('aria-expanded')).toBe('false');
+    const icon = trigger().querySelector('sb-icon')!;
+    expect(icon.getAttribute('title')).toBe('');
+    expect(icon.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true');
+    expect(trigger().querySelectorAll('[aria-label]')).toHaveLength(0);
+  });
+
+  it('draws the icon at the inline size, 16px', () => {
+    expect(trigger().querySelector('sb-icon svg')!.getAttribute('width')).toBe('16');
+  });
+
+  it('has no glyph input and no glyph rule left', () => {
+    expect(SOURCE).not.toMatch(/glyph\s*=\s*input/);
+    expect(SOURCE).not.toMatch(/\.glyph\s*\{/);
+  });
+
+  it('is never handed a glyph by a caller: a static glyph= would be a dead attribute', () => {
+    // strictTemplates does not reject an unknown static attribute on a
+    // component, so a leftover glyph="v" would build, render nothing and
+    // mislead the next reader. Scan every template instead.
+    const offenders = allSources()
+      .filter(({ source }) => /<sb-hint[^>]*glyph=/.test(stripComments(source)))
+      .map(({ name }) => name);
+    expect(offenders).toEqual([]);
   });
 
   it('floats as an overlay, the one surface allowed a shadow', () => {
@@ -458,6 +501,10 @@ describe('Hint anchor (label) mode (v195 correction 10)', () => {
     await fixture.whenStable();
   };
   const isOpen = () => pop().hasAttribute(POPOVER_OPEN_ATTR);
+
+  it('draws no info icon in anchor mode: the rail link is the thing being named', () => {
+    expect((fixture.nativeElement as HTMLElement).querySelector('sb-hint sb-icon')).toBeNull();
+  });
 
   it('renders no trigger button, so the rail link stays the only tab stop', () => {
     expect(el().querySelectorAll('sb-hint button')).toHaveLength(0);

@@ -356,6 +356,13 @@ describe('shell navigation', () => {
     const hint = foot.querySelector('sb-hint.version')!;
     expect(hint.querySelector('[role=tooltip]')!.textContent!.trim())
       .toBe('ui 1.36.1 · bot 2.15.3 · updated 2026-10-25T06:00:00Z');
+    // v240 §4 correction: the version hint draws the info icon like every
+    // other hint; the "v" letter it used to opt into is gone.
+    const trigger = hint.querySelector('button.trigger')!;
+    expect(trigger.getAttribute('aria-label')).toBe('Version');
+    expect(trigger.querySelector('sb-icon svg path')!.getAttribute('d'))
+      .toBe('M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 11v5.5 M12 7.6v.1');
+    expect(trigger.textContent!.trim()).toBe('');
     expect(el.querySelector('.version-row')).toBeNull();
   });
 
