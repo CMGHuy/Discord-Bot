@@ -88,7 +88,7 @@ def test_fields_sit_together_between_chart_patterns_and_database():
     attrs = [f.attr for f in config.FIELDS]
     start = attrs.index("DCB_VOLUME_RATIO") + 1
     assert attrs[start:start + len(V209_FIELDS)] == list(V209_FIELDS)
-    assert attrs[start + len(V209_FIELDS)] == "DATABASE_URL"
+    assert attrs[start + len(V209_FIELDS)] == "BEAR_REGIME_MODE"   # v239's section follows
 
 
 @pytest.mark.parametrize("attr", sorted(V209_FIELDS))

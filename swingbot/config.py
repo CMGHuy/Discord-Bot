@@ -1690,6 +1690,22 @@ FIELDS: list[Field] = [
           "Days of readings to keep",
           type="number", default="180", min=1, max=3650, step=1,
           help="v209. The nightly recap prunes market_shock_readings older than this."),
+    # --- Bear Regime (v239) ---
+    Field("BEAR_REGIME_MODE", "BEAR_REGIME_MODE", "Bear Regime",
+          "Bear-regime engine (v239)",
+          type="select", default="shadow",
+          options=[("off", "Off -- no fetch, no row, no stamp, no alert line, no notice, no banner"),
+                   ("shadow", "Shadow -- label, record, show, notify; change no trade"),
+                   ("live", "Live -- identical to shadow until a screened follow-on spec")],
+          help="v239. Once per NYSE session the first scan pass labels the coming session from "
+               "completed daily SPY and ^VIX bars: BEAR, CORRECTION, NORMAL or UNKNOWN, plus a "
+               "VIX stress flag and a pullback trigger. shadow: one row per session in "
+               "market_regime_days, every new plan's entry_context gains bear_regime and "
+               "regime_action (what the engine would do), every alert carries a Trend line, a "
+               "confirmed change posts one ops notice and the site shows a Trend banner -- no "
+               "long is blocked, no short issued, no plan cancelled. live: in v239 identical to "
+               "shadow. off: a byte-identical kill switch. An unknown value falls back to off."),
+
     # --- Database ---
     Field("DATABASE_URL", "DATABASE_URL", "Database", "Postgres connection URL",
           type="password", sensitive=True, hot_reloadable=False,
@@ -1793,6 +1809,7 @@ _MODE_VALUES = {
     "ADMIN_REFRESHER": ("on", "off"),
     "ADMIN_STORE_SNAPSHOT": ("on", "off"),
     "MARKET_SHOCK_MODE": ("off", "shadow", "live"),
+    "BEAR_REGIME_MODE": ("off", "shadow", "live"),
 }
 
 # v128: "off" is a signal change for FVG_LEVELS_MODE (it removes a level

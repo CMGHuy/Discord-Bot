@@ -454,6 +454,37 @@ re-create them on the Users tab after rolling forward. The other route is
 `scripts/ops/rollback_to.sh` (point-in-time restore), which also discards
 everything written since.
 
+### v239: bear-regime engine (`market_regime_days`)
+
+Revision `v239_001` creates `market_regime_days`: one write-once row per NYSE
+session, keyed by the session the label is **for** (`session_date` = D;
+`last_bar_date` = the last completed SPY bar it read). The first scan pass of
+a session that finds no row for D (any pass: scheduled scan, `!check`, admin
+scan, SHORT lane) fetches SPY and ^VIX daily through `get_daily_data` (2y;
+^VIX is yfinance only, SPY Alpaca first), labels D and runs
+`INSERT … ON CONFLICT DO NOTHING`; every later pass reads the row. A label
+from a stale SPY bar is not stored, so the next pass retries. A row is never
+updated and nothing is backfilled. A confirmed state change (two sessions)
+or a pullback day enqueues one `bear_regime` event in the v197 notify queue
+(`manual_close_notify`), delivered as a plain status embed to
+`DISCORD_CHANNEL_OPS_ID` (falls back to the trades channel), at most one per
+session. The table raises no SSE events.
+
+| Flag | Production value | Set |
+|---|---|---|
+| `BEAR_REGIME_MODE` | `shadow` (label, record, stamp, show; **no trade changes**) | explicitly in `.env` right after the v239 deploy |
+
+**Read-back:**
+
+    bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T db psql -U swingbot -d swingbot -c \"SELECT session_date, last_bar_date, state, stress, pullback_trigger, spy_provider, vix_provider, computed_at FROM market_regime_days ORDER BY session_date DESC LIMIT 10\""
+
+**Rollback, in this order:**
+1. Behaviour: `python3 scripts/ops/env_set.py BEAR_REGIME_MODE off`, then `docker compose restart bot admin`. That means no fetch, no row, no `bear_regime` / `regime_action` key, no Trend line, no notice and no banner.
+2. Schema: § Rolling back (`alembic downgrade <down_revision of v239_001>` from the new image; it was `v228_001` when planned).
+3. Queue: the previous image does not know the `bear_regime` kind. After an image rollback check `SELECT count(*) FROM manual_close_notify WHERE delivered_at IS NULL AND doc::text LIKE '%bear_regime%'` and, if it is not `0`, ask before deleting those rows.
+
+The table stays after a behaviour rollback; dropping it is never needed to roll back.
+
 ### v209: market shock tables (`market_shock_state`, `market_shock_readings`)
 
 The bot's scheduled `session_scan` takes one shock reading per pass while the
