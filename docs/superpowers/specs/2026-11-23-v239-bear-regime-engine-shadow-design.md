@@ -380,6 +380,66 @@ a separate downgrade revision and is never needed for rollback.
   base-rate script on a synthetic series with known episodes and flicker,
   and its hash refusal.
 
+## Code reconciliation (plan brief, 2026-11-23)
+
+The plan brief (`.superpowers/briefs/2026-11-23-v239-bear-regime-engine-shadow.md`)
+checked every named symbol. Where it disagrees with the text above, this
+section wins.
+
+1. **^VIX source.** `is_alpaca_eligible("^VIX")` is False, so `get_daily_data`
+   serves ^VIX from yfinance only (`auto_adjust=True`). SPY goes Alpaca
+   first. No `data.py` change is needed. `provider` is recorded per symbol:
+   `spy_provider`, `vix_provider`.
+2. **Calendar.** `completed_frame` is weekday-only. The live `(s, D)` pair
+   comes from the half-day-aware `session` helpers (`is_nyse_regular_session`,
+   `last_regular_close`, `is_early_close`; calendar 2018–2030), applied on
+   top of `completed_frame`. The 1993 study derives sessions from the SPY bar
+   index, not the calendar.
+3. **Study data.** No local cache holds SPY from 1993 or ^VIX through
+   2026-11-20. The pinned `_ext` cache is never refetched. A first plan task
+   fetches SPY and ^VIX daily, 1993-01-01 → 2026-11-20, into a new
+   `data/backtest_cache_regime/`, records the hashes, and creates
+   `scripts/research/`.
+4. **Table contract.** `market_regime_days` also carries `doc` (JSONB) and
+   `updated_at`, per `schema.contract_violations`. It needs `register()`, a
+   `PROMOTION_REASONS` entry, and a row in
+   `tests/db/test_unknown_field_round_trip.py`. Alembic `down_revision` is
+   the current head at implementation time (`v228_001` when briefed).
+5. **Notify kind.** A new kind `bear_regime` joins `lifecycle_events.KINDS`
+   and its validator, with a dispatch beside `market_shock` in
+   `lifecycle_notifications`.
+6. **Embed builders.** The line goes on every *alert* builder:
+   - `build_embed`: a field appended to `sections["plan"]`, above the image
+     and the disclaimer footer.
+   - `build_simple_alert` and `_legacy_simple_alert`.
+   - `build_strategy_alert_embed`: after the Ledger field.
+   - `build_strategy_simple_embed`: in the description, because it has no
+     fields.
+
+   The execution ticket (`build_ticket_embed`) is out of scope. One more
+   line, missing above: SHORT `aligned` in CORRECTION reads
+   `Regime: Correction — short in a dip; uptrend intact`. Legacy
+   `build_embed` (complexity E) and `_sync_run_scan` (F) each get one
+   unconditional helper call, no new branch.
+7. **Stamping.**
+   - `regime_action` is derived in `stamp_entry_context`, where the plan
+     direction is in scope, beside `shock_asof`
+     (`swingbot/core/planning/params.py:221`).
+   - `attach_plan_v2` gets no branch.
+   - `trade_why.WIRE_CONTEXT_KEYS` gains `bear_regime` and `regime_action`,
+     so the SPA receives them.
+8. **Frontend placement.**
+   - The "dashboard banner" lives in the **app shell** (`shell.html`), so it
+     shows on every route, under the top bar on a phone and under
+     `.tape-strip` from 640 px.
+   - The "plan-card chip" goes on the direction/tag rows of `trade-detail.ts`
+     and `plan-detail.ts`, not `trades/plan-card.ts` (the order panel).
+9. **Tests and access.**
+   - `tests/scanning` (1111/1200) and `tests/scripts` (1163/1200) are near
+     their caps, so new tests go in a new `tests/regime/` directory, which
+     joins one suite in `tests/suites.toml`.
+   - The new viewer GET adds an `access_expectations.py` row.
+
 ## Panel review
 
 Spec review, 2026-11-23, on c344f1f9. Every finding was applied in this
