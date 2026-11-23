@@ -157,7 +157,7 @@ interface SplitGroup { dim: CancelSplit['dim']; title: string; rows: SplitRow[] 
     .figure { display: grid; gap: var(--space-4); align-content: start; }
     .figure-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-8); }
     .value { font-size: var(--text-hero); line-height: 1.1; }
-    .num { font-family: var(--font-num); }
+    .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
     /* sb-button ghost supplies the paint; layout, border and ink are set back
        here so each stays one full-width, 44px touch target. */
     .card, .count, .split-row {
@@ -171,7 +171,7 @@ interface SplitGroup { dim: CancelSplit['dim']; title: string; rows: SplitRow[] 
     }
     .small-n { color: var(--warn); font-size: var(--text-micro); }
     .caption, .note, .as-of, .tp1-note, .pair-label, .survival, .ties, .manual, .split-empty {
-      margin: 0; color: var(--text-faint); font-size: var(--text-micro);
+      margin: 0; color: var(--text-muted); font-size: var(--text-micro);
     }
     .baseline, .without-risk-cap { margin: 0; font-size: var(--text-body); }
     @container cancels (min-width: 640px) {

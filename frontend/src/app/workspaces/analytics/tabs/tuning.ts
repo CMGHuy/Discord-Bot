@@ -267,7 +267,7 @@ interface ProposalView extends ProposalRow {
 
     .section-help { max-width: 70ch; }
     .section-help + .section-help, .section-help + .launch { margin-top: var(--space-10); }
-    code { font-family: var(--font-mono); }
+    code { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
     /* Flush panels (Job, Grid results, Earlier jobs) put their table edge to
      * edge, which leaves sb-panel-header with none of the padding the panel
@@ -296,6 +296,7 @@ interface ProposalView extends ProposalRow {
       border-bottom: 1px solid var(--border);
       color: var(--text-secondary);
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-table);
       line-height: 1.5;
       white-space: pre-wrap;
@@ -329,7 +330,7 @@ interface ProposalView extends ProposalRow {
       text-transform: uppercase;
       letter-spacing: 0.1em;
     }
-    .diff .num { text-align: right; font-family: var(--font-mono); }
+    .diff .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .proposal .muted { display: block; margin: var(--space-8) 0; }
   `,
 })

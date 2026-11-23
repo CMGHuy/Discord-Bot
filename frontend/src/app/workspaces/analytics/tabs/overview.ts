@@ -221,12 +221,12 @@ function maxDrawdown(values: readonly number[]): number | null {
     /* v175: the Normal bad luck panel spans both columns; its own two bars
        take the columns from 640px up and stack below. */
     .wide { grid-column: 1 / -1; }
-    .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-faint); min-width: 0; }
+    .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-muted); min-width: 0; }
     .basis-line { margin: var(--space-4) 0 0; min-width: 0; }
     .pane-label { font-size: var(--text-chip); color: var(--text-secondary); margin: var(--space-10) 0 var(--space-4); }
     .benchmark-link-row { font-size: var(--text-chip); margin: var(--space-6) 0 0; }
     .pairs { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-8); margin: var(--space-10) 0 0; }
-    .pairs dt { font-size: var(--text-micro); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.1em; }
+    .pairs dt { font-size: var(--text-micro); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; }
     .pairs dd { margin: var(--space-4) 0 0; color: var(--text); font-variant-numeric: tabular-nums; }
     .pairs .missing dd { color: var(--warn); font-style: italic; }
     @media (max-width: 639px) { .panels { grid-template-columns: 1fr; } }

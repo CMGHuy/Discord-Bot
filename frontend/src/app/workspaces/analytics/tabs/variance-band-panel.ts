@@ -141,7 +141,7 @@ export function bandView(band: VarianceBandOk, currency: string): BandView {
     .expr { color: var(--text); font-variant-numeric: tabular-nums; }
     .caveat { color: var(--warn); }
     .insufficient { color: var(--text-secondary); }
-    .caption { font-size: var(--text-chip); color: var(--text-faint); }
+    .caption { font-size: var(--text-chip); color: var(--text-muted); }
     @media (max-width: 639px) { .bars { grid-template-columns: 1fr; } }
   `,
 })

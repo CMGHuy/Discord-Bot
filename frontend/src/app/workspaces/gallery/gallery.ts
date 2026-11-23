@@ -986,7 +986,7 @@ interface ContractRow {
     }
     /* One line per cell: wrapped, R's bar dropped under its figure and lifted
        it ~10px off the row's line at phone width. The box scrolls instead. */
-    .numerics-demo th.num, .numerics-demo td.num { text-align: right; white-space: nowrap; }
+    .numerics-demo th.num, .numerics-demo td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .numerics-demo thead th {
       color: var(--text-secondary); font-size: var(--text-micro);
       border-bottom: 1px solid var(--border);

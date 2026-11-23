@@ -165,7 +165,7 @@ export function formatInterval(low: number | null, high: number | null): string 
     .figures { width: 100%; border-collapse: collapse; font-size: var(--text-table); }
     .figures th { text-align: left; color: var(--text-muted); font-weight: 500; }
     .figures th, .figures td { padding: var(--space-4) var(--space-8); border-bottom: 1px solid var(--border); }
-    .aside, .caption, .footer { color: var(--text-faint); font-size: var(--text-micro); }
+    .aside, .caption, .footer { color: var(--text-muted); font-size: var(--text-micro); }
     .caption, .footer { margin: var(--space-8) 0 0; }
     .candidate { display: inline-block; margin: var(--space-6) var(--space-8) 0 0; color: var(--info); font-size: var(--text-micro); }
   `,

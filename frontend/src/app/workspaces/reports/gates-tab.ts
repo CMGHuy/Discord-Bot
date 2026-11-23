@@ -125,7 +125,7 @@ const percent = (value: number | null): string =>
   styles: `
     :host { display: grid; gap: var(--space-14); }
     .verdict, .waiting { display: inline-flex; align-items: center; gap: var(--space-8); flex-wrap: wrap; }
-    .word { font-family: var(--font-mono); color: var(--text-muted); letter-spacing: 0.08em; }
+    .word { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-muted); letter-spacing: 0.08em; }
     progress { width: 5rem; height: 6px; }
     .detail { display: grid; gap: var(--space-8); }
     .sentence { margin: 0; }
@@ -134,7 +134,7 @@ const percent = (value: number | null): string =>
     .figures { width: 100%; border-collapse: collapse; font-size: var(--text-table); }
     .figures th { text-align: left; color: var(--text-muted); font-weight: 500; }
     .figures th, .figures td { padding: var(--space-4) var(--space-8); border-bottom: 1px solid var(--border); }
-    .aside, .caption, .footer { color: var(--text-faint); font-size: var(--text-micro); }
+    .aside, .caption, .footer { color: var(--text-muted); font-size: var(--text-micro); }
     .caption, .footer { margin: var(--space-8) 0; }
   `,
 })
