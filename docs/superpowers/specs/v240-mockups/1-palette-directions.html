@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Navy restyle mockups</title>
+<style>
+@font-face { font-family: "Jost"; font-weight: 100 900; font-style: normal; font-display: swap;
+  src: url("jost-latin-wght-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400 700; src: local("JetBrains Mono"), local("Consolas"); }
+
+:root { --page: #0b0f14; --ink: #e6edf3; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 "Jost", system-ui, sans-serif; padding: 24px 16px 64px; }
+.intro { max-width: 1400px; margin: 0 auto 20px; }
+.intro h1 { font-size: 26px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+.intro p { margin: 0; color: #9fb0c0; max-width: 900px; }
+.grid { max-width: 1400px; margin: 0 auto; display: grid; gap: 24px; }
+.choice { border: 2px solid transparent; border-radius: 16px; padding: 12px; background: #11161d; cursor: pointer; transition: border-color .15s; }
+.choice.selected { border-color: #53ceb5; }
+.choice > header { display: flex; align-items: baseline; gap: 10px; margin: 2px 4px 10px; flex-wrap: wrap; }
+.choice > header b { font-size: 18px; font-weight: 600; }
+.choice > header span { color: #9fb0c0; font-size: 14px; }
+.letter { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: #22303d; font-weight: 700; }
+
+/* ---------- the app frame, token-driven ---------- */
+.app { --sans: "Jost", system-ui, sans-serif; --num: var(--sans);
+  display: grid; grid-template-columns: 200px 1fr; min-height: 560px; border-radius: 12px; overflow: hidden;
+  background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; }
+.app .nav { background: var(--nav-bg, var(--surface)); border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; gap: 4px; }
+.brand { font-weight: 700; font-size: 20px; letter-spacing: -0.02em; padding: 0 10px 14px; color: var(--text); }
+.brand i { font-style: normal; color: var(--mint); }
+.nav a { display: block; padding: 9px 12px; border-radius: var(--control-radius); color: var(--text-secondary); text-decoration: none; font-weight: 500; }
+.nav a.on { background: var(--accent-soft); color: var(--text); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+.main { padding: 18px 20px 22px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.topbar h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { font: 600 13px/1 var(--sans); letter-spacing: var(--btn-tracking); text-transform: var(--btn-case); padding: 11px 16px; border-radius: var(--control-radius); border: 1px solid transparent; cursor: pointer; }
+.btn.primary { background: var(--accent-fill); color: #fafdff; }
+.btn.ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
+.btn.soft { background: var(--chip-bg); color: var(--chip-fg); }
+
+.hero { border-radius: var(--panel-radius); padding: 20px 22px; background: var(--hero-bg); box-shadow: var(--panel-shadow); border: var(--hero-border, 1px solid var(--border)); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+.hero .k { color: var(--hero-label, var(--text-muted)); font-size: 13px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; }
+.hero .v { font-size: 40px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.hero .d { color: var(--mint); font-weight: 600; }
+.pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 12px; background: var(--mint); color: #003958; font-weight: 600; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: var(--panel-border); border-radius: var(--panel-radius); padding: 14px 16px; box-shadow: var(--panel-shadow); }
+.tile .k { color: var(--text-muted); font-size: 12px; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; }
+.tile .v { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.tile .s { color: var(--text-secondary); font-size: 12px; }
+
+.row2 { display: grid; grid-template-columns: 1.1fr 1.4fr; gap: 12px; }
+.panel { background: var(--surface); border: var(--panel-border); border-radius: var(--panel-radius); box-shadow: var(--panel-shadow); padding: 14px 16px; min-width: 0; }
+.panel h3 { margin: 0 0 10px; font-size: 15px; font-weight: 600; display: flex; justify-content: space-between; }
+.panel h3 small { color: var(--text-muted); font-weight: 500; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
+.alert { background: var(--surface-raised); border-radius: var(--inner-radius); padding: 12px 14px; display: grid; gap: 8px; }
+.alert .t { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.alert .sym { font-size: 18px; font-weight: 700; }
+.chip { border-radius: var(--chip-radius); padding: 3px 9px; font-size: 12px; font-weight: 600; background: var(--chip-bg); color: var(--chip-fg); }
+.chip.long { background: var(--pos-soft); color: var(--pos); }
+.chip.short { background: var(--neg-soft); color: var(--neg); }
+.levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.levels div { background: var(--surface-overlay); border-radius: var(--small-radius); padding: 6px 8px; }
+.levels span { display: block; color: var(--text-muted); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+.levels b { font-variant-numeric: tabular-nums; font-family: var(--num); font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { text-align: left; color: var(--text-muted); font-weight: 500; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+td { padding: 8px; border-bottom: 1px solid var(--border); font-family: var(--num); }
+td.n, th.n { text-align: right; }
+tr:last-child td { border-bottom: 0; }
+.pos { color: var(--pos); font-weight: 600; } .neg { color: var(--neg); font-weight: 600; }
+
+/* ---------- Current: Navy today (for comparison) ---------- */
+.v0 { --sans: "Inter", "Segoe UI", system-ui, sans-serif; --num: "JetBrains Mono", Consolas, monospace;
+  --bg: #0a1220; --surface: #0f1a2c; --surface-raised: #152238; --surface-overlay: #1b2a44; --border: #22324d; --border-strong: #2d4063;
+  --text: #e8eef7; --text-secondary: #b6c3d6; --text-muted: #8a9bb3; --accent: #6b9bd1; --accent-fill: #3a6ea8; --accent-soft: rgba(107,155,209,.16);
+  --mint: #4fbf8a; --pos: #4fbf8a; --pos-soft: rgba(79,191,138,.14); --neg: #e5636b; --neg-soft: rgba(229,99,107,.14);
+  --chip-bg: #1b2a44; --chip-fg: #b6c3d6;
+  --panel-radius: 6px; --control-radius: 4px; --chip-radius: 4px; --inner-radius: 4px; --small-radius: 2px;
+  --panel-border: 1px solid var(--border); --panel-shadow: none; --btn-case: none; --btn-tracking: 0;
+  --hero-bg: var(--surface); }
+.v0 .hero .v, .v0 .tile .v { font-family: var(--sans); }
+
+/* ---------- A: Doctena night, flat ---------- */
+.va { --bg: #00131f; --surface: #001e30; --surface-raised: #032a42; --surface-overlay: #073652; --border: #0d3d59; --border-strong: #1d5373;
+  --text: #fafdff; --text-secondary: #c8e1ef; --text-muted: #8fb3c8; --accent: #328ec0; --accent-fill: #0072b0; --accent-soft: rgba(50,142,192,.18);
+  --mint: #53ceb5; --pos: #53ceb5; --pos-soft: rgba(83,206,181,.14); --neg: #f07a7a; --neg-soft: rgba(240,122,122,.14);
+  --chip-bg: #0d3d59; --chip-fg: #c8e1ef;
+  --panel-radius: 10px; --control-radius: 12px; --chip-radius: 999px; --inner-radius: 8px; --small-radius: 6px;
+  --panel-border: 1px solid var(--border); --panel-shadow: none; --btn-case: uppercase; --btn-tracking: .04em;
+  --hero-bg: var(--surface); }
+
+/* ---------- B: Doctena night, hero + soft depth ---------- */
+.vb { --bg: #001521; --surface: #002235; --surface-raised: #032e48; --surface-overlay: #083b5a; --border: rgba(200,225,239,.08); --border-strong: rgba(200,225,239,.22);
+  --text: #fafdff; --text-secondary: #c8e1ef; --text-muted: #8fb3c8; --accent: #53ceb5; --accent-fill: #0072b0; --accent-soft: rgba(83,206,181,.14);
+  --mint: #53ceb5; --pos: #53ceb5; --pos-soft: rgba(83,206,181,.14); --neg: #f07a7a; --neg-soft: rgba(240,122,122,.14);
+  --chip-bg: #c8e1ef; --chip-fg: #005b8c; --nav-bg: #001a29;
+  --panel-radius: 14px; --control-radius: 12px; --chip-radius: 999px; --inner-radius: 10px; --small-radius: 8px;
+  --panel-border: 1px solid var(--border); --panel-shadow: 0 10px 15px -3px rgba(0,0,0,.35), 0 4px 6px -4px rgba(0,0,0,.3);
+  --btn-case: uppercase; --btn-tracking: .04em;
+  --hero-bg: radial-gradient(120% 140% at 15% 0%, #328ec0 0%, #0072b0 45%, #005b8c 100%); --hero-border: 0; --hero-label: #c8e1ef; }
+.vb .hero .d { color: #c8efe9; }
+.vb .chip.long, .vb .chip.short { }
+
+@media (max-width: 1100px) { .row2 { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; }
+  .app .nav { flex-direction: row; overflow-x: auto; padding: 10px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .brand { padding: 6px 10px; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .levels { grid-template-columns: repeat(2, 1fr); }
+  .hero .v { font-size: 32px; }
+}
+</style>
+</head>
+<body>
+<div class="intro">
+  <h1>Dark doctena: two takes on the Navy theme</h1>
+  <p>Same dashboard, three skins. <b>Navy today</b> is shown first as the baseline. <b>A</b> swaps in doctena's palette, Jost and rounder shapes but stays flat. <b>B</b> adds doctena's signature rounded blue gradient block, soft card shadows and light-blue chips. Click A or B to choose (or tell me what to mix).</p>
+</div>
+<div class="grid">
+
+<div class="choice" data-choice="current" >
+  <header><span class="letter">&ndash;</span><b>Navy today</b><span>Inter + JetBrains Mono, 4-6px corners, flat</span></header>
+  <div class="app v0">
+    <nav class="nav">
+      <div class="brand">bomeo<i>.</i>capital</div>
+      <a class="on">Dashboard</a><a>Alerts</a><a>Positions</a><a>Analytics</a><a>Calendar</a><a>Settings</a>
+    </nav>
+    <div class="main">
+      <div class="topbar"><h2>Dashboard</h2>
+        <div class="btns"><button class="btn ghost">Export</button><button class="btn soft">Scan now</button><button class="btn primary">New plan</button></div></div>
+      <div class="hero">
+        <div><div class="k">Paper portfolio</div><div class="v">$12,480.20</div><div class="d">+$292.40 (+2.4%) this month</div></div>
+        <span class="pill">&#9733; 3 setups confirmed today</span>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="k">Open positions</div><div class="v">7</div><div class="s">heat 4.1% of 8%</div></div>
+        <div class="tile"><div class="k">Win rate</div><div class="v">54%</div><div class="s">N = 412 closed</div></div>
+        <div class="tile"><div class="k">Expectancy</div><div class="v pos">+0.12R</div><div class="s">pooled, 90 days</div></div>
+        <div class="tile"><div class="k">Avg hold</div><div class="v">6.3d</div><div class="s">swing horizon</div></div>
+      </div>
+      <div class="row2">
+        <div class="panel"><h3>Latest alert <small>2 min ago</small></h3>
+          <div class="alert">
+            <div class="t"><span class="sym">NVDA</span><span class="chip long">LONG</span><span class="chip">Break &amp; Retest</span><span class="chip">Confluence 4/5</span></div>
+            <div class="levels"><div><span>Entry</span><b>182.40</b></div><div><span>Stop</span><b>176.10</b></div><div><span>TP1</span><b>191.20</b></div><div><span>Size</span><b>31 sh</b></div></div>
+          </div>
+        </div>
+        <div class="panel"><h3>Open positions <small>7</small></h3>
+          <table><thead><tr><th>Ticker</th><th>Side</th><th class="n">Entry</th><th class="n">Last</th><th class="n">P&amp;L</th></tr></thead>
+          <tbody>
+            <tr><td>MSFT</td><td><span class="chip long">LONG</span></td><td class="n">412.30</td><td class="n">421.85</td><td class="n pos">+1.4R</td></tr>
+            <tr><td>XLE</td><td><span class="chip short">SHORT</span></td><td class="n">88.12</td><td class="n">89.40</td><td class="n neg">&minus;0.6R</td></tr>
+            <tr><td>AMD</td><td><span class="chip long">LONG</span></td><td class="n">141.05</td><td class="n">143.90</td><td class="n pos">+0.7R</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="choice" data-choice="a" onclick="toggleSelect(this)">
+  <header><span class="letter">A</span><b>Doctena night, flat</b><span>Jost, doctena navy/blue/mint, 10-12px corners, pill chips, no shadows</span></header>
+  <div class="app va">
+    <nav class="nav">
+      <div class="brand">bomeo<i>.</i>capital</div>
+      <a class="on">Dashboard</a><a>Alerts</a><a>Positions</a><a>Analytics</a><a>Calendar</a><a>Settings</a>
+    </nav>
+    <div class="main">
+      <div class="topbar"><h2>Dashboard</h2>
+        <div class="btns"><button class="btn ghost">Export</button><button class="btn soft">Scan now</button><button class="btn primary">New plan</button></div></div>
+      <div class="hero">
+        <div><div class="k">Paper portfolio</div><div class="v">$12,480.20</div><div class="d">+$292.40 (+2.4%) this month</div></div>
+        <span class="pill">&#9733; 3 setups confirmed today</span>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="k">Open positions</div><div class="v">7</div><div class="s">heat 4.1% of 8%</div></div>
+        <div class="tile"><div class="k">Win rate</div><div class="v">54%</div><div class="s">N = 412 closed</div></div>
+        <div class="tile"><div class="k">Expectancy</div><div class="v pos">+0.12R</div><div class="s">pooled, 90 days</div></div>
+        <div class="tile"><div class="k">Avg hold</div><div class="v">6.3d</div><div class="s">swing horizon</div></div>
+      </div>
+      <div class="row2">
+        <div class="panel"><h3>Latest alert <small>2 min ago</small></h3>
+          <div class="alert">
+            <div class="t"><span class="sym">NVDA</span><span class="chip long">LONG</span><span class="chip">Break &amp; Retest</span><span class="chip">Confluence 4/5</span></div>
+            <div class="levels"><div><span>Entry</span><b>182.40</b></div><div><span>Stop</span><b>176.10</b></div><div><span>TP1</span><b>191.20</b></div><div><span>Size</span><b>31 sh</b></div></div>
+          </div>
+        </div>
+        <div class="panel"><h3>Open positions <small>7</small></h3>
+          <table><thead><tr><th>Ticker</th><th>Side</th><th class="n">Entry</th><th class="n">Last</th><th class="n">P&amp;L</th></tr></thead>
+          <tbody>
+            <tr><td>MSFT</td><td><span class="chip long">LONG</span></td><td class="n">412.30</td><td class="n">421.85</td><td class="n pos">+1.4R</td></tr>
+            <tr><td>XLE</td><td><span class="chip short">SHORT</span></td><td class="n">88.12</td><td class="n">89.40</td><td class="n neg">&minus;0.6R</td></tr>
+            <tr><td>AMD</td><td><span class="chip long">LONG</span></td><td class="n">141.05</td><td class="n">143.90</td><td class="n pos">+0.7R</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="choice" data-choice="b" onclick="toggleSelect(this)">
+  <header><span class="letter">B</span><b>Doctena night, hero + depth</b><span>A plus the rounded blue gradient block, soft shadows, light-blue chips</span></header>
+  <div class="app vb">
+    <nav class="nav">
+      <div class="brand">bomeo<i>.</i>capital</div>
+      <a class="on">Dashboard</a><a>Alerts</a><a>Positions</a><a>Analytics</a><a>Calendar</a><a>Settings</a>
+    </nav>
+    <div class="main">
+      <div class="topbar"><h2>Dashboard</h2>
+        <div class="btns"><button class="btn ghost">Export</button><button class="btn soft">Scan now</button><button class="btn primary">New plan</button></div></div>
+      <div class="hero">
+        <div><div class="k">Paper portfolio</div><div class="v">$12,480.20</div><div class="d">+$292.40 (+2.4%) this month</div></div>
+        <span class="pill">&#9733; 3 setups confirmed today</span>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="k">Open positions</div><div class="v">7</div><div class="s">heat 4.1% of 8%</div></div>
+        <div class="tile"><div class="k">Win rate</div><div class="v">54%</div><div class="s">N = 412 closed</div></div>
+        <div class="tile"><div class="k">Expectancy</div><div class="v pos">+0.12R</div><div class="s">pooled, 90 days</div></div>
+        <div class="tile"><div class="k">Avg hold</div><div class="v">6.3d</div><div class="s">swing horizon</div></div>
+      </div>
+      <div class="row2">
+        <div class="panel"><h3>Latest alert <small>2 min ago</small></h3>
+          <div class="alert">
+            <div class="t"><span class="sym">NVDA</span><span class="chip long">LONG</span><span class="chip">Break &amp; Retest</span><span class="chip">Confluence 4/5</span></div>
+            <div class="levels"><div><span>Entry</span><b>182.40</b></div><div><span>Stop</span><b>176.10</b></div><div><span>TP1</span><b>191.20</b></div><div><span>Size</span><b>31 sh</b></div></div>
+          </div>
+        </div>
+        <div class="panel"><h3>Open positions <small>7</small></h3>
+          <table><thead><tr><th>Ticker</th><th>Side</th><th class="n">Entry</th><th class="n">Last</th><th class="n">P&amp;L</th></tr></thead>
+          <tbody>
+            <tr><td>MSFT</td><td><span class="chip long">LONG</span></td><td class="n">412.30</td><td class="n">421.85</td><td class="n pos">+1.4R</td></tr>
+            <tr><td>XLE</td><td><span class="chip short">SHORT</span></td><td class="n">88.12</td><td class="n">89.40</td><td class="n neg">&minus;0.6R</td></tr>
+            <tr><td>AMD</td><td><span class="chip long">LONG</span></td><td class="n">141.05</td><td class="n">143.90</td><td class="n pos">+0.7R</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</body>
+</html>
