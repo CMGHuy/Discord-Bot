@@ -58,7 +58,7 @@ describe('recent activity panel', () => {
     // "partial" path) rather than an icon name, since sb-icon exposes no
     // other observable trace of which name it was given.
     const path = el.querySelector('sb-icon path')!;
-    expect(path.getAttribute('d')).toBe('M8 14.5A6.5 6.5 0 1 0 8 1.5a6.5 6.5 0 0 0 0 13z M8 1.5v13');
+    expect(path.getAttribute('d')).toBe('M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z');
   });
 
   it('falls back to the "opened" icon for an unrecognised status', () => {
@@ -67,7 +67,7 @@ describe('recent activity panel', () => {
     ]});
     const path = el.querySelector('sb-icon path')!;
     expect(path.getAttribute('d')).toBe(
-      'M8 13.5A5.5 5.5 0 1 0 8 2.5a5.5 5.5 0 0 0 0 11z M8 8.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z',
+      'M8.2 15.8a5.4 5.4 0 0 1 0-7.6 M15.8 8.2a5.4 5.4 0 0 1 0 7.6 M5.4 18.6a9.3 9.3 0 0 1 0-13.2 M18.6 5.4a9.3 9.3 0 0 1 0 13.2',
     );
   });
 
