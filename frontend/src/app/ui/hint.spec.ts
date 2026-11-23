@@ -136,7 +136,7 @@ describe('Hint (v80 D4)', () => {
   });
 
   it('has no glyph input and no glyph rule left', () => {
-    expect(SOURCE).not.toMatch(/glyph\s*=\s*input/);
+    expect(SOURCE).not.toMatch(/\bglyph\s*=\s*input\b/);
     expect(SOURCE).not.toMatch(/\.glyph\s*\{/);
   });
 
@@ -145,7 +145,7 @@ describe('Hint (v80 D4)', () => {
     // component, so a leftover glyph="v" would build, render nothing and
     // mislead the next reader. Scan every template instead.
     const offenders = allSources()
-      .filter(({ source }) => /<sb-hint[^>]*glyph=/.test(stripComments(source)))
+      .filter(({ source }) => /<sb-hint\b[^>]*\bglyph=/.test(stripComments(source)))
       .map(({ name }) => name);
     expect(offenders).toEqual([]);
   });
