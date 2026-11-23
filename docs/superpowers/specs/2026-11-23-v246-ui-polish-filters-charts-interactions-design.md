@@ -69,7 +69,11 @@ page heading when the page opens").
 with R reads just `rMultiple(r)` (`−1.00R`), coloured by sign the way the
 panel already colours R. A closed row **without** an R keeps the word
 `Closed`, so the row is never blank. Opened rows (`at 204.46`) and cancelled
-rows are unchanged. `activity.spec.ts:31-34` and
+rows are unchanged. The R is the book's R, **pre-tax and before modelled
+frictions**, the same basis as the "pre-tax, before modelled frictions"
+caveat the Dashboard already prints. The panel's hint says so. The row's
+accessible name keeps the status word ("SOFI closed, −1.00R"), so dropping
+the visible word costs a screen reader nothing. `activity.spec.ts:31-34` and
 `recent-activity.spec.ts:116` change with it. A new case covers a closed row
 with no R. The trade drawer's "Closed at" field (`trade-drawer.ts:90`) is a
 price label, not this text, and stays.
@@ -97,13 +101,28 @@ L for a free-text search such as Ticker). The widths are tokens:
 `--field-s`, `--field-m`, `--field-l` in `styles/tokens.css`, with values
 chosen in the plan from the widest current option label at each size.
 
-`sb-control-bar` and `sb-filter-bar` switch to `align-items: flex-end`, so
-fields line up along the bottom even if a label wraps. Every control inside
-them is wrapped in an `sb-field`. Every control in a bar is
-`--control-h` tall: `sb-select`, `sb-text-input`, `sb-date-range`'s two
-inputs, `sb-segmented`, the month arrows and the "Clear N" button. A test
-gives each consumer bar a fixed size and asserts every control's bottom edge
-is the same.
+**The bars that exist (staff-engineer review).** There are four layouts,
+not one:
+- `sb-control-bar` (`control-bar.ts:35`, `align-items: center`): used by
+  Trades, the Analytics scope bar and the Gallery.
+- `sb-filter-bar` (`filter-bar.ts:43`): **already** `flex-end`.
+- `sb-toolbar` (`toolbar.ts:80-91`, 8 consumers including Watchlist).
+- Calendar's month row: its own flex (`calendar.ts:407`), with no shared
+  bar.
+
+`sb-control-bar` and `sb-toolbar` switch to `align-items: flex-end`, so
+fields line up along the bottom even if a label wraps. Calendar's month row
+moves into an `sb-control-bar`. Every control inside these bars is wrapped
+in an `sb-field`.
+
+**Control height.** Every control in a bar consumes the `--control-h`
+token: `sb-select`, `sb-text-input`, `sb-date-range`'s two inputs,
+`sb-segmented`, the month arrows and the "Clear N" button. The token is
+28px at its base and 44px below 1024px (`styles/tokens.css:311,410`), so
+touch targets come free.
+
+**Test.** A test gives each consumer bar a fixed size and asserts every
+control's bottom edge is the same, at both token values.
 
 **Date ranges.** `sb-date-range` becomes one field: one label ("Opened",
 "Range"), with From and To inline at M width each and the dash between them.
@@ -119,14 +138,26 @@ buttons.
 
 **Consumers in this plan:** Trades (`trades.ts`), Calendar (`calendar.ts`),
 Analytics scope bar (`analytics/scope-bar.ts`), Watchlist (`watchlist.ts`),
-and the Dashboard trading-performance toggles. Other bars (System logs/scan
-tabs, Research, Tuning, Partials) inherit the `flex-end` change for free.
-Their controls are wrapped in `sb-field` in plan B's sweep.
+and the Dashboard trading-performance toggles. The other `sb-toolbar` and
+`sb-control-bar` consumers (System logs/scan/settings, Research, Tuning,
+Partials, Attribution, Benchmark) get the `flex-end` change now. Their
+controls are wrapped in `sb-field` by plan B's B10.
 
-**Phone.** `control-bar.ts:72-76` keeps the two-column grid below 640px.
-Fields fill their grid cell (full width, not their desktop size), so a
-2-2-1 stack shows equal widths, not the ragged "each select as wide as its
-text" seen at 390.
+**The consistency gate.** Plan A extends `workspace-consistency.spec.ts`:
+a control in a bar that sits outside an `sb-field` fails. It ships with an
+allowlist naming those not-yet-wrapped consumers, so it passes when A
+merges. B10 empties the allowlist and deletes it.
+
+**Phone.**
+- `control-bar.ts:72-76` keeps the two-column grid below 640px. Fields fill
+  their grid cell (full width, not their desktop size), so a 2-2-1 stack
+  shows equal widths, not the ragged "each select as wide as its text" seen
+  at 390.
+- Controls that take a full row below 640px (month arrows, segmented
+  groups, "Clear N") drop the empty label filler, so they leave no blank
+  line.
+- A segmented group with 3 or more options takes the full row, splits it
+  into equal segments, and never wraps.
 
 ### Plan A §3. One chart theme, and the time series on lightweight-charts
 
@@ -165,9 +196,18 @@ destroy) and applies the theme.
 - `baseline` with base 0 draws drawdown: the area below zero filled with
   `--money-neg` at low opacity, plus a zero line.
 
-The Analytics Overview equity and drawdown move onto it, keep their N and
-total labels in the card header, and share one time scale (scrolling one
-scrolls the other).
+The Analytics Overview equity and drawdown move onto it and keep their N and
+total labels in the card header. The drawdown header adds the money units a
+retail trader feels: max drawdown in € and the longest losing streak, read
+from what `risk_metrics.py` already computes. Neither is a new
+calculation.
+
+**Linked scrolling.** The two charts scroll together. `lightweight-charts`
+5 has no shared time scale, so each chart subscribes to the other's
+`subscribeVisibleLogicalRangeChange`, with a guard flag against
+ping-pong. `sb-time-series` unsubscribes in its `DestroyRef.onDestroy`,
+alongside its `ResizeObserver` and its `theme.service` subscription. A
+spec asserts all three are released on destroy.
 
 **Dashboard equity** (`dashboard/panels/equity-candles.ts`) calls
 `applyChartTheme` and uses `priceFormat`. Its last-value tag shifts so it
@@ -202,7 +242,15 @@ menu, anchored to the button on desktop and tablet and a bottom sheet below
 1024px (reusing v240 plan 4's sheet). It holds Trades' **Clear open** and
 **Clear history** and the Dashboard's **Close all open/partial**. Each item
 keeps its current confirm dialog and copy. Danger items are red text in the
-menu and come last, after a divider. Risk's **Engage killswitch** stays in
+menu and come last, after a divider. Keyboard:
+- Enter or Space opens the menu.
+- Arrow keys move between items, and Home/End jump to the first/last.
+- Esc closes it, and focus returns to the "⋯" button.
+- The bottom sheet traps focus with `ui/focus-trap.ts`.
+
+Close all's confirm copy states what is being closed: the number of open
+and partial positions and the € currently at risk (open risk from the
+Dashboard tile). Risk's **Engage killswitch** stays in
 the page header as an outlined danger button (`--money-neg` border and
 text, transparent fill), with a 16px gap after Refresh. At 390, Refresh and
 Killswitch sit on one row.
@@ -216,8 +264,14 @@ wrapped mid-value (`59,701 € ·` / `5.98%`, `−131.22` / `€`, `997,659.81` 
   per frame).
 - A compound value (`159 € · 0.02%`) puts its second half on a second line
   at the secondary size instead of wrapping arbitrarily.
-- Titles are capped at two lines, ending with "…", with the full title in
-  the tile's hint. Values sit on a shared baseline across a row, so a long
+- **The sign and the unit are never dropped, and a value is never cut
+  with "…".** If a value still doesn't fit at the smallest step
+  (`--text-body`), the whole value wraps onto a second line. A clipped
+  `−131…` would read as a different number.
+- **No reveal is hover-only (ux-designer, BLOCKING).** With a fine pointer
+  (`@media (pointer: fine)`), titles are capped at two lines ending with
+  "…" and the full title sits in the tile's hint. With a coarse pointer
+  (touch), titles wrap in full with no cap. Values sit on a shared baseline across a row, so a long
   title no longer pushes its value below its neighbours' (seen on Analytics:
   "MAX DRAWDOWN · CUMULATIVE R, SELECTED RANGE").
 - Open Risk on the Dashboard uses the same size as its neighbours (it is
@@ -231,17 +285,25 @@ wrapped mid-value (`59,701 € ·` / `5.98%`, `−131.22` / `€`, `997,659.81` 
 - Status shows as one badge everywhere: `Pending`, `Open 35%`, `Partial`,
   `Closed`, `Cancelled`. Today it's a bare % bar for open trades and
   `• CLOSED` for closed ones. The open progress bar stays inside the badge
-  with a tooltip: "35% of the way from entry to TP1".
+  with a tooltip: "35% of the way from entry to TP1". The same sentence is
+  also printed in the expanded row or drawer, so touch has a way to read
+  it.
 - The badge tier (VALIDATED / WEAK / …) becomes a coloured badge instead of
-  plain white capitals.
+  plain white capitals. **Only VALIDATED is green** (`--money-pos` family).
+  WEAK is a muted amber. Every other tier is neutral grey. No tier uses the
+  loss red. A WEAK strategy must never read as a pass (`known-traps.md`
+  § Live plans are almost never VALIDATED).
 
 **B5. Calendar (all widths).**
 - Today gets an outlined marker.
 - Days outside the month are dimmed to `--text-tertiary`, with no tint even
   if they had trades.
-- Sat and Sun columns are half width at ≥ 1024px.
-- The count in each cell's corner gets a label: "22 trades" at ≥ 1024px,
-  "22" with a tooltip below.
+- Sat and Sun columns are half width at ≥ 1024px, never narrower than
+  64px.
+- The count in each cell's corner gets a label: "22 trades" in weekday
+  columns at ≥ 1024px. Weekend columns and narrower widths show just "22".
+  The day page (one tap away) states the count in words, so no tooltip is
+  needed.
 - In the weekday tables, numeric columns and their headings are
   right-aligned and day names left-aligned (headings and numbers point
   different ways today).
@@ -249,8 +311,10 @@ wrapped mid-value (`59,701 € ·` / `5.98%`, `−131.22` / `€`, `997,659.81` 
 - The "thin sample" note appears once per card instead of under each tile.
 
 **B6. Watchlist (all widths).**
-- Company names stay on one line with "…" and the full name on hover
-  (today a name wraps to 3 lines and triples the row height).
+- Company names stop wrapping to 3 lines (which triples the row height
+  today). With a fine pointer: one line, "…", and the full name on hover.
+  With a coarse pointer: up to two lines, and the full name in the row's
+  expanded view or drawer.
 - The price cell drops the repeated date (`2026-11-23`) when it is today and
   keeps the age ("30 s ago").
 - The `TAPE` column gets the heading "Tape" with a hint saying what +/−
@@ -275,6 +339,14 @@ wrapped mid-value (`59,701 € ·` / `5.98%`, `−131.22` / `€`, `997,659.81` 
   rate (net R)" and the Outcome bar becomes "Wins (any profit)", each with a
   hint saying what it counts. Today, 28.99% beside "Wins 52%" reads as a
   contradiction.
+  - The hint names the cause. The tile counts **trades** by net R (N=238
+    scored). The Outcome bar counts **rows**, legs included (854 + 779 =
+    1,633), and partial exits make a losing trade's TP1 leg a "win".
+    The plan confirms these figures against `overview.ts` before writing
+    the copy.
+  - The hint adds that win rate is a constraint, not the edge, and that
+    ExpR leads. The tile order keeps ExpR first, as it is today
+    (`edge-priorities.md`).
 - By month shows the last 12 months, with empty months greyed and labelled
   "no trades", instead of one bar and a half-empty card.
 
@@ -290,18 +362,30 @@ controls in `sb-field`.
 ### Plan C. Interactions
 
 **C1. Crosshair tooltip and click-through.**
-- Every `sb-time-series` shows a tooltip under the crosshair: date, value,
-  and for equity the day's change. On touch, a tap pins the tooltip and a
-  tap elsewhere clears it.
-- SVG bars use the existing `sb-chart-tooltip` with the same layout.
-- Clicking or tapping an equity point, a calendar day, an R-distribution
-  bar or a By-month bar goes to Trades filtered to that slice:
-  `closedOn=YYYY-MM-DD`, `rBucket=lo:hi`, `closedMonth=YYYY-MM`. These are
-  new Trades query parameters, read through the existing query-param
-  filter model.
-- The active slice shows as a removable chip in the control bar ("Closed on
-  5 Nov ✕"), counted in "Clear N".
-- Calendar keeps its day page; a day cell opens it as it does today.
+- **Tooltip.** Every `sb-time-series` shows a tooltip under the crosshair:
+  date, value, and for equity the day's change. SVG bars use the existing
+  `sb-chart-tooltip` with the same layout.
+- **Touch: one gesture, one meaning.** A tap pins the tooltip, and a tap
+  elsewhere clears it. Navigation is never on the bare tap. The pinned
+  tooltip holds a "View N trades →" link, which is the drill-down.
+- **Mouse.** A click does the same as following that link.
+- **Keyboard and screen reader.** The chart host is focusable
+  (`tabindex=0`, labelled with the chart's title). Arrow keys step through
+  the points or bars, an `aria-live="polite"` region reads the tooltip
+  text, and Enter follows "View N trades". The card's existing "Table"
+  link remains the full data list.
+- **Where the drill-down goes.** Trades, filtered to that slice:
+  - `closedOn=YYYY-MM-DD` and `closedMonth=YYYY-MM` map onto the server's
+    existing `closed_from` / `closed_to` filter (`trades.py:85-93`).
+  - `rBucket=lo:hi` is **new server-side work** (staff-engineer review): a
+    new allowlisted filter in `swingbot/admin/api_v1/trades.py`'s filter
+    table (`:1121-1186`), with tests, built in plan C's backend part.
+- **The slice chip.** The active slice shows as a removable chip in the
+  control bar, with its N ("Closed on 5 Nov · N=3 ✕"). It carries the
+  calendar's "thin sample" note when N is below the threshold the calendar
+  uses, so a single trade doesn't read as a pattern. It counts toward
+  "Clear N".
+- **Calendar** keeps its day page: a day cell opens it, as it does today.
 
 **C2. Saved filters and presets (server, per login).**
 - **In the address.** Every filter on Trades, Analytics, Watchlist and
@@ -309,26 +393,63 @@ controls in `sb-field`.
   shared links keep it.
 - **Last used.** Each page's last-used query is saved per login and
   restored when the page opens with no query string. An explicit query
-  string always wins.
+  string always wins. It is **not** saved on every filter change: it's
+  written at most once per 2 s (trailing debounce), and on page leave or
+  `visibilitychange → hidden`. The admin runs one worker with 16 threads
+  (`deploy/gunicorn.conf.py:20-24`), and v206 showed what chatty polling
+  does to it.
 - **Named presets** per page: save current, rename, delete, set as default.
   A "Presets" field leads the filter bar (an `sb-select` with a "Save
-  current…" item that opens a small name dialog).
-- **Backend.** A new table `filter_presets` (`id`, `login`, `page`, `name`,
-  `query` jsonb, `is_default` bool, `is_last_used` bool, `updated_at`).
-  Unique on (`login`, `page`, `name`). At most one default and one
-  last-used row per (`login`, `page`), enforced by partial unique indexes.
-  The table is added by an Alembic revision following
-  `schema-evolution.md`.
-- **Endpoints.** `GET/POST /api/v1/filter-presets?page=`, plus
-  `PATCH/DELETE /api/v1/filter-presets/<id>`. The server scopes every row to
-  the session principal's login and never takes `login` from the request.
+  current…" item that opens a small name dialog). The dialog uses the
+  `confirm-dialog` focus pattern: focus moves to the name input, Esc
+  cancels, focus returns to the select.
+- **Storage: no new table (staff-engineer review).** Both live in the
+  existing per-owner store `ui_preferences`
+  (`swingbot/core/db/repositories/preferences.py`), under one key per
+  owner row:
+
+  ```
+  filter_presets: {<page>: {last_used: {...},
+                            presets: [{name, query, is_default}]}}
+  ```
+
+  That means no Alembic revision and no second per-user UI store. Last-used
+  is its own field, so it can't collide with a preset name and doesn't
+  count toward the cap.
+- **The owner key.**
+  - The admin, whether a session login or a Basic-auth call with no
+    principal (`auth.py:50-58`), writes to the existing `"admin"` owner row
+    (`preferences.py:13`). Renaming `ADMIN_USERNAME` in `.env` therefore
+    orphans nothing.
+  - A viewer writes to `viewer:<user_id>`. Deleting a viewer from
+    `admin_users` deletes that owner row in the same transaction (the users
+    delete path, with a test).
+  - The admin's existing column-picker preferences sit in the same row,
+    beside the new key. Writes are read-modify-write of the
+    `filter_presets` key only, under a row lock (`SELECT … FOR UPDATE`), so
+    a preset save never clobbers the column prefs or a concurrent save.
+- **Endpoints.** `GET /api/v1/filter-presets?page=`,
+  `PUT /api/v1/filter-presets/<page>/last-used`,
+  `POST /api/v1/filter-presets/<page>`, and
+  `PATCH/DELETE /api/v1/filter-presets/<page>/<name>`. The owner always
+  comes from the principal, never from the request. They sit outside
+  `/api/v1/system`, so they aren't admin-only.
 - **Validation.** `page` must be one of the four. `query` is a flat
   string→string map of at most 40 keys, each value at most 200 characters,
   and only known keys for that page are kept (the frontend sends its list).
-  `name` is 1–60 characters. Each (`login`, `page`) holds at most 50 presets.
-- **Access.** `swingbot/admin/access.py` lets viewer logins read and write
-  their own presets (only these endpoints, still scoped to their own
-  login).
+  `name` is 1–60 characters. Each owner holds at most 50 presets per page.
+  A duplicate name returns 409.
+- **Access: the first viewer write (staff-engineer review).** v207 defines a
+  viewer as read-only (`principals.py:4`), and `_viewer_may` refuses every
+  non-GET (`access.py:47-50`). This spec amends that contract by exactly
+  one path:
+  - a new `VIEWER_WRITE_PREFIXES = ("/api/v1/filter-presets",)` in
+    `access.py`, matched on segment boundaries like
+    `ADMIN_ONLY_PREFIXES`;
+  - a row in `tests/admin/access_expectations.py` for every new Flask rule,
+    so `test_access_contract.py` stays the authority.
+
+  Everything else stays default-deny.
 - **Failures.** If a preset save fails, the page keeps working with its
   current filters and shows an inline error. If the last-used restore
   fails, the page opens unfiltered.
@@ -336,8 +457,12 @@ controls in `sb-field`.
 **C3. The most important columns first on tablet and phone.**
 - Every Trades column gets an `inlineFrom` (the `ui/priority.ts` model from
   v95). At 820: ticker, status, P&L, R and plan are inline. Origin,
-  strategy, horizon, confidence, badge, note and opened move into the
-  expanded row (their `DemotionTarget`).
+  strategy, horizon, confidence, badge, note and opened are demoted.
+  Their `DemotionTarget` is **the trade drawer** that v240 plan 5 makes
+  the narrow-width tap destination. Plan C runs after v240 plan 5, so one
+  tap does one thing (open the drawer), with no expand-then-drawer double
+  step. If the order ever slips, C3 waits, never ships a temporary
+  expanded-row target.
 - At 390 the card shows the same order.
 - The column picker still overrides: a column the partner turns on shows
   inline at any width, and the table scrolls sideways with the B4 shadow.
@@ -347,23 +472,35 @@ controls in `sb-field`.
 - **Undo toast** (`sb-toast` service, new). Reversible actions run at once
   and show "Removed MRVL · Undo" for 6 seconds: watchlist remove, preset
   delete. Undo calls the reverse API (re-add / re-create). The toast is
-  announced through an `aria-live="polite"` region. Destructive trade
+  announced through an `aria-live="polite"` region.
+  - The timer pauses while the toast is hovered or holds focus (WCAG
+    2.2.1).
+  - Below 1024px the toast sits above the bottom tab bar (offset by the bar
+    height plus 8px), and above the on-screen keyboard when one is open
+    (`visualViewport`). Destructive trade
   actions (clear, close, killswitch) keep their confirm dialogs and never
   use undo.
 - **Loading placeholders.** Stat tiles, tables (5 placeholder rows) and
   charts show a neutral outline in their final size while their first load
   is pending, instead of an empty space and a spinner, so nothing jumps
-  when data arrives. Later refreshes keep the old data on screen.
+  when data arrives. Later refreshes keep the old data on screen. If the
+  first load fails, the placeholder is replaced by the existing
+  `panel-error` (what failed plus Retry). A placeholder never stays on
+  screen indefinitely.
 - **Flash.** `[sbFlash]` (exists, `ui/flash.ts`) is applied to every live
   price and P&L cell on Dashboard, Trades and Watchlist: a 600ms tint by
   sign when the value changes. It stays scoped to the cell, as v168 §4
   requires, and is off when the device asks for reduced motion.
 - **One "Updated" stamp per page.** One `sb-freshness` in the page header
   replaces the scattered per-card "2 min ago" labels (at 1440 the Dashboard
-  shows five). It turns amber when stale (`STALE_AFTER_SEC`), with the
-  reason on hover. Cards whose data comes from a different source
-  (Market movers, FX rates) keep their own stamp only when it differs from
-  the page's by more than `STALE_AFTER_SEC`.
+  shows five).
+  - **The stamp shows the oldest source's age** (prices, scan, FX, market
+    movers), not the page-load time. A fresh page can never hide a lagging
+    feed (financial-advisor review).
+  - It turns amber when that oldest age passes `STALE_AFTER_SEC`.
+  - Hover or tap opens a list of each source and its age, so the stale
+    one is named.
+  - No card keeps a stamp of its own.
 
 ## Error, empty and edge states
 
@@ -375,8 +512,9 @@ controls in `sb-field`.
 - Charts read their theme colours from the tokens once the view has
   loaded. A missing token falls back to the Navy value and logs once.
 - Page-actions menu with no items is not rendered.
-- KPI fit: a value too long even at the smallest step ends with "…" and
-  shows in full on hover. Never smaller than `--text-body`.
+- KPI fit: a value too long even at the smallest step (`--text-body`)
+  wraps whole onto a second line. Never "…", never a lost sign or unit
+  (§B3).
 - Presets: a duplicate name is a 409 with "A preset with that name exists".
   A saved preset whose query contains a key that's no longer known has that
   key dropped silently on apply.
@@ -392,7 +530,10 @@ Every plan checks its screens at 390, 820 and 1440 with Playwright
 `ADMIN_PASSWORD` through `POST /api/v1/session`, never printed. Each
 finding above names the width it was seen at, and its fix is checked at
 all three. Touch targets stay at least 44px below 1024px: the "⋯" menus,
-segmented options, preset select, toast Undo and the calendar cells.
+segmented options, preset select, toast Undo and the calendar cells. Each
+plan's closing task also runs `node frontend/scripts/layout-audit.mjs` at
+the three widths (overflow, target size, text size). Every new hint and
+tooltip has a tap path. Nothing is hover-only (§B3, §B4, §B6, §C1).
 
 ## Testing
 
@@ -409,10 +550,14 @@ new, edge and empty cases included, frontend and backend alike:
   status badge, data-table scroll shadow, calendar today/outside/weekend,
   watchlist truncation, heat bar), plus a header-overlap test at 390
   (bounding boxes don't intersect).
-- **C:** backend tests for the `filter_presets` store (CRUD, scoping by
-  login, a viewer can't reach another login's rows, limits, the
-  default/last-used uniqueness) and the Alembic revision (upgrade,
-  downgrade). Frontend specs for preset UI, query restore precedence,
+- **C:** backend tests for the preset endpoints:
+  - CRUD, owner scoping (a viewer can't reach the admin's or another
+    viewer's presets), Basic-auth admin mapping to `"admin"`;
+  - limits, the 409, one default per page;
+  - the column prefs untouched by a preset write;
+  - the viewer-delete cleanup;
+  - `access_expectations.py` rows;
+  - the `rBucket` trades filter. Frontend specs for preset UI, query restore precedence,
   drill-down parameters and chips, `inlineFrom` per column at the three
   widths, toast with undo and expiry, placeholders, flash under reduced
   motion, single freshness stamp.
@@ -431,18 +576,29 @@ No plan runs the full suite. CI does (CLAUDE.md).
 
 ## What follows
 
-Three plans, numbered v246 like this spec, each at most 20 tasks:
+Five plans, numbered v246 like this spec, each at most 20 tasks. They are
+split up front (staff-engineer review), never compressed:
 
 1. **Plan A — requests**: Recent activity R, `sb-field` + bar alignment +
-   date range + segmented sweep on the five named consumers, chart theme,
-   `sb-time-series`, Analytics equity/drawdown move, Dashboard candle
-   fixes, SVG token sweep, R-distribution edges.
-2. **Plan B — audit fixes**: B1–B10.
-3. **Plan C — interactions**: C1–C4, backend first (C2's table, endpoints,
-   access) so the frontend tasks build on a merged API.
+   date range + segmented sweep on the five named consumers, the gate
+   allowlist, chart theme, `sb-time-series`, Analytics equity/drawdown
+   move, Dashboard candle fixes, SVG token sweep, R-distribution edges.
+2. **Plan B1 — audit fixes, part 1**: B1–B5 (header, page actions, KPI
+   fit, tables, Calendar).
+3. **Plan B2 — audit fixes, part 2**: B6–B10 (Watchlist, Risk, Analytics,
+   Dashboard, the `sb-field` sweep, which empties A's allowlist).
+4. **Plan C1 — interactions backend**: preset endpoints on
+   `ui_preferences`, owner keying, viewer-delete cleanup, the
+   `VIEWER_WRITE_PREFIXES` access change, the `rBucket` trades filter.
+5. **Plan C2 — interactions frontend**: C1 tooltips/drill-down, C2 UI and
+   address/restore, C3 priority columns, C4 toast/placeholders/flash/
+   stamp. If C2 measures over 20 tasks at writing time, it splits again
+   (C2a: C1 + C2 UI; C2b: C3 + C4).
 
-**Order:** v240 plan 3 → v246 A → v240 plan 4 → v246 B → v240 plan 5 →
-v246 C. Why:
+**Order:** v240 plan 3 → v246 A → v240 plan 4 → v246 B1 → v246 B2 →
+v240 plan 5 → v246 C1 → v246 C2. The same interleave is recorded in
+v240's "What follows", so the two specs never disagree about what's next.
+Why:
 - A edits the Trades and Calendar control bars, which v240 plan 3 moves.
 - B's tables and the page-actions sheet build on v240 plan 4's
   `sb-data-table` tap rule and bottom sheet.
@@ -450,3 +606,42 @@ v246 C. Why:
   plan 5 moves into drawers.
 
 None of these run in parallel. Each pair edits shared shell or table files.
+
+## Panel review
+
+Run 2026-11-23 on ee049953, serially: ux-designer (sonnet), staff-engineer
+(opus), financial-advisor (sonnet).
+
+**BLOCKING**
+- ux-designer: hover-only reveals (KPI "…" values, two-line titles, watchlist names, status and count tooltips) are unreadable on touch -- applied: no value is ever cut with "…"; coarse-pointer titles and names wrap; status text repeated in the drawer; calendar count reads in words on the day page (§B3, §B4, §B5, §B6, Three devices).
+- financial-advisor: the bare R in Recent activity doesn't say its cost basis -- applied: stated as pre-tax, before modelled frictions, in the panel hint (§A1).
+
+**ADVISORY**
+- ux-designer: tap both pins the tooltip and navigates -- applied: tap pins, "View N trades" link navigates (§C1).
+- ux-designer: chart drill-down is pointer-only -- applied: focusable host, arrow-key stepping, aria-live readout, Enter follows (§C1).
+- ux-designer: "⋯" menu and preset dialog keyboard behaviour unstated -- applied (§B2, §C2).
+- ux-designer: `--control-h` is 28px base / 44px below 1024; alignment test should run at both -- applied (§A2).
+- ux-designer: name `layout-audit.mjs` in each plan's closing task -- applied (Three devices).
+- ux-designer: empty label filler leaves gaps in the phone grid; segmented groups below 640px unspecified -- applied (§A2 Phone).
+- ux-designer: "22 trades" in half-width weekend columns -- applied: short form there, 64px minimum (§B5).
+- ux-designer: toast position, pause and first-load failure of placeholders -- applied (§C4).
+- ux-designer: expanded row vs v240 drawer tap conflict -- applied: drawer is the target; C3 waits rather than ship an interim (§C3).
+- ux-designer: closed row must still announce its status -- applied: accessible name keeps "closed" (§A1).
+- staff-engineer: bar seam misnamed (sb-filter-bar already flex-end; sb-toolbar and Calendar's own flex unnamed) -- applied (§A2).
+- staff-engineer: consistency gate goes red at A's merge -- applied: allowlist shipped by A, emptied by B10 (§A2).
+- staff-engineer: `filter_presets` table ignores schema.py conventions -- applied by removal: no new table, presets live in the existing `ui_preferences` store (§C2).
+- staff-engineer: last-used row collides with names and the cap -- applied: its own field (§C2).
+- staff-engineer: Basic-auth admin has no principal; env username rename and viewer delete orphan rows -- applied: `"admin"` owner for both admin paths, `viewer:<user_id>` deleted with the user (§C2).
+- staff-engineer: first viewer write needs an explicit rule and contract rows -- applied: `VIEWER_WRITE_PREFIXES` + `access_expectations.py` rows, v207 amended by one path (§C2).
+- staff-engineer: last-used saved on every change starves the single worker -- applied: 2 s debounce plus save on leave/hidden (§C2).
+- staff-engineer: `rBucket` needs a server filter -- applied: plan C1 backend work; closedOn/closedMonth reuse `closed_from`/`closed_to` (§C1).
+- staff-engineer: plans B and C exceed 20 tasks -- applied: split into B1/B2 and C1/C2 now (What follows).
+- staff-engineer: interleave contradicts v240's "strictly in this order" -- applied: recorded in v240's What follows in the same commit.
+- staff-engineer: lightweight-charts has no shared time scale; teardown unstated -- applied: visible-range subscriptions with guard, all released in DestroyRef (§A3).
+- financial-advisor: win-rate rename should name the cause and keep ExpR leading -- applied (§B8).
+- financial-advisor: KPI fit could clip a sign or unit -- applied: sign and unit never dropped, wrap instead of "…" (§B3).
+- financial-advisor: keep Close all on the Dashboard's open-risk tile -- rejected: the partner chose the "⋯" menu for it (D3); applied the other half, the confirm copy states the positions and € at risk being closed (§B2).
+- financial-advisor: drawdown only in R/% -- applied: max drawdown in € and longest losing streak in the card header (§A3).
+- financial-advisor: one page stamp can hide a stale feed -- applied: the stamp shows the oldest source's age and lists each source (§C4).
+- financial-advisor: drill-down slice shown without N -- applied: chip carries N and the thin-sample note (§C1).
+- financial-advisor: coloured tier badge could make WEAK read as a pass -- applied: only VALIDATED green, WEAK muted amber, never loss red (§B4).
