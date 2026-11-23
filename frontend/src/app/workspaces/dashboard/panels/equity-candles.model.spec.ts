@@ -181,6 +181,12 @@ describe('v181 readout parts', () => {
     expect(parts[0].tone).toBe('neg');
   });
 
+  it('prints a drawdown that rounds to zero unsigned (v240 Decision 10)', () => {
+    const parts = rangeReadoutParts(
+      { change: 0, changePct: 0, high: 1, low: 1, maxDrawdownPct: 0.004 }, '€');
+    expect(parts[3].text).toBe(`${RANGE_LABELS.drawdown} 0.00%`);
+  });
+
   it('never colours the dash of an undefined drawdown or percentage', () => {
     const parts = rangeReadoutParts(
       { change: 5, changePct: null, high: 1, low: 1, maxDrawdownPct: null }, '€');

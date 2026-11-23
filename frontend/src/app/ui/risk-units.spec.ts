@@ -43,4 +43,9 @@ describe('riskUnits', () => {
     expect(riskUnits(-0.5, 100_000, '$')).not.toContain('-');
     expect(riskUnits(-0.5, null, '$')).toBe(`${ABSENT} · ${MINUS}0.50%`);
   });
+
+  it('prints a money part that rounds to zero unsigned (v240 Decision 10)', () => {
+    expect(riskUnits(-0.001, 10_000, '$')).toBe(`0 $ · ${MINUS}<0.01%`);
+    expect(riskUnits(-1.42, 100_000, '$')).toBe(`${MINUS}1,420 $ · ${MINUS}1.42%`);
+  });
 });

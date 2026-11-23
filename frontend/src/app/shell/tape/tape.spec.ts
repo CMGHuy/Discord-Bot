@@ -170,7 +170,7 @@ describe('Tape', () => {
   it('carries the headline numbers in its title', () => {
     const el = setup([index], [stock], undefined, shockState).nativeElement as HTMLElement;
     expect(el.querySelector('.shock-badge')!.getAttribute('title')).toBe(
-      'Market state SHOCK since 14:45 UTC · breadth 42% · sectors 5/8 · SPY -1.80 ATR · QQQ -2.30 ATR · VIX 21.13 (+27.2%)');
+      'Market state SHOCK since 14:45 UTC · breadth 42% · sectors 5/8 · SPY −1.80 ATR · QQQ −2.30 ATR · VIX 21.13 (+27.2%)');
   });
 
   it('summarises a reading with no numbers as n/a', () => {
@@ -179,5 +179,11 @@ describe('Tape', () => {
       sectors_total: null, spy_atr_move: null, qqq_atr_move: null, vix_level: null,
       vix_chg_pct: null, vix_missing: true,
     })).toBe('Market state NORMAL · breadth n/a · sectors n/a · SPY n/a · QQQ n/a · VIX missing');
+  });
+
+  it('signs a fall with a true minus and a flat reading with none (v240 §1)', () => {
+    const text = shockSummary({ ...shockState, label: 'SHOCK', spy_atr_move: 0, qqq_atr_move: -0.004, vix_chg_pct: -3.4 });
+    expect(text).toContain('SPY 0.00 ATR · QQQ 0.00 ATR · VIX 21.13 (−3.4%)');
+    expect(text).not.toMatch(/-\d/);
   });
 });

@@ -22,6 +22,13 @@ describe('activityLine (spec v202 §4.4)', () => {
   it('signs a loss with a true minus and keeps the amount unsigned', () => {
     expect(activityLine(event({ pnl: { r: -1, amount: -210 }, tone: 'negative' }))).toBe('NVDA closed · TP2 · −1.0R (210 €) (paper, pre-cost)');
   });
+
+  it('prints an R that rounds to zero unsigned (v240 Decision 10)', () => {
+    expect(pnlParts({ r: -0.04, amount: -3 }, '€')!.r).toBe('0.0R');
+    expect(pnlParts({ r: 0.04, amount: 3 }, '€')!.r).toBe('0.0R');
+    expect(pnlParts({ r: 0, amount: 0 }, '€')!.r).toBe('0.0R');
+    expect(pnlParts({ r: 0.05, amount: 3 }, '€')!.r).toBe('+0.1R');
+  });
   it('omits a missing amount, and leaves a row without P&L alone', () => {
     expect(activityLine(event({ pnl: { r: 1, amount: null } }))).toBe('NVDA closed · TP2 · +1.0R (paper, pre-cost)');
     expect(activityLine(ALERT)).toBe('AAPL plan alerted · long');

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import { Hint } from './hint';
 import { Icon } from './icon';
-import { money, num, pct, rMultiple, share } from './format';
+import { fixed, money, num, pct, rMultiple, share } from './format';
 
 /**
  * Entry, target and stop in one cell — spec v18 Decision 4.
@@ -68,6 +68,7 @@ import { money, num, pct, rMultiple, share } from './format';
        preserves that run on every viewport, including the pinned phone mode. */
     .plan {
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-table);
       white-space: nowrap;
     }
@@ -76,7 +77,7 @@ import { money, num, pct, rMultiple, share } from './format';
        than a colour: the palette's hues all mean something already, and
        "provisional" is not one of them. */
     .entry.pending {
-      color: var(--text-faint);
+      color: var(--text-muted);
       border-bottom: 1px dashed currentColor;
     }
     .target { color: var(--pos); }
@@ -92,7 +93,7 @@ import { money, num, pct, rMultiple, share } from './format';
     .plan.runner { display: inline-block; }
     .line { display: block; white-space: nowrap; }
     /* A small muted label, so line 2 is never read as a second plan. */
-    .trail { color: var(--text-faint); font-size: var(--text-micro); }
+    .trail { color: var(--text-muted); font-size: var(--text-micro); }
     .best  { color: var(--text-secondary); }
     .exit  { color: var(--neg); }
     .peak, .lock { color: var(--pos); }
@@ -111,7 +112,7 @@ import { money, num, pct, rMultiple, share } from './format';
        announces and what anything reading the cell as a string gets. In a
        mono font the literal spaces are exactly one cell wide anyway.
        Literal spaces preserve the relationship in the text as well. */
-    .sep    { color: var(--text-faint); white-space: pre; }
+    .sep    { color: var(--text-muted); white-space: pre; }
   `,
 })
 export class PlanCell {
@@ -350,7 +351,7 @@ export class PlanCell {
   }
 }
 
-const formatR = (value: number | null): string => value === null ? '—' : `${value.toFixed(1)}R`;
+const formatR = (value: number | null): string => value === null ? '—' : `${fixed(value, 1)}R`;
 
 interface TrailLine {
   best: number;

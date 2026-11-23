@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { fixed } from './format';
 import { Hint } from './hint';
 import { CountUp } from './motion/count-up';
 import { Spinner } from './spinner';
@@ -156,7 +157,7 @@ export class MetricCard {
   protected readonly format = computed(() => {
     const decimals = this.decimals();
     const unit = this.unit();
-    return (value: number) => `${value.toFixed(decimals)}${unit}`;
+    return (value: number) => `${fixed(value, decimals)}${unit}`;
   });
 
   protected readonly subClass = computed(() => {

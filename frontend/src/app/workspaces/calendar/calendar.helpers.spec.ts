@@ -67,15 +67,19 @@ describe('monthLabel', () => {
 describe('cellValue', () => {
   const DAY = { date: '2026-04-24', net_r: 1.2, net_pnl_amount: 480, trade_count: 12, win_rate: 75 };
 
-  it('signs a losing day with the true minus; zero and a gain keep the plus', () => {
+  it('signs a losing day with the true minus and a gain with a plus; a zero has no sign (v240 Decision 10)', () => {
     const loss = { ...DAY, net_r: -0.6, net_pnl_amount: -1234 };
     expect(cellValue(loss, 'r').text).toBe('−0.60R');
     expect(cellValue(loss, 'currency').text).toBe('−1,234');
     expect(cellValue(loss, 'r').text).not.toContain('-');
     expect(cellValue(loss, 'currency').text).not.toContain('-');
     const flat = { ...DAY, net_r: 0, net_pnl_amount: 0 };
-    expect(cellValue(flat, 'r').text).toBe('+0.00R');
-    expect(cellValue(flat, 'currency').text).toBe('+0');
+    expect(cellValue(flat, 'r').text).toBe('0.00R');
+    expect(cellValue(flat, 'currency').text).toBe('0');
+    const tiny = { ...DAY, net_r: -0.004, net_pnl_amount: -0.4 };
+    expect(cellValue(tiny, 'r').text).toBe('0.00R');
+    expect(cellValue(tiny, 'currency').text).toBe('0');
+    expect(cellValue({ ...DAY, net_r: 0.004, net_pnl_amount: 0.4 }, 'r').text).toBe('0.00R');
     expect(cellValue(DAY, 'currency').text).toBe('+480');
   });
 

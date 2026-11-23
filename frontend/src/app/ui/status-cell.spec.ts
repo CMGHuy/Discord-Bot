@@ -72,7 +72,9 @@ describe('StatusCell', () => {
   it('signs a negative trailing stop and best P&L with the true minus; zero and positive unchanged', () => {
     const neg = render({ ...TRAILING, stop_pnl_pct: -2.34, best_pnl_pct: -0.04 });
     expect(neg.querySelector('.end.neg')!.textContent).toBe('−2.3%');
-    expect(neg.querySelector('.end.pos')!.textContent).toBe('−0.0%');
+    // v240 Decision 10: a best P&L of −0.04 rounds to zero at one decimal,
+    // so it prints unsigned.
+    expect(neg.querySelector('.end.pos')!.textContent).toBe('0.0%');
     expect(neg.querySelector('.end.neg')!.textContent).not.toContain('-');
     const zero = render({ ...TRAILING, stop_pnl_pct: 0, best_pnl_pct: 6 });
     expect(zero.querySelector('.end.neg')!.textContent).toBe('0.0%');

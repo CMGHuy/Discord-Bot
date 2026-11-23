@@ -29,6 +29,15 @@ describe('override-fidelity model', () => {
     expect(signedR(null)).toBe('—');
   });
 
+  it('prints a delta that rounds to zero unsigned (v240 Decision 10)', () => {
+    expect(signedUsd(-0.004, '$')).toBe('$0.00');
+    expect(signedUsd(0.004, '€')).toBe('€0.00');
+    expect(signedR(-0.004)).toBe('0.00 R');
+    expect(signedR(0.004)).toBe('0.00 R');
+    expect(signedR(0.006)).toBe('+0.01 R');
+    expect(recordedLine({ ...VERDICT_RECORDED_COST, mean_delta_r: -0.004 })).toContain('mean 0.00 R per override');
+  });
+
   it('leads the net effect with dollars, then R', () => {
     expect(netEffect(F.summary, '$')).toBe('+$59.35 · +1.19 R');
   });

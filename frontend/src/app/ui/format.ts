@@ -23,6 +23,33 @@ function signOf(value: number): string {
   return value < 0 ? MINUS : '';
 }
 
+/** A plain number at fixed decimals, with a true minus on a loss (spec
+ *  v240 §1): the drop-in for `value.toFixed(decimals)` wherever a loss can
+ *  appear. No `+` on a gain (the sites it replaces never printed one) and
+ *  no grouping. A loss that rounds to zero at these decimals prints an
+ *  unsigned zero, never "−0.00", because a zero has no sign. */
+export function fixed(value: number, decimals: number): string {
+  const magnitude = Math.abs(value).toFixed(decimals);
+  return value < 0 && Number(magnitude) !== 0 ? `${MINUS}${magnitude}` : magnitude;
+}
+
+/** The sign for a magnitude already formatted: `signOf`, except none when
+ *  the printed text holds no non-zero digit. A value that rounds to zero
+ *  prints unsigned ("0.00", never "−0.00" or "+0.00"), because a zero has
+ *  no sign (v240, index Decision 10). Testing the text, not the number,
+ *  keeps it in step with whatever rounding toFixed or toLocaleString did. */
+export function signFor(value: number, magnitude: string): string {
+  return /[1-9]/.test(magnitude) ? signOf(value) : '';
+}
+
+/** The sign for a figure that shows a loss signed and a gain bare (a
+ *  drawdown, an expectancy, a plain number): a true minus on a loss whose
+ *  printed magnitude holds a non-zero digit, nothing otherwise -- so a loss
+ *  that rounds away prints an unsigned zero (v240, index Decision 10). */
+export function lossSign(value: number, magnitude: string): string {
+  return value < 0 ? signFor(value, magnitude) : '';
+}
+
 export function num(value: number | null | undefined, decimals = 2): string {
   return value === null || value === undefined ? ABSENT : grouped(value, decimals);
 }
@@ -32,7 +59,8 @@ export function num(value: number | null | undefined, decimals = 2): string {
  *  cannot rely on the green/red pair at all. A loss is signed with MINUS (v195 correction 5). */
 export function pct(value: number | null | undefined, decimals = 2): string {
   if (value === null || value === undefined) return ABSENT;
-  return `${signOf(value)}${Math.abs(value).toFixed(decimals)}%`;
+  const magnitude = Math.abs(value).toFixed(decimals);
+  return `${signFor(value, magnitude)}${magnitude}%`;
 }
 
 /** An unsigned percentage: a share or a level, not a movement.
@@ -76,14 +104,16 @@ export function shareCount(value: number | null | undefined): string {
 
 /** v194 B5: the one percentage formatter for portfolio heat, per-position
  *  risk and their totals. Unsigned like `share` (a budget is a level, not a
- *  movement), sign kept on a negative. A non-zero value under 0.01 renders
- *  "<0.01%": at two decimals it printed "0.00%", claiming no risk where
- *  there is some. An exact zero (or -0) is "0.00%". */
+ *  movement); a negative keeps its sign, as a true minus (v240 §1). A
+ *  non-zero value under 0.01 renders "<0.01%": at two decimals it printed
+ *  "0.00%", claiming no risk where there is some. An exact zero (or -0) is
+ *  "0.00%". */
 export function riskPct(value: number | null | undefined): string {
   if (value === null || value === undefined) return ABSENT;
   if (value === 0) return '0.00%';
-  if (Math.abs(value) < 0.01) return `${value < 0 ? '-' : ''}<0.01%`;
-  return `${grouped(value, 2)}%`;
+  const sign = value < 0 ? MINUS : '';
+  if (Math.abs(value) < 0.01) return `${sign}<0.01%`;
+  return `${sign}${grouped(Math.abs(value), 2)}%`;
 }
 
 /** A realised P&L amount, signed like `pct` -- it is the same gain/loss the
@@ -95,7 +125,8 @@ export function money(value: number | null | undefined, unit: string, decimals =
   if (value === null || value === undefined) return ABSENT;
   // v195 correction 5: the sign is ours (a true minus) and the magnitude is
   // toLocaleString's -- which would otherwise print a hyphen-minus itself.
-  return `${signOf(value)}${grouped(Math.abs(value), decimals)} ${unit}`;
+  const magnitude = grouped(Math.abs(value), decimals);
+  return `${signFor(value, magnitude)}${magnitude} ${unit}`;
 }
 
 /** An unsigned currency magnitude: a cap, an exposure, a risk amount -- not
@@ -110,7 +141,8 @@ export function amount(value: number | null | undefined, unit: string, decimals 
 
 export function rMultiple(value: number | null | undefined): string {
   if (value === null || value === undefined) return ABSENT;
-  return `${signOf(value)}${Math.abs(value).toFixed(2)}R`;
+  const magnitude = Math.abs(value).toFixed(2);
+  return `${signFor(value, magnitude)}${magnitude}R`;
 }
 
 /** Holding period at day/hour/minute precision. */
@@ -209,5 +241,6 @@ export function text(value: string | null | undefined): string {
  */
 export function signed(value: number | null | undefined, decimals = 2): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return ABSENT;
-  return `${signOf(value)}${num(Math.abs(value), decimals)}`;
+  const magnitude = num(Math.abs(value), decimals);
+  return `${signFor(value, magnitude)}${magnitude}`;
 }

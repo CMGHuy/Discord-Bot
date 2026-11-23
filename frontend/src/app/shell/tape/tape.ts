@@ -11,7 +11,7 @@ import { TapeStore } from '../../stores/tape.store';
 import { MarketValue } from '../../ui/market-value';
 import { Hint } from '../../ui/hint';
 import { Flash } from '../../ui/flash';
-import { ABSENT, num, pct } from '../../ui/format';
+import { ABSENT, fixed, num, pct } from '../../ui/format';
 import { TAPE_MIN_DURATION_S, tapeDurationSeconds } from './tape-speed';
 
 /** Yahoo symbol -> the label the tile shows. `/market/tape` echoes back the
@@ -29,7 +29,12 @@ function proxyLabel(r: TapeRow): string | null {
 }
 
 const NA = 'n/a';
-const signed = (v: number, digits: number) => `${v >= 0 ? '+' : ''}${v.toFixed(digits)}`;
+/** A market move, signed both ways: '+' on a rise, a true minus on a fall
+ *  (spec v240 §1, via `fixed`), no sign on a flat or rounded-away reading. */
+const signed = (v: number, digits: number): string => {
+  const text = fixed(v, digits);
+  return v > 0 && Number(text) !== 0 ? `+${text}` : text;
+};
 const atr = (v: number | null) => (v === null ? NA : `${signed(v, 2)} ATR`);
 
 function sinceUtc(iso: string | null): string {

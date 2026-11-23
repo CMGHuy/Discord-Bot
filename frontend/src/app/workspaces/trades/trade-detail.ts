@@ -23,7 +23,7 @@ import { liveTickers } from '../../stores/trades.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
 import { Chip, ChipTone, QualityChip } from '../../ui/chip';
-import { MINUS } from '../../ui/format';
+import { rMultiple } from '../../ui/format';
 import { Hint } from '../../ui/hint';
 import { MetricChip } from '../../ui/metric-chip';
 import { ExcursionEstimate } from '../../ui/excursion-estimate';
@@ -510,9 +510,10 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
     }
     .ticker {
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
     }
     .loading-title {
-      color: var(--text-faint);
+      color: var(--text-muted);
     }
 
     .tags {
@@ -534,8 +535,9 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
        strategy/tier are, and boxing it the same would suggest it is one. */
     .trade-id {
       font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       font-size: var(--text-chip);
-      color: var(--text-faint);
+      color: var(--text-muted);
     }
 
     .grid-host { min-width: 0; container: cards / inline-size; }
@@ -554,7 +556,7 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
 
     .no-detail {
       max-width: 68ch;
-      color: var(--text-faint);
+      color: var(--text-muted);
       font-size: var(--text-table);
       line-height: 1.6;
     }
@@ -586,7 +588,7 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
       outline-offset: -1px;
     }
     .note-field:disabled {
-      color: var(--text-faint);
+      color: var(--text-muted);
       cursor: not-allowed;
     }
     .note-readonly {
@@ -599,7 +601,7 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
     }
     .note-state {
       margin-top: var(--space-6);
-      color: var(--text-faint);
+      color: var(--text-muted);
       font-size: var(--text-chip);
     }
     /* The one state the reader must not miss: text they typed is not stored. */
@@ -646,7 +648,7 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
 
     .todo {
       margin-top: var(--space-14);
-      color: var(--text-faint);
+      color: var(--text-muted);
       font-size: var(--text-table);
     }
   `,
@@ -813,7 +815,7 @@ export class TradeDetail {
     const runDate = stats['run_date'] ?? '';
     return (
       `${regime} regime: ${winRate.toFixed(1)}% WR / ` +
-      `${expectancyR >= 0 ? '+' : MINUS}${Math.abs(expectancyR).toFixed(2)}R (n=${n}, frozen ${runDate})`
+      `${rMultiple(expectancyR)} (n=${n}, frozen ${runDate})`
     );
   });
 

@@ -187,6 +187,16 @@ describe('trading performance panel', () => {
     expect(text).toContain('Realised today');
   });
 
+  it('prints an expectancy that rounds to zero unsigned (v240 Decision 10)', () => {
+    const el = render({
+      winRate: 49.1, winRateN: 12, expectancyR: -0.004, payoffRatio: 2.34,
+      todayRealized: TODAY_BLOCK, currency: '€',
+    });
+    const text = el.querySelector('.mobile-summary')!.textContent ?? '';
+    expect(text).toContain('0.00R');
+    expect(text).not.toContain('−0.00R');
+  });
+
   it('shows the open P&L amount under the percentage', () => {
     const el = render({ openPnlPct: 2.5, openPnlAmount: 1234.5, currency: '€' });
     const card = [...el.querySelectorAll('sb-metric-card')]

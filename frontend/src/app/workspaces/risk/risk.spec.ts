@@ -792,6 +792,15 @@ describe('Risk metric basis and money drawdown (v194 B8)', () => {
     expect(tile.querySelector('div.hint')).toBeNull();
   });
 
+  it('prints an R drawdown that rounds to zero unsigned, a real one with a true minus (v240 Decision 10)', async () => {
+    const tiny = await renderWithMetrics({ max_drawdown_r: { value: 0.004, n: 782 } });
+    const tinyText = tileHost(tiny, RISK_DRAWDOWN_LABEL).querySelector('.value')!.textContent!;
+    expect(tinyText).toContain('0.00R');
+    expect(tinyText).not.toMatch(/[−-]0\.00R/);
+    const real = await renderWithMetrics();
+    expect(tileHost(real, RISK_DRAWDOWN_LABEL).querySelector('.value')!.textContent!).toContain('−8.40R');
+  });
+
   it('shows no money line when the payload carries none', async () => {
     const fixture = await renderWithMetrics();
     expect(tileHost(fixture, RISK_DRAWDOWN_LABEL).querySelector('.secondary')).toBeNull();

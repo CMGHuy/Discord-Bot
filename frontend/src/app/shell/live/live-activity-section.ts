@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { LiveEvent, LiveEventKind, LiveEventsMeta, LiveTone } from '../../api/models';
-import { MINUS, amount, timeInZone } from '../../ui/format';
+import { amount, signFor, timeInZone } from '../../ui/format';
 import { PanelError } from '../../ui/panel-error';
 import { scanAge } from '../freshness-chip';
 import { isStale, liveTime } from './live-state';
@@ -19,16 +19,13 @@ const KIND_WORDS: Readonly<Record<LiveEventKind, string>> = {
   plan_alerted: 'alerts', paper_filled: 'paper fills', tp1_hit: 'TP1 hits', trade_closed: 'closes', killswitch: 'killswitch',
 };
 
-function signOf(value: number): string {
-  if (value > 0) return '+';
-  return value < 0 ? MINUS : '';
-}
-
 /** '+2.1R' and '441 €' (unsigned: the R carries the sign); null without P&L. */
 export function pnlParts(pnl: LiveEvent['pnl'], currency: string): PnlParts | null {
   if (pnl === null) return null;
+  // v240 Decision 10: an R that rounds to zero at one decimal prints unsigned.
+  const r = Math.abs(pnl.r).toFixed(1);
   return {
-    r: `${signOf(pnl.r)}${Math.abs(pnl.r).toFixed(1)}R`,
+    r: `${signFor(pnl.r, r)}${r}R`,
     amount: pnl.amount === null ? null : amount(Math.abs(pnl.amount), currency, 0),
   };
 }
