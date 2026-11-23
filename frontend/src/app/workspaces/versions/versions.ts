@@ -13,6 +13,7 @@ import { Release } from '../../api/models';
 import { tablePerPage } from '../../ui/table-per-page';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
+import { Icon } from '../../ui/icon';
 import { ControlRow } from '../../ui/layout';
 import { Page } from '../../ui/page';
 import { PaginationComponent } from '../../ui/pagination';
@@ -44,7 +45,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
 @Component({
   selector: 'sb-versions',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Button, ControlRow, Page, PaginationComponent, Async, Timeline],
+  imports: [Button, ControlRow, Icon, Page, PaginationComponent, Async, Timeline],
   // v54 D1: this workspace is a lane strip plus a change stream -- both
   // dense, repeating rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -155,7 +156,7 @@ import { LaneSegment, VersionsStore } from '../../stores/versions.store';
       </div>
 
       <div class="ticks">
-        <span class="now">{{ store.lastDate() }} &#9650; now</span>
+        <span class="now">{{ store.lastDate() }} <sb-icon name="up" title="" /> now</span>
         <span>{{ store.firstDate() }}</span>
       </div>
 

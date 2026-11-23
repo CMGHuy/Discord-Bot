@@ -361,6 +361,32 @@ describe('Watchlist tape column sorting', () => {
       .map((el) => (el.textContent ?? '').trim());
   }
 
+  it('draws plus on a row outside the tape and minus on a row in it (v240 §4)', () => {
+    // icon.ts drawings (V241-2).
+    const PLUS_D = 'M12 7v10 M7 12h10';
+    const MINUS_D = 'M7 12h10';
+    const toggles = [...fixture.nativeElement.querySelectorAll('button.tape-toggle')] as HTMLButtonElement[];
+    expect(toggles).toHaveLength(2);
+    // Default sort: AAPL (not in the tape) first, NVDA (in the tape) second.
+    const [aapl, nvda] = toggles;
+    const drawn = (b: Element) => b.querySelector('sb-icon svg path')!.getAttribute('d');
+
+    expect(drawn(aapl)).toBe(PLUS_D);
+    expect(aapl.getAttribute('aria-pressed')).toBe('false');
+    expect(aapl.getAttribute('aria-label')).toBe('Show AAPL in the live tape');
+
+    expect(drawn(nvda)).toBe(MINUS_D);
+    expect(nvda.getAttribute('aria-pressed')).toBe('true');
+    expect(nvda.getAttribute('aria-label')).toBe('Show NVDA in the live tape');
+
+    for (const toggle of toggles) {
+      // No text glyph, no second name from the icon.
+      expect(toggle.textContent!.trim()).toBe('');
+      expect(toggle.querySelector('sb-icon')!.getAttribute('title')).toBe('');
+      expect(toggle.querySelector('sb-icon svg')!.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
   it('sorts flagged rows first on click, and reverses on a second click', () => {
     // Sanity check: the default sort really does start AAPL first, so the
     // reorder below is attributable to the Tape click alone.

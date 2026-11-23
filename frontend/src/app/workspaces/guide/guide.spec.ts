@@ -14,6 +14,7 @@ import { RouteTitleService } from '../../routing/route-title.service';
 import { GuideStore } from '../../stores/guide.store';
 import { installDialogPolyfill } from '../../testing/dialog-polyfill';
 import { ViewportService } from '../../ui/breakpoints';
+import { styleRules } from '../../ui/testing/style-rules';
 import { GUIDE_NOTICE, Guide } from './guide';
 import { GUIDE_FIGURES } from './guide-figures';
 import { guideRoutes } from './guide.routes';
@@ -305,5 +306,30 @@ describe('Guide page styles (source)', () => {
   it('gives every link inside a chapter the shared hit area without growing its line (layout audit tap check, v236)', () => {
     expect(source).toMatch(/sb-guide \.md a::after \{[^}]*width: max\(100%, var\(--hit-min\)\)[^}]*height: max\(100%, var\(--hit-min\)\)/);
     expect(source).toMatch(/sb-guide \.md a \{ position: relative; \}/);
+  });
+
+  it('draws the fold marker with the chevron icons through a mask, not a text glyph (v240 §4)', () => {
+    // Sanitised markdown runs no Angular component, so sb-icon cannot render
+    // here; the marker masks the same 24-grid paths icon.ts draws.
+    const rules = styleRules('app/workspaces/guide/guide.ts', source);
+    const closed = rules.find((r) => r.selector === 'sb-guide .md summary::before')?.body ?? '';
+    const open = rules.find((r) => r.selector === 'sb-guide .md details[open] > summary::before')?.body ?? '';
+
+    expect(closed).toContain("content: ''");
+    expect(closed).toContain('width: 16px');
+    expect(closed).toContain('height: 16px');
+    expect(closed).toContain('background: currentColor');
+    expect(closed).toContain('-webkit-mask: url("data:image/svg+xml,');
+    expect(closed).toMatch(/(?:^|[;\s])mask: url\("data:image\/svg\+xml,/);
+    expect(closed).toContain("viewBox='0 0 24 24'");
+    expect(closed).toContain("stroke-width='1.8'");
+    expect(closed).toContain("d='M9 6l6 6-6 6'");   // expand
+
+    expect(open).toContain('-webkit-mask-image: url("data:image/svg+xml,');
+    expect(open).toMatch(/(?:^|[;\s])mask-image: url\("data:image\/svg\+xml,/);
+    expect(open).toContain("d='M6 9l6 6 6-6'");     // down
+    expect(open).not.toContain("d='M9 6l6 6-6 6'");
+
+    expect(source).not.toMatch(/content: '[▸▾]'/);
   });
 });

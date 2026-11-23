@@ -150,6 +150,21 @@ describe('Versions', () => {
     expect(ticks[1].classList.contains('now')).toBe(false);
   });
 
+  it('marks "now" with the up icon, not a text triangle (v240 §4)', async () => {
+    const fixture = seed(SIX);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const now = (fixture.nativeElement as HTMLElement).querySelector('.ticks .now')!;
+    const icon = now.querySelector(':scope > sb-icon')!;
+    expect(icon.querySelector('svg path')!.getAttribute('d')).toBe('M6 15l6-6 6 6');
+    // Decorative: "now" names it. An unset title would tooltip "Move up".
+    expect(icon.getAttribute('title')).toBe('');
+    expect(icon.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true');
+    expect(now.textContent).not.toContain('▲');
+    expect(now.textContent!.replace(/\s+/g, ' ').trim()).toMatch(/\S now$/);
+  });
+
   it('flushes the absent region against the trailing (oldest) edge', async () => {
     const fixture = seed(SIX);
     await fixture.whenStable();

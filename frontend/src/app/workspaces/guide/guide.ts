@@ -139,8 +139,11 @@ export const GUIDE_NOTICE = 'Education about a paper-trading tool, not advice: a
     sb-guide .md pre { max-width: 100%; overflow-x: auto; padding: var(--space-8); background: var(--bg); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     sb-guide .md details { margin: var(--space-10) 0; padding: 0 var(--space-10); border: 1px solid var(--border); border-radius: var(--control-radius); }
     sb-guide .md summary { display: flex; align-items: center; gap: var(--space-6); min-height: var(--hit-min); color: var(--text-muted); cursor: pointer; list-style: none; }
-    sb-guide .md summary::before { content: '▸'; }
-    sb-guide .md details[open] > summary::before { content: '▾'; }
+    /* The fold marker: icon.ts's expand / down chevrons (24 grid, 1.8 stroke),
+       masked because sanitised markdown cannot hold an sb-icon. A mask reads
+       alpha only: stroke='black' means "opaque"; the colour is currentColor. */
+    sb-guide .md summary::before { content: ''; flex: none; width: 16px; height: 16px; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E") center / 16px 16px no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E") center / 16px 16px no-repeat; }
+    sb-guide .md details[open] > summary::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); }
     sb-guide .md .permalink { margin-left: var(--space-6); color: var(--text-muted); text-decoration: none; }
     sb-guide .guide-bar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-10); min-width: 0; }
     sb-guide .guide-picker { flex: 1 1 100%; min-width: 0; }

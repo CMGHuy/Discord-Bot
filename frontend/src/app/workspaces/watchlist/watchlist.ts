@@ -450,7 +450,7 @@ export const WATCHLIST_OLD_PRINT_HINT =
           [attr.aria-pressed]="tape.symbols().includes(row.symbol)"
           [attr.aria-label]="'Show ' + row.symbol + ' in the live tape'"
           (click)="tape.toggle(row.symbol)"
-        >{{ tape.symbols().includes(row.symbol) ? '◉' : '○' }}</button>
+        ><sb-icon [name]="tape.symbols().includes(row.symbol) ? 'minus' : 'plus'" title="" /></button>
       </ng-template>
 
       <ng-template #symbolCell let-row>

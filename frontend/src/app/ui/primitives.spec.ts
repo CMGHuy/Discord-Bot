@@ -136,8 +136,10 @@ describe('no call site redefines a promoted composite', () => {
  * Scope: allSources() -- every .ts/.css/.html under src/, so ui/, every
  * stylesheet, styles.css and index.html, minus specs and styles/.
  * Pattern: a hex literal, or rgb()/rgba()/hsl()/hsla() in either the comma
- * or the space syntax. (?<!&) keeps an HTML numeric character reference out
- * (&#9650; in versions.ts is a triangle glyph, not a colour). Comments are
+ * or the space syntax. (?<!&) keeps an HTML numeric character reference
+ * (a glyph entity such as &#9650;) from reading as a hex colour; since v241
+ * none is left in the sources (icon-glyphs.spec.ts keeps the replaced
+ * marker glyphs out), but the lookbehind costs nothing. Comments are
  * stripped first, so a hex quoted in prose (button.ts's contrast note)
  * stays legal.
  *
