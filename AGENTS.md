@@ -177,12 +177,9 @@ acceptance is one gate (`swingbot/core/backtesting/acceptance.py`, driven by
 `scripts/backtest/validate_component.py --stage mde|walkforward|validation`):
 win rate is the objective, expectancy a non-inferiority constraint, and every
 verdict appends a row to `preregistration-ledger.jsonl`. A screen pass then
-runs the replication ladder (`scripts/backtest/replicate_idea.py`, four
-one-shot `ladder-<name>-r<N>` rungs, instrument `ladder-v1`, never reading 2021+)
-before a strategy spec, which cites its ladder rows and the shape selected;
-an added strategy is judged by `validate_component.py --gate additive` (own
-net ExpR the objective, win rate above its own realised break-even, both
-arms net and stamped `r_basis`). Clauses, thresholds and
+runs the replication ladder (`scripts/backtest/replicate_idea.py`, instrument
+`ladder-v1`) before a strategy spec; an added strategy is judged by
+`validate_component.py --gate additive`. Clauses, thresholds and
 stages: `docs/claude/backtest-methodology.md`, `document-conventions.md`;
 `tests/hooks/test_spec_screen_header.py` and `test_spec_panel_header.py` enforce.
 
@@ -259,7 +256,7 @@ results-doc checks), `prereg` (commit a pre-registration stub before the
 measurement, append the ledger row after it) and `data-check` (run
 `validate_data.py` and report each cache's verdict from its output). `new-doc`
 (new spec or plan), `close-out` (plan close-out) and `replicate-prod-db`
-(read-only copy of the production database into a local replica database) may
+(read-only copy of the production database to a local replica) may
 also be run implicitly: `new-doc` right before creating a numbered spec or plan,
 `close-out` once a plan's final full-suite task is green, `replicate-prod-db`
 before a task's first test run against the database. `panel` (dispatch
@@ -268,13 +265,12 @@ findings) may also run implicitly: right after committing a spec with a
 `**Panel:**` line, and before `close-out` of a plan built from one. Skill text
 names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use your equivalent.
 
-Expert role skills (v145) each hold one reviewer's lens (Lens, Checklist, Red
-flags, Out of scope) and load when you review from that seat: `quant-researcher`,
-`risk-manager`, `financial-advisor` (educational, not personal financial advice),
-`veteran-trader`, `technical-analyst`, `fundamental-analyst`, `staff-engineer`,
-`quant-engineer` (lookahead, numerics, the OHLCV caches), `senior-engineer`
-(code quality, the complexity limit) and `ux-designer` (screens and embeds at
-three widths). A role raises cited `BLOCKING`/`ADVISORY`
+Expert role skills (v145) each hold one reviewer's lens and load when you
+review from that seat: `quant-researcher`, `risk-manager`, `financial-advisor`
+(educational, not personal advice), `veteran-trader`, `technical-analyst`,
+`fundamental-analyst`, `staff-engineer`, `quant-engineer`, `senior-engineer`
+and `ux-designer` (screens and embeds at three widths). A role raises cited
+`BLOCKING`/`ADVISORY`
 findings; it never decides.
 
 Claude Code plugins switched off in `.claude/settings.json` `enabledPlugins` load no
@@ -509,9 +505,9 @@ A diff touching a guide chapter's `sources:` (`docs/guide/`) updates that chapte
 and its `reviewed_for`, or records `guide: no reader-visible change` in the
 close-out commit; `python scripts/dev/guide_sources.py <base>..<head>` lists them.
 
-A plan's `**Goal:**` is a paragraph block, not one sentence: why the work
-exists, what changes once shipped, how it works, what it leaves alone, how
-success is measured (`docs/claude/document-conventions.md`).
+A plan's `**Goal:**` is a paragraph block, not one sentence: why, what
+changes, how, what stays, how success is measured
+(`docs/claude/document-conventions.md`).
 
 Write specs and plans directly on `main` and commit them once finished: no
 branch, worktree or approval gate; branch or worktree only to implement. When
