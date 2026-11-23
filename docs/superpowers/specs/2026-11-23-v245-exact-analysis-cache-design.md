@@ -97,8 +97,18 @@ What the profile is expected to make cacheable, each subject to its tag:
 | Cached (prefix-pure) | Recomputed every scan (reads the tail or the price) |
 |---|---|
 | Confirmed pivots older than the confirmation window | Pivots inside the window, plus the forming bar |
-| The trendline pair search over confirmed pivots: **every scored candidate line before the price gates** (slope, intercept, touches, score), kept in the original `i<j` iteration order | Pairs involving any tail pivot; both `current_price` gates in `_score_candidate` (`trendlines.py:235-242`); the best-line pick with the same strict `>` tie-break; evaluation at index `len(df) - 1` of the full frame |
+| The trendline pair search over confirmed pivots: for **every candidate pair**, its geometry (slope, intercept) and its touch count **against confirmed pivots only**, kept in the original `i<j` iteration order | Pairs involving any tail pivot; touches added by tail pivots; `recency` and `line_at_now` (both read `n_bars`); the final score; both `current_price` gates in `_score_candidate` (`trendlines.py:235-242`); the best-line pick with the same strict `>` tie-break; evaluation at index `len(df) - 1` of the full frame |
 | Any other source the profile shows is prefix-pure **and** can be split without a float difference | `_trendln_fallback_levels`; floor pivots (`levels.py:320`, `iloc[-2]`); rolling S/R and Donchian (`shift(1)`); EMA/ATR/VWAP/Bollinger series (incremental `ewm`/`rolling` is not float byte-identical); `get_htf_bias` and `horizon_trend` (last close); `_cluster_levels` (order-dependent over a candidate set that includes per-scan sources); scenarios, confluence, confidence, requirements |
+
+**The 1500-bar trim.** `_find_best_trendline` works on `df.tail(1500)`, and
+`zigzag_pivots` starts at the trimmed frame's first row. On a frame longer
+than 1500 bars, each new session moves that start, so the trendline prefix
+is stable within a session day (frame length is constant between intraday
+scans) but not across days. The trendline unit's fingerprint therefore
+includes the trimmed window's start date. In practice the cache hits for
+every scan of a day after the first, and the first scan of each day
+rebuilds. That is exactly the saving the goal needs, and it never serves a
+result built from a different window.
 
 One code path: the refactored functions take an optional prefix result. With
 the cache disabled they compute the prefix themselves. So "cache off" and
@@ -162,7 +172,11 @@ The comparison run has no side effects:
 - `progress=None`, and its log lines at DEBUG, so ops greps such as
   "plan rejected (" don't double-count;
 - the same `now` and `current_price` as the authoritative run, both captured
-  once per scan.
+  once per scan. Today `_apply_pullback_dryup` and `_band_live` each read the
+  wall clock, so `_scan_one` gains an optional `now` parameter, passed down to
+  both; `None` keeps today's behaviour for the other callers.
+- its log quieting comes from a logger-level wrapper around the comparison
+  call, not from edits to the inline `log.info` lines.
 
 A comparator exception is logged and swallowed; it never touches posting.
 
