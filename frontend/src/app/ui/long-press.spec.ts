@@ -11,6 +11,7 @@ import { LONG_PRESS_MS, LONG_PRESS_SLOP_PX, LongPress } from './long-press';
 @Component({
   imports: [LongPress],
   template: `
+    <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
     <a class="target" tabindex="0" sbLongPress (longPress)="presses = presses + 1" (click)="clicks = clicks + 1">
       <span class="icon">i</span>
     </a>

@@ -447,6 +447,8 @@ export class Hint {
   /** This hint is opening: the one that was open closes (v247 Decision 7). */
   private claimOpenSlot(): void {
     if (openHint && openHint !== this) openHint.dismiss();
+    // The app-wide "one open hint" slot must hold the instance itself.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     openHint = this;
   }
 
