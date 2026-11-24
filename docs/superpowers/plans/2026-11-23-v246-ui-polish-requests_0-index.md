@@ -49,8 +49,8 @@ labelled by their lower edge.
 How it works: `sb-field` provides an injection token that `sb-select` and
 `sb-text-input` read, so a wrapped control drops its own visible label and
 keeps its accessible name (one label path per bar). Alignment is CSS
-(`align-items: flex-end` on `sb-control-bar`, `sb-toolbar` and
-`sb-control-row`), asserted from CSS source per consumer in `ng test`
+(`align-items: flex-end` on `sb-control-bar`, `sb-toolbar` and an opt-in
+`sb-control-row align="end"`), asserted from CSS source per consumer in `ng test`
 (jsdom has no layout) and measured by bottom edge in Playwright at
 390/820/1440 in the closing task, which covers both `--control-h` values.
 The whole-R edges are a server change: an opt-in `whole_r=True` mode on
@@ -83,7 +83,8 @@ or text-size finding on those pages; CI's full run is green after the push.
   and `date-range.ts` read the field context and the `--sb-control-w`
   custom property the field sets.
 - **Bars** (V246-5, V246-6): `sb-segmented` gains the phone full-row rule;
-  `sb-control-bar`, `sb-toolbar` and `sb-control-row` align to `flex-end`.
+  `sb-control-bar` and `sb-toolbar` align to `flex-end`; `sb-control-row`
+  gains opt-in `align="end"` (default stays `last baseline`, decision 8).
 - **Consumers** (V246-7..V246-10): Trades, Calendar, Analytics scope bar,
   Watchlist, Dashboard trading-performance and equity-candles toggles wrap
   their controls in `sb-field`.
@@ -195,7 +196,7 @@ default is one subagent at a time; parallel runs only when asked.
 | V246-3 | `sb-field` and the `--field-s/m/l` width tokens | 1 | sonnet | C `frontend/src/app/ui/field.ts`, C `frontend/src/app/ui/field.spec.ts`, M `frontend/src/styles/tokens.css`, M `frontend/src/app/ui/tokens.spec.ts` | `Field` (`sb-field`): `label = input<string>('')`, `size = input<FieldSize>('m')`, `fullRow = input<boolean>(false)`; `export type FieldSize = 's' \| 'm' \| 'l' \| 'auto'`; `export interface FieldContext { readonly label: Signal<string> }`; `export const SB_FIELD = new InjectionToken<FieldContext>('SB_FIELD')`; host sets `--sb-control-w` (the size token; `100%` below 640px; unset for `auto`); tokens `--field-s`, `--field-m`, `--field-l` |
 | V246-4 | `sb-select` / `sb-text-input` drop their visible label inside `sb-field`; `sb-date-range` as one field (M + M inline, 50/50 below 640px) | 1 | sonnet | M `frontend/src/app/ui/form-controls.ts`, M `frontend/src/app/ui/form-controls.spec.ts`, M `frontend/src/app/ui/date-range.ts`, M `frontend/src/app/ui/date-range.spec.ts` | `Select`/`TextInput` inject `SB_FIELD` optionally: inside a field no `.sb-label`, `aria-label` = own `label()` ?? `ariaLabel()` ?? field `label()`; `select`/`input` width `var(--sb-control-w, auto)`; `DateRange` inputs width `var(--field-m)`, `height: var(--control-h)`, host full width and inputs `flex: 1 1 0` below 640px (no new inputs) |
 | V246-5 | `sb-segmented` in a bar: 3+ options take the full row below 640px, equal segments, never wrap | 2 | sonnet | M `frontend/src/app/ui/segmented.ts`, M `frontend/src/app/ui/segmented.spec.ts`, M `frontend/src/app/ui/hit-area.spec.ts` | `Segmented.many: Signal<boolean>` (options ≥ 3), host class `many` |
-| V246-6 | Bars align on the bottom edge: `sb-control-bar`, `sb-toolbar`, `sb-control-row` → `flex-end`; phone fields fill their grid cell | 2 | sonnet | M `frontend/src/app/ui/control-bar.ts`, M `frontend/src/app/ui/control-bar.spec.ts`, M `frontend/src/app/ui/toolbar.ts`, M `frontend/src/app/ui/toolbar.spec.ts`, M `frontend/src/app/ui/layout.ts`, M `frontend/src/app/ui/layout.spec.ts` | `.clear` height `var(--control-h)`; CSS-source assertion pattern `expect(css).toMatch(/align-items:\s*flex-end/)` reused by V246-7..10 |
+| V246-6 | Bars align on the bottom edge: `sb-control-bar`, `sb-toolbar` → `flex-end`, `sb-control-row` opt-in `align="end"`; phone fields fill their grid cell | 2 | sonnet | M `frontend/src/app/ui/control-bar.ts`, M `frontend/src/app/ui/control-bar.spec.ts`, M `frontend/src/app/ui/toolbar.ts`, M `frontend/src/app/ui/toolbar.spec.ts`, M `frontend/src/app/ui/layout.ts`, M `frontend/src/app/ui/layout.spec.ts` | `.clear` height `var(--control-h)`; CSS-source assertion pattern `expect(css).toMatch(/align-items:\s*flex-end/)` reused by V246-7..10 |
 | V246-7 | Trades toolbar: controls in `sb-field` (dates "Opened" M+M, Ticker L, Strategy M, selects S/M); Compact/Full → `sb-segmented` "Density" | 2 | sonnet | M `frontend/src/app/workspaces/trades/trades.ts`, M `frontend/src/app/workspaces/trades/trades.spec.ts` | none |
 | V246-8 | Calendar month row: arrows, metric switch (→ `sb-segmented` "Show") and selects in `sb-field`s inside `sb-control-row` | 2 | sonnet | M `frontend/src/app/workspaces/calendar/calendar.ts`, M `frontend/src/app/workspaces/calendar/calendar.spec.ts` | none |
 | V246-9 | Analytics scope bar: Range/Ledger/Strategy/Horizon/Direction in `sb-field`, date range "Range", Unit segmented "Units" | 3 | sonnet | M `frontend/src/app/workspaces/analytics/scope-bar.ts`, M `frontend/src/app/workspaces/analytics/scope-bar.spec.ts` | none |
@@ -261,10 +262,18 @@ Writer decisions (index, 2026-11-24) — the controller should confirm:
 8. **Calendar stays in `sb-control-row`.** The spec says its month row
    "moves into an `sb-control-bar`"; with decision 4 the row is already a
    shared bar (`sb-control-row`), and `sb-control-bar` would add a "Clear N"
-   and filter/scope slots Calendar does not use. V246-6 switches
-   `sb-control-row` to `flex-end` (it also serves trading-performance), and
-   V246-8 wraps Calendar's controls in `sb-field` inside it. The gate
-   (V246-11) treats `sb-control-row` as a bar.
+   and filter/scope slots Calendar does not use. V246-8 wraps Calendar's
+   controls in `sb-field` inside it. The gate (V246-11) treats
+   `sb-control-row` as a bar.
+   **Amended (partner, 2026-11-24): opt-in, not global.** `sb-control-row`
+   keeps v179 §3.4's `last baseline` as its default; V246-6 adds an opt-in
+   `align="end"` input (host attribute → `align-items: flex-end`) that only
+   v246's bars set (Calendar's month row in V246-8, trading-performance only
+   if a v246 task wraps it). The ~15 other `sb-control-row` users (Versions
+   headline, settings save bar, Watchlist forms, confirm dialog) are
+   untouched and `layout.spec.ts`'s baseline pin stays; V246-6 adds a pin for
+   the opt-in. The gate (V246-11) checks that a v246 bar using
+   `sb-control-row` sets `align="end"`.
 9. **Alignment test = CSS source + Playwright.** The spec's "a test gives
    each consumer bar a fixed size and asserts every control's bottom edge
    is the same, at both token values" cannot run in jsdom. Each consumer
