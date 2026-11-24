@@ -15,18 +15,20 @@ class Blank {}
 
 describe('crumbsFor (v202: Destination / Section)', () => {
   it('is destination and section on a sectioned page, neither a link', () => {
-    expect(crumbsFor('/trades', null, 'Trades')).toEqual([
-      { label: 'Trades', link: null },
-      { label: 'Book', link: null },
+    expect(crumbsFor('/insights/research', null, 'Research')).toEqual([
+      { label: 'Insights', link: null },
+      { label: 'Research', link: null },
     ]);
   });
 
-  it('is the destination alone on a single page', () => {
+  it('is the destination alone on a single page, Trades and Calendar included (v247)', () => {
     expect(crumbsFor('/risk', null, 'Risk')).toEqual([{ label: 'Risk', link: null }]);
+    expect(crumbsFor('/trades', null, 'Trades')).toEqual([{ label: 'Trades', link: null }]);
+    expect(crumbsFor('/calendar?month=2026-11', null, 'Calendar')).toEqual([{ label: 'Calendar', link: null }]);
   });
 
   it.each([
-    ['/trades/calendar', 'Calendar', ['Trades', 'Calendar']],
+    ['/insights/reports', 'Reports', ['Insights', 'Reports']],
     ['/insights/analytics', 'Analytics', ['Insights', 'Analytics']],
     ['/insights/guide', 'Guide', ['Insights', 'Guide']],
     ['/system/versions', 'Versions', ['System', 'Versions']],
@@ -37,8 +39,7 @@ describe('crumbsFor (v202: Destination / Section)', () => {
 
   it('links the crumb before a detail back to its list', () => {
     expect(crumbsFor('/trades/812', 'NVDA #812', 'Trade detail')).toEqual([
-      { label: 'Trades', link: null },
-      { label: 'Book', link: '/trades' },
+      { label: 'Trades', link: '/trades' },
       { label: 'NVDA #812', link: null },
     ]);
     expect(crumbsFor('/watchlist/NVDA', 'NVDA', 'Ticker detail')).toEqual([
@@ -55,12 +56,11 @@ describe('crumbsFor (v202: Destination / Section)', () => {
     ]);
   });
 
-  it("stands the route title in for a detail that has not loaded yet, below a section's list", () => {
+  it('stands the route title in for a detail that has not loaded yet', () => {
     expect(crumbsFor('/plans/5', null, 'Plan detail').map((crumb) => crumb.label))
-      .toEqual(['Trades', 'Book', 'Plan detail']);
-    expect(crumbsFor('/trades/calendar/2026-10-01', null, 'Calendar day')).toEqual([
-      { label: 'Trades', link: null },
-      { label: 'Calendar', link: '/trades/calendar' },
+      .toEqual(['Trades', 'Plan detail']);
+    expect(crumbsFor('/calendar/2026-10-01', null, 'Calendar day')).toEqual([
+      { label: 'Calendar', link: '/calendar' },
       { label: 'Calendar day', link: null },
     ]);
   });
@@ -85,7 +85,7 @@ describe('Breadcrumb (sb-breadcrumb)', () => {
         provideZonelessChangeDetection(),
         provideRouter([
           { path: 'trades', component: Blank, title: 'Trades' },
-          { path: 'trades/calendar', component: Blank, title: 'Calendar' },
+          { path: 'calendar', component: Blank, title: 'Calendar' },
           { path: 'trades/:id', component: Blank, title: 'Trade detail' },
           { path: 'ui', component: Blank, title: 'UI gallery' },
         ]),
@@ -113,29 +113,29 @@ describe('Breadcrumb (sb-breadcrumb)', () => {
     expect(el().querySelector('h1, h2, h3, h4, h5, h6')).toBeNull();
   });
 
-  it('shows destination and section, the section marked current', async () => {
+  it('shows a single page as one crumb, marked current', async () => {
     await go('/trades');
-    expect(labels()).toEqual(['Trades', 'Book']);
-    expect(el().querySelector('[aria-current="page"]')!.textContent!.trim()).toBe('Book');
+    expect(labels()).toEqual(['Trades']);
+    expect(el().querySelector('[aria-current="page"]')!.textContent!.trim()).toBe('Trades');
     expect(el().querySelector('a')).toBeNull();
   });
 
   it('shows the detail segment once the detail route supplies it, linking back to the list', async () => {
     await go('/trades/812');
-    expect(labels()).toEqual(['Trades', 'Book', 'Trade detail']);
+    expect(labels()).toEqual(['Trades', 'Trade detail']);
     titles.setDetail('NVDA #812');
     fixture.detectChanges();
-    expect(labels()).toEqual(['Trades', 'Book', 'NVDA #812']);
+    expect(labels()).toEqual(['Trades', 'NVDA #812']);
     const back = el().querySelector('a')!;
-    expect(back.textContent!.trim()).toBe('Book');
+    expect(back.textContent!.trim()).toBe('Trades');
     expect(back.getAttribute('href')).toBe('/trades');
     expect(back.classList).toContain('sb-hit');
     expect(el().querySelector('[aria-current="page"]')!.textContent!.trim()).toBe('NVDA #812');
   });
 
-  it('shows a section page as destination and section, with no third crumb', async () => {
-    await go('/trades/calendar');
-    expect(labels()).toEqual(['Trades', 'Calendar']);
+  it('shows Calendar as a destination of its own (v247)', async () => {
+    await go('/calendar');
+    expect(labels()).toEqual(['Calendar']);
     expect(el().querySelector('a')).toBeNull();
   });
 
@@ -147,7 +147,7 @@ describe('Breadcrumb (sb-breadcrumb)', () => {
   it('hides its separators from assistive tech', async () => {
     await go('/trades/812');
     const seps = [...el().querySelectorAll('.sep')];
-    expect(seps).toHaveLength(2);
+    expect(seps).toHaveLength(1);
     for (const sep of seps) expect(sep.getAttribute('aria-hidden')).toBe('true');
   });
 

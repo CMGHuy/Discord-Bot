@@ -44,9 +44,17 @@ describe('SectionTabs (sb-section-tabs, v202 §1)', () => {
   });
 
   it("draws a destination's sections as links, in order, in a labelled nav", () => {
-    render(entry('/trades'), section('/trades/calendar'));
-    expect(el().querySelector('nav')!.getAttribute('aria-label')).toBe('Trades sections');
-    expect(tabs()).toEqual([['Book', '/trades'], ['Calendar', '/trades/calendar']]);
+    render(entry('/insights'), section('/insights/analytics'));
+    expect(el().querySelector('nav')!.getAttribute('aria-label')).toBe('Insights sections');
+    expect(tabs()).toEqual([['Analytics', '/insights/analytics'], ['Research', '/insights/research'],
+      ['Reports', '/insights/reports'], ['Guide', '/insights/guide']]);
+  });
+
+  it('draws nothing on Trades or Calendar, single pages since v247', () => {
+    render(entry('/trades'), null);
+    expect(el().querySelector('nav')).toBeNull();
+    render(entry('/calendar'), null);
+    expect(el().querySelector('nav')).toBeNull();
   });
 
   it('marks only the active section as the current page', () => {

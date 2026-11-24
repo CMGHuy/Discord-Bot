@@ -573,7 +573,7 @@ describe('shell labelled rail (v202 §3)', () => {
     TestBed.configureTestingModule({
       providers: shellProviders([
         { path: 'trades', component: Blank },
-        { path: 'trades/calendar', component: Blank },
+        { path: 'calendar', component: Blank }, { path: 'calendar/:date', component: Blank },
         { path: 'plans/:id', component: Blank },
         { path: 'insights/analytics', component: Blank },
         { path: 'system/versions', component: Blank },
@@ -591,7 +591,7 @@ describe('shell labelled rail (v202 §3)', () => {
 
   const labelOf = (link: Element) => link.querySelector('.rail-label')!.textContent!.trim();
 
-  it('draws six labelled destinations, five work entries then System at the foot (v202 §3)', async () => {
+  it('draws seven labelled destinations, six work entries then System at the foot (v247)', async () => {
     const { el } = await mount();
     const rail = el.querySelector('nav.rail')!;
     expect(rail.getAttribute('aria-label')).toBe('Primary');
@@ -599,7 +599,7 @@ describe('shell labelled rail (v202 §3)', () => {
     const lists = [...rail.querySelectorAll(':scope > ul.nav')];
     expect(lists.map((ul) => ul.className)).toEqual(['nav rail-work', 'nav rail-foot']);
     const labels = (ul: Element) => [...ul.querySelectorAll(':scope > li > a.rail-link')].map(labelOf);
-    expect(labels(lists[0])).toEqual(['Dashboard', 'Watchlist', 'Trades', 'Risk', 'Insights']);
+    expect(labels(lists[0])).toEqual(['Dashboard', 'Watchlist', 'Trades', 'Calendar', 'Risk', 'Insights']);
     expect(labels(lists[1])).toEqual(['System']);
     expect(lists[1].nextElementSibling!.matches('.rail-version')).toBe(true);
     expect(rail.querySelector('.rail-divider, sb-nav-indicator, .nav-group-label')).toBeNull();
@@ -615,7 +615,7 @@ describe('shell labelled rail (v202 §3)', () => {
     const lists = [...rail.querySelectorAll(':scope > ul.nav')];
     expect(lists.map((ul) => ul.className)).toEqual(['nav rail-work']);
     expect([...lists[0].querySelectorAll('a.rail-link')].map(labelOf))
-      .toEqual(['Dashboard', 'Watchlist', 'Trades', 'Risk', 'Insights']);
+      .toEqual(['Dashboard', 'Watchlist', 'Trades', 'Calendar', 'Risk', 'Insights']);
     expect(rail.querySelector('a[href="/system"]')).toBeNull();
     const version = lists[0].nextElementSibling as HTMLElement;
     expect(version.matches('.rail-version')).toBe(true);
@@ -668,7 +668,7 @@ describe('shell labelled rail (v202 §3)', () => {
 
   it.each([
     ['/trades', 'Trades'],
-    ['/trades/calendar', 'Trades'],
+    ['/calendar', 'Calendar'], ['/calendar/2026-10-01', 'Calendar'],
     ['/plans/7', 'Trades'],
     ['/insights/analytics?tab=tuning#x', 'Insights'],
     ['/system/versions', 'System'],
@@ -730,7 +730,7 @@ describe('shell top bar (v195 Phase 3, correction 9)', () => {
       expect(bar.children[index].matches(selector), selector).toBe(true));
     const crumbs = [...bar.querySelectorAll('nav[aria-label="Breadcrumb"] li')]
       .map((li) => li.textContent!.replace('/', '').trim());
-    expect(crumbs).toEqual(['Trades', 'Book']);
+    expect(crumbs).toEqual(['Trades']);
     expect(el.querySelectorAll('h1')).toHaveLength(0);
     expect(el.querySelector('.page-title, .page-subtitle')).toBeNull();
   });
@@ -1266,8 +1266,9 @@ describe('section tabs in the shell (v202 §1)', () => {
     TestBed.configureTestingModule({
       providers: shellProviders([
         { path: 'trades', component: Blank },
-        { path: 'trades/calendar', component: Blank },
         { path: 'trades/:id', component: Blank },
+        { path: 'insights/analytics', component: Blank },
+        { path: 'insights/research', component: Blank },
         { path: 'risk', component: Blank },
       ]),
     });
@@ -1291,16 +1292,17 @@ describe('section tabs in the shell (v202 §1)', () => {
     [...el.querySelectorAll('sb-section-tabs a[aria-current="page"]')].map((a) => a.textContent!.trim());
 
   it('draws the tabs at the top of the workspace, before the routed page', async () => {
-    const el = await at('/trades/calendar');
+    const el = await at('/insights/research');
     const content = el.querySelector('main.workspace > .workspace-content')!;
     expect(content.firstElementChild!.tagName.toLowerCase()).toBe('sb-section-tabs');
     expect([...content.querySelectorAll('sb-section-tabs a')].map((a) => a.textContent!.trim()))
-      .toEqual(['Book', 'Calendar']);
-    expect(current(el)).toEqual(['Calendar']);
+      .toEqual(['Analytics', 'Research', 'Reports', 'Guide']);
+    expect(current(el)).toEqual(['Research']);
   });
 
-  it("keeps the destination's first section active on a detail page", async () => {
-    expect(current(await at('/trades/812'))).toEqual(['Book']);
+  it('draws no tabs on Trades or a trade detail, a single page since v247', async () => {
+    expect((await at('/trades')).querySelectorAll('sb-section-tabs a')).toHaveLength(0);
+    expect((await at('/trades/812')).querySelectorAll('sb-section-tabs a')).toHaveLength(0);
   });
 
   it('draws no tabs on a single page', async () => {
@@ -1311,10 +1313,10 @@ describe('section tabs in the shell (v202 §1)', () => {
     const fixture = createShell();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    await go(fixture, '/trades');
-    expect(current(el)).toEqual(['Book']);
-    await go(fixture, '/trades/calendar');
-    expect(current(el)).toEqual(['Calendar']);
+    await go(fixture, '/insights/analytics');
+    expect(current(el)).toEqual(['Analytics']);
+    await go(fixture, '/insights/research');
+    expect(current(el)).toEqual(['Research']);
     await go(fixture, '/risk');
     expect(el.querySelectorAll('sb-section-tabs a')).toHaveLength(0);
   });
