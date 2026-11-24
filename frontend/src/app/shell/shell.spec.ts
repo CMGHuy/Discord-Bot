@@ -31,6 +31,7 @@ import { DENSITY_STORAGE } from '../ui/density.service';
 import { THEME_STORAGE, ThemeStorage } from '../ui/theme.service';
 import { styleRules } from '../ui/testing/style-rules';
 import { HINT_HOVER_DELAY_MS } from '../ui/hint';
+import { LONG_PRESS_MS } from '../ui/long-press';
 import { POPOVER_OPEN_ATTR } from '../testing/popover-polyfill';
 import { provideMotion } from '../ui/motion/motion.service';
 import { NAV_ENTRIES } from './nav';
@@ -616,6 +617,31 @@ describe('shell icon rail (v247, spec v240 §5)', () => {
   const railLink = (el: HTMLElement, path: string) =>
     el.querySelector<HTMLAnchorElement>(`nav.rail a.rail-link[href="${path}"]`)!;
 
+  /** jsdom has no PointerEvent: a MouseEvent carrying pointerType and pointerId
+   *  is what sbLongPress reads (ui/long-press.spec.ts does the same). */
+  function pointer(type: string, pointerType = 'touch'): MouseEvent {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 30, clientY: 120 });
+    Object.defineProperty(event, 'pointerType', { value: pointerType });
+    Object.defineProperty(event, 'pointerId', { value: 1 });
+    return event;
+  }
+
+  /** Holds a pointer on the link for LONG_PRESS_MS and lifts it. Only
+   *  setTimeout is faked: the hint's requestAnimationFrame stays real. */
+  async function hold(fixture: ComponentFixture<Shell>, link: Element, pointerType = 'touch') {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      link.dispatchEvent(pointer('pointerdown', pointerType));
+      vi.advanceTimersByTime(LONG_PRESS_MS);
+      link.dispatchEvent(pointer('pointerup', pointerType));
+    } finally {
+      vi.useRealTimers();
+    }
+    await settle(fixture);
+  }
+
+  const tap = () => new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+
   it('draws seven labelled destinations, six work entries then System at the foot (v247)', async () => {
     const { el } = await mount();
     const rail = el.querySelector('nav.rail')!;
@@ -811,6 +837,83 @@ describe('shell icon rail (v247, spec v240 §5)', () => {
     for (const word of ['shell.sidebar', 'toggleSidebar', 'userCollapsed', 'overlayOpen', 'railed', 'applyStoredSidebar']) {
       expect(code, word).not.toContain(word);
     }
+  });
+
+  it('makes every rail link a long-press host, and the brand mark not one', async () => {
+    const { el } = await mount();
+    const links = [...el.querySelectorAll('nav.rail a.rail-link')];
+    expect(links).toHaveLength(NAV_ENTRIES.length);
+    for (const link of links) expect(link.classList.contains('sb-long-press'), labelOf(link)).toBe(true);
+    expect(el.querySelector('nav.rail a.rail-brand')!.classList.contains('sb-long-press')).toBe(false);
+  });
+
+  it('opens the entry hint on a 500ms touch hold and not a moment before', async () => {
+    const { fixture, el } = await mount();
+    const link = railLink(el, '/calendar');
+    const tooltip = tooltipOf(el, link);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      link.dispatchEvent(pointer('pointerdown'));
+      vi.advanceTimersByTime(LONG_PRESS_MS - 1);
+      fixture.detectChanges();
+      expect(isOpen(tooltip)).toBe(false);
+      vi.advanceTimersByTime(1);
+    } finally {
+      vi.useRealTimers();
+    }
+    await settle(fixture);
+    expect(isOpen(tooltip)).toBe(true);
+    expect(tooltip.textContent!.trim()).toBe('Calendar');
+  });
+
+  it('keeps the held-open hint after the finger lifts, and swallows the click so it navigates nowhere', async () => {
+    const { fixture, el } = await mount();
+    const router = TestBed.inject(Router);
+    const before = router.url;
+    const link = railLink(el, '/trades');
+    await hold(fixture, link);
+    expect(isOpen(tooltipOf(el, link))).toBe(true);
+    link.dispatchEvent(tap());
+    await settle(fixture);
+    expect(router.url).toBe(before);
+    expect(isOpen(tooltipOf(el, link))).toBe(true);
+  });
+
+  it('closes the held-open hint on the next touch anywhere, and on Escape', async () => {
+    const { fixture, el } = await mount();
+    const link = railLink(el, '/risk');
+    await hold(fixture, link);
+    expect(isOpen(tooltipOf(el, link))).toBe(true);
+    document.body.dispatchEvent(pointer('pointerdown'));
+    await settle(fixture);
+    expect(isOpen(tooltipOf(el, link))).toBe(false);
+
+    await hold(fixture, link);
+    expect(isOpen(tooltipOf(el, link))).toBe(true);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle(fixture);
+    expect(isOpen(tooltipOf(el, link))).toBe(false);
+  });
+
+  it('never opens on a mouse held down, and that click still navigates (hover covers a mouse)', async () => {
+    const { fixture, el } = await mount();
+    const link = railLink(el, '/trades');
+    await hold(fixture, link, 'mouse');
+    expect(isOpen(tooltipOf(el, link))).toBe(false);
+    link.dispatchEvent(tap());
+    await settle(fixture);
+    expect(TestBed.inject(Router).url).toBe('/trades');
+  });
+
+  it('moves a held-open hint to the entry held next (one at a time)', async () => {
+    const { fixture, el } = await mount();
+    const first = railLink(el, '/dashboard');
+    const second = railLink(el, '/insights');
+    await hold(fixture, first);
+    expect(isOpen(tooltipOf(el, first))).toBe(true);
+    await hold(fixture, second);
+    expect(isOpen(tooltipOf(el, second))).toBe(true);
+    expect(isOpen(tooltipOf(el, first))).toBe(false);
   });
 });
 

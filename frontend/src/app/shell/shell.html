@@ -18,7 +18,8 @@
           <a #link class="rail-link" [routerLink]="entry.path"
              [attr.aria-label]="entry.label"
              [class.active]="entry.path === activePath()"
-             [attr.aria-current]="entry.path === activePath() ? 'page' : null">
+             [attr.aria-current]="entry.path === activePath() ? 'page' : null"
+             sbLongPress (longPress)="hint.openPinned()">
             <sb-icon [name]="entry.icon" title="" [size]="24" />
           </a>
           <sb-hint #hint [anchor]="link" [text]="entry.label" [openDelay]="railHintDelay" />
@@ -33,7 +34,8 @@
             <a #link class="rail-link" [routerLink]="entry.path"
                [attr.aria-label]="entry.label"
                [class.active]="entry.path === activePath()"
-               [attr.aria-current]="entry.path === activePath() ? 'page' : null">
+               [attr.aria-current]="entry.path === activePath() ? 'page' : null"
+               sbLongPress (longPress)="hint.openPinned()">
               <sb-icon [name]="entry.icon" title="" [size]="24" />
             </a>
             <sb-hint #hint [anchor]="link" [text]="entry.label" [openDelay]="railHintDelay" />

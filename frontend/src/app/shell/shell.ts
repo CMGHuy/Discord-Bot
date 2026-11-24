@@ -30,6 +30,7 @@ import { DensityService } from '../ui/density.service';
 import { HINT_HOVER_DELAY_MS, Hint } from '../ui/hint';
 import { ThemeService } from '../ui/theme.service';
 import { Icon } from '../ui/icon';
+import { LongPress } from '../ui/long-press';
 import { ProfileMenu } from './profile-menu';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteRefreshService } from '../routing/route-refresh.service';
@@ -89,7 +90,7 @@ const ZOOM_DEFAULT = 100;
   selector: 'sb-shell',
   imports: [
     RouterOutlet, RouterLink, AlarmChip, ToastHost,
-    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, VoiceChip, ProfileMenu, Tape,
+    ScanProgressStrip, Icon, Hint, LongPress, Breadcrumb, KillswitchChip, VoiceChip, ProfileMenu, Tape,
     Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
     LiveDock, LiveEdgeTab, LiveStrip, LiveSheet, ReadOnlyBadge, ShockPill,
   ],
