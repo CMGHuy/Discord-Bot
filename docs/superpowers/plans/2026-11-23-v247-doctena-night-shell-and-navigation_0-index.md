@@ -229,8 +229,8 @@ edges and their reasons:
   `more-sheet.ts` and their specs.
 - V247-11 → V247-12 → V247-13: `TabBarPrefs` is consumed by the bar, and
   V247-13 edits `phone-tab-bar.ts` after V247-12.
-- V247-11 → V247-14 → V247-15: the editor consumes `TabBarPrefs`; V247-15
-  edits `tab-bar-editor.ts` after V247-14.
+- V247-11 → V247-14 → V247-14b → V247-15: the editor consumes `TabBarPrefs`;
+  V247-14b and V247-15 edit `tab-bar-editor.ts` after V247-14.
 - V247-12 → V247-15: both edit `more-sheet.ts` and its spec.
 - V247-10 → V247-15: both edit `shell.html` and `shell.spec.ts`
   (V247-15 also `shell.ts`).
@@ -262,9 +262,10 @@ vs the shell template, with no contract between them.
 | V247-12 | Phone bar and More sheet read `TabBarPrefs`; `PHONE_TABS` deleted | 4 | sonnet | M `frontend/src/app/shell/nav.ts`, M `frontend/src/app/shell/nav.spec.ts`, M `frontend/src/app/shell/phone-tab-bar.ts`, M `frontend/src/app/shell/phone-tab-bar.spec.ts`, M `frontend/src/app/shell/more-sheet.ts`, M `frontend/src/app/shell/more-sheet.spec.ts` | `PHONE_TABS` deleted; `phoneTabPathFor(url: string, tabs: readonly NavEntry[]): string \| null` (tabs required); `morePageGroups(entries: readonly NavEntry[], tabs: readonly NavEntry[]): MoreGroup[]` (both required) |
 | V247-12b | Phone bar restyle: equal-width tabs, accent-soft pill, 600-weight labels | 4 | haiku | M `frontend/src/app/shell/phone-tab-bar.ts`, M `frontend/src/app/shell/phone-tab-bar.spec.ts` | none (styles only) |
 | V247-13 | Tab press-and-hold shows the tab's name above it | 4 | sonnet | M `frontend/src/app/shell/phone-tab-bar.ts`, M `frontend/src/app/shell/phone-tab-bar.spec.ts` | `PhoneTabBar` tab hints: `placement="above"`, text = rail label |
-| V247-14 | Tab-bar editor: two lists, move/add/remove, inline reason, live preview, announcements | 5 | sonnet | C `frontend/src/app/shell/tab-bar-editor.ts`, C `frontend/src/app/shell/tab-bar-editor.spec.ts`, M `frontend/src/app/ui/money-colour.spec.ts` (`NAV_FILES` += `'app/shell/tab-bar-editor.ts'`) | `@Component({ selector: 'sb-tab-bar-editor' }) class TabBarEditor { open = input(false); closed = output<void>() }`; `.announce[aria-live=polite]` region; `export const ADD_LIMIT_REASON = 'The bar holds 4 pages. Remove one to add another.'` |
+| V247-14 | Tab-bar editor: two lists, move/add/remove, inline reason, focus, announcements | 5 | sonnet | C `frontend/src/app/shell/tab-bar-editor.ts`, C `frontend/src/app/shell/tab-bar-editor.spec.ts` | `@Component({ selector: 'sb-tab-bar-editor' }) class TabBarEditor { open = input(false); closed = output<void>() }`; `.announce[aria-live=polite]` region; `export const ADD_LIMIT_REASON = 'The bar holds 4 pages. Remove one to add another.'`; rows `ol.on-bar`/`ul.under-more > li.row[data-path]` with `button.act.up\|down\|remove\|add` |
+| V247-14b | Tab-bar editor: live preview, three-width styles with 44px targets, the partition gate | 5 | sonnet | M `frontend/src/app/shell/tab-bar-editor.ts`, M `frontend/src/app/shell/tab-bar-editor.spec.ts`, M `frontend/src/app/ui/money-colour.spec.ts` (`NAV_FILES` += `'app/shell/tab-bar-editor.ts'`) | `figure.preview[role=img]` labelled `Tab bar preview: <labels>, More` |
 | V247-15 | Reset with 8s Undo, Done; More sheet's Edit tab bar action; shell wiring and focus return | 5 | sonnet | M `frontend/src/app/shell/tab-bar-editor.ts`, M `frontend/src/app/shell/tab-bar-editor.spec.ts`, M `frontend/src/app/shell/more-sheet.ts`, M `frontend/src/app/shell/more-sheet.spec.ts`, M `frontend/src/app/shell/shell.html`, M `frontend/src/app/shell/shell.ts`, M `frontend/src/app/shell/shell.spec.ts` | `export const UNDO_MS = 8000`; `MoreSheet.editRequested = output<void>()`; `MoreSheet.editing = input(false)`; `Shell.editorOpen` signal, `openEditor()`, `closeEditor()` |
-| V247-16 | Browser check at 390/820/1440 (rail tooltip, editor round-trip) and the layout audit | 5 | sonnet | C `frontend/scripts/shell-nav-check.mjs` | none |
+| V247-16 | Browser check at 320/390/820/1440 (rail tooltip, editor round-trip) and the layout audit | 5 | sonnet | C `frontend/scripts/shell-nav-check.mjs`, C `frontend/scripts/shell-nav-check-lib.mjs`, C `frontend/scripts/shell-nav-check-lib.test.mjs` | none |
 
 ## Parts
 
@@ -274,7 +275,7 @@ vs the shell template, with no contract between them.
 | 2 | `2026-11-23-v247-doctena-night-shell-and-navigation_2-hint-and-long-press.md` | V247-5..V247-7 | `Hint`'s new public API (delay, dismiss, one-at-a-time, `openPinned`, above placement) and `sbLongPress` |
 | 3 | `2026-11-23-v247-doctena-night-shell-and-navigation_3-rail-and-wordmark.md` | V247-8..V247-10 | The 64px icon rail with hints and long-press, the audit's rail check, the wordmark |
 | 4 | `2026-11-23-v247-doctena-night-shell-and-navigation_4-tab-bar.md` | V247-11..V247-13 | `TabBarPrefs`, the bar and More sheet reading it, tab press-and-hold |
-| 5 | `2026-11-23-v247-doctena-night-shell-and-navigation_5-editor-and-check.md` | V247-14..V247-16 | The tab-bar editor, the Edit action and shell wiring, the closing browser check |
+| 5 | `2026-11-23-v247-doctena-night-shell-and-navigation_5-editor-and-check.md` | V247-14, V247-14b, V247-15, V247-16 | The tab-bar editor, the Edit action and shell wiring, the closing browser check |
 
 ## Handoff
 
