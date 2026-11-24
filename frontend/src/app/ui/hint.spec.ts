@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DIALOG_CLOSING_EVENT, Hint, clampPopover, placeBeside, supportsPopover } from './hint';
+import { DIALOG_CLOSING_EVENT, HINT_HOVER_DELAY_MS, Hint, clampPopover, placeBeside, supportsPopover } from './hint';
 import { ConfirmDialog } from './confirm-dialog';
 import { Drawer } from './layout';
 import { provideMotion } from './motion/motion.service';
@@ -40,6 +41,33 @@ class Host {}
 class AnchorHost {
   readonly anchored = signal(true);
 }
+
+/** v247 Decision 6: a rail-style label and a glyph hint, both with the hover delay. */
+@Component({
+  imports: [Hint],
+  template: `
+    <a #a href="/dashboard" class="link-a" aria-label="Dashboard">D</a>
+    <sb-hint class="anchored-hint" [anchor]="a" text="Dashboard" [openDelay]="delay" />
+    <sb-hint class="glyph-hint" text="Explained." label="About it" [openDelay]="delay" />
+  `,
+})
+class DelayHost {
+  readonly delay = HINT_HOVER_DELAY_MS;
+}
+
+/** v247 Decision 7: two rail labels and a glyph hint on one page. */
+@Component({
+  imports: [Hint],
+  template: `
+    <a #a href="/dashboard" class="link-a" aria-label="Dashboard">D</a>
+    <sb-hint [anchor]="a" text="Dashboard" />
+    <a #b href="/watchlist" class="link-b" aria-label="Watchlist">W</a>
+    <sb-hint [anchor]="b" text="Watchlist" />
+    <sb-hint class="glyph-hint" text="Explained." label="About it" />
+    <span class="outside">Elsewhere</span>
+  `,
+})
+class PairHost {}
 
 describe('Hint (v80 D4)', () => {
   let fixture: ComponentFixture<Host>;
@@ -602,5 +630,159 @@ describe('placeBeside (v195 correction 10)', () => {
 
   it('shifts left rather than run off a narrow viewport', () => {
     expect(placeBeside(rail, label, { width: 100, height: 900 }).left).toBe(12);
+  });
+});
+
+describe('Hint hover delay and dismiss() (v247 Decision 6)', () => {
+  let fixture: ComponentFixture<DelayHost>;
+
+  beforeEach(async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(DelayHost);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    // Only the delay timer is faked: the open effect's requestAnimationFrame stays real.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const link = () => el().querySelector('a.link-a') as HTMLAnchorElement;
+  const popFor = (hint: string) => el().querySelector(`sb-hint.${hint} [role=tooltip]`) as HTMLElement;
+  const trigger = () => el().querySelector('sb-hint.glyph-hint button.trigger') as HTMLButtonElement;
+  const isOpen = (hint: string) => popFor(hint).hasAttribute(POPOVER_OPEN_ATTR);
+  const fire = (target: Element, event: Event) => {
+    target.dispatchEvent(event);
+    fixture.detectChanges();
+  };
+  const tick = (ms: number) => {
+    vi.advanceTimersByTime(ms);
+    fixture.detectChanges();
+  };
+  const instance = (hint: string): Hint =>
+    fixture.debugElement.query(By.css(`sb-hint.${hint}`)).componentInstance as Hint;
+
+  it('exports the 300ms hover delay the rail and the tab bar pass', () => {
+    expect(HINT_HOVER_DELAY_MS).toBe(300);
+  });
+
+  it('opens an anchor label only once the hover has lasted the delay', () => {
+    fire(link(), new MouseEvent('mouseenter'));
+    tick(HINT_HOVER_DELAY_MS - 1);
+    expect(isOpen('anchored-hint')).toBe(false);
+    tick(1);
+    expect(isOpen('anchored-hint')).toBe(true);
+    fire(link(), new MouseEvent('mouseleave'));
+    expect(isOpen('anchored-hint')).toBe(false);
+  });
+
+  it('never opens for a pointer that leaves before the delay', () => {
+    fire(link(), new MouseEvent('mouseenter'));
+    tick(HINT_HOVER_DELAY_MS - 50);
+    fire(link(), new MouseEvent('mouseleave'));
+    tick(HINT_HOVER_DELAY_MS);
+    expect(isOpen('anchored-hint')).toBe(false);
+  });
+
+  it('delays hover only: keyboard focus on the anchor opens at once', () => {
+    fire(link(), new FocusEvent('focus'));
+    expect(isOpen('anchored-hint')).toBe(true);
+  });
+
+  it('delays a glyph trigger hover too, but a click pins it at once', () => {
+    const host = el().querySelector('sb-hint.glyph-hint')!;
+    fire(host, new MouseEvent('mouseenter'));
+    expect(isOpen('glyph-hint')).toBe(false);
+    fire(trigger(), new MouseEvent('click', { bubbles: true }));
+    expect(isOpen('glyph-hint')).toBe(true);
+  });
+
+  it('dismiss() closes a hint held by focus and hover, and cancels a pending hover', () => {
+    fire(link(), new FocusEvent('focus'));
+    fire(link(), new MouseEvent('mouseenter'));
+    tick(HINT_HOVER_DELAY_MS);
+    instance('anchored-hint').dismiss();
+    fixture.detectChanges();
+    expect(isOpen('anchored-hint')).toBe(false);
+
+    fire(link(), new MouseEvent('mouseleave'));
+    fire(link(), new FocusEvent('blur'));
+    fire(link(), new MouseEvent('mouseenter'));
+    instance('anchored-hint').dismiss();
+    tick(HINT_HOVER_DELAY_MS * 2);
+    expect(isOpen('anchored-hint')).toBe(false);
+  });
+
+  it('has no protected close() left: dismiss() is the one way to close', () => {
+    expect(SOURCE).not.toMatch(/\bclose\(\): void/);
+    expect(SOURCE).not.toMatch(/this\.close\(\)|'close\(\)'/);
+    expect(SOURCE).toMatch(/^ {2}dismiss\(\): void \{/m);
+  });
+});
+
+describe('Hint: one open at a time, app-wide (v247 Decision 7)', () => {
+  let fixture: ComponentFixture<PairHost>;
+
+  beforeEach(async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(PairHost);
+    fixture.detectChanges();
+    await fixture.whenStable();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const popOf = (anchor: Element) =>
+    el().querySelector(`[id="${anchor.getAttribute('aria-describedby')}"]`) as HTMLElement;
+  const linkA = () => el().querySelector('a.link-a') as HTMLAnchorElement;
+  const linkB = () => el().querySelector('a.link-b') as HTMLAnchorElement;
+  const glyphPop = () => el().querySelector('sb-hint.glyph-hint [role=tooltip]') as HTMLElement;
+  const trigger = () => el().querySelector('sb-hint.glyph-hint button.trigger') as HTMLButtonElement;
+  const open = (pop: HTMLElement) => pop.hasAttribute(POPOVER_OPEN_ATTR);
+  const fire = async (target: Element, event: Event) => {
+    target.dispatchEvent(event);
+    fixture.detectChanges();
+    await fixture.whenStable();
+  };
+
+  it('closes the open label when another label opens', async () => {
+    await fire(linkA(), new MouseEvent('mouseenter'));
+    expect(open(popOf(linkA()))).toBe(true);
+    await fire(linkB(), new FocusEvent('focus'));
+    expect(open(popOf(linkB()))).toBe(true);
+    expect(open(popOf(linkA()))).toBe(false);
+  });
+
+  it('closes an open label when a glyph hint is pinned, and the other way round', async () => {
+    await fire(linkA(), new FocusEvent('focus'));
+    await fire(trigger(), new MouseEvent('click', { bubbles: true }));
+    expect(open(glyphPop())).toBe(true);
+    expect(open(popOf(linkA()))).toBe(false);
+    await fire(linkB(), new MouseEvent('mouseenter'));
+    expect(open(popOf(linkB()))).toBe(true);
+    expect(open(glyphPop())).toBe(false);
+  });
+
+  it('does not reopen the displaced hint when the newer one closes', async () => {
+    await fire(linkA(), new MouseEvent('mouseenter'));
+    await fire(linkB(), new MouseEvent('mouseenter'));
+    await fire(linkB(), new MouseEvent('mouseleave'));
+    expect(open(popOf(linkA()))).toBe(false);
+    expect(open(popOf(linkB()))).toBe(false);
+  });
+
+  it('frees the slot when an open hint is destroyed', async () => {
+    await fire(linkA(), new MouseEvent('mouseenter'));
+    fixture.destroy();
+    const next = TestBed.createComponent(PairHost);
+    next.detectChanges();
+    await next.whenStable();
+    const link = (next.nativeElement as HTMLElement).querySelector('a.link-b') as HTMLAnchorElement;
+    link.dispatchEvent(new MouseEvent('mouseenter'));
+    next.detectChanges();
+    await next.whenStable();
+    const pop = (next.nativeElement as HTMLElement)
+      .querySelector(`[id="${link.getAttribute('aria-describedby')}"]`) as HTMLElement;
+    expect(open(pop)).toBe(true);
   });
 });

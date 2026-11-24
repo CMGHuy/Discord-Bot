@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   computed,
   effect,
@@ -13,6 +14,17 @@ import {
 import { Icon } from './icon';
 
 let nextId = 0;
+
+/** The hover delay the rail and the tab bar pass to `openDelay` (v247
+ *  Decision 6): a pointer sweeping across the rail does not flash every
+ *  label on its way, and a resting pointer still gets an answer quickly.
+ *  The spec cited "the existing hint delay"; there was none, so this is it. */
+export const HINT_HOVER_DELAY_MS = 300;
+
+/** The one hint open app-wide (v240 §5 "only one tooltip shows at a time",
+ *  v247 Decision 7). Claimed by the open effect, released by its cleanup;
+ *  a module variable because hints share no parent to hold it. */
+let openHint: Hint | null = null;
 
 /**
  * Whether this engine has the Popover API (spec v194 A1, feature detection).
@@ -123,17 +135,23 @@ export function placeBeside(
  * The trigger always draws the `info` icon (v240 §4): the per-caller letter
  * (`glyph="v"`, `glyph="?"`) is gone. The icon is aria-hidden with an empty
  * title, so the button's `label` stays its one accessible name.
+ *
+ * v247: `openDelay` holds the hover reason back by that many ms (focus,
+ * click and openPinned() stay immediate; 0 keeps the old instant hover).
+ * Only one hint is open app-wide: whichever opens dismisses the one that
+ * was open. `dismiss()` is public, so that rule -- and a host holding a
+ * template ref -- can close a hint whatever holds it open.
  */
 @Component({
   selector: 'sb-hint',
   imports: [Icon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    '(mouseenter)': 'hovered.set(true)',
-    '(mouseleave)': 'hovered.set(false)',
+    '(mouseenter)': 'onHoverStart()',
+    '(mouseleave)': 'onHoverEnd()',
     '(focusin)': 'focused.set(true)',
     '(focusout)': 'onFocusOut($event)',
-    '(keydown.escape)': 'close()',
+    '(keydown.escape)': 'dismiss()',
     '(document:pointerdown)': 'onDocumentPointer($event)',
     '[class.anchored]': 'anchor() !== null',
   },
@@ -252,6 +270,10 @@ export class Hint {
    *  Non-null renders no trigger; the anchor's hover and focus open the
    *  popover, which sits beside it. Null (default) is the glyph trigger. */
   readonly anchor = input<HTMLElement | null>(null);
+  /** Hover-only open delay in ms (v247 Decision 6). Focus, click and
+   *  openPinned() stay immediate. 0 (default) opens on hover at once, as
+   *  every hint did before; the rail and tab bar pass HINT_HOVER_DELAY_MS. */
+  readonly openDelay = input(0);
 
   protected readonly id = `sb-hint-${nextId++}`;
   protected readonly pinned = signal(false);
@@ -266,6 +288,8 @@ export class Hint {
    *  here rather than read back from :popover-open, so the guards hold the
    *  same way under the test polyfill (jsdom cannot match that selector). */
   private shown = false;
+  /** The pending hover open, while a delay is running. */
+  private hoverTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly popTop = signal(0);
   protected readonly popLeft = signal(0);
@@ -287,6 +311,7 @@ export class Hint {
   };
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.clearHoverTimer());
     /** Open -> show the popover (top layer, or the fallback's fixed box),
      *  then place it from the trigger's viewport rect: once on open, and on
      *  every scroll/resize while open -- a panel body scrolls its content
@@ -295,6 +320,7 @@ export class Hint {
      *  cleanup hides it. */
     effect((onCleanup) => {
       if (!this.open()) return;
+      this.claimOpenSlot();
       const pop = this.pop().nativeElement;
       this.show(pop);
       this.reposition();
@@ -307,6 +333,7 @@ export class Hint {
         unwatch();
         window.removeEventListener('scroll', this.reposition, true);
         window.removeEventListener('resize', this.reposition);
+        this.releaseOpenSlot();
         this.hide(pop);
       });
     });
@@ -320,14 +347,55 @@ export class Hint {
   }
 
   protected toggle(): void {
-    if (this.pinned()) this.close();
+    if (this.pinned()) this.dismiss();
     else this.pinned.set(true);
   }
 
-  protected close(): void {
+  /** Closes the hint whatever holds it open -- pin, hover (current or
+   *  pending) and focus. Public since v247 (replaces the protected close()):
+   *  the open-slot rule calls it on the hint it displaces. */
+  dismiss(): void {
+    this.clearHoverTimer();
     this.pinned.set(false);
     this.hovered.set(false);
     this.focused.set(false);
+  }
+
+  /** Hover start, glyph host or anchor alike: at once, or after openDelay. */
+  protected onHoverStart(): void {
+    this.clearHoverTimer();
+    const delay = this.openDelay();
+    if (delay <= 0) {
+      this.hovered.set(true);
+      return;
+    }
+    this.hoverTimer = setTimeout(() => {
+      this.hoverTimer = null;
+      this.hovered.set(true);
+    }, delay);
+  }
+
+  /** Hover end: a pending open is cancelled, a current one ends. */
+  protected onHoverEnd(): void {
+    this.clearHoverTimer();
+    this.hovered.set(false);
+  }
+
+  private clearHoverTimer(): void {
+    if (this.hoverTimer === null) return;
+    clearTimeout(this.hoverTimer);
+    this.hoverTimer = null;
+  }
+
+  /** This hint is opening: the one that was open closes (v247 Decision 7). */
+  private claimOpenSlot(): void {
+    if (openHint && openHint !== this) openHint.dismiss();
+    openHint = this;
+  }
+
+  /** From the open effect's cleanup: closing, or destroyed while open. */
+  private releaseOpenSlot(): void {
+    if (openHint === this) openHint = null;
   }
 
   /** Focus moving between the trigger and anything inside the popover is not
@@ -338,7 +406,7 @@ export class Hint {
   }
 
   protected onDocumentPointer(event: Event): void {
-    if (!this.host.contains(event.target as Node)) this.close();
+    if (!this.host.contains(event.target as Node)) this.dismiss();
   }
 
   /** Guarded (v194 A1): showPopover() throws InvalidStateError on a
@@ -361,14 +429,14 @@ export class Hint {
   /** A hint inside a modal <dialog> host (sb-drawer, sb-confirm-dialog)
    *  closes when that dialog starts closing (v194 A1). A pinned manual
    *  popover is not hidden by its ancestor dialog closing, so it would stay
-   *  painted in the top layer through the drawer's exit animation. `close`
-   *  covers a host shut without its exit (the drawer's [open] input going
+   *  painted in the top layer through the drawer's exit animation. the dialog's `close`
+   *  event covers a host shut without its exit (the drawer's [open] input going
    *  false). Looked up on open, not in the constructor: a projected hint is
    *  not inside its dialog yet when it is created. Returns the remover. */
   private watchHostDialog(): () => void {
     const dialog = this.host.closest('dialog');
     if (!dialog) return () => undefined;
-    const onClosing = (): void => this.close();
+    const onClosing = (): void => this.dismiss();
     dialog.addEventListener(DIALOG_CLOSING_EVENT, onClosing);
     dialog.addEventListener('close', onClosing);
     return () => {
@@ -391,12 +459,12 @@ export class Hint {
     let pressed = false;
     const onKey = (event: Event): void => {
       pressed = false;
-      if ((event as KeyboardEvent).key === 'Escape') this.close();
+      if ((event as KeyboardEvent).key === 'Escape') this.dismiss();
     };
     const listeners: [string, EventListener][] = [
-      ['mouseenter', () => this.hovered.set(true)],
-      ['mouseleave', () => this.hovered.set(false)],
-      ['pointerdown', () => { pressed = true; this.close(); }],
+      ['mouseenter', () => this.onHoverStart()],
+      ['mouseleave', () => this.onHoverEnd()],
+      ['pointerdown', () => { pressed = true; this.dismiss(); }],
       ['focus', () => { if (!pressed) this.focused.set(true); pressed = false; }],
       ['blur', () => { pressed = false; this.focused.set(false); }],
       ['keydown', onKey],
@@ -406,7 +474,7 @@ export class Hint {
     return () => {
       for (const [type, listener] of listeners) anchor.removeEventListener(type, listener);
       if (anchor.getAttribute('aria-describedby') === this.id) anchor.removeAttribute('aria-describedby');
-      this.close();
+      this.dismiss();
     };
   }
 }
