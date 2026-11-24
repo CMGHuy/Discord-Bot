@@ -58,6 +58,7 @@ describe('routing, authenticated', () => {
   it.each([
     ['/dashboard', 'Dashboard'],
     ['/trades', 'Trades'],
+    ['/calendar', 'Calendar'],
     ['/insights/analytics', 'Analytics'],
     ['/watchlist', 'Watchlist'],
     ['/risk', 'Risk'],
@@ -86,10 +87,11 @@ describe('routing, authenticated', () => {
     expect(harness.routeNativeElement?.textContent).toContain('AAPL');
   });
 
-  it('serves the calendar workspace behind the auth guard', async () => {
-    const route = routes.find((r) => r.path === 'trades/calendar');
+  it('serves the calendar workspace at /calendar behind the auth guard (v247)', async () => {
+    const route = routes.find((r) => r.path === 'calendar');
     expect(route).toBeDefined();
     expect(route?.canMatch).toEqual([authGuard]);
+    expect(route?.redirectTo).toBeUndefined();
 
     // The lazy route must expose its component through its child config.
     const children = await route!.loadChildren!() as Routes;
@@ -142,7 +144,7 @@ describe('routing, authenticated', () => {
 
 describe('route data readiness contract', () => {
   const expected = [
-    'dashboard', 'trades', 'trades/:id', 'plans/:id', 'insights/analytics', 'trades/calendar',
+    'dashboard', 'trades', 'trades/:id', 'plans/:id', 'insights/analytics', 'calendar',
     'watchlist', 'watchlist/:symbol', 'risk', 'system', 'system/versions', 'insights/research',
     'insights/reports', 'insights/guide',
   ] as const;
@@ -200,11 +202,11 @@ describe('routing, unauthenticated', () => {
   });
 });
 
-/* v202 V202-4: section routes and the old paths' redirects.
+/* v202 V202-4, v247: section routes and the old paths' redirects.
  *
  * Every lazy route is swapped for a blank component, so these tests check
  * the matching and redirect rules themselves, not each workspace's resolver.
- * `trades/calendar` keeps its `''` and `:date` children, as calendar.routes
+ * `calendar` keeps its `''` and `:date` children, as calendar.routes
  * declares them.
  */
 @Component({ template: '' })
@@ -215,7 +217,7 @@ function stubbed(): Routes {
     if (!route.loadChildren && !route.loadComponent) return route;
     const { loadChildren: _lazy, loadComponent: _component, ...rest } = route;
     void _lazy; void _component;
-    return route.path === 'trades/calendar'
+    return route.path === 'calendar'
       ? { ...rest, children: [{ path: '', component: Blank }, { path: ':date', component: Blank }] }
       : { ...rest, component: Blank };
   });
@@ -246,8 +248,8 @@ describe('v202 section routes and redirects', () => {
   beforeEach(() => configureStubbed());
 
   it.each([
-    ['/calendar', '/trades/calendar'],
-    ['/calendar/2026-10-01', '/trades/calendar/2026-10-01'],
+    ['/trades/calendar', '/calendar'],
+    ['/trades/calendar/2026-10-01', '/calendar/2026-10-01'],
     ['/analytics', '/insights/analytics'],
     ['/research', '/insights/research'],
     ['/reports', '/insights/reports'],
@@ -262,15 +264,38 @@ describe('v202 section routes and redirects', () => {
   });
 
   it('redirects a bare old path without inventing a query', async () => {
-    expect((await land('/calendar')).url).toBe('/trades/calendar');
+    expect((await land('/trades/calendar')).url).toBe('/calendar');
+  });
+
+  it.each([
+    ['/calendar', ''],
+    ['/calendar/2026-10-01', ':date'],
+    ['/calendar?month=2026-11&strategy=EMA20', ''],
+  ])('serves %s on the Calendar workspace itself, no redirect (v247)', async (url, child) => {
+    const landed = await land(url);
+    expect(landed.url).toBe(url);
+    expect(landed.paths).toEqual([undefined, 'calendar', child]);
   });
 
   it.each(['/trades/calendar', '/trades/calendar/2026-10-01'])(
-    'matches %s as a section, never as a trade id', async (url) => {
+    'never reads %s as a trade id: it lands on the Calendar workspace', async (url) => {
       const { paths } = await land(url);
       expect(paths).not.toContain('trades/:id');
-      expect(paths.some((p) => p === 'trades/calendar')).toBe(true);
+      expect(paths).toContain('calendar');
     });
+
+  it('keeps no redirect pointing at another redirect, so no pair loops (v247)', () => {
+    const redirects = new Map(routes
+      .filter((route) => typeof route.redirectTo === 'string')
+      .map((route) => [route.path, route.redirectTo as string]));
+    for (const [from, to] of redirects) {
+      expect(redirects.has(to), `${from} -> ${to}`).toBe(false);
+    }
+    expect(redirects.get('trades/calendar')).toBe('calendar');
+    expect(redirects.get('trades/calendar/:date')).toBe('calendar/:date');
+    expect(redirects.has('calendar')).toBe(false);
+    expect(redirects.has('calendar/:date')).toBe(false);
+  });
 
   it('still reads any other second segment as a trade id', async () => {
     expect((await land('/trades/812')).paths).toContain('trades/:id');
@@ -285,7 +310,7 @@ describe('v202 section routes and redirects', () => {
   });
 
   it.each([
-    ['trades/calendar', 'Calendar', 'P&L by day'],
+    ['calendar', 'Calendar', 'P&L by day'],
     ['insights/analytics', 'Analytics', 'What already happened, measured'],
     ['insights/research', 'Research', 'Every pre-registration and its verdict'],
     ['insights/reports', 'Reports', 'What the measurements say about entries and gates'],
@@ -299,17 +324,20 @@ describe('v202 section routes and redirects', () => {
     expect(route?.canMatch).toEqual(path.startsWith('system') ? [authGuard, adminGuard] : [authGuard]);
   });
 
-  it('declares every section before the route that would swallow it', () => {
+  it('declares every section and the moved Calendar paths before the route that would swallow them', () => {
     const at = (path: string) => routes.findIndex((r) => r.path === path);
+    expect(at('trades/calendar')).toBeGreaterThanOrEqual(0);
     expect(at('trades/calendar')).toBeLessThan(at('trades/:id'));
+    expect(at('trades/calendar/:date')).toBeLessThan(at('trades/:id'));
     expect(at('system/versions')).toBeLessThan(at('system'));
   });
 
   it('keeps no old path as a real page', () => {
-    for (const old of ['calendar', 'cancels', 'analytics', 'research', 'reports', 'versions']) {
-      const route = routes.find((r) => r.path === old);
-      expect(route?.redirectTo, old).toBeTruthy();
-      expect(route?.loadChildren, old).toBeUndefined();
+    const old = ['trades/calendar', 'trades/calendar/:date', 'cancels', 'analytics', 'research', 'reports', 'versions'];
+    for (const path of old) {
+      const route = routes.find((r) => r.path === path);
+      expect(route?.redirectTo, path).toBeTruthy();
+      expect(route?.loadChildren, path).toBeUndefined();
     }
   });
 });
@@ -324,7 +352,7 @@ describe('routing, viewer (v207)', () => {
     },
   );
 
-  it.each(['/dashboard', '/trades', '/trades/calendar', '/watchlist', '/risk', '/insights/analytics'])(
+  it.each(['/dashboard', '/trades', '/calendar', '/watchlist', '/risk', '/insights/analytics'])(
     'still mounts %s', async (url) => {
       const harness = await RouterTestingHarness.create(url);
       expect(TestBed.inject(Router).url).toBe(url);
