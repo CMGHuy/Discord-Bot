@@ -261,7 +261,13 @@ describe('TabBarEditor styles (v240 §6, §9)', () => {
 });
 
 describe('TabBarEditor Reset, Undo and Done (v240 §6, Decision 15)', () => {
-  afterEach(() => vi.useRealTimers());
+  // Spies first, clock second: a setTimeout spy taken while the clock is fake
+  // would otherwise be restored after useRealTimers, putting the dead fake
+  // setTimeout back on globalThis and hanging every later spec file's timers.
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
 
   const action = (el: HTMLElement, name: 'reset' | 'undo' | 'done') =>
     el.querySelector<HTMLButtonElement>(`.actions button.${name}`);
