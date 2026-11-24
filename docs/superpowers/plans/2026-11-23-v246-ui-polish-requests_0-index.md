@@ -200,7 +200,7 @@ default is one subagent at a time; parallel runs only when asked.
 | V246-7 | Trades toolbar: controls in `sb-field` (dates "Opened" M+M, Ticker L, Strategy M, selects S/M); Compact/Full → `sb-segmented` "Density" | 2 | sonnet | M `frontend/src/app/workspaces/trades/trades.ts`, M `frontend/src/app/workspaces/trades/trades.spec.ts` | none |
 | V246-8 | Calendar month row: arrows, metric switch (→ `sb-segmented` "Show") and selects in `sb-field`s inside `sb-control-row` | 2 | sonnet | M `frontend/src/app/workspaces/calendar/calendar.ts`, M `frontend/src/app/workspaces/calendar/calendar.spec.ts` | none |
 | V246-9 | Analytics scope bar: Range/Ledger/Strategy/Horizon/Direction in `sb-field`, date range "Range", Unit segmented "Units" | 3 | sonnet | M `frontend/src/app/workspaces/analytics/scope-bar.ts`, M `frontend/src/app/workspaces/analytics/scope-bar.spec.ts` | none |
-| V246-10 | Watchlist search in `sb-field` L; Dashboard trading-performance presets and equity-candles toggles labelled ("Interval", "Trades") in `sb-field` | 3 | sonnet | M `frontend/src/app/workspaces/watchlist/watchlist.ts`, M `frontend/src/app/workspaces/watchlist/watchlist.spec.ts`, M `frontend/src/app/workspaces/dashboard/panels/trading-performance.ts`, M `.../panels/trading-performance.spec.ts`, M `.../panels/equity-candles.ts`, M `.../panels/equity-candles.spec.ts` | none |
+| V246-10 | Watchlist search in `sb-field` L; equity-candles toggles labelled ("Interval", "Trades") in `sb-field` (trading-performance presets left to B9, decision 12) | 3 | sonnet | M `frontend/src/app/workspaces/watchlist/watchlist.ts`, M `frontend/src/app/workspaces/watchlist/watchlist.spec.ts`, M `frontend/src/app/workspaces/dashboard/panels/equity-candles.ts`, M `.../panels/equity-candles.spec.ts`, M `frontend/src/app/workspaces/dashboard/dashboard.spec.ts` | none |
 | V246-11 | Consistency gate: a control in a bar outside `sb-field` fails; allowlist for the B10 bars | 3 | sonnet | M `frontend/src/app/workspaces/workspace-consistency.spec.ts` | `FIELD_GATE_ALLOWLIST: readonly string[]` (workspace file names B10 empties and deletes) |
 | V246-12 | Chart theme: `priceFormat`, `rFormat`, `pctFormat`, `applyChartTheme`, `SVG_CHART_TOKENS`, Navy fallback logged once | 4 | sonnet | M `frontend/src/app/ui/chart/chart-theme.ts`, M `frontend/src/app/ui/chart/chart-theme.spec.ts` | `export const priceFormat: PriceFormatCustom`; `export const rFormat: PriceFormatCustom`; `export const pctFormat: PriceFormatCustom`; `export function applyChartTheme(chart: IChartApi, palette: ChartPalette = chartPalette()): void`; `export const SVG_CHART_TOKENS` (`{ line, pos, neg, grid, axisText, crosshair }` token names + `strokeWidth`, `strokeWidthThin`, `barRadius`, `barGap`, `labelSize`) |
 | V246-13 | `sb-time-series`: area / baseline / candles, value formats, height, resize, theme repaint, destroy, 0/1 point | 4 | opus | C `frontend/src/app/ui/chart/time-series.ts`, C `frontend/src/app/ui/chart/time-series.spec.ts` | `TimeSeries` (`sb-time-series`): `kind = input.required<TimeSeriesKind>()`, `points = input.required<readonly TimeSeriesDatum[]>()`, `valueFormat = input<TimeSeriesFormat>('price')`, `height = input<number>(220)`, `label = input.required<string>()`; `export type TimeSeriesKind = 'area' \| 'baseline' \| 'candles'`; `export type TimeSeriesFormat = 'price' \| 'r' \| 'pct'`; `export interface TimeSeriesPoint { time: string; value: number }`; `export interface TimeSeriesCandle { time: string; open: number; high: number; low: number; close: number }`; `export type TimeSeriesDatum = TimeSeriesPoint \| TimeSeriesCandle`; `export function collapseByDay<T extends { time: string }>(points: readonly T[]): T[]` (last per day wins) |
@@ -288,3 +288,23 @@ Writer decisions (index, 2026-11-24) — the controller should confirm:
     empty interior buckets kept (the function's existing rule); `bins` is
     ignored in that mode. No tail clamp: an outlier shows as its own
     bucket, never folded into a neighbour.
+
+Part-writer decisions (part 3, 2026-11-24, accepted by the controller):
+
+12. **Trading-performance presets stay unwrapped in Plan A.** The spec's
+    "Dashboard trading-performance toggles" are the Interval/Trades groups
+    inside `sb-equity-candles`; the Today…All presets are converted to
+    `sb-segmented` by §B9 (plan B2), so wrapping them now would add a caption
+    B9 rewrites. V246-10 edits `equity-candles` and one line of
+    `dashboard.spec.ts` instead.
+13. **Group names contain their visible caption** (WCAG 2.5.3): "Unit" →
+    "Units", "Candle timeframe" → "Candle interval", "Equity basis" →
+    "Trades counted". The Analytics custom date range (shown only for
+    "Custom…") has no caption of its own; Benchmark mode's range reads "Range".
+14. **`FIELD_GATE_ALLOWLIST` is measured, not copied:** today it holds only
+    `research/research.ts`; a stale entry fails the gate. The gate checks
+    `sb-control-bar`, `sb-toolbar` and `sb-control-row align="end"`; an
+    `sb-control-row` holding an `sb-field` must set `align="end"`.
+15. **Text items in field bars align on `last baseline`** (`.scope-line`,
+    equity `.controls/.readout`), so text sits on the controls' text line,
+    not the caption's.
