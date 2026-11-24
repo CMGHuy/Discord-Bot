@@ -1,0 +1,166 @@
+import { provideZonelessChangeDetection } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { patchState } from '@ngrx/signals';
+import { unprotected } from '@ngrx/signals/testing';
+import { describe, expect, it } from 'vitest';
+
+import { SessionStore } from '../stores/session.store';
+import { installDialogPolyfill } from '../testing/dialog-polyfill';
+import { ViewportService } from '../ui/breakpoints';
+import { provideMotion } from '../ui/motion/motion.service';
+import { TAB_BAR_PREF_KEY, TAB_BAR_STORAGE } from './tab-bar-prefs';
+import { ADD_LIMIT_REASON, TabBarEditor } from './tab-bar-editor';
+
+type List = 'on-bar' | 'under-more';
+type Action = 'up' | 'down' | 'remove' | 'add';
+
+let stored: Map<string, string>;
+
+function mount(role: 'admin' | 'viewer' = 'admin', saved?: string) {
+  installDialogPolyfill();
+  stored = new Map(saved === undefined ? [] : [[TAB_BAR_PREF_KEY, saved]]);
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideMotion('off'),
+      { provide: ViewportService, useValue: { isPhone: () => true } },
+      {
+        provide: TAB_BAR_STORAGE,
+        useValue: { get: (key: string) => stored.get(key) ?? null, set: (key: string, value: string) => void stored.set(key, value) },
+      },
+    ],
+  });
+  patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: role, role });
+  const fixture = TestBed.createComponent(TabBarEditor);
+  fixture.componentRef.setInput('open', true);
+  fixture.detectChanges();
+  return { fixture, el: fixture.nativeElement as HTMLElement };
+}
+
+const text = (node: Element) => node.textContent!.trim();
+const labels = (el: HTMLElement, list: List) => [...el.querySelectorAll(`.${list} .row-label`)].map(text);
+const rowPaths = (el: HTMLElement, list: List) =>
+  [...el.querySelectorAll(`.${list} li.row`)].map((row) => row.getAttribute('data-path')!);
+const button = (el: HTMLElement, path: string, action: Action) =>
+  el.querySelector<HTMLButtonElement>(`li[data-path="${path}"] button.${action}`)!;
+const announced = (el: HTMLElement) => text(el.querySelector('.announce')!);
+const savedPaths = () => JSON.parse(stored.get(TAB_BAR_PREF_KEY)!) as string[];
+
+function press(fixture: ComponentFixture<TabBarEditor>, target: HTMLButtonElement): void {
+  target.click();
+  fixture.detectChanges();
+}
+
+describe('TabBarEditor (v240 §6)', () => {
+  it('is an sb-drawer headed Edit tab bar, with nothing rendered while closed', () => {
+    const { fixture, el } = mount();
+    expect(text(el.querySelector('sb-drawer h2')!)).toBe('Edit tab bar');
+    expect(el.querySelector('dialog')!.open).toBe(true);
+    fixture.componentRef.setInput('open', false);
+    fixture.detectChanges();
+    expect(el.querySelector('dialog')!.open).toBe(false);
+    expect(el.querySelector('.editor')).toBeNull();
+  });
+
+  it('lists the bar in order, Home pinned first with no buttons', () => {
+    const { el } = mount();
+    expect(labels(el, 'on-bar')).toEqual(['Home', 'Watchlist', 'Trades', 'Calendar']);
+    const home = el.querySelector('.on-bar li.row')!;
+    expect(home.querySelectorAll('button')).toHaveLength(0);
+    expect(text(home.querySelector('.pinned')!)).toBe('Always first');
+    for (const path of ['/watchlist', '/trades', '/calendar']) {
+      for (const action of ['up', 'down', 'remove'] as const) expect(button(el, path, action)).not.toBeNull();
+    }
+    expect(button(el, '/watchlist', 'up').getAttribute('aria-label')).toBe('Move Watchlist up');
+    expect(button(el, '/watchlist', 'down').getAttribute('aria-label')).toBe('Move Watchlist down');
+    expect(button(el, '/watchlist', 'remove').getAttribute('aria-label')).toBe('Remove Watchlist from the tab bar');
+  });
+
+  it('lists every other page under More, rail order and rail labels, each with an add button', () => {
+    const { el } = mount();
+    expect(labels(el, 'under-more')).toEqual(['Risk', 'Insights', 'System']);
+    expect(rowPaths(el, 'under-more')).toEqual(['/risk', '/insights', '/system']);
+    expect(button(el, '/risk', 'add').getAttribute('aria-label')).toBe('Add Risk to the tab bar');
+  });
+
+  it('marks up unavailable at position 2 and down at the last position, and those presses do nothing', () => {
+    const { fixture, el } = mount();
+    expect(button(el, '/watchlist', 'up').getAttribute('aria-disabled')).toBe('true');
+    expect(button(el, '/calendar', 'down').getAttribute('aria-disabled')).toBe('true');
+    expect(button(el, '/trades', 'up').hasAttribute('aria-disabled')).toBe(false);
+    expect(button(el, '/watchlist', 'up').disabled).toBe(false);
+    press(fixture, button(el, '/watchlist', 'up'));
+    press(fixture, button(el, '/calendar', 'down'));
+    expect(labels(el, 'on-bar')).toEqual(['Home', 'Watchlist', 'Trades', 'Calendar']);
+    expect(announced(el)).toBe('');
+    expect(stored.has(TAB_BAR_PREF_KEY)).toBe(false);
+  });
+
+  it('moves a page, saves it, announces its new position and keeps focus on the same button', () => {
+    const { fixture, el } = mount();
+    press(fixture, button(el, '/watchlist', 'down'));
+    expect(labels(el, 'on-bar')).toEqual(['Home', 'Trades', 'Watchlist', 'Calendar']);
+    expect(savedPaths()).toEqual(['/dashboard', '/trades', '/watchlist', '/calendar']);
+    expect(announced(el)).toBe('Watchlist moved to position 3');
+    expect(document.activeElement).toBe(button(el, '/watchlist', 'down'));
+    press(fixture, button(el, '/calendar', 'up'));
+    expect(labels(el, 'on-bar')).toEqual(['Home', 'Trades', 'Calendar', 'Watchlist']);
+    expect(announced(el)).toBe('Calendar moved to position 3');
+    expect(document.activeElement).toBe(button(el, '/calendar', 'up'));
+  });
+
+  it('removes a page to More in rail order, announces it and focuses its add button', () => {
+    const { fixture, el } = mount();
+    press(fixture, button(el, '/watchlist', 'remove'));
+    expect(labels(el, 'on-bar')).toEqual(['Home', 'Trades', 'Calendar']);
+    expect(labels(el, 'under-more')).toEqual(['Watchlist', 'Risk', 'Insights', 'System']);
+    expect(announced(el)).toBe('Watchlist moved to More');
+    expect(document.activeElement).toBe(button(el, '/watchlist', 'add'));
+  });
+
+  it('shows the add-limit reason inline above Under More while the bar is full, and add does nothing', () => {
+    const { fixture, el } = mount();
+    const reason = el.querySelector('p.reason')!;
+    expect(text(reason)).toBe(ADD_LIMIT_REASON);
+    expect(ADD_LIMIT_REASON).toBe('The bar holds 4 pages. Remove one to add another.');
+    const underMore = el.querySelector('ul.under-more')!;
+    expect(reason.compareDocumentPosition(underMore) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const add = button(el, '/risk', 'add');
+    expect(add.getAttribute('aria-disabled')).toBe('true');
+    expect(add.getAttribute('aria-describedby')).toBe(reason.id);
+    press(fixture, add);
+    expect(labels(el, 'on-bar')).toEqual(['Home', 'Watchlist', 'Trades', 'Calendar']);
+    expect(announced(el)).toBe('');
+  });
+
+  it('adds once there is room: the reason goes, the page joins the end and its remove button takes focus', () => {
+    const { fixture, el } = mount();
+    press(fixture, button(el, '/watchlist', 'remove'));
+    expect(el.querySelector('p.reason')).toBeNull();
+    expect(button(el, '/risk', 'add').hasAttribute('aria-disabled')).toBe(false);
+    expect(button(el, '/risk', 'add').hasAttribute('aria-describedby')).toBe(false);
+    press(fixture, button(el, '/risk', 'add'));
+    expect(labels(el, 'on-bar')).toEqual(['Home', 'Trades', 'Calendar', 'Risk']);
+    expect(savedPaths()).toEqual(['/dashboard', '/trades', '/calendar', '/risk']);
+    expect(announced(el)).toBe('Risk added to the tab bar');
+    expect(document.activeElement).toBe(button(el, '/risk', 'remove'));
+  });
+
+  it('carries the announcements in one polite live region, last in the editor', () => {
+    const { el } = mount();
+    const regions = el.querySelectorAll('[aria-live]');
+    expect(regions).toHaveLength(1);
+    expect(regions[0].getAttribute('aria-live')).toBe('polite');
+    expect(regions[0].classList).toContain('announce');
+    expect(el.querySelector('.editor')!.lastElementChild).toBe(regions[0]);
+  });
+
+  it('reports one close when the drawer closes itself (its × button)', () => {
+    const { fixture, el } = mount();
+    let closed = 0;
+    fixture.componentInstance.closed.subscribe(() => (closed += 1));
+    el.querySelector<HTMLButtonElement>('sb-drawer header button.close')!.click();
+    fixture.detectChanges();
+    expect(closed).toBe(1);
+  });
+});
