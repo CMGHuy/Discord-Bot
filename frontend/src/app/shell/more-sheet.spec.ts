@@ -56,6 +56,7 @@ describe('MoreSheet (v195 Phase 3)', () => {
   let el: HTMLElement;
   let closed: number;
   let searched: number;
+  let edited: number;
   let stored: Map<string, string>;
 
   /** An in-memory ui.tabbar, read through the closure so a test may reseed it. */
@@ -76,8 +77,10 @@ describe('MoreSheet (v195 Phase 3)', () => {
     el = fixture.nativeElement as HTMLElement;
     closed = 0;
     searched = 0;
+    edited = 0;
     fixture.componentInstance.closed.subscribe(() => (closed += 1));
     fixture.componentInstance.searchRequested.subscribe(() => (searched += 1));
+    fixture.componentInstance.editRequested.subscribe(() => (edited += 1));
     fixture.detectChanges();
   }
 
@@ -172,5 +175,34 @@ describe('MoreSheet (v195 Phase 3)', () => {
     open();
     el.querySelector<HTMLButtonElement>('button.search')!.click();
     expect(searched).toBe(1);
+  });
+
+  it('offers Edit tab bar with the pencil, just before Close (v240 §6)', () => {
+    open();
+    const edit = el.querySelector<HTMLButtonElement>('button.edit')!;
+    expect(edit.textContent!.trim()).toBe('Edit tab bar');
+    expect(edit.querySelector('sb-icon')).not.toBeNull();
+    expect(edit.nextElementSibling!.matches('button.close')).toBe(true);
+  });
+
+  it('takes focus on Edit before asking for the editor, so focus can come back to it', () => {
+    open();
+    const edit = el.querySelector<HTMLButtonElement>('button.edit')!;
+    edit.click();
+    expect(edited).toBe(1);
+    expect(document.activeElement).toBe(edit);
+    expect(closed).toBe(0);
+  });
+
+  it('leaves Escape to the editor while it is open over the sheet', () => {
+    open();
+    fixture.componentRef.setInput('editing', true);
+    fixture.detectChanges();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(closed).toBe(0);
+    fixture.componentRef.setInput('editing', false);
+    fixture.detectChanges();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(closed).toBe(1);
   });
 });

@@ -5,7 +5,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { patchState } from '@ngrx/signals';
 import { unprotected } from '@ngrx/signals/testing';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionStore } from '../stores/session.store';
 import { installDialogPolyfill } from '../testing/dialog-polyfill';
@@ -13,7 +13,7 @@ import { ViewportService } from '../ui/breakpoints';
 import { provideMotion } from '../ui/motion/motion.service';
 import { navEntriesFor } from './nav';
 import { TAB_BAR_PREF_KEY, TAB_BAR_STORAGE } from './tab-bar-prefs';
-import { ADD_LIMIT_REASON, TabBarEditor } from './tab-bar-editor';
+import { ADD_LIMIT_REASON, TabBarEditor, UNDO_MS } from './tab-bar-editor';
 
 type List = 'on-bar' | 'under-more';
 type Action = 'up' | 'down' | 'remove' | 'add';
@@ -257,5 +257,103 @@ describe('TabBarEditor styles (v240 §6, §9)', () => {
   it('marks an unavailable button without the disabled attribute, and rounds with tokens only', () => {
     expect(source).toContain(".act[aria-disabled='true']");
     expect(source).not.toMatch(/border-radius:\s*\d+px/);
+  });
+});
+
+describe('TabBarEditor Reset, Undo and Done (v240 §6, Decision 15)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  const action = (el: HTMLElement, name: 'reset' | 'undo' | 'done') =>
+    el.querySelector<HTMLButtonElement>(`.actions button.${name}`);
+
+  it('pins the Undo window at 8 seconds and puts Reset, Done in one wrapping row before the live region', () => {
+    const { el } = mount('admin', '["/dashboard","/risk"]');
+    expect(UNDO_MS).toBe(8000);
+    expect(text(action(el, 'reset')!)).toBe('Reset');
+    expect(text(action(el, 'done')!)).toBe('Done');
+    expect(action(el, 'undo')).toBeNull();
+    expect(el.querySelector('.actions')!.nextElementSibling!.classList).toContain('announce');
+  });
+
+  it('marks Reset unavailable on the default bar, and that press does nothing', () => {
+    const { fixture, el } = mount();
+    expect(action(el, 'reset')!.getAttribute('aria-disabled')).toBe('true');
+    press(fixture, action(el, 'reset')!);
+    expect(announced(el)).toBe('');
+    expect(action(el, 'undo')).toBeNull();
+  });
+
+  it('resets to the default, saves and announces it, and offers Undo for exactly 8 seconds', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { fixture, el } = mount('admin', '["/dashboard","/risk"]');
+    press(fixture, action(el, 'reset')!);
+    expect(labels(el, 'on-bar')).toEqual(['Home', 'Watchlist', 'Trades', 'Calendar']);
+    expect(savedPaths()).toEqual(['/dashboard', '/watchlist', '/trades', '/calendar']);
+    expect(announced(el)).toBe('Tab bar reset to default');
+    expect(action(el, 'undo')).not.toBeNull();
+    vi.advanceTimersByTime(UNDO_MS - 1);
+    fixture.detectChanges();
+    expect(action(el, 'undo')).not.toBeNull();
+    vi.advanceTimersByTime(1);
+    fixture.detectChanges();
+    expect(action(el, 'undo')).toBeNull();
+  });
+
+  it('Undo restores the bar from before the reset, announces it and hands focus to Reset', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { fixture, el } = mount('admin', '["/dashboard","/risk"]');
+    const set = vi.spyOn(globalThis, 'setTimeout');
+    const clear = vi.spyOn(globalThis, 'clearTimeout');
+    press(fixture, action(el, 'reset')!);
+    const undoTimer = set.mock.results[set.mock.calls.findIndex((call) => call[1] === UNDO_MS)].value;
+    press(fixture, action(el, 'undo')!);
+    expect(labels(el, 'on-bar')).toEqual(['Home', 'Risk']);
+    expect(savedPaths()).toEqual(['/dashboard', '/risk']);
+    expect(announced(el)).toBe('Tab bar restored');
+    expect(action(el, 'undo')).toBeNull();
+    expect(document.activeElement).toBe(action(el, 'reset'));
+    expect(clear).toHaveBeenCalledWith(undoTimer);
+  });
+
+  it('an Undo that expires while focused hands focus to Reset', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { fixture, el } = mount('admin', '["/dashboard","/risk"]');
+    press(fixture, action(el, 'reset')!);
+    action(el, 'undo')!.focus();
+    vi.advanceTimersByTime(UNDO_MS);
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(action(el, 'reset'));
+  });
+
+  it('Done closes once, keeps the edits and clears a pending Undo', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { fixture, el } = mount('admin', '["/dashboard","/risk"]');
+    let closed = 0;
+    fixture.componentInstance.closed.subscribe(() => (closed += 1));
+    const base = vi.getTimerCount();
+    press(fixture, action(el, 'reset')!);
+    press(fixture, action(el, 'done')!);
+    expect(closed).toBe(1);
+    expect(savedPaths()).toEqual(['/dashboard', '/watchlist', '/trades', '/calendar']);
+    expect(vi.getTimerCount()).toBe(base);
+  });
+
+  it('closing the editor clears a pending Undo, so reopening shows none', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { fixture, el } = mount('admin', '["/dashboard","/risk"]');
+    const base = vi.getTimerCount();
+    press(fixture, action(el, 'reset')!);
+    fixture.componentRef.setInput('open', false);
+    fixture.detectChanges();
+    expect(vi.getTimerCount()).toBe(base);
+    fixture.componentRef.setInput('open', true);
+    fixture.detectChanges();
+    expect(action(el, 'undo')).toBeNull();
+  });
+
+  it('gives the action buttons a 44px target at every width', () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/shell/tab-bar-editor.ts'), 'utf8');
+    expect(source).toMatch(/^\s*\.actions button \{[^}]*min-height: 44px/m);
+    expect(source).toMatch(/^\s*\.actions \{[^}]*flex-wrap: wrap/m);
   });
 });

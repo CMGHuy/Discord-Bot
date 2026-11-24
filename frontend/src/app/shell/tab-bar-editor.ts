@@ -1,5 +1,8 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, computed, inject, input, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked,
+} from '@angular/core';
 
+import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { Drawer } from '../ui/layout';
 import { NavEntry } from './nav';
@@ -7,6 +10,9 @@ import { MAX_TAB_PAGES, TabBarPrefs } from './tab-bar-prefs';
 
 /** Why Add is unavailable: inline text above Under More, never only a tooltip (spec v240 §6). */
 export const ADD_LIMIT_REASON = `The bar holds ${MAX_TAB_PAGES} pages. Remove one to add another.`;
+
+/** How long Reset's inline Undo stays (spec v240 §6). */
+export const UNDO_MS = 8000;
 
 /** The control that takes focus after an edit: the moved page's own button. */
 type RowAction = 'up' | 'down' | 'remove' | 'add';
@@ -27,7 +33,7 @@ type RowAction = 'up' | 'down' | 'remove' | 'add';
 @Component({
   selector: 'sb-tab-bar-editor',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Drawer, Icon],
+  imports: [Drawer, Icon, Button],
   template: `
     <sb-drawer [open]="open()" heading="Edit tab bar" (closed)="onDrawerClosed()">
       <div class="editor">
@@ -72,6 +78,15 @@ type RowAction = 'up' | 'down' | 'remove' | 'add';
             </li>
           }
         </ul>
+
+        <div class="actions">
+          <button sb-button variant="secondary" type="button" class="reset"
+                  [attr.aria-disabled]="prefs.isDefault() ? 'true' : null" (click)="reset()">Reset</button>
+          @if (undoPaths()) {
+            <button sb-button variant="secondary" type="button" class="undo" (click)="undo()">Undo</button>
+          }
+          <button sb-button variant="primary" type="button" class="done" (click)="done()">Done</button>
+        </div>
 
         <p class="announce" aria-live="polite" aria-atomic="true">{{ announcement() }}</p>
       </div>
@@ -127,6 +142,9 @@ type RowAction = 'up' | 'down' | 'remove' | 'add';
     .act:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     .act[aria-disabled='true'] { color: var(--text-muted); opacity: 0.5; cursor: not-allowed; }
     .reason { margin: 0; color: var(--text-secondary); font-size: var(--text-micro); }
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8); margin-top: var(--space-4); }
+    .actions button { min-height: 44px; }
+    .actions .done { margin-left: auto; }
     .announce { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   `,
 })
@@ -144,6 +162,60 @@ export class TabBarEditor {
 
   private readonly host = inject(ElementRef<HTMLElement>).nativeElement as HTMLElement;
   private readonly cdr = inject(ChangeDetectorRef);
+
+  /** The bar from before a Reset, while its Undo is offered. */
+  protected readonly undoPaths = signal<readonly string[] | null>(null);
+  private undoTimer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor() {
+    // Closing by any path drops a pending Undo (Decision 15).
+    effect(() => {
+      if (!this.open()) untracked(() => this.clearUndo());
+    });
+    inject(DestroyRef).onDestroy(() => this.clearUndo());
+  }
+
+  protected reset(): void {
+    if (this.prefs.isDefault()) return;
+    const before = this.prefs.reset();
+    this.clearUndo();
+    this.undoPaths.set(before);
+    this.undoTimer = setTimeout(() => this.expireUndo(), UNDO_MS);
+    this.announce('Tab bar reset to default');
+  }
+
+  protected undo(): void {
+    const before = this.undoPaths();
+    if (!before) return;
+    this.prefs.set(before);
+    this.clearUndo();
+    this.announce('Tab bar restored');
+    this.focusAction('reset');
+  }
+
+  /** Every edit is already saved; Done only closes. */
+  protected done(): void {
+    this.clearUndo();
+    this.closed.emit();
+  }
+
+  /** The Undo button leaves the DOM; if it held focus, Reset takes it, never <body>. */
+  private expireUndo(): void {
+    const focused = this.host.querySelector('.actions .undo') === document.activeElement;
+    this.clearUndo();
+    if (focused) this.focusAction('reset');
+  }
+
+  private clearUndo(): void {
+    clearTimeout(this.undoTimer);
+    this.undoTimer = undefined;
+    this.undoPaths.set(null);
+  }
+
+  private focusAction(name: 'reset'): void {
+    this.cdr.detectChanges();
+    this.host.querySelector<HTMLElement>(`.actions .${name}`)?.focus();
+  }
 
   protected moveUp(tab: NavEntry, index: number): void {
     if (index <= 1) return;

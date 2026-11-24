@@ -25,6 +25,7 @@ import { PreferencesStore } from '../stores/preferences.store';
 import { LiveValuesStore } from '../stores/live-values.store';
 import { TapeFeed } from '../stores/tape-feed';
 import { TapeStore } from '../stores/tape.store';
+import { installDialogPolyfill } from '../testing/dialog-polyfill';
 import { ViewportService } from '../ui/breakpoints';
 import { CLOCK } from '../ui/clock';
 import { DENSITY_STORAGE } from '../ui/density.service';
@@ -36,6 +37,7 @@ import { POPOVER_OPEN_ATTR } from '../testing/popover-polyfill';
 import { provideMotion } from '../ui/motion/motion.service';
 import { NAV_ENTRIES } from './nav';
 import { Shell } from './shell';
+import { TAB_BAR_STORAGE, TabBarStorage } from './tab-bar-prefs';
 import { SessionStore } from '../stores/session.store';
 
 /** Same fake as `chart.store.spec.ts`/`connection.store.spec.ts` -- a counter
@@ -101,6 +103,11 @@ function memoryThemeStorage(map = new Map<string, string>()): ThemeStorage {
   return { get: (key) => map.get(key) ?? null, set: (key, value) => void map.set(key, value) };
 }
 
+/** An in-memory ui.tabbar, so no shell spec writes jsdom's localStorage (v240 §6). */
+function memoryTabBarStorage(map = new Map<string, string>()): TabBarStorage {
+  return { get: (key) => map.get(key) ?? null, set: (key, value) => void map.set(key, value) };
+}
+
 /** The providers every v195 shell describe uses: the same fakes as the
  *  `shell navigation` block, with a route table the breadcrumb can read. */
 function shellProviders(routes: Routes = []) {
@@ -113,6 +120,7 @@ function shellProviders(routes: Routes = []) {
     { provide: TapeStore, useValue: { load: vi.fn(), visible: signal(false), rows: signal([]), asOf: signal(null) } },
     { provide: LiveValuesStore, useValue: fakeLiveValues() },
     { provide: THEME_STORAGE, useValue: memoryThemeStorage() },
+    { provide: TAB_BAR_STORAGE, useValue: memoryTabBarStorage() },
   ];
 }
 
@@ -1828,5 +1836,72 @@ describe('shell voice notifications (v227)', () => {
     const css = readSource('src/app/shell/shell.css');
     const phone = css.slice(css.lastIndexOf('@media (max-width: 639px)'));
     expect(phone).toMatch(/sb-voice-chip \{[^}]*flex: none;/);
+  });
+});
+
+describe('shell tab-bar editor (v240 §6)', () => {
+  let phone: WritableSignal<boolean>;
+
+  beforeEach(() => {
+    installDialogPolyfill();
+    phone = signal(true);
+    TestBed.configureTestingModule({ providers: [...shellProviders([{ path: 'dashboard', component: Blank }]), provideMotion('off')] });
+    TestBed.overrideProvider(ViewportService, { useValue: { isPhone: phone, isNarrow: signal(true), viewport: signal('xs') } });
+    patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: 'admin', role: 'admin' });
+  });
+
+  async function settle(fixture: ComponentFixture<Shell>): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  async function openEditor() {
+    const fixture = createShell();
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('sb-phone-tab-bar button.more')!.click();
+    await settle(fixture);
+    const edit = el.querySelector<HTMLButtonElement>('sb-more-sheet button.edit')!;
+    edit.click();
+    await settle(fixture);
+    return { fixture, el, edit };
+  }
+
+  const editorOpen = (el: HTMLElement) => el.querySelector('sb-tab-bar-editor dialog')?.hasAttribute('open') ?? false;
+  const sheet = (el: HTMLElement) => el.querySelector('sb-more-sheet [role=dialog]');
+
+  it('opens the editor over the More sheet; Escape leaves the sheet; Done returns focus to Edit tab bar', async () => {
+    const { fixture, el, edit } = await openEditor();
+    expect(editorOpen(el)).toBe(true);
+    expect(sheet(el)).not.toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle(fixture);
+    expect(sheet(el)).not.toBeNull();
+    el.querySelector<HTMLButtonElement>('sb-tab-bar-editor .actions button.done')!.click();
+    await settle(fixture);
+    expect(editorOpen(el)).toBe(false);
+    expect(sheet(el)).not.toBeNull();
+    expect(document.activeElement).toBe(edit);
+  });
+
+  it('shows an edit on the bar and in the More sheet at once', async () => {
+    const { fixture, el } = await openEditor();
+    el.querySelector<HTMLButtonElement>('sb-tab-bar-editor li[data-path="/watchlist"] button.remove')!.click();
+    await settle(fixture);
+    expect([...el.querySelectorAll('sb-phone-tab-bar .tab-label')].map((n) => n.textContent!.trim()))
+      .toEqual(['Home', 'Trades', 'Calendar', 'More']);
+    expect([...el.querySelectorAll('sb-more-sheet .group-label')].map((n) => n.textContent!.trim())).toContain('Watchlist');
+  });
+
+  it('closes the editor with its sheet when the window leaves phone width', async () => {
+    const { fixture, el } = await openEditor();
+    phone.set(false);
+    await settle(fixture);
+    expect(el.querySelector('sb-tab-bar-editor')).toBeNull();
+    phone.set(true);
+    await settle(fixture);
+    expect(editorOpen(el)).toBe(false);
+    expect(sheet(el)).toBeNull();
   });
 });

@@ -38,6 +38,7 @@ import { SessionStore } from '../stores/session.store';
 import { Breadcrumb } from './breadcrumb';
 import { KillswitchChip } from './killswitch-chip';
 import { MoreSheet } from './more-sheet';
+import { TabBarEditor } from './tab-bar-editor';
 import { CommandPalette, isPaletteShortcut, shortcutLabel } from './palette/command-palette';
 import { PhoneTabBar } from './phone-tab-bar';
 import { RefresherBanner } from './refresher-banner';
@@ -91,7 +92,7 @@ const ZOOM_DEFAULT = 100;
   imports: [
     RouterOutlet, RouterLink, AlarmChip, ToastHost,
     ScanProgressStrip, Icon, Hint, LongPress, Breadcrumb, KillswitchChip, VoiceChip, ProfileMenu, Tape,
-    Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
+    Button, PhoneTabBar, MoreSheet, TabBarEditor, CommandPalette, RefresherBanner, SectionTabs,
     LiveDock, LiveEdgeTab, LiveStrip, LiveSheet, ReadOnlyBadge, ShockPill,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -160,7 +161,7 @@ export class Shell {
   /** A sheet left open on a phone must not reappear when the window is
    *  narrowed again later: leaving phone width closes it. */
   private readonly closeMoreOffPhone = effect(() => {
-    if (!this.isPhone()) untracked(() => this.moreOpen.set(false));
+    if (!this.isPhone()) untracked(() => this.closeMore());
   });
 
   protected toggleMore(): void {
@@ -169,6 +170,18 @@ export class Shell {
 
   protected closeMore(): void {
     this.moreOpen.set(false);
+    this.closeEditor();
+  }
+
+  /** The tab-bar editor (v240 §6) opens over the More sheet and never outlives it. */
+  protected readonly editorOpen = signal(false);
+
+  protected openEditor(): void {
+    this.editorOpen.set(true);
+  }
+
+  protected closeEditor(): void {
+    this.editorOpen.set(false);
   }
 
   /**

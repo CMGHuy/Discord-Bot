@@ -72,6 +72,9 @@ export function morePageGroups(entries: readonly NavEntry[], tabs: readonly NavE
             }
           </ul>
         }
+        <button sb-button variant="secondary" type="button" class="edit" (click)="requestEdit($event)">
+          <sb-icon name="edit" title="" /> Edit tab bar
+        </button>
         <button sb-button variant="secondary" type="button" class="close" (click)="closed.emit()">Close</button>
       </div>
     }
@@ -138,6 +141,10 @@ export class MoreSheet {
   readonly open = input(false);
   readonly closed = output<void>();
   readonly searchRequested = output<void>();
+  /** Asks the shell for the tab-bar editor (v240 §6). */
+  readonly editRequested = output<void>();
+  /** True while the editor is open over this sheet: its Escape is the editor's. */
+  readonly editing = input(false);
 
   private readonly session = inject(SessionStore);
   private readonly prefs = inject(TabBarPrefs);
@@ -145,6 +152,12 @@ export class MoreSheet {
     morePageGroups(navEntriesFor(this.session.isAdmin()), this.prefs.tabs()));
 
   protected onEscape(): void {
-    if (this.open()) this.closed.emit();
+    if (this.open() && !this.editing()) this.closed.emit();
+  }
+
+  /** Focus first: the editor's FocusTrap returns focus to whatever held it on open, and Safari does not focus a clicked button. */
+  protected requestEdit(event: Event): void {
+    (event.currentTarget as HTMLElement).focus();
+    this.editRequested.emit();
   }
 }

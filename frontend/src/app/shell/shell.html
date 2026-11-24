@@ -201,7 +201,11 @@
        display: contents. -->
   @if (isPhone()) {
     <sb-phone-tab-bar [moreOpen]="moreOpen()" (moreRequested)="toggleMore()" />
-    <sb-more-sheet [open]="moreOpen()" (closed)="closeMore()" (searchRequested)="onSearchRequested()" />
+    <sb-more-sheet [open]="moreOpen()" [editing]="editorOpen()" (closed)="closeMore()"
+                   (searchRequested)="onSearchRequested()" (editRequested)="openEditor()" />
+    <!-- v240 §6: the tab-bar editor, over the More sheet, which stays open so
+         the editor's FocusTrap can hand focus back to its Edit button. -->
+    <sb-tab-bar-editor [open]="editorOpen()" (closed)="closeEditor()" />
   }
 
   <!-- v203: the Live dock as a sheet below 1024px -- from the right on a
