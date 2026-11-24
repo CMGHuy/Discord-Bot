@@ -44,11 +44,11 @@ APP_DIR = os.path.join(os.path.dirname(__file__), "static", "app")
 #: v202: `insights` is the Insights destination (`/insights/analytics` etc.);
 #: System's sections live under `system`. v247: `calendar` is a destination
 #: again (`/calendar`, `/calendar/<date>`); `trades` keeps `/trades/calendar`
-#: reachable on a reload, for its client-side redirect. The five pre-v202
-#: names -- cancels, analytics, research, reports, versions -- stay on
-#: purpose, like cockpit/universe above: a reload of an old bookmark must
-#: reach Angular's redirect. They come out at Phase 4's close-out, together
-#: with cockpit and universe.
+#: reachable on a reload, for its client-side redirect. The five
+#: pre-v202 names -- cancels, analytics, research, reports, versions --
+#: stay on purpose, like cockpit/universe above: a reload of an old
+#: bookmark must reach Angular's redirect. They come out at Phase 4's
+#: close-out, together with cockpit and universe.
 #:
 #: A route added to `app.routes.ts` and NOT added here works when reached by
 #: clicking, and 404s when reached by reload or bookmark — the failure looks
