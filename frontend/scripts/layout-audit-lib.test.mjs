@@ -368,25 +368,33 @@ test('hintVerdict: a popover with no area fails zero-size, whatever else is true
   assert.deepEqual(hintVerdict(box(-500, 100, 0, 60), VIEW, BOTH), { ok: false, reason: 'zero-size' });
 });
 
-// railLabelVerdict (v202 §3): a labelled-rail entry's accessible name, its visible .rail-label, and
-// label-in-name (WCAG 2.5.3): the name a screen reader hears contains the word the eye reads.
-test('railLabelVerdict: a named entry whose label shows and is in its name passes', () => {
-  assert.deepEqual(railLabelVerdict({ name: 'Dashboard', label: 'Dashboard', labelVisible: true }), { ok: true, reason: null });
-  assert.deepEqual(railLabelVerdict({ name: 'Insights section', label: 'insights', labelVisible: true }), { ok: true, reason: null });
+// railLabelVerdict (v247 Decision 12): an icon-rail entry draws no label. It needs an accessible
+// name and a role="tooltip" (its sb-hint, through aria-describedby) whose text is that name.
+test('railLabelVerdict: a named entry whose tooltip reads its name passes', () => {
+  assert.deepEqual(railLabelVerdict({ name: 'Dashboard', tooltip: 'Dashboard' }), { ok: true, reason: null });
+  // Whitespace around and inside either side is not a difference.
+  assert.deepEqual(railLabelVerdict({ name: ' Calendar ', tooltip: '\n   Calendar\n' }), { ok: true, reason: null });
 });
 
-test('railLabelVerdict: no accessible name fails no-name first, whatever the label does', () => {
+test('railLabelVerdict: no accessible name fails no-name first, whatever the tooltip does', () => {
   for (const name of ['', '   ', null, undefined]) {
-    assert.deepEqual(railLabelVerdict({ name, label: 'Risk', labelVisible: true }), { ok: false, reason: 'no-name' }, String(name));
-    assert.deepEqual(railLabelVerdict({ name, label: '', labelVisible: false }), { ok: false, reason: 'no-name' }, String(name));
+    assert.deepEqual(railLabelVerdict({ name, tooltip: 'Risk' }), { ok: false, reason: 'no-name' }, String(name));
+    assert.deepEqual(railLabelVerdict({ name, tooltip: null }), { ok: false, reason: 'no-name' }, String(name));
   }
 });
 
-test('railLabelVerdict: a missing label, a hidden one and a name without it each fail', () => {
-  assert.deepEqual(railLabelVerdict({ name: 'Risk', label: '  ', labelVisible: true }), { ok: false, reason: 'no-label' });
-  assert.deepEqual(railLabelVerdict({ name: 'Risk', label: 'Risk', labelVisible: false }), { ok: false, reason: 'label-hidden' });
-  assert.deepEqual(railLabelVerdict({ name: 'Open the book', label: 'Trades', labelVisible: true }),
-    { ok: false, reason: 'label-not-in-name' });
+test('railLabelVerdict: no tooltip fails no-tooltip; an empty or different one fails tooltip-not-name', () => {
+  for (const tooltip of [null, undefined]) {
+    assert.deepEqual(railLabelVerdict({ name: 'Risk', tooltip }), { ok: false, reason: 'no-tooltip' }, String(tooltip));
+  }
+  assert.deepEqual(railLabelVerdict({ name: 'Risk' }), { ok: false, reason: 'no-tooltip' });
+  for (const tooltip of ['', '  ', 'Trades', 'risk', 'Risk page']) {
+    assert.deepEqual(railLabelVerdict({ name: 'Risk', tooltip }), { ok: false, reason: 'tooltip-not-name' }, tooltip);
+  }
+});
+
+test('railLabelVerdict: the pre-v247 visible-label fields no longer pass an entry', () => {
+  assert.deepEqual(railLabelVerdict({ name: 'Risk', label: 'Risk', labelVisible: true }), { ok: false, reason: 'no-tooltip' });
 });
 
 test('RAIL_MIN_WIDTH: the rail check runs at the tablet and desktop widths, never the phone', () => {

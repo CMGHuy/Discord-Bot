@@ -19,9 +19,9 @@
  *   hint       an sb-hint popover that, opened the way the device opens it (hover at 1440, tap at
  *              <= 1023), is zero-size, past a viewport edge, or not topmost at its centre and at
  *              its top-left + 8px (spec v194 A2; the trigger's aria-label names it). Never allowed.
- *   rail-label a labelled-rail entry (nav.rail a.rail-link; widths >= 640 only, the phone navigates by
- *              its tab bar) with no accessible name, no visible .rail-label, or a name that does not
- *              contain its label (spec v202 §3). Never allowed.
+ *   rail-label an icon-rail entry (nav.rail a.rail-link; widths >= 640 only, the phone navigates by
+ *              its tab bar) with no accessible name, no aria-describedby role="tooltip", or a
+ *              tooltip whose text is not its name (v247 Decision 12, spec v240 §5). Never allowed.
  *   dock       from 1024px the docked Live column (aside.live-column) missing, over main.workspace's
  *              content box, or a live strip beside it; below 1024px a docked column, no live strip,
  *              or a sheet that a tap on the strip does not open inside the viewport (spec v202 §8).
@@ -345,24 +345,17 @@ async function auditHints(page, width) {
 
 
 /** Runs inside the page (locator.evaluate): a rail link's accessible name (aria-labelledby,
- *  aria-label, then text) and href, and its .rail-label's text and whether it shows.
- *  Self-contained: isVisuallyHidden arrives as source. */
-function railEntry(link, hiddenSrc) {
-  const isVisuallyHidden = new Function(`return ${hiddenSrc}`)();
-  const shows = (el) => {
-    const rect = el.getBoundingClientRect();
-    const style = getComputedStyle(el);
-    if (rect.width <= 0 || rect.height <= 0 || style.visibility === 'hidden') return false;
-    return !isVisuallyHidden(style, rect) && rect.left >= 0 && rect.right <= window.innerWidth;
-  };
-  const labelledBy = (link.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean)
+ *  aria-label, then text), its href, and the text of the first role="tooltip" its
+ *  aria-describedby names (null when none). Self-contained. The tooltip is read closed:
+ *  its text is in the DOM whether or not the popover shows. */
+function railEntry(link) {
+  const ids = (attr) => (link.getAttribute(attr) ?? '').split(/\s+/).filter(Boolean);
+  const labelledBy = ids('aria-labelledby')
     .map((id) => document.getElementById(id)?.textContent ?? '').join(' ').trim();
   const name = labelledBy || (link.getAttribute('aria-label') ?? '').trim() || (link.textContent ?? '').trim();
-  const label = link.querySelector('.rail-label');
-  return {
-    name, href: link.getAttribute('href') ?? '',
-    label: (label?.textContent ?? '').trim(), labelVisible: label ? shows(label) : false,
-  };
+  const tooltip = ids('aria-describedby').map((id) => document.getElementById(id))
+    .find((el) => el?.getAttribute('role') === 'tooltip');
+  return { name, href: link.getAttribute('href') ?? '', tooltip: tooltip ? (tooltip.textContent ?? '') : null };
 }
 
 const railFinding = (entry, reason, extra) => ({
@@ -373,21 +366,21 @@ const railFinding = (entry, reason, extra) => ({
 });
 
 /**
- * The rail-label check (spec v202 §3): every labelled-rail entry needs an accessible name and a
- * visible .rail-label its name contains. Skipped below RAIL_MIN_WIDTH (the phone's tab bar
- * navigates). Nothing is focused or hovered: the labels are always drawn.
+ * The rail-label check (v247 Decision 12): every icon-rail entry needs an accessible name and a
+ * describing role="tooltip" (its sb-hint) that reads that name. Skipped below RAIL_MIN_WIDTH (the
+ * phone's tab bar navigates). Nothing is hovered: the tooltip text is read from the DOM, and
+ * whether it fits on screen when open is V247-16's browser check.
  */
 async function auditRailLabels(page, width) {
   if (width < RAIL_MIN_WIDTH) return [];
   const links = page.locator('nav.rail a.rail-link');
   const count = await links.count();
   if (count === 0) return [railFinding({ href: '', name: '' }, 'no rail entries found', `width ${width}`)];
-  const hiddenSrc = isVisuallyHidden.toString();
   const findings = [];
   for (let i = 0; i < count; i += 1) {
-    const entry = await links.nth(i).evaluate(railEntry, hiddenSrc);
+    const entry = await links.nth(i).evaluate(railEntry);
     const verdict = railLabelVerdict(entry);
-    if (!verdict.ok) findings.push(railFinding(entry, verdict.reason, entry.label));
+    if (!verdict.ok) findings.push(railFinding(entry, verdict.reason, entry.tooltip?.trim() || ''));
   }
   return findings;
 }
