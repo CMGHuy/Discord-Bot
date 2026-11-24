@@ -296,9 +296,9 @@ as Decisions 1–5 above:
    test, probe and smoke string the brief lists is flipped (V247-2, V247-3,
    V247-4).
 
-Open for the controller: Decision 6 (300ms hover delay), Decision 8
-(`--text-micro` 12px floor instead of the spec's 11px tab label) and
-Decision 7 (one open hint app-wide).
+Writer Decisions 6 (300ms hover delay), 7 (one open hint app-wide) and 8
+(`--text-micro` 12px floor instead of the spec's 11px tab label) were
+accepted by the controller as written, 2026-11-24.
 
 Guide chapters: no file under `docs/guide/` cites the shell or nav files.
 The close-out records `guide: no reader-visible change` unless
