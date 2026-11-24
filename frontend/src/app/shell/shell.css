@@ -129,8 +129,9 @@
 
 .topbar-lead { flex: 0 1 auto; min-width: 0; }
 
-/* v203 (spec v202 D2): the two-tone wordmark leads the bar again, the
-   pre-v195 .brand .word treatment. On a phone the diamond sits before it. */
+/* v247 (spec v240 §5, D8): the two-tone "Bomeo Capital" wordmark leads the
+   bar; on a phone the diamond sits before it. Sans, not mono: a wordmark
+   holds no figures (v247 Decision 10). Accent, never mint (spec v240 §1). */
 .brand {
   display: flex;
   align-items: center;
@@ -141,14 +142,14 @@
 }
 .brand sb-icon { flex: none; color: var(--accent); }
 .brand .word {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-sans);
   font-size: var(--text-body);
   font-weight: 700;
   letter-spacing: -0.02em;
   white-space: nowrap;
+  color: var(--text);
 }
-.brand .word span:last-child { color: var(--accent); }
+.brand .word span:last-child { color: var(--accent); font-weight: 500; }
 
 /* A hairline between the wordmark and the breadcrumb. */
 .topbar-divider { flex: none; width: 1px; height: 20px; background: var(--border); }

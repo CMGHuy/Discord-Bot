@@ -55,15 +55,17 @@
 
   <div class="main">
     <header class="topbar">
-      <!-- v203 (spec v202 §3, D2): the two-tone BomeoCapital wordmark leads
-           the bar on every device. On a phone the diamond sits before it (the
-           rail that carries it elsewhere is hidden there). A link, never a
-           heading: the page's one <h1> belongs to sb-page (correction 9). -->
+      <!-- v247 (spec v240 §5, D8): the two-tone "Bomeo Capital" wordmark
+           leads the bar on every device: Bomeo in the text colour, Capital in
+           the accent. &ngsp; is the space Angular keeps between the two
+           spans. On a phone the diamond sits before it (the rail that carries
+           it elsewhere is hidden there). A link, never a heading: the page's
+           one <h1> belongs to sb-page (correction 9). -->
       <a class="brand sb-hit" routerLink="/dashboard" aria-label="Bomeo Capital — go to the Dashboard">
         @if (isPhone()) {
           <sb-icon name="brand" title="" />
         }
-        <span class="word"><span>Bomeo</span><span>Capital</span></span>
+        <span class="word"><span>Bomeo</span>&ngsp;<span>Capital</span></span>
       </a>
       @if (!isPhone()) {
         <span class="topbar-divider" aria-hidden="true"></span>

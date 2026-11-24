@@ -1720,24 +1720,35 @@ describe('shell top bar (v203, spec v202 §3)', () => {
     expect(bar.querySelector('span.topbar-divider')!.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('renders the two-tone wordmark as two spans, not one coloured string', () => {
-    // Restored from fdf6b78a^ (spec v202 D2).
-    expect(render().querySelectorAll('.brand .word span').length).toBe(2);
+  it('renders the two-tone wordmark as two spans with a real space between them (v247, spec v240 D8)', () => {
+    const word = render().querySelector('header.topbar > a.brand .word')!;
+    expect(word.querySelectorAll('span')).toHaveLength(2);
+    expect([...word.querySelectorAll('span')].map((x) => x.textContent)).toEqual(['Bomeo', 'Capital']);
+    // An ordinary U+0020, not a no-break space and not nothing.
+    expect(word.textContent).toBe('Bomeo Capital');
   });
 
-  it('gives the wordmark the pre-v195 treatment, Capital in the accent, linking to the Dashboard', () => {
+  it('draws Bomeo in the text colour at 700 and Capital in the accent at 500, in the sans face, linking to the Dashboard', () => {
     const brand = render().querySelector('header.topbar > a.brand')!;
-    expect([...brand.querySelectorAll('.word span')].map((x) => x.textContent)).toEqual(['Bomeo', 'Capital']);
     expect(brand.getAttribute('href')).toBe('/dashboard');
-    expect(brand.getAttribute('aria-label')).toContain('Bomeo Capital');
+    expect(brand.getAttribute('aria-label')).toBe('Bomeo Capital — go to the Dashboard');
     expect(brand.querySelector('sb-icon')).toBeNull();          // the diamond heads the rail above phone width
     const css = readSource('src/app/shell/shell.css').replace(/\/\*[\s\S]*?\*\//g, '');
-    const rule = (selector: string) => css.match(new RegExp('^' + selector.replace(/[.]/g, '[.]') + ' [{][^}]*[}]', 'm'))?.[0] ?? '';
-    for (const declaration of ['font-family: var(--font-mono);', 'font-size: var(--text-body);', 'font-weight: 700;',
-      'letter-spacing: -0.02em;', 'white-space: nowrap;']) {
-      expect(rule('.brand .word')).toContain(declaration);
+    const rule = (selector: string) =>
+      css.match(new RegExp('^' + selector.replace(/[.]/g, '[.]') + ' [{][^}]*[}]', 'm'))?.[0] ?? '';
+    const word = rule('.brand .word');
+    for (const declaration of ['font-family: var(--font-sans);', 'font-size: var(--text-body);', 'font-weight: 700;',
+      'letter-spacing: -0.02em;', 'white-space: nowrap;', 'color: var(--text);']) {
+      expect(word, declaration).toContain(declaration);
     }
-    expect(rule('.brand .word span:last-child')).toContain('color: var(--accent);');
+    // No figures in a wordmark: no mono face and no tabular figures (v247 Decision 10).
+    expect(word).not.toContain('--font-mono');
+    expect(word).not.toContain('tabular-nums');
+    const capital = rule('.brand .word span:last-child');
+    expect(capital).toContain('color: var(--accent);');
+    expect(capital).toContain('font-weight: 500;');
+    // Nav and brand never read the money colours (spec v240 §1).
+    expect(word + capital).not.toMatch(/--pos|--neg/);
   });
 });
 
