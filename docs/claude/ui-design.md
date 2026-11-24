@@ -60,9 +60,9 @@ each width (Playwright, never claude-in-chrome — `skills-tools.md`).
   and at its top-left + 8px; the finding names the trigger's `aria-label`.
   The `hint` check is the only tooltip probe: never an ad-hoc script.
   (`rail-label`, v203) every rail entry (`nav.rail a.rail-link`, at 768 and
-  1440; the phone navigates by its tab bar) has an accessible name and a
-  visible `.rail-label` its name contains (the labelled rail has no hint per
-  link), and (`dock`, v203) at 1024px and wider the docked `aside.live-column`
+  1440; the phone navigates by its tab bar) has an accessible name and an
+  anchored hint (`aria-describedby`) whose text is that name (v247: the rail is
+  icon-only, so the hint replaced the visible `.rail-label`), and (`dock`, v203) at 1024px and wider the docked `aside.live-column`
   never intersects `main.workspace`'s content box, while at smaller widths a
   tap on the live strip opens a sheet that stays inside the viewport. The checks run
   on every route and tab. A finding is fixed, not allowed;
