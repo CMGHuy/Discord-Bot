@@ -13,7 +13,7 @@
 export const ROUTES = Object.freeze([
   '/dashboard',
   '/trades', '/trades/:id', '/trades/:id?tab=why', '/trades/:id?tab=chart', '/trades/:id?tab=journal',
-  '/trades/calendar', '/trades/calendar/:date', '/trades/cancels',
+  '/calendar', '/calendar/:date', '/trades/cancels',
   '/plans/:plan',
   '/insights/analytics', '/insights/analytics?tab=attribution', '/insights/analytics?tab=execution',
   '/insights/analytics?tab=edge', '/insights/analytics?tab=pipeline', '/insights/analytics?tab=tuning',
