@@ -878,6 +878,7 @@ git commit -m "test(v247): breadcrumb, section tabs, dock state and shell rail f
 - Test: `frontend/src/app/workspaces/calendar/calendar.spec.ts` (lines 502, 508, 715, 755, 768, 781, 797, 808, 809)
 - Test: `frontend/src/app/workspaces/calendar/day/calendar-day.spec.ts` (lines 332, 333, 342, 343, 355, 361, 381, 397, 406, 414, 427, 433)
 - Test: `frontend/src/app/routing/old-paths.spec.ts`
+- Test: `frontend/src/app/ui/hit-area.spec.ts:89` (the `PADDED` row that pins overview.ts's link text)
 
 **Interfaces:**
 - Consumes: V247-1's `/calendar` and `/calendar/:date` routes.
@@ -1074,15 +1075,21 @@ Expected: FAIL. `old-paths.spec` `finds no such link ... (v247)` lists `app/work
         <a class="sb-hit" routerLink="/calendar">Open the calendar</a>
 ```
 
+`frontend/src/app/ui/hit-area.spec.ts:89`, the `PADDED` row for that link (it matches the source text, so it goes red with the repoint otherwise):
+
+```ts
+    ['src/app/workspaces/analytics/tabs/overview.ts', /<a class="sb-hit" routerLink="\/calendar"/],
+```
+
 - [ ] **Step 4: Run the specs to verify they pass**
 
-Run: the Step 2 command again.
+Run: the Step 2 command again, plus `--include src/app/ui/hit-area.spec.ts`.
 Expected: PASS, 0 failed. Then `git grep -n "trades/calendar" -- frontend/src/app ':!*.spec.ts'` prints only the two redirect lines in `app.routes.ts` and its comment.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add frontend/src/app/workspaces/calendar/calendar.ts frontend/src/app/workspaces/calendar/calendar.spec.ts frontend/src/app/workspaces/calendar/day/calendar-day.ts frontend/src/app/workspaces/calendar/day/calendar-day.spec.ts frontend/src/app/workspaces/analytics/tabs/overview.ts frontend/src/app/routing/old-paths.spec.ts
+git add frontend/src/app/workspaces/calendar/calendar.ts frontend/src/app/workspaces/calendar/calendar.spec.ts frontend/src/app/workspaces/calendar/day/calendar-day.ts frontend/src/app/workspaces/calendar/day/calendar-day.spec.ts frontend/src/app/workspaces/analytics/tabs/overview.ts frontend/src/app/routing/old-paths.spec.ts frontend/src/app/ui/hit-area.spec.ts
 git commit -m "feat(v247): in-app calendar links point at /calendar; old-paths gate forbids /trades/calendar"
 ```
 
