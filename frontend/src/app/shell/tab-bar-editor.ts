@@ -52,11 +52,11 @@ type RowAction = 'up' | 'down' | 'remove' | 'add';
               @if (i === 0) {
                 <span class="pinned">Always first</span>
               } @else {
-                <button type="button" class="act up" [attr.aria-disabled]="i === 1 ? 'true' : null"
+                <button sb-button variant="icon" type="button" class="act up" [attr.aria-disabled]="i === 1 ? 'true' : null"
                         [attr.aria-label]="'Move ' + tab.label + ' up'" (click)="moveUp(tab, i)"><sb-icon name="up" title="" [size]="20" /></button>
-                <button type="button" class="act down" [attr.aria-disabled]="last ? 'true' : null"
+                <button sb-button variant="icon" type="button" class="act down" [attr.aria-disabled]="last ? 'true' : null"
                         [attr.aria-label]="'Move ' + tab.label + ' down'" (click)="moveDown(tab, last)"><sb-icon name="down" title="" [size]="20" /></button>
-                <button type="button" class="act remove" [attr.aria-label]="'Remove ' + tab.label + ' from the tab bar'"
+                <button sb-button variant="icon" type="button" class="act remove" [attr.aria-label]="'Remove ' + tab.label + ' from the tab bar'"
                         (click)="remove(tab)"><sb-icon name="minus" title="" [size]="20" /></button>
               }
             </li>
@@ -72,7 +72,7 @@ type RowAction = 'up' | 'down' | 'remove' | 'add';
             <li class="row" [attr.data-path]="entry.path">
               <span class="glyph" aria-hidden="true"><sb-icon [name]="entry.icon" title="" [size]="20" /></span>
               <span class="row-label">{{ entry.label }}</span>
-              <button type="button" class="act add" [attr.aria-disabled]="prefs.canAdd() ? null : 'true'"
+              <button sb-button variant="icon" type="button" class="act add" [attr.aria-disabled]="prefs.canAdd() ? null : 'true'"
                       [attr.aria-describedby]="prefs.canAdd() ? null : 'tab-bar-full'"
                       [attr.aria-label]="'Add ' + entry.label + ' to the tab bar'" (click)="add(entry)"><sb-icon name="plus" title="" [size]="20" /></button>
             </li>
