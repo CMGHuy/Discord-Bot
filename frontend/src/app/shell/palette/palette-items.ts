@@ -91,7 +91,7 @@ function pageItem(label: string, route: string, sub?: string): PaletteItem {
 }
 
 /** Every page of the nav model, in rail order: each section of a
- *  destination (its `sub` the destination, 'Calendar · Trades') or the
+ *  destination (its `sub` the destination, 'Research · Insights') or the
  *  destination itself on a single page; then the workspace tabs. */
 export function pageItems(
   entries: readonly NavEntry[] = NAV_ENTRIES,

@@ -13,7 +13,7 @@
 export const ROUTES = Object.freeze([
   '/dashboard',
   '/trades', '/trades/:id', '/trades/:id?tab=why', '/trades/:id?tab=chart', '/trades/:id?tab=journal',
-  '/trades/calendar', '/trades/calendar/:date', '/trades/cancels',
+  '/calendar', '/calendar/:date', '/trades/cancels',
   '/plans/:plan',
   '/insights/analytics', '/insights/analytics?tab=attribution', '/insights/analytics?tab=execution',
   '/insights/analytics?tab=edge', '/insights/analytics?tab=pipeline', '/insights/analytics?tab=tuning',
@@ -196,22 +196,24 @@ export function hintVerdict(rect, viewport, hits) {
   return { ok: true, reason: null };
 }
 
-/** Narrowest width the labelled rail shows at: below it (the shell's 639px phone breakpoint) the bottom
+/** Narrowest width the icon rail shows at: below it (the shell's 639px phone breakpoint) the bottom
  *  tab bar navigates, and its tabs carry visible labels. */
 export const RAIL_MIN_WIDTH = 640;
 
+/** Collapses runs of whitespace and trims, so a tooltip's template indentation is no difference. */
+const squash = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+
 /**
- * The rail-label check's verdict (spec v202 §3) on one labelled-rail entry: its accessible name, its
- * .rail-label text and whether that label shows (layout-audit.mjs auditRailLabels). No name fails
- * first, then no label, then a hidden one, then a name without the label (WCAG 2.5.3 label-in-name).
+ * The rail-label check's verdict (v247 Decision 12, spec v240 §5) on one icon-rail entry: its
+ * accessible name and the text of the role="tooltip" its aria-describedby points at (null when
+ * none does; layout-audit.mjs auditRailLabels). No name fails first, then no tooltip, then a
+ * tooltip whose text is not the name. The id stays 'rail-label': CHECKS is pinned.
  */
 export function railLabelVerdict(entry) {
-  const name = String(entry.name ?? '').trim();
-  const label = String(entry.label ?? '').trim();
+  const name = squash(entry.name);
   if (!name) return { ok: false, reason: 'no-name' };
-  if (!label) return { ok: false, reason: 'no-label' };
-  if (!entry.labelVisible) return { ok: false, reason: 'label-hidden' };
-  if (!name.toLowerCase().includes(label.toLowerCase())) return { ok: false, reason: 'label-not-in-name' };
+  if (entry.tooltip === null || entry.tooltip === undefined) return { ok: false, reason: 'no-tooltip' };
+  if (squash(entry.tooltip) !== name) return { ok: false, reason: 'tooltip-not-name' };
   return { ok: true, reason: null };
 }
 

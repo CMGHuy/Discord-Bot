@@ -5,7 +5,8 @@ import { adminGuard } from './auth/admin.guard';
 import { authGuard } from './shell/auth.guard';
 
 /**
- * Six destinations (v202), their section routes, and the detail views that hang off them.
+ * Seven destinations (v202; Calendar became its own in v247), their section
+ * routes, and the detail views that hang off them.
  *
  * Every one is `loadComponent`, so a workspace's component and (from Phase
  * 4) its store arrive together and only when visited. That is what makes
@@ -45,15 +46,20 @@ export const routes: Routes = [
     data: { subtitle: 'Every plan, filled or not' },
     loadChildren: () => import('./workspaces/trades/trades.routes').then((m) => m.tradesRoutes),
   },
-  // v202: Trades' sections. Declared BEFORE `trades/:id`, so a section word is
-  // never read as a trade id (`/trades/calendar` is not trade "calendar").
+  // v247 (spec v240 §6): Calendar is a destination of its own, no longer a
+  // Trades section.
   {
-    path: 'trades/calendar',
+    path: 'calendar',
     canMatch: [authGuard],
     title: 'Calendar',
     data: { subtitle: 'P&L by day' },
     loadChildren: () => import('./workspaces/calendar/calendar.routes').then((m) => m.calendarRoutes),
   },
+  // Its old v202 address, kept so bookmarks and Discord links still land.
+  // RELATIVE redirects (no leading slash) keep the query string and fragment.
+  // Declared BEFORE `trades/:id`, so "calendar" is never read as a trade id.
+  { path: 'trades/calendar', pathMatch: 'full', redirectTo: 'calendar' },
+  { path: 'trades/calendar/:date', redirectTo: 'calendar/:date' },
   // The Cancels page became Analytics' Cancels tab. A string redirectTo cannot
   // carry a query, so these two build the UrlTree (an incoming query string
   // is dropped: nothing linked to this page with one).
@@ -81,8 +87,6 @@ export const routes: Routes = [
   // bookmark depend on; an absolute redirect would drop both. These come out
   // at Phase 4's close-out with `cockpit` and `universe`, together with
   // their names in spa.py's WORKSPACES.
-  { path: 'calendar', pathMatch: 'full', redirectTo: 'trades/calendar' },
-  { path: 'calendar/:date', redirectTo: 'trades/calendar/:date' },
   { path: 'cancels', pathMatch: 'full', redirectTo: toCancelsTab },
   { path: 'analytics', pathMatch: 'full', redirectTo: 'insights/analytics' },
   { path: 'research', pathMatch: 'full', redirectTo: 'insights/research' },
@@ -165,7 +169,7 @@ export const routes: Routes = [
     loadComponent: () => import('./workspaces/gallery/gallery').then((m) => m.Gallery),
   },
   // A typo'd URL lands on the Dashboard rather than a blank outlet. There is
-  // no 404 view: with six destinations and no external links into the app,
+  // no 404 view: with seven destinations and no external links into the app,
   // a dedicated not-found page would be a page nobody ever means to reach.
   { path: '**', redirectTo: 'dashboard' },
 ];

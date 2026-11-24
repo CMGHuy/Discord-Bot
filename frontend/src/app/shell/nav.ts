@@ -1,6 +1,6 @@
 import type { IconName } from '../ui/icon';
 
-/** One tab inside a destination (v202 §1): `/trades/calendar`, 'Calendar'. */
+/** One tab inside a destination (v202 §1): `/insights/research`, 'Research'. */
 export interface NavSection {
   path: string;
   label: string;
@@ -22,7 +22,7 @@ export interface NavEntry {
 }
 
 /**
- * The nav model -- v202 §1. Six destinations, with sub-pages as their
+ * The nav model -- v202 §1, v247. Seven destinations, with sub-pages as their
  * sections. One model for the rail, the phone tab bar and More sheet, the
  * command palette, the section tabs and the breadcrumb. The /ui gallery is
  * a developer surface, reachable by URL and the palette, never the rail.
@@ -32,13 +32,9 @@ export interface NavEntry {
 export const NAV_ENTRIES: readonly NavEntry[] = [
   { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
   { path: '/watchlist', label: 'Watchlist', icon: 'watchlist' },
-  {
-    path: '/trades', label: 'Trades', icon: 'trades',
-    sections: [
-      { path: '/trades', label: 'Book' },
-      { path: '/trades/calendar', label: 'Calendar' },
-    ],
-  },
+  { path: '/trades', label: 'Trades', icon: 'trades' },
+  // v247 (spec v240 §6): Calendar left Trades' sections for a rail entry of its own.
+  { path: '/calendar', label: 'Calendar', icon: 'calendar' },
   { path: '/risk', label: 'Risk', icon: 'risk' },
   {
     path: '/insights', label: 'Insights', icon: 'analytics',
@@ -65,10 +61,9 @@ export function navEntriesFor(isAdmin: boolean, entries: readonly NavEntry[] = N
 }
 
 /** A section label that is not its route's title. The route keeps the page
- *  name the browser tab shows ('Trades', 'System'); the tab names the view
- *  inside the destination ('Book', 'Health'). */
+ *  name the browser tab shows ('System'); the tab names the view inside
+ *  the destination ('Health'). */
 export const SECTION_LABEL_OVERRIDES: Readonly<Record<string, string>> = {
-  '/trades': 'Book',
   '/system': 'Health',
 };
 
@@ -78,7 +73,7 @@ export const DESTINATION_LABEL_OVERRIDES: Readonly<Record<string, string>> = {
   '/insights': 'Insights',
 };
 
-/** Every second-segment word that names a section somewhere ('calendar').
+/** Every second-segment word that names a section somewhere ('analytics').
  *  The rule itself is per destination (navEntryFor, V202-6b). */
 export const SECTION_WORDS: ReadonlySet<string> = new Set(
   NAV_ENTRIES.flatMap((entry) => entry.sections ?? [])
@@ -87,15 +82,14 @@ export const SECTION_WORDS: ReadonlySet<string> = new Set(
 );
 
 /** v202: the paths that belong to another destination. A plan is part of
- *  the trade book, /universe and /cockpit are older names, and the six
+ *  the trade book, /universe and /cockpit are older names, and five
  *  pre-v202 pages moved under a destination (app.routes.ts redirects all
  *  but /plans). Resolving them here keeps a rail highlight from blinking
- *  during a redirect. */
+ *  during a redirect. /calendar is a destination again since v247. */
 export const ALIASES: Readonly<Record<string, string>> = {
   '/plans': '/trades',
   '/universe': '/watchlist',
   '/cockpit': '/dashboard',
-  '/calendar': '/trades/calendar',
   '/cancels': '/insights/analytics',
   '/analytics': '/insights/analytics',
   '/research': '/insights/research',
@@ -103,7 +97,7 @@ export const ALIASES: Readonly<Record<string, string>> = {
   '/versions': '/system/versions',
 };
 
-/** '/calendar/2026-10-01?x#y' -> ['trades', 'calendar', '2026-10-01']; '' -> []. */
+/** '/versions/x?y#z' -> ['system', 'versions', 'x']; '' -> []. */
 function segments(url: string): string[] {
   const parts = url.split(/[?#]/)[0].split('/').filter((part) => part !== '');
   if (parts.length === 0) return [];
@@ -141,7 +135,7 @@ export function destinationFor(url: string): string | null {
 }
 
 /** True when the URL's second segment (after ALIASES) names one of its
- *  destination's sections: '/trades/calendar', not '/trades' or '/trades/812'. */
+ *  destination's sections: '/insights/research', not '/insights' or '/trades/812'. */
 export function isSectionUrl(url: string): boolean {
   const [first, second] = segments(url);
   const entry = entryAt(first);
@@ -152,31 +146,36 @@ export function isSectionUrl(url: string): boolean {
  *  landing page reads as Home on a 64 px tab (v202 §3). */
 const PHONE_TAB_LABELS: Readonly<Record<string, string>> = { '/dashboard': 'Home' };
 
-/** The phone bottom bar's four tabs, in order; PhoneTabBar adds More as the
- *  fifth. Three are destinations (paths and icons their own); Calendar is the
- *  one section promoted to a tab, so the P&L view is a single tap away. Risk
- *  lives in the More sheet. */
-const PHONE_TAB_ENTRIES: readonly NavEntry[] = [
-  ...['/dashboard', '/watchlist'].map((path) => navEntryFor(path)!.entry),
-  { path: '/trades/calendar', label: 'Calendar', icon: 'calendar' },
-  navEntryFor('/trades')!.entry,
-];
+/** The phone bottom bar's default pages, in rail order (v240 §6); TabBarPrefs
+ *  falls back to them and PhoneTabBar adds More last. Risk, Insights and
+ *  System live in the More sheet until the partner moves them. */
+export const DEFAULT_PHONE_TAB_PATHS: readonly string[] = ['/dashboard', '/watchlist', '/trades', '/calendar'];
 
-export const PHONE_TABS: readonly NavEntry[] = PHONE_TAB_ENTRIES
-  .map((entry) => ({ ...entry, label: PHONE_TAB_LABELS[entry.path] ?? entry.label }));
+/** The tab entries for a list of destination paths, in the order given.
+ *  Paths not in `entries` are dropped; the Dashboard reads Home. Returns
+ *  copies, so NAV_ENTRIES keeps its rail labels. */
+export function phoneTabsFor(paths: readonly string[], entries: readonly NavEntry[] = NAV_ENTRIES): NavEntry[] {
+  return paths
+    .map((path) => entries.find((entry) => entry.path === path))
+    .filter((entry): entry is NavEntry => entry !== undefined)
+    .map((entry) => ({ ...entry, label: PHONE_TAB_LABELS[entry.path] ?? entry.label }));
+}
 
-/** The phone tab a URL lights: its section's own tab when the section is one
- *  (Calendar), else its destination's; null off the nav. */
-export function phoneTabPathFor(url: string): string | null {
+/** The phone tab a URL lights, given the bar's tabs (TabBarPrefs.tabs()):
+ *  its section's own tab when a tab holds that section, else its
+ *  destination's (a calendar day lights Calendar, a plan lights Trades).
+ *  A destination the bar does not hold is still returned, so the caller
+ *  lights More; null off the nav. */
+export function phoneTabPathFor(url: string, tabs: readonly NavEntry[]): string | null {
   const found = navEntryFor(url);
   if (!found) return null;
-  const sectionTab = PHONE_TABS.find((tab) => tab.path === found.section?.path);
+  const sectionTab = tabs.find((tab) => tab.path === found.section?.path);
   return sectionTab?.path ?? found.entry.path;
 }
 
-/** `Destination / Section` ('Trades / Calendar'), the destination alone on a
- *  single page ('Risk'), plus the detail segment a detail route supplies
- *  ('Trades / Book / NVDA #812'). Empty off the nav. */
+/** `Destination / Section` ('Insights / Research'), the destination alone on
+ *  a single page ('Risk'), plus the detail segment a detail route supplies
+ *  ('Trades / NVDA #812'). Empty off the nav. */
 export function breadcrumbFor(url: string, detail: string | null): string[] {
   const found = navEntryFor(url);
   if (!found) return [];

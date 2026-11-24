@@ -58,16 +58,16 @@ _ASSET_RE = re.compile(
 #: `/risk` is absent on purpose: until NG57 deletes the Jinja routes, a hard
 #: GET of it lands on the Jinja page by design (see spa.py:register).
 #: Asserting it serves the SPA would fail on a correct deployment.
-WORKSPACES = ("dashboard", "trades", "trades/calendar", "trades/cancels", "insights",
+WORKSPACES = ("dashboard", "trades", "calendar", "trades/cancels", "insights",
               "insights/analytics", "insights/research", "insights/reports",
               "watchlist", "system", "system/versions")
 
-#: The pre-SR4/SR5 URLs and (v202) the six pre-Phase-1 page names, kept
+#: The pre-SR4/SR5 URLs and (v202) the five pre-Phase-1 page names, kept
 #: server-side so a bookmark or an open tab does not 404 before Angular loads
-#: and can redirect it. All eight leave at Phase 4's close-out. Checked because losing
+#: and can redirect it. All seven leave at Phase 4's close-out. Checked because losing
 #: them breaks quietly -- the person affected is the one who bookmarked a page
 #: months ago, and they see a 404 with no way to know it used to work.
-LEGACY_WORKSPACES = ("cockpit", "universe", "calendar", "cancels", "analytics",
+LEGACY_WORKSPACES = ("cockpit", "universe", "cancels", "analytics",
                      "research", "reports", "versions")
 
 #: Assets that are allowed to be missing. Angular emits a favicon link whether

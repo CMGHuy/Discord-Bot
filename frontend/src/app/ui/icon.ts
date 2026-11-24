@@ -178,7 +178,7 @@ const LABELS: Record<IconName, string> = {
   collapse: 'Collapse', expand: 'Expand', profile: 'Profile', signout: 'Sign out',
   menu: 'Menu', trash: 'Delete', clock: 'Clock', more: 'More actions',
   opened: 'Opened', closed: 'Closed', pending: 'Pending', partial: 'Partially closed',
-  cancelled: 'Cancelled', trailing: 'Trailing stop', brand: 'Swingbot',
+  cancelled: 'Cancelled', trailing: 'Trailing stop', brand: 'Bomeo Capital',
   reports: 'Reports', research: 'Research', search: 'Search',
   theme: 'Theme',
   info: 'Information', long: 'Long', short: 'Short', close: 'Close', edit: 'Edit',

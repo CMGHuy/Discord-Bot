@@ -23,7 +23,7 @@ const trade = (id: string, symbol: string, status: string, created_at: string | 
 
 const labels = (items: readonly PaletteItem[]) => items.map((item) => item.label);
 /** The nav model's pages in rail order: each section, or a single page. */
-const RAIL = ['Dashboard', 'Watchlist', 'Book', 'Calendar', 'Risk',
+const RAIL = ['Dashboard', 'Watchlist', 'Trades', 'Calendar', 'Risk',
   'Analytics', 'Research', 'Reports', 'Guide', 'Health', 'Versions'];
 
 describe('palette items (v195 §3.1)', () => {
@@ -33,13 +33,14 @@ describe('palette items (v195 §3.1)', () => {
     expect(pages.slice(RAIL.length)).toEqual([...TAB_PAGES]);
     expect(pages.every((item) => item.group === 'pages')).toBe(true);
     expect(pages.find((item) => item.label === 'Risk')).toEqual({ key: 'page:/risk', group: 'pages', label: 'Risk', route: '/risk' });
-    expect(pages.find((item) => item.label === 'Calendar')).toMatchObject({ route: '/trades/calendar', sub: 'Trades' });
-    expect(pages.find((item) => item.label === 'Book')).toMatchObject({ route: '/trades', sub: 'Trades' });
+    expect(pages.find((item) => item.label === 'Calendar')).toEqual({ key: 'page:/calendar', group: 'pages', label: 'Calendar', route: '/calendar' });
+    expect(pages.find((item) => item.label === 'Trades')).toEqual({ key: 'page:/trades', group: 'pages', label: 'Trades', route: '/trades' });
+    expect(pages.find((item) => item.label === 'Book')).toBeUndefined();
   });
 
   it('routes every page to a path of the nav model, never a pre-v202 one', () => {
     expect(pageItems().filter((item) => !item.queryParams).map((item) => item.route)).toEqual([
-      '/dashboard', '/watchlist', '/trades', '/trades/calendar', '/risk',
+      '/dashboard', '/watchlist', '/trades', '/calendar', '/risk',
       '/insights/analytics', '/insights/research', '/insights/reports', '/insights/guide', '/system', '/system/versions',
     ]);
   });
@@ -209,6 +210,6 @@ describe('pageItemsFor (v207)', () => {
     expect(routes).not.toContain('/insights/analytics?tab=tuning');
     expect(routes).toContain('/insights/analytics?tab=partials');
     expect(routes).toContain('/watchlist?tab=earnings');
-    expect(routes).toContain('/trades/calendar');
+    expect(routes).toContain('/calendar');
   });
 });

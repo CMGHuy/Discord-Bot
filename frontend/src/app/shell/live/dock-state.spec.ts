@@ -13,8 +13,8 @@ import { DOCK_PREF_KEY } from './live-state';
 class Blank {}
 
 const ROUTES: Routes = [
-  ...['dashboard', 'risk', 'trades', 'trades/calendar', 'insights/analytics', 'ui'].map((path) => ({ path, component: Blank })),
-  { path: 'calendar', redirectTo: 'trades/calendar' },
+  ...['dashboard', 'risk', 'trades', 'calendar', 'insights/analytics', 'ui'].map((path) => ({ path, component: Blank })),
+  { path: 'trades/calendar', redirectTo: 'calendar' },
 ];
 
 describe('DockState (v203)', () => {
@@ -41,7 +41,7 @@ describe('DockState (v203)', () => {
     dock = TestBed.inject(DockState);
   });
 
-  it.each([['/trades/calendar', '/trades'], ['/insights/analytics?tab=tuning#x', '/insights'], ['/calendar', '/trades'], ['/ui', null]])(
+  it.each([['/calendar', '/calendar'], ['/insights/analytics?tab=tuning#x', '/insights'], ['/trades/calendar', '/calendar'], ['/trades', '/trades'], ['/ui', null]])(
     'keys %s by destination %s', async (url, destination) => {
       await go(url);
       expect(dock.destination()).toBe(destination);
@@ -67,17 +67,25 @@ describe('DockState (v203)', () => {
   });
 
   it('remembers a toggle per destination, through PreferencesStore', async () => {
-    await go('/trades/calendar');
+    await go('/calendar');
     dock.toggle();
     expect(dock.open()).toBe(true);
-    expect(data()[DOCK_PREF_KEY]).toEqual({ '/trades': true });
+    expect(data()[DOCK_PREF_KEY]).toEqual({ '/calendar': true });
     await go('/risk');
     expect(dock.open()).toBe(true);
     dock.toggle();
     expect(dock.open()).toBe(false);
-    await go('/calendar');          // an old path keys the same destination
+    await go('/trades/calendar');   // the old address redirects onto the same destination
     expect(dock.open()).toBe(true);
-    expect(data()[DOCK_PREF_KEY]).toEqual({ '/trades': true, '/risk': false });
+    expect(data()[DOCK_PREF_KEY]).toEqual({ '/calendar': true, '/risk': false });
+  });
+
+  it("no longer applies a Trades dock choice to Calendar (v247: its own destination)", async () => {
+    data.set({ [DOCK_PREF_KEY]: { '/trades': true } });
+    await go('/calendar');
+    expect(dock.open()).toBe(false);
+    await go('/trades');
+    expect(dock.open()).toBe(true);
   });
 
   it('writes nothing off the nav model', async () => {
@@ -132,10 +140,10 @@ describe('DockState (v203)', () => {
 
   it('keeps the sheet open when only query params or the fragment change', async () => {
     narrow.set(true);
-    await go('/trades/calendar');
+    await go('/calendar');
     dock.openSheet();
-    await go('/trades/calendar?month=2026-11');
-    await go('/trades/calendar?month=2026-11#day');
+    await go('/calendar?month=2026-11');
+    await go('/calendar?month=2026-11#day');
     expect(dock.sheetOpen()).toBe(true);
     await go('/trades');            // a different page still closes it
     expect(dock.sheetOpen()).toBe(false);
