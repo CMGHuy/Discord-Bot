@@ -98,6 +98,27 @@ export function placeBeside(
 }
 
 /**
+ * Where an above-placed anchor label goes (v247, the phone tab bar's
+ * press-and-hold, spec v240 §6): over its anchor, two gaps off it,
+ * horizontally centred on it, and kept `margin` px inside the viewport --
+ * shifted right off the left edge, left off the right, down off the top.
+ * A tab sits at the foot of the screen, so beside would run off it. Pure,
+ * like placeBeside.
+ */
+export function placeAbove(
+  anchor: { top: number; bottom: number; left: number; right: number; width: number },
+  pop: { width: number; height: number },
+  viewport: { width: number; height: number },
+  margin = 8,
+): { top: number; left: number } {
+  const centre = anchor.left + anchor.width / 2;
+  return {
+    top: clamp(anchor.top - 2 * POP_GAP - pop.height, margin, viewport.height - margin - pop.height),
+    left: clamp(centre - pop.width / 2, margin, viewport.width - margin - pop.width),
+  };
+}
+
+/**
  * An info popover -- spec v80 D4.
  *
  * Thirty-five `title` tooltips carry real explanation today, and a `title`
@@ -141,6 +162,10 @@ export function placeBeside(
  * Only one hint is open app-wide: whichever opens dismisses the one that
  * was open. `dismiss()` is public, so that rule -- and a host holding a
  * template ref -- can close a hint whatever holds it open.
+ * `openPinned()` opens and pins it for a gesture the hint cannot see
+ * (sbLongPress on the anchor); a pinned hint closes on the next pointerdown
+ * anywhere or on Escape pressed anywhere. `placement="above"` puts an
+ * anchor label over its anchor (placeAbove) instead of beside it.
  */
 @Component({
   selector: 'sb-hint',
@@ -153,6 +178,7 @@ export function placeBeside(
     '(focusout)': 'onFocusOut($event)',
     '(keydown.escape)': 'dismiss()',
     '(document:pointerdown)': 'onDocumentPointer($event)',
+    '(document:keydown.escape)': 'onDocumentEscape()',
     '[class.anchored]': 'anchor() !== null',
   },
   template: `
@@ -275,6 +301,11 @@ export class Hint {
    *  every hint did before; the rail and tab bar pass HINT_HOVER_DELAY_MS. */
   readonly openDelay = input(0);
 
+  /** Anchor mode only (v247): 'beside' (default) labels to the right of the
+   *  anchor -- the rail; 'above' centres the label over it -- the phone tab
+   *  bar, whose tabs sit at the foot of the screen. */
+  readonly placement = input<'beside' | 'above'>('beside');
+
   protected readonly id = `sb-hint-${nextId++}`;
   protected readonly pinned = signal(false);
   protected readonly hovered = signal(false);
@@ -304,11 +335,19 @@ export class Hint {
     const rect = target.getBoundingClientRect();
     const size = { width: pop.offsetWidth, height: pop.offsetHeight };
     const viewport = { width: root.clientWidth, height: root.clientHeight };
-    // Anchor mode labels beside its anchor; the glyph trigger opens below.
-    const place = anchor ? placeBeside(rect, size, viewport) : clampPopover(rect, size, viewport, this.align());
+    // Anchor mode labels beside (or above) its anchor; the glyph trigger opens below.
+    const place = anchor ? this.placeLabel(rect, size, viewport) : clampPopover(rect, size, viewport, this.align());
     this.popTop.set(place.top);
     this.popLeft.set(place.left);
   };
+
+  private placeLabel(
+    rect: DOMRect,
+    size: { width: number; height: number },
+    viewport: { width: number; height: number },
+  ): { top: number; left: number } {
+    return this.placement() === 'above' ? placeAbove(rect, size, viewport) : placeBeside(rect, size, viewport);
+  }
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.clearHoverTimer());
@@ -359,6 +398,24 @@ export class Hint {
     this.pinned.set(false);
     this.hovered.set(false);
     this.focused.set(false);
+  }
+
+  /** Opens and pins the hint at once (v247): for a gesture the hint cannot
+   *  see -- sbLongPress on its anchor, wired by the host template as
+   *  `(longPress)="hint.openPinned()"`. Pinned, it outlives hover and focus
+   *  ending, and closes on the next pointerdown anywhere (onDocumentPointer,
+   *  the anchor's own pointerdown) or on Escape anywhere (onDocumentEscape).
+   *  No timed close: a slow reader is not rushed (spec v240 §6). */
+  openPinned(): void {
+    this.clearHoverTimer();
+    this.pinned.set(true);
+  }
+
+  /** Escape anywhere closes a pinned hint: a touch user who long-pressed a
+   *  tab has no focus inside it to press Escape from. Hover and focus opens
+   *  keep their own Escape paths (the host and the anchor). */
+  protected onDocumentEscape(): void {
+    if (this.pinned()) this.dismiss();
   }
 
   /** Hover start, glyph host or anchor alike: at once, or after openDelay. */
