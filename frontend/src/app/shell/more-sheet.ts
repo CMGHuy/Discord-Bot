@@ -36,7 +36,8 @@ export function morePageGroups(entries: readonly NavEntry[], tabs: readonly NavE
 
 /**
  * The phone's More sheet -- v195 Phase 3: every destination the tab bar does
- * not hold, with its sections (v202 §3), and the search field.
+ * not hold (TabBarPrefs, v240 §6), with its sections (v202 §3), and the
+ * search field.
  *
  * A modal bottom sheet: scrim, `role=dialog`, focus trapped while open and
  * returned to the More tab on close (FocusTrap restores what had focus).
