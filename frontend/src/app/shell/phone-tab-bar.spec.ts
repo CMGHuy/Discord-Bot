@@ -32,6 +32,10 @@ describe('PhoneTabBar (v195 Phase 3, v240 §6)', () => {
 
   const labels = (el: HTMLElement) => [...el.querySelectorAll('.tab .tab-label')].map((n) => n.textContent!.trim());
   const moreLit = (el: HTMLElement) => el.querySelector('button.tab.more')!.classList.contains('active');
+  const styles = () => readFileSync(join(process.cwd(), 'src/app/shell/phone-tab-bar.ts'), 'utf8');
+  /** One CSS rule of the component's styles block, by its exact selector. */
+  const rule = (selector: string) =>
+    styles().match(new RegExp(`^\\s*${selector.replace(/[.*]/g, '\\$&')} \\{[^}]*\\}`, 'm'))?.[0] ?? '';
 
   async function mount(url: string, moreOpen = false) {
     await TestBed.inject(Router).navigateByUrl(url);
@@ -172,5 +176,43 @@ describe('PhoneTabBar (v195 Phase 3, v240 §6)', () => {
     expect(source).toContain('height: calc(56px + env(safe-area-inset-bottom));');
     expect(source).toContain('padding-bottom: env(safe-area-inset-bottom);');
     expect(source).toMatch(/:host \{[^}]*position: fixed;[^}]*z-index: 8;/s);
+  });
+
+  it('shares the width equally between however many tabs it holds (v240 §6)', () => {
+    const bar = rule('.tabs');
+    expect(bar).toContain('grid-auto-flow: column;');
+    expect(bar).toContain('grid-auto-columns: minmax(0, 1fr);');
+    expect(styles()).not.toMatch(/repeat\(5/);
+    expect(rule('.tab')).toContain('min-width: 0;');
+  });
+
+  it('marks the active tab with the accent-soft pill and an accent icon, not a top border (v240 §6)', () => {
+    const pill = rule('.glyph');
+    expect(pill).toContain('border-radius: var(--pill-radius);');
+    expect(pill).toContain('width: 48px;');
+    expect(pill).toContain('height: 28px;');
+    const active = rule('.tab.active .glyph');
+    expect(active).toContain('background: var(--accent-soft);');
+    expect(active).toContain('color: var(--accent);');
+    expect(rule('.tab.active')).toContain('color: var(--text);');
+    expect(styles()).not.toMatch(/border-top: 2px|border-top-color/);
+  });
+
+  it('labels every tab at the 12px micro size, weight 600, truncating rather than widening (Decision 8)', () => {
+    const label = rule('.tab-label');
+    for (const declaration of ['font-size: var(--text-micro);', 'font-weight: 600;', 'overflow: hidden;',
+      'text-overflow: ellipsis;', 'white-space: nowrap;', 'max-width: 100%;']) {
+      expect(label, declaration).toContain(declaration);
+    }
+    expect(styles()).not.toMatch(/11px|--text-faint/);
+  });
+
+  it('keeps the pill on the More button while the sheet is open', async () => {
+    const { fixture, el } = await mount('/dashboard');
+    fixture.componentRef.setInput('moreOpen', true);
+    fixture.detectChanges();
+    const more = el.querySelector('button.tab.more')!;
+    expect(more.classList).toContain('active');
+    expect(more.querySelector('.glyph')).not.toBeNull();
   });
 });

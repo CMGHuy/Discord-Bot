@@ -16,6 +16,10 @@ import { TabBarPrefs } from './tab-bar-prefs';
  * model, not RouterLinkActive, so a plan detail lights Trades and a page
  * the bar does not hold lights More.
  *
+ * The tabs share the width equally, 2 to 5 of them. The active tab shows
+ * the --accent-soft pill behind an --accent icon, and its label steps to
+ * full text: never colour alone.
+ *
  * Each glyph sits in an aria-hidden span: `sb-icon` names itself with a
  * native title, which would otherwise join the visible label in the tab's
  * accessible name ("Trades Trades").
@@ -60,38 +64,58 @@ import { TabBarPrefs } from './tab-bar-prefs';
       z-index: 8;
       display: block;
     }
+    /* One equal column per tab, 2 to 5 of them; five fit a 320px phone. */
     .tabs {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
       box-sizing: border-box;
       height: calc(56px + env(safe-area-inset-bottom));
       padding-bottom: env(safe-area-inset-bottom);
       background: var(--surface);
       border-top: 1px solid var(--border);
     }
-    /* A 2px top edge that the active tab fills with the accent: a bar plus
-       the label stepping to full text, never colour alone. */
     .tab {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       gap: 2px;
+      min-width: 0;
       min-height: var(--hit-min);
       margin: 0;
-      padding: 0;
+      padding: 0 var(--space-4);
       border: 0;
-      border-top: 2px solid transparent;
       background: none;
       color: var(--text-muted);
       font: inherit;
-      font-size: var(--text-micro);
       text-decoration: none;
       cursor: pointer;
-      transition: color var(--transition), border-color var(--transition);
+      transition: color var(--transition);
     }
-    .tab.active { color: var(--text); border-top-color: var(--accent); }
-    .glyph { display: inline-flex; line-height: 0; }
+    .tab.active { color: var(--text); }
+    /* The pill the active tab fills: --accent-soft behind an --accent icon (v240 §6). */
+    .glyph {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 28px;
+      border-radius: var(--pill-radius);
+      line-height: 0;
+      transition: background var(--transition), color var(--transition);
+    }
+    .tab.active .glyph { background: var(--accent-soft); color: var(--accent); }
+    /* The 12px floor (--text-micro, Decision 8) at weight 600; a long label
+       truncates instead of widening its column. */
+    .tab-label {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: var(--text-micro);
+      font-weight: 600;
+    }
   `,
 })
 export class PhoneTabBar {
