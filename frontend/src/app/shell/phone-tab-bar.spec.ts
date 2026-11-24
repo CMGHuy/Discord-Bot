@@ -6,12 +6,15 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { patchState } from '@ngrx/signals';
 import { unprotected } from '@ngrx/signals/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionStore } from '../stores/session.store';
 import { DEFAULT_PHONE_TAB_PATHS } from './nav';
 import { PhoneTabBar } from './phone-tab-bar';
 import { TAB_BAR_PREF_KEY, TAB_BAR_STORAGE, TabBarPrefs } from './tab-bar-prefs';
+import { POPOVER_OPEN_ATTR } from '../testing/popover-polyfill';
+import { HINT_HOVER_DELAY_MS } from '../ui/hint';
+import { LONG_PRESS_MS } from '../ui/long-press';
 
 @Component({ template: '' })
 class Blank {}
@@ -214,5 +217,179 @@ describe('PhoneTabBar (v195 Phase 3, v240 §6)', () => {
     const more = el.querySelector('button.tab.more')!;
     expect(more.classList).toContain('active');
     expect(more.querySelector('.glyph')).not.toBeNull();
+  });
+
+  describe('press and hold (v240 §6, Decision 9)', () => {
+    const root = document.documentElement;
+
+    afterEach(() => {
+      // Undo the viewport stub: the own properties shadow Element.prototype's getters.
+      delete (root as unknown as Record<string, unknown>)['clientWidth'];
+      delete (root as unknown as Record<string, unknown>)['clientHeight'];
+    });
+
+    const tabLink = (el: HTMLElement, path: string) => el.querySelector<HTMLAnchorElement>(`a.tab[href="${path}"]`)!;
+    /** The role="tooltip" popover the tab's aria-describedby points at (its sb-hint). */
+    const tooltipOf = (el: HTMLElement, link: Element) =>
+      el.querySelector(`[id="${link.getAttribute('aria-describedby')}"]`) as HTMLElement;
+    const isOpen = (tooltip: HTMLElement) => tooltip.hasAttribute(POPOVER_OPEN_ATTR);
+    async function settle(fixture: { detectChanges(): void; whenStable(): Promise<unknown> }) {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+
+    /** jsdom has no PointerEvent: a MouseEvent carrying pointerType and pointerId
+     *  is what sbLongPress reads (ui/long-press.spec.ts does the same). */
+    function pointer(type: string, pointerType = 'touch'): MouseEvent {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 100, clientY: 810 });
+      Object.defineProperty(event, 'pointerType', { value: pointerType });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      return event;
+    }
+
+    /** Holds a pointer on the tab for LONG_PRESS_MS and lifts it. Only
+     *  setTimeout is faked: the hint's requestAnimationFrame stays real. */
+    async function hold(fixture: Parameters<typeof settle>[0], link: Element, pointerType = 'touch') {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        link.dispatchEvent(pointer('pointerdown', pointerType));
+        vi.advanceTimersByTime(LONG_PRESS_MS);
+        link.dispatchEvent(pointer('pointerup', pointerType));
+      } finally {
+        vi.useRealTimers();
+      }
+      await settle(fixture);
+    }
+
+    const tap = () => new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+
+    it('gives every tab one tooltip naming its page as the rail does, and More none', async () => {
+      const { el } = await mount('/dashboard');
+      const links = [...el.querySelectorAll('a.tab')];
+      expect(links).toHaveLength(4);
+      expect(links.map((link) => tooltipOf(el, link).textContent!.trim()))
+        .toEqual(['Dashboard', 'Watchlist', 'Trades', 'Calendar']);
+      for (const link of links) {
+        expect(tooltipOf(el, link).getAttribute('role')).toBe('tooltip');
+        expect(isOpen(tooltipOf(el, link))).toBe(false);
+      }
+      const more = el.querySelector('button.tab.more')!;
+      expect(more.hasAttribute('aria-describedby')).toBe(false);
+      expect(el.querySelectorAll('[role="tooltip"]')).toHaveLength(4);
+    });
+
+    it('names the tabs of a custom bar too', async () => {
+      stored.set(TAB_BAR_PREF_KEY, '["/dashboard","/risk","/insights"]');
+      const { el } = await mount('/dashboard');
+      expect([...el.querySelectorAll('a.tab')].map((link) => tooltipOf(el, link).textContent!.trim()))
+        .toEqual(['Dashboard', 'Risk', 'Insights']);
+    });
+
+    it('makes every tab a long-press host and the More button not one', async () => {
+      const { el } = await mount('/dashboard');
+      for (const link of el.querySelectorAll('a.tab')) expect(link.classList).toContain('sb-long-press');
+      expect(el.querySelector('button.tab.more')!.classList).not.toContain('sb-long-press');
+    });
+
+    it('opens the tab tooltip on a 500ms touch hold and not a moment before', async () => {
+      const { fixture, el } = await mount('/dashboard');
+      const link = tabLink(el, '/calendar');
+      const tooltip = tooltipOf(el, link);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        link.dispatchEvent(pointer('pointerdown'));
+        vi.advanceTimersByTime(LONG_PRESS_MS - 1);
+        fixture.detectChanges();
+        expect(isOpen(tooltip)).toBe(false);
+        vi.advanceTimersByTime(1);
+      } finally {
+        vi.useRealTimers();
+      }
+      await settle(fixture);
+      expect(isOpen(tooltip)).toBe(true);
+      expect(tooltip.textContent!.trim()).toBe('Calendar');
+    });
+
+    it('keeps the held-open tooltip after the finger lifts, and swallows the click so it navigates nowhere', async () => {
+      const { fixture, el } = await mount('/dashboard');
+      const router = TestBed.inject(Router);
+      const link = tabLink(el, '/trades');
+      await hold(fixture, link);
+      expect(isOpen(tooltipOf(el, link))).toBe(true);
+      link.dispatchEvent(tap());
+      await settle(fixture);
+      expect(router.url).toBe('/dashboard');
+      expect(isOpen(tooltipOf(el, link))).toBe(true);
+    });
+
+    it('closes the held-open tooltip on the next touch anywhere, and on Escape', async () => {
+      const { fixture, el } = await mount('/dashboard');
+      const link = tabLink(el, '/watchlist');
+      await hold(fixture, link);
+      expect(isOpen(tooltipOf(el, link))).toBe(true);
+      document.body.dispatchEvent(pointer('pointerdown'));
+      await settle(fixture);
+      expect(isOpen(tooltipOf(el, link))).toBe(false);
+
+      await hold(fixture, link);
+      expect(isOpen(tooltipOf(el, link))).toBe(true);
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settle(fixture);
+      expect(isOpen(tooltipOf(el, link))).toBe(false);
+    });
+
+    it('never opens on a mouse held down, and that click still navigates', async () => {
+      const { fixture, el } = await mount('/dashboard');
+      const link = tabLink(el, '/trades');
+      await hold(fixture, link, 'mouse');
+      expect(isOpen(tooltipOf(el, link))).toBe(false);
+      link.dispatchEvent(tap());
+      await settle(fixture);
+      expect(TestBed.inject(Router).url).toBe('/trades');
+    });
+
+    it('opens on a mouse hover only after the hover delay (Decision 6)', async () => {
+      const { fixture, el } = await mount('/dashboard');
+      const link = tabLink(el, '/watchlist');
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        link.dispatchEvent(new MouseEvent('mouseenter'));
+        vi.advanceTimersByTime(HINT_HOVER_DELAY_MS - 1);
+        fixture.detectChanges();
+        expect(isOpen(tooltipOf(el, link))).toBe(false);
+        vi.advanceTimersByTime(1);
+      } finally {
+        vi.useRealTimers();
+      }
+      await settle(fixture);
+      expect(isOpen(tooltipOf(el, link))).toBe(true);
+    });
+
+    it('moves a held-open tooltip to the tab held next (one at a time)', async () => {
+      const { fixture, el } = await mount('/dashboard');
+      const first = tabLink(el, '/dashboard');
+      const second = tabLink(el, '/calendar');
+      await hold(fixture, first);
+      expect(isOpen(tooltipOf(el, first))).toBe(true);
+      await hold(fixture, second);
+      expect(isOpen(tooltipOf(el, second))).toBe(true);
+      expect(isOpen(tooltipOf(el, first))).toBe(false);
+    });
+
+    it('places the tooltip above its tab, centred, 8px off it', async () => {
+      const { fixture, el } = await mount('/dashboard');
+      const link = tabLink(el, '/watchlist');
+      link.getBoundingClientRect = () =>
+        ({ top: 788, bottom: 844, left: 78, right: 156, width: 78, height: 56, x: 78, y: 788, toJSON: () => ({}) }) as DOMRect;
+      const pop = tooltipOf(el, link);
+      Object.defineProperty(pop, 'offsetWidth', { configurable: true, value: 70 });
+      Object.defineProperty(pop, 'offsetHeight', { configurable: true, value: 24 });
+      Object.defineProperty(root, 'clientWidth', { configurable: true, value: 390 });
+      Object.defineProperty(root, 'clientHeight', { configurable: true, value: 844 });
+      await hold(fixture, link);
+      expect(pop.style.top).toBe('756px');
+      expect(pop.style.left).toBe('82px');
+    });
   });
 });

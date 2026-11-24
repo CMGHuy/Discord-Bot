@@ -3,8 +3,10 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter, map } from 'rxjs';
 
+import { HINT_HOVER_DELAY_MS, Hint } from '../ui/hint';
 import { Icon } from '../ui/icon';
-import { phoneTabPathFor } from './nav';
+import { LongPress } from '../ui/long-press';
+import { NAV_ENTRIES, phoneTabPathFor } from './nav';
 import { TabBarPrefs } from './tab-bar-prefs';
 
 /**
@@ -20,6 +22,12 @@ import { TabBarPrefs } from './tab-bar-prefs';
  * the --accent-soft pill behind an --accent icon, and its label steps to
  * full text: never colour alone.
  *
+ * Press and hold (v240 §6): a 500ms touch on a tab opens its name above it
+ * (sbLongPress -> sb-hint openPinned(), placement "above") and navigates
+ * nowhere; it stays until the next touch or Escape. A mouse hovers instead,
+ * after HINT_HOVER_DELAY_MS. The name is the rail's, so Home reads
+ * "Dashboard" (Decision 9). More has no hint: its label is its name.
+ *
  * Each glyph sits in an aria-hidden span: `sb-icon` names itself with a
  * native title, which would otherwise join the visible label in the tab's
  * accessible name ("Trades Trades").
@@ -30,19 +38,23 @@ import { TabBarPrefs } from './tab-bar-prefs';
 @Component({
   selector: 'sb-phone-tab-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Icon],
+  imports: [RouterLink, Icon, Hint, LongPress],
   template: `
     <nav class="tabs" aria-label="Main pages">
       @for (tab of tabs(); track tab.path) {
         <a
+          #link
           class="tab"
           [routerLink]="tab.path"
           [class.active]="activePath() === tab.path"
           [attr.aria-current]="activePath() === tab.path ? 'page' : null"
+          sbLongPress
+          (longPress)="hint.openPinned()"
         >
           <span class="glyph" aria-hidden="true"><sb-icon [name]="tab.icon" [size]="24" /></span>
           <span class="tab-label">{{ tab.label }}</span>
         </a>
+        <sb-hint #hint [anchor]="link" [text]="railLabelOf(tab.path)" placement="above" [openDelay]="hintDelay" />
       }
       <button
         type="button"
@@ -124,6 +136,14 @@ export class PhoneTabBar {
   readonly moreRequested = output<void>();
 
   protected readonly tabs = inject(TabBarPrefs).tabs;
+
+  /** The hover delay the rail's hints use too (Decision 6). */
+  protected readonly hintDelay = HINT_HOVER_DELAY_MS;
+
+  /** A tab's tooltip is its page's rail name: the Home tab reads "Dashboard". */
+  protected railLabelOf(path: string): string {
+    return NAV_ENTRIES.find((entry) => entry.path === path)?.label ?? path;
+  }
 
   private readonly router = inject(Router);
   private readonly url = toSignal(
