@@ -4,16 +4,17 @@ import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter, map } from 'rxjs';
 
 import { Icon } from '../ui/icon';
-import { PHONE_TABS, phoneTabPathFor } from './nav';
+import { phoneTabPathFor } from './nav';
+import { TabBarPrefs } from './tab-bar-prefs';
 
 /**
- * The phone's bottom tab bar -- v195 Phase 3.
+ * The phone's bottom tab bar -- v195 Phase 3, v240 §6.
  *
- * Home (the Dashboard) · Watchlist · Trades · Calendar, then More (v202 §3, v240 §6).
- * Risk lives in the More sheet; the killswitch chip in the top bar shows the
- * halt state and Risk's page header holds the control. The current tab comes
- * from the nav model, not RouterLinkActive, so a plan detail lights Trades
- * and a page the bar does not hold lights More.
+ * The pages come from TabBarPrefs: by default Home (the Dashboard) ·
+ * Watchlist · Trades · Calendar, then More; the partner may keep 1 to 4
+ * pages, the Dashboard always first. The current tab comes from the nav
+ * model, not RouterLinkActive, so a plan detail lights Trades and a page
+ * the bar does not hold lights More.
  *
  * Each glyph sits in an aria-hidden span: `sb-icon` names itself with a
  * native title, which would otherwise join the visible label in the tab's
@@ -28,7 +29,7 @@ import { PHONE_TABS, phoneTabPathFor } from './nav';
   imports: [RouterLink, Icon],
   template: `
     <nav class="tabs" aria-label="Main pages">
-      @for (tab of tabs; track tab.path) {
+      @for (tab of tabs(); track tab.path) {
         <a
           class="tab"
           [routerLink]="tab.path"
@@ -98,7 +99,7 @@ export class PhoneTabBar {
   readonly moreOpen = input(false);
   readonly moreRequested = output<void>();
 
-  protected readonly tabs = PHONE_TABS;
+  protected readonly tabs = inject(TabBarPrefs).tabs;
 
   private readonly router = inject(Router);
   private readonly url = toSignal(
@@ -110,11 +111,11 @@ export class PhoneTabBar {
   );
 
   /** The tab the current page belongs to; null off the nav (the /ui gallery). */
-  protected readonly activePath = computed(() => phoneTabPathFor(this.url()));
+  protected readonly activePath = computed(() => phoneTabPathFor(this.url(), this.tabs()));
 
   protected readonly moreActive = computed(() => {
     if (this.moreOpen()) return true;
     const path = this.activePath();
-    return path !== null && !this.tabs.some((tab) => tab.path === path);
+    return path !== null && !this.tabs().some((tab) => tab.path === path);
   });
 }

@@ -146,8 +146,9 @@ export function isSectionUrl(url: string): boolean {
  *  landing page reads as Home on a 64 px tab (v202 §3). */
 const PHONE_TAB_LABELS: Readonly<Record<string, string>> = { '/dashboard': 'Home' };
 
-/** The phone bottom bar's default pages, in rail order (v240 §6); PhoneTabBar
- *  adds More last. Risk, Insights and System live in the More sheet. */
+/** The phone bottom bar's default pages, in rail order (v240 §6); TabBarPrefs
+ *  falls back to them and PhoneTabBar adds More last. Risk, Insights and
+ *  System live in the More sheet until the partner moves them. */
 export const DEFAULT_PHONE_TAB_PATHS: readonly string[] = ['/dashboard', '/watchlist', '/trades', '/calendar'];
 
 /** The tab entries for a list of destination paths, in the order given.
@@ -160,13 +161,12 @@ export function phoneTabsFor(paths: readonly string[], entries: readonly NavEntr
     .map((entry) => ({ ...entry, label: PHONE_TAB_LABELS[entry.path] ?? entry.label }));
 }
 
-/** The default bar. V247-12 replaces it with TabBarPrefs.tabs(). */
-export const PHONE_TABS: readonly NavEntry[] = phoneTabsFor(DEFAULT_PHONE_TAB_PATHS);
-
-/** The phone tab a URL lights: its section's own tab when a tab holds that
- *  section, else its destination's (a calendar day lights Calendar, a plan
- *  lights Trades); null off the nav. */
-export function phoneTabPathFor(url: string, tabs: readonly NavEntry[] = PHONE_TABS): string | null {
+/** The phone tab a URL lights, given the bar's tabs (TabBarPrefs.tabs()):
+ *  its section's own tab when a tab holds that section, else its
+ *  destination's (a calendar day lights Calendar, a plan lights Trades).
+ *  A destination the bar does not hold is still returned, so the caller
+ *  lights More; null off the nav. */
+export function phoneTabPathFor(url: string, tabs: readonly NavEntry[]): string | null {
   const found = navEntryFor(url);
   if (!found) return null;
   const sectionTab = tabs.find((tab) => tab.path === found.section?.path);

@@ -5,7 +5,8 @@ import { FocusTrap } from '../ui/focus-trap';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { SessionStore } from '../stores/session.store';
-import { NAV_ENTRIES, NavEntry, PHONE_TABS, navEntriesFor } from './nav';
+import { NavEntry, navEntriesFor } from './nav';
+import { TabBarPrefs } from './tab-bar-prefs';
 
 /** One group of the More sheet: a destination, and the pages it links to. */
 export interface MoreGroup {
@@ -17,13 +18,12 @@ export interface MoreGroup {
 /**
  * The destinations the phone's tab bar does not hold, in rail order (v202
  * §3), each with its sections as links; a single page links to itself.
- * Today: Insights (Analytics, Research, Reports) and, for the admin only,
- * System (Health, Versions). Trades' sections are reached from its section tabs.
+ * With the default bar: Risk, Insights (Analytics, Research, Reports,
+ * Guide) and, for the admin only, System (Health, Versions). The bar is
+ * the partner's choice (v240 §6), so the caller passes it: MoreSheet hands
+ * in TabBarPrefs.tabs(). Pure.
  */
-export function morePageGroups(
-  entries: readonly NavEntry[] = NAV_ENTRIES,
-  tabs: readonly NavEntry[] = PHONE_TABS,
-): MoreGroup[] {
+export function morePageGroups(entries: readonly NavEntry[], tabs: readonly NavEntry[]): MoreGroup[] {
   const onBar = new Set(tabs.map((tab) => tab.path));
   return entries
     .filter((entry) => !onBar.has(entry.path))
@@ -139,7 +139,9 @@ export class MoreSheet {
   readonly searchRequested = output<void>();
 
   private readonly session = inject(SessionStore);
-  protected readonly groups = computed(() => morePageGroups(navEntriesFor(this.session.isAdmin())));
+  private readonly prefs = inject(TabBarPrefs);
+  protected readonly groups = computed(() =>
+    morePageGroups(navEntriesFor(this.session.isAdmin()), this.prefs.tabs()));
 
   protected onEscape(): void {
     if (this.open()) this.closed.emit();

@@ -6,8 +6,11 @@ import { unprotected } from '@ngrx/signals/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { MoreSheet, morePageGroups } from './more-sheet';
-import { NAV_ENTRIES } from './nav';
+import { DEFAULT_PHONE_TAB_PATHS, NAV_ENTRIES, phoneTabsFor } from './nav';
+import { TAB_BAR_PREF_KEY, TAB_BAR_STORAGE, TabBarPrefs } from './tab-bar-prefs';
 import { SessionStore } from '../stores/session.store';
+
+const DEFAULT_TABS = phoneTabsFor(DEFAULT_PHONE_TAB_PATHS);
 
 @Component({ template: '' })
 class Blank {}
@@ -17,7 +20,7 @@ describe('morePageGroups (v202 §3)', () => {
     groups.map((group) => [group.id, group.label, group.links.map((link) => [link.label, link.path])]);
 
   it('lists the destinations the tab bar does not hold, each with its sections, in rail order', () => {
-    expect(shape(morePageGroups())).toEqual([
+    expect(shape(morePageGroups(NAV_ENTRIES, DEFAULT_TABS))).toEqual([
       ['more-risk', 'Risk', [['Risk', '/risk']]],
       ['more-insights', 'Insights', [['Analytics', '/insights/analytics'], ['Research', '/insights/research'], ['Reports', '/insights/reports'], ['Guide', '/insights/guide']]],
       ['more-system', 'System', [['Health', '/system'], ['Versions', '/system/versions']]],
@@ -25,7 +28,7 @@ describe('morePageGroups (v202 §3)', () => {
   });
 
   it('lists no destination the tab bar holds', () => {
-    const ids = morePageGroups().map((group) => group.id);
+    const ids = morePageGroups(NAV_ENTRIES, DEFAULT_TABS).map((group) => group.id);
     for (const id of ['more-dashboard', 'more-watchlist', 'more-trades', 'more-calendar']) expect(ids).not.toContain(id);
   });
 
@@ -35,6 +38,12 @@ describe('morePageGroups (v202 §3)', () => {
     expect(shape(groups)[0]).toEqual(['more-dashboard', 'Dashboard', [['Dashboard', '/dashboard']]]);
     expect(shape(groups)[2]).toEqual(['more-trades', 'Trades', [['Trades', '/trades']]]);
     expect(shape(groups)[3]).toEqual(['more-calendar', 'Calendar', [['Calendar', '/calendar']]]);
+  });
+
+  it('follows the tab list it is given', () => {
+    const tabs = phoneTabsFor(['/dashboard', '/risk']);
+    expect(morePageGroups(NAV_ENTRIES, tabs).map((group) => group.label))
+      .toEqual(['Watchlist', 'Trades', 'Calendar', 'Insights', 'System']);
   });
 
   it('is empty for an empty model', () => {
@@ -47,12 +56,22 @@ describe('MoreSheet (v195 Phase 3)', () => {
   let el: HTMLElement;
   let closed: number;
   let searched: number;
+  let stored: Map<string, string>;
 
-  beforeEach(() => {
+  /** An in-memory ui.tabbar, read through the closure so a test may reseed it. */
+  const storageProvider = () => ({
+    provide: TAB_BAR_STORAGE,
+    useValue: { get: (key: string) => stored.get(key) ?? null, set: (key: string, value: string) => void stored.set(key, value) },
+  });
+
+  function configure(role: 'admin' | 'viewer'): void {
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), provideRouter([{ path: '**', component: Blank }])],
+      providers: [provideZonelessChangeDetection(), provideRouter([{ path: '**', component: Blank }]), storageProvider()],
     });
-    patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: 'admin', role: 'admin' });
+    patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: role, role });
+  }
+
+  function create(): void {
     fixture = TestBed.createComponent(MoreSheet);
     el = fixture.nativeElement as HTMLElement;
     closed = 0;
@@ -60,12 +79,40 @@ describe('MoreSheet (v195 Phase 3)', () => {
     fixture.componentInstance.closed.subscribe(() => (closed += 1));
     fixture.componentInstance.searchRequested.subscribe(() => (searched += 1));
     fixture.detectChanges();
+  }
+
+  beforeEach(() => {
+    stored = new Map<string, string>();
+    configure('admin');
+    create();
   });
 
   function open(): void {
     fixture.componentRef.setInput('open', true);
     fixture.detectChanges();
   }
+
+  const groupLabels = () => [...el.querySelectorAll('.group-label')].map((n) => n.textContent!.trim());
+
+  it('lists what the partner took off the bar, and drops what they put on it (v240 §6)', () => {
+    const prefs = TestBed.inject(TabBarPrefs);
+    prefs.remove('/watchlist');
+    prefs.add('/risk');
+    open();
+    expect(groupLabels()).toEqual(['Watchlist', 'Insights', 'System']);
+    prefs.remove('/risk');
+    fixture.detectChanges();
+    expect(groupLabels()).toEqual(['Watchlist', 'Risk', 'Insights', 'System']);
+  });
+
+  it('reads the stored bar, ignoring a System tab for a viewer', () => {
+    TestBed.resetTestingModule();
+    stored = new Map([[TAB_BAR_PREF_KEY, '["/dashboard","/system","/insights"]']]);
+    configure('viewer');
+    create();
+    open();
+    expect(groupLabels()).toEqual(['Watchlist', 'Trades', 'Calendar', 'Risk']);
+  });
 
   const dialog = () => el.querySelector<HTMLElement>('[role=dialog]');
 

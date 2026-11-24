@@ -6,10 +6,11 @@ import { describe, expect, it } from 'vitest';
 import { routes } from '../app.routes';
 import { ICON_NAMES } from '../ui/icon';
 import {
-  ALIASES, DEFAULT_PHONE_TAB_PATHS, DESTINATION_LABEL_OVERRIDES, NAV_ENTRIES, PHONE_TABS, SECTION_LABEL_OVERRIDES,
+  ALIASES, DEFAULT_PHONE_TAB_PATHS, DESTINATION_LABEL_OVERRIDES, NAV_ENTRIES, SECTION_LABEL_OVERRIDES,
   SECTION_WORDS, breadcrumbFor, destinationFor, detailCrumb, isSectionUrl, navEntriesFor, navEntryFor,
   phoneTabPathFor, phoneTabsFor,
 } from './nav';
+import * as navModule from './nav';
 
 const paths = (entries: readonly { path: string }[]) => entries.map((entry) => entry.path);
 
@@ -106,12 +107,17 @@ describe('ALIASES (v202 §1)', () => {
 
 describe('phone tabs (v240 §6)', () => {
   it('defaults to Home, Watchlist, Trades and Calendar, the rail order, each with its destination icon', () => {
+    const tabs = phoneTabsFor(DEFAULT_PHONE_TAB_PATHS);
     expect(DEFAULT_PHONE_TAB_PATHS).toEqual(['/dashboard', '/watchlist', '/trades', '/calendar']);
-    expect(paths(PHONE_TABS)).toEqual([...DEFAULT_PHONE_TAB_PATHS]);
-    expect(PHONE_TABS.map((tab) => tab.label)).toEqual(['Home', 'Watchlist', 'Trades', 'Calendar']);
-    for (const tab of PHONE_TABS) {
+    expect(paths(tabs)).toEqual([...DEFAULT_PHONE_TAB_PATHS]);
+    expect(tabs.map((tab) => tab.label)).toEqual(['Home', 'Watchlist', 'Trades', 'Calendar']);
+    for (const tab of tabs) {
       expect(NAV_ENTRIES.find((entry) => entry.path === tab.path)?.icon).toBe(tab.icon);
     }
+  });
+
+  it('exports no PHONE_TABS constant: the bar is TabBarPrefs.tabs() (v240 §6)', () => {
+    expect('PHONE_TABS' in navModule).toBe(false);
   });
 
   it('maps paths in the order given, drops unknown ones and labels only the Dashboard Home', () => {
@@ -167,6 +173,8 @@ describe('navEntryFor (v202 second-segment rule)', () => {
 });
 
 describe('phoneTabPathFor', () => {
+  const DEFAULT_TABS = phoneTabsFor(DEFAULT_PHONE_TAB_PATHS);
+
   it.each([
     ['/calendar/2026-10-01', '/calendar'],
     ['/calendar?month=2026-11', '/calendar'],
@@ -177,13 +185,19 @@ describe('phoneTabPathFor', () => {
     ['/risk', '/risk'],
     ['/system/versions', '/system'],
     ['/ui', null],
-  ])('lights %s on the %j tab', (url, expected) => {
-    expect(phoneTabPathFor(url)).toBe(expected);
+  ])('lights %s on the %j tab of the default bar', (url, expected) => {
+    expect(phoneTabPathFor(url, DEFAULT_TABS)).toBe(expected);
   });
 
   it('reads the tab list it is given', () => {
     expect(phoneTabPathFor('/insights/research', phoneTabsFor(['/dashboard']))).toBe('/insights');
     expect(phoneTabPathFor('/calendar/2026-10-01', phoneTabsFor(['/dashboard', '/calendar']))).toBe('/calendar');
+    expect(phoneTabPathFor('/plans/7', phoneTabsFor(['/dashboard', '/risk', '/trades']))).toBe('/trades');
+  });
+
+  it('still names the destination for an empty bar, so the caller lights More', () => {
+    expect(phoneTabPathFor('/risk', [])).toBe('/risk');
+    expect(phoneTabPathFor('/ui', [])).toBeNull();
   });
 });
 
