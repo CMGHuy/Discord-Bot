@@ -232,7 +232,7 @@ def _runner_from(raw, seen=None):
 
 def test_routes_are_the_spec_list_in_order_with_the_pinned_date():
     assert probe.routes("2026-11-03") == [
-        "dashboard", "trades", "trades/calendar", "trades/calendar/2026-11-03", "trades/cancels",
+        "dashboard", "trades", "calendar", "calendar/2026-11-03", "trades/cancels",
         "watchlist", "risk", "insights/analytics", "insights/research", "insights/reports",
         "system", "system/versions"]
 

@@ -231,7 +231,7 @@ ROOT = Path(__file__).resolve().parents[2]
 BERLIN = ZoneInfo("Europe/Berlin")
 DEFAULT_BASE = "https://bomeo-capital.com"
 #: Spec P1-a, in this fixed order; production serves the SPA at the root path.
-ROUTES = ("dashboard", "trades", "trades/calendar", "trades/calendar/{date}", "trades/cancels",
+ROUTES = ("dashboard", "trades", "calendar", "calendar/{date}", "trades/cancels",
           "watchlist", "risk", "insights/analytics", "insights/research", "insights/reports",
           "system", "system/versions")
 QUIET_S = 2.0
@@ -256,7 +256,7 @@ def _iso_date(text: str) -> str:
 
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Browser probe of the admin under load (v206).")
-    parser.add_argument("--date", required=True, type=_iso_date, help="day for trades/calendar/<date>")
+    parser.add_argument("--date", required=True, type=_iso_date, help="day for calendar/<date>")
     parser.add_argument("--out", required=True, type=Path, help="directory for probe.json and probe.md")
     parser.add_argument("--base", default=DEFAULT_BASE)
     parser.add_argument("--rounds", type=int, default=3)

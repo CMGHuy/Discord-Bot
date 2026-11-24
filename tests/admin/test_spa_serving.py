@@ -84,7 +84,7 @@ def test_each_workspace_serves_the_spa(client, workspace, built):
     "/trades/calendar/2026-10-01",
     "/insights/analytics",
     "/system/versions",
-    "/calendar/2026-10-01",
+    "/calendar/2026-11-23",
 ])
 def test_a_detail_url_reloads_into_the_spa(client, path, built):
     """Refreshing on /trades/:id must not 404 -- the route only exists in
@@ -94,12 +94,31 @@ def test_a_detail_url_reloads_into_the_spa(client, path, built):
 
 
 def test_the_old_names_stay_served_until_phase_4():
-    """v202 moved six pages under new destinations. Their old names keep
+    """v202 moved five pages under new destinations. Their old names keep
     serving index.html, so a bookmark still reaches Angular's redirect instead
     of a server 404. Phase 4's close-out removes them with cockpit/universe."""
-    for name in ("calendar", "cancels", "analytics", "research", "reports", "versions",
+    for name in ("cancels", "analytics", "research", "reports", "versions",
                  "cockpit", "universe"):
         assert name in spa.WORKSPACES, name
+
+
+def test_calendar_is_a_served_destination_not_an_old_name(client, built):
+    """v247 (spec v240 s6): Calendar is a destination at /calendar again. It sits
+    in the destinations row, ahead of the old names Phase 4's close-out deletes,
+    and the removal note does not name it, so that close-out cannot drop the
+    prefix of a live page."""
+    import inspect
+
+    destinations = spa.WORKSPACES[: spa.WORKSPACES.index("analytics")]
+    assert "calendar" in destinations
+    assert spa.WORKSPACES.count("calendar") == 1
+
+    source = inspect.getsource(spa)
+    removal_note = source[source.index("pre-v202 names --"): source.index("WORKSPACES = (")]
+    assert "calendar" not in removal_note
+
+    assert client.get("/calendar").status_code == 200
+    assert client.get("/calendar/2026-11-23?strategy=EMA20").status_code == 200
 
 
 def test_an_unknown_path_is_still_a_404(client, built):
