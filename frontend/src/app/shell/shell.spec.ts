@@ -30,6 +30,8 @@ import { CLOCK } from '../ui/clock';
 import { DENSITY_STORAGE } from '../ui/density.service';
 import { THEME_STORAGE, ThemeStorage } from '../ui/theme.service';
 import { styleRules } from '../ui/testing/style-rules';
+import { HINT_HOVER_DELAY_MS } from '../ui/hint';
+import { POPOVER_OPEN_ATTR } from '../testing/popover-polyfill';
 import { provideMotion } from '../ui/motion/motion.service';
 import { NAV_ENTRIES } from './nav';
 import { Shell } from './shell';
@@ -314,23 +316,34 @@ describe('shell navigation', () => {
     expect(button.textContent?.trim()).toBe('Aa 90%');
   });
 
-  it('marks the active entry with the pill and a brighter glyph and label', () => {
+  it('marks the active entry with the accent-soft fill and a 3px accent bar on the inner edge (v247 §5)', () => {
     const css = readSource('src/app/shell/shell.css');
-    expect(css.match(/^\.rail-link\.active \.rail-pill \{[^}]*\}/m)?.[0]).toContain('background: var(--accent-soft);');
-    expect(css.match(/^\.rail-link\.active \{[^}]*\}/m)?.[0]).toContain('color: var(--text);');
-    expect(css.match(/^\.rail-link \{[^}]*\}/m)?.[0]).toContain('color: var(--text-muted);');
-    expect(css).not.toMatch(/sb-nav-indicator|border-left-color/);
+    const active = css.match(/^\.rail-link\.active \{[^}]*\}/m)?.[0] ?? '';
+    expect(active).toContain('background: var(--accent-soft);');
+    expect(active).toContain('color: var(--text);');
+    const bar = css.match(/^\.rail-link\.active::after \{[^}]*\}/m)?.[0] ?? '';
+    for (const declaration of ['content: "";', 'position: absolute;', 'width: 3px;',
+      'right: calc((var(--rail-width) - 44px) / -2);', 'border-radius: var(--pill-radius);',
+      'background: var(--accent);']) {
+      expect(bar, declaration).toContain(declaration);
+    }
+    // The bar is placed against the link, so the link is its containing block.
+    const link = css.match(/^\.rail-link \{[^}]*\}/m)?.[0] ?? '';
+    expect(link).toContain('position: relative;');
+    expect(link).toContain('color: var(--text-muted);');
+    expect(css).not.toMatch(/sb-nav-indicator|border-left-color|\.rail-pill/);
   });
 
-  it('sizes each entry 64x52, a 24px icon over a micro label', () => {
+  it('sizes each entry 44x44 with a 24px icon and no label rule (v247 §5)', () => {
     const css = readSource('src/app/shell/shell.css');
     const link = css.match(/^\.rail-link \{[^}]*\}/m)?.[0] ?? '';
-    expect(link).toContain('width: 64px;');
-    expect(link).toContain('min-height: 52px;');
+    expect(link).toContain('width: 44px;');
+    expect(link).toContain('height: 44px;');
+    expect(link).not.toContain('flex-direction: column;');
     // The icon draws at 24 through sb-icon's size input (v240 §4); no rule
     // reaches into the svg to resize it.
     expect(styleRules('shell.css', css).filter((rule) => /sb-icon\s+svg/.test(rule.selector))).toEqual([]);
-    expect(css.match(/^\.rail-label \{[^}]*\}/m)?.[0]).toContain('font-size: var(--text-micro);');
+    expect(css).not.toMatch(/\.rail-label/);
   });
 
   it('keeps the ui and bot versions in a hint at the foot of the rail', async () => {
@@ -568,7 +581,7 @@ describe('shell topbar centred on one axis (v179 layout audit)', () => {
   });
 });
 
-describe('shell labelled rail (v202 §3)', () => {
+describe('shell icon rail (v247, spec v240 §5)', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: shellProviders([
@@ -589,7 +602,19 @@ describe('shell labelled rail (v202 §3)', () => {
     return { fixture, el: fixture.nativeElement as HTMLElement };
   }
 
-  const labelOf = (link: Element) => link.querySelector('.rail-label')!.textContent!.trim();
+  /** v247: a rail link is named by its aria-label alone; it draws no text. */
+  const labelOf = (link: Element) => link.getAttribute('aria-label') ?? '';
+  /** The role="tooltip" popover the link's aria-describedby points at (its sb-hint). */
+  const tooltipOf = (el: HTMLElement, link: Element) =>
+    el.querySelector(`[id="${link.getAttribute('aria-describedby')}"]`) as HTMLElement;
+  const isOpen = (tooltip: HTMLElement) => tooltip.hasAttribute(POPOVER_OPEN_ATTR);
+  async function settle(fixture: ComponentFixture<Shell>) {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+  const railLink = (el: HTMLElement, path: string) =>
+    el.querySelector<HTMLAnchorElement>(`nav.rail a.rail-link[href="${path}"]`)!;
 
   it('draws seven labelled destinations, six work entries then System at the foot (v247)', async () => {
     const { el } = await mount();
@@ -636,26 +661,104 @@ describe('shell labelled rail (v202 §3)', () => {
     expect(el.querySelector('sb-read-only-badge')).toBeNull();
   });
 
-  it('draws each entry as its icon over its visible label, with no hint and no title', async () => {
+  it('names each entry by aria-label alone, draws no label, and gives it one anchored hint with that name', async () => {
     const { el } = await mount();
     const links = [...el.querySelectorAll<HTMLAnchorElement>('nav.rail a.rail-link')];
     expect(links.map((a) => a.getAttribute('href'))).toEqual(NAV_ENTRIES.map((entry) => entry.path));
-    for (const link of links) {
-      const label = labelOf(link);
-      // The visible label is the accessible name; the icon is aria-hidden.
-      expect(link.hasAttribute('aria-label'), label).toBe(false);
+    expect(el.querySelector('nav.rail .rail-label, nav.rail .rail-pill')).toBeNull();
+    links.forEach((link, index) => {
+      const label = NAV_ENTRIES[index].label;
+      expect(link.getAttribute('aria-label'), label).toBe(label);
       expect(link.hasAttribute('title'), label).toBe(false);
-      expect(link.querySelector(':scope > .rail-pill > sb-icon')!.getAttribute('title'), label).toBe('');
-      expect(link.textContent!.trim(), label).toBe(label);
-      expect(link.parentElement!.querySelector('sb-hint'), label).toBeNull();
-    }
+      // No visible text: the icon is the link's only child, and it is unnamed.
+      expect(link.textContent!.trim(), label).toBe('');
+      expect([...link.children].map((child) => child.tagName.toLowerCase()), label).toEqual(['sb-icon']);
+      expect(link.querySelector(':scope > sb-icon')!.getAttribute('title'), label).toBe('');
+      // One hint per entry, beside the link in its <li>, describing it with the same name.
+      expect(link.parentElement!.querySelectorAll('sb-hint'), label).toHaveLength(1);
+      const tooltip = tooltipOf(el, link);
+      expect(tooltip.getAttribute('role'), label).toBe('tooltip');
+      expect(tooltip.textContent!.trim(), label).toBe(label);
+      expect(isOpen(tooltip), label).toBe(false);
+    });
     expect(el.querySelectorAll('nav.rail ul.nav button')).toHaveLength(0);
+  });
+
+  it('gives a viewer a hint on every entry it sees and none naming System (v207)', async () => {
+    asViewer();
+    const { el } = await mount();
+    const links = [...el.querySelectorAll<HTMLAnchorElement>('nav.rail a.rail-link')];
+    expect(links.map(labelOf)).toEqual(['Dashboard', 'Watchlist', 'Trades', 'Calendar', 'Risk', 'Insights']);
+    expect(el.querySelectorAll('nav.rail li > sb-hint')).toHaveLength(links.length);
+    expect([...el.querySelectorAll('nav.rail li [role="tooltip"]')].map((tip) => tip.textContent!.trim()))
+      .not.toContain('System');
+  });
+
+  it('opens the entry hint at once on keyboard focus, and closes it on blur and on Escape', async () => {
+    const { fixture, el } = await mount();
+    const link = railLink(el, '/watchlist');
+    const tooltip = tooltipOf(el, link);
+    link.dispatchEvent(new FocusEvent('focus'));
+    await settle(fixture);
+    expect(isOpen(tooltip)).toBe(true);
+    link.dispatchEvent(new FocusEvent('blur'));
+    await settle(fixture);
+    expect(isOpen(tooltip)).toBe(false);
+    link.dispatchEvent(new FocusEvent('focus'));
+    await settle(fixture);
+    expect(isOpen(tooltip)).toBe(true);
+    link.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle(fixture);
+    expect(isOpen(tooltip)).toBe(false);
+  });
+
+  it('opens the entry hint on hover only after the hint delay, and a leave before it cancels', async () => {
+    const { fixture, el } = await mount();
+    const link = railLink(el, '/risk');
+    const tooltip = tooltipOf(el, link);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      link.dispatchEvent(new MouseEvent('mouseenter'));
+      fixture.detectChanges();
+      vi.advanceTimersByTime(HINT_HOVER_DELAY_MS - 1);
+      fixture.detectChanges();
+      expect(isOpen(tooltip)).toBe(false);
+      vi.advanceTimersByTime(1);
+      fixture.detectChanges();
+      expect(isOpen(tooltip)).toBe(true);
+      link.dispatchEvent(new MouseEvent('mouseleave'));
+      fixture.detectChanges();
+      expect(isOpen(tooltip)).toBe(false);
+      // A pass over the link shorter than the delay never opens it.
+      link.dispatchEvent(new MouseEvent('mouseenter'));
+      vi.advanceTimersByTime(HINT_HOVER_DELAY_MS - 50);
+      link.dispatchEvent(new MouseEvent('mouseleave'));
+      vi.advanceTimersByTime(HINT_HOVER_DELAY_MS);
+      fixture.detectChanges();
+      expect(isOpen(tooltip)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows one rail tooltip at a time', async () => {
+    const { fixture, el } = await mount();
+    const first = railLink(el, '/trades');
+    const second = railLink(el, '/calendar');
+    first.dispatchEvent(new FocusEvent('focus'));
+    await settle(fixture);
+    expect(isOpen(tooltipOf(el, first))).toBe(true);
+    second.dispatchEvent(new FocusEvent('focus'));
+    await settle(fixture);
+    expect(isOpen(tooltipOf(el, second))).toBe(true);
+    expect(isOpen(tooltipOf(el, first))).toBe(false);
+    expect(el.querySelectorAll(`nav.rail li [role="tooltip"][${POPOVER_OPEN_ATTR}]`)).toHaveLength(1);
   });
 
   it('draws the brand and every destination icon at 24px through sb-icon size (v240 §4)', async () => {
     const { el } = await mount();
     const svgs = [...el.querySelectorAll(
-      'nav.rail > a.rail-brand > sb-icon svg, nav.rail .rail-pill > sb-icon svg',
+      'nav.rail > a.rail-brand > sb-icon svg, nav.rail a.rail-link > sb-icon svg',
     )];
     // The brand plus one icon per destination.
     expect(svgs).toHaveLength(1 + NAV_ENTRIES.length);
@@ -738,7 +841,7 @@ describe('shell top bar (v195 Phase 3, correction 9)', () => {
   it('sizes the rail and the bar from two shell tokens, with no animated width', () => {
     const css = readSource('src/app/shell/shell.css');
     const shell = css.match(/^\.shell \{[^}]*\}/m)?.[0] ?? '';
-    expect(shell).toContain('--rail-width: 80px;');
+    expect(shell).toContain('--rail-width: 64px;');
     expect(shell).toContain('--topbar-h: 40px;');
     expect(shell).toContain('grid-template-columns: var(--rail-width) 1fr;');
     expect(shell).not.toContain('transition');

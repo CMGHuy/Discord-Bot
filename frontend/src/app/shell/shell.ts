@@ -27,7 +27,7 @@ import { CLOCK } from '../ui/clock';
 import { ViewportService } from '../ui/breakpoints';
 import { Button } from '../ui/button';
 import { DensityService } from '../ui/density.service';
-import { Hint } from '../ui/hint';
+import { HINT_HOVER_DELAY_MS, Hint } from '../ui/hint';
 import { ThemeService } from '../ui/theme.service';
 import { Icon } from '../ui/icon';
 import { ProfileMenu } from './profile-menu';
@@ -64,10 +64,13 @@ import { VoiceNotifier } from '../voice/voice-notifier';
  * Rendered by App instead of the login form -- it is not itself routed, so
  * there is no state in which the shell exists without a session.
  *
- * **One rail state.** The rail is always 80px, each entry an icon over its label (v202 §3): there is no
- * expanded sidebar, no overlay and no stored collapse choice. The server's
- * pre-v195 sidebar preference is left in place (an older image reads it
- * again on rollback) and is never read or written here.
+ * **One rail state.** The rail is always 64px, each entry a 24px icon in a
+ * 44x44 link named by its aria-label, with an anchored sb-hint that shows
+ * the name on hover (after HINT_HOVER_DELAY_MS), on focus and on a touch
+ * long-press (v247, spec v240 §5). There is no expanded sidebar, no overlay
+ * and no stored collapse choice. The server's pre-v195 sidebar preference
+ * is left in place (an older image reads it again on rollback) and is never
+ * read or written here.
  *
  * **Scan and bot status live here and nowhere else.** They were on the old
  * Dashboard as well as the header, which meant two renderings of one fact
@@ -113,6 +116,10 @@ export class Shell {
    *  (v202 §1). The /ui gallery is not on it: a developer surface. */
   protected readonly railWork = computed(() => navEntriesFor(this.session.isAdmin()).filter((entry) => !entry.foot));
   protected readonly railFoot = computed(() => navEntriesFor(this.session.isAdmin()).filter((entry) => entry.foot));
+
+  /** The rail hints wait this long on hover, so a pointer crossing the rail
+   *  does not flash every label (v247 Decision 6); focus opens at once. */
+  protected readonly railHintDelay = HINT_HOVER_DELAY_MS;
 
   private readonly router = inject(Router);
   private readonly url = toSignal(

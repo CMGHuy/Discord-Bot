@@ -1,7 +1,7 @@
 .shell {
-  /* v203 (spec v202 §3): an 80px labelled rail and a 40px top bar. One
-     state, so nothing here animates. */
-  --rail-width: 80px;
+  /* v247 (spec v240 §5): a 64px icon rail and a 40px top bar. One state,
+     so nothing here animates. */
+  --rail-width: 64px;
   --topbar-h: 40px;
   display: grid;
   grid-template-columns: var(--rail-width) 1fr;
@@ -57,53 +57,43 @@
   border-top: 1px solid var(--border);
 }
 
-/* 64x52 at every width: past the 44px touch size, so no .sb-hit. */
+/* 44x44 at every width: the touch size itself, so no .sb-hit. The 24px icon
+   is sb-icon's size input; the link is the bar's containing block. */
 .rail-link {
+  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-4);
   box-sizing: border-box;
-  width: 64px;
-  min-height: 52px;
-  padding: var(--space-4) 0;
+  width: 44px;
+  height: 44px;
   border-radius: var(--control-radius);
   color: var(--text-muted);
   text-decoration: none;
-  transition: color var(--transition);
+  transition: color var(--transition), background var(--transition);
 }
-.rail-link:hover { color: var(--text); }
+.rail-link:hover { color: var(--text); background: var(--surface-raised); }
 .rail-link:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 
-/* The pill behind the icon is the indicator. */
-.rail-pill {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 28px;
-  border-radius: var(--control-radius);
-  transition: background var(--transition);
-}
-.rail-link:hover .rail-pill { background: var(--surface-raised); }
-
-.rail-label {
-  max-width: 100%;
-  overflow: hidden;
-  font-size: var(--text-micro);
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Three cues, so the active entry survives a monochrome reading: the pill,
-   glyph and label stepping up to full text, and aria-current. */
-.rail-link.active .rail-pill {
-  background: var(--accent-soft);
-}
+/* Three cues, so the active entry survives a monochrome reading: the fill,
+   the bar on the rail's inner edge, and aria-current. Accent, never mint:
+   mint means "gain" (spec v240 §1). After :hover, so a hovered active entry
+   keeps its fill. */
 .rail-link.active {
   color: var(--text);
+  background: var(--accent-soft);
+}
+/* The link sits centred in the rail, (rail - 44px) / 2 in from each edge;
+   the bar sits that far out, flush with the rail's right edge. */
+.rail-link.active::after {
+  content: "";
+  position: absolute;
+  top: var(--space-8);
+  bottom: var(--space-8);
+  right: calc((var(--rail-width) - 44px) / -2);
+  width: 3px;
+  border-radius: var(--pill-radius);
+  background: var(--accent);
 }
 
 .rail-version {

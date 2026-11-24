@@ -1,9 +1,11 @@
 <div class="shell">
-  <!-- v203 (spec v202 §3): an 80px labelled rail. The diamond mark heads it,
-       the five work destinations follow, System sits at the foot. Each entry
-       draws its icon over its label, so it needs no hint, and the active
-       entry's pill is the indicator. "Active" comes from the nav model
-       (navHere), not routerLinkActive, so /plans/7 lights Trades. -->
+  <!-- v247 (spec v240 §5): a 64px icon rail. The diamond mark heads it, the
+       six work destinations follow, System sits at the foot. Each entry is a
+       24px icon in a 44x44 link named by its aria-label; its sb-hint shows
+       the name beside it on hover (after the hint delay), on focus and on a
+       touch long-press, one at a time. The active entry has the accent-soft
+       fill and the accent bar on the rail's inner edge. "Active" comes from
+       the nav model (navHere), not routerLinkActive, so /plans/7 lights Trades. -->
   <nav class="rail" aria-label="Primary">
     <a class="rail-brand sb-hit" routerLink="/dashboard" #brand aria-label="Bomeo Capital — go to the Dashboard">
       <sb-icon name="brand" title="" [size]="24" />
@@ -13,12 +15,13 @@
     <ul class="nav rail-work" aria-label="Destinations">
       @for (entry of railWork(); track entry.path) {
         <li>
-          <a class="rail-link" [routerLink]="entry.path"
+          <a #link class="rail-link" [routerLink]="entry.path"
+             [attr.aria-label]="entry.label"
              [class.active]="entry.path === activePath()"
              [attr.aria-current]="entry.path === activePath() ? 'page' : null">
-            <span class="rail-pill"><sb-icon [name]="entry.icon" title="" [size]="24" /></span>
-            <span class="rail-label">{{ entry.label }}</span>
+            <sb-icon [name]="entry.icon" title="" [size]="24" />
           </a>
+          <sb-hint #hint [anchor]="link" [text]="entry.label" [openDelay]="railHintDelay" />
         </li>
       }
     </ul>
@@ -27,12 +30,13 @@
       <ul class="nav rail-foot" aria-label="System">
         @for (entry of railFoot(); track entry.path) {
           <li>
-            <a class="rail-link" [routerLink]="entry.path"
+            <a #link class="rail-link" [routerLink]="entry.path"
+               [attr.aria-label]="entry.label"
                [class.active]="entry.path === activePath()"
                [attr.aria-current]="entry.path === activePath() ? 'page' : null">
-              <span class="rail-pill"><sb-icon [name]="entry.icon" title="" [size]="24" /></span>
-              <span class="rail-label">{{ entry.label }}</span>
+              <sb-icon [name]="entry.icon" title="" [size]="24" />
             </a>
+            <sb-hint #hint [anchor]="link" [text]="entry.label" [openDelay]="railHintDelay" />
           </li>
         }
       </ul>

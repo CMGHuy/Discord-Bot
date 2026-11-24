@@ -60,9 +60,9 @@ describe('v179: the .sb-hit utility', () => {
 
 describe('v179: controls that grow to the hit size', () => {
   const GROWN: [file: string, selector: string, declaration: string][] = [
-    // v202 §3: a 64x52 rail entry is past the 44px hit size at every width.
-    ['src/app/shell/shell.css', '.rail-link', 'min-height: 52px'],
-    ['src/app/shell/shell.css', '.rail-link', 'width: 64px'],
+    // v247 (spec v240 §5): a 44x44 rail entry is the 44px hit size at every width.
+    ['src/app/shell/shell.css', '.rail-link', 'width: 44px'],
+    ['src/app/shell/shell.css', '.rail-link', 'height: 44px'],
     ['src/app/ui/filter-bar.ts', '.chip', 'min-height: var(--control-h)'],
     ['src/app/ui/filter-bar.ts', '.chip', 'min-width: var(--hit-min)'],
     ['src/app/ui/column-picker.ts', '.trigger', 'min-height: var(--control-h)'],
