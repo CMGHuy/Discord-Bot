@@ -9,7 +9,7 @@ import { PHONE_TABS, phoneTabPathFor } from './nav';
 /**
  * The phone's bottom tab bar -- v195 Phase 3.
  *
- * Home (the Dashboard) · Watchlist · Calendar · Trades, then More (v202 §3).
+ * Home (the Dashboard) · Watchlist · Trades · Calendar, then More (v202 §3, v240 §6).
  * Risk lives in the More sheet; the killswitch chip in the top bar shows the
  * halt state and Risk's page header holds the control. The current tab comes
  * from the nav model, not RouterLinkActive, so a plan detail lights Trades

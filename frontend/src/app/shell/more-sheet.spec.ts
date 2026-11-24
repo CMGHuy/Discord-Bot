@@ -26,15 +26,15 @@ describe('morePageGroups (v202 §3)', () => {
 
   it('lists no destination the tab bar holds', () => {
     const ids = morePageGroups().map((group) => group.id);
-    for (const id of ['more-dashboard', 'more-watchlist', 'more-trades']) expect(ids).not.toContain(id);
+    for (const id of ['more-dashboard', 'more-watchlist', 'more-trades', 'more-calendar']) expect(ids).not.toContain(id);
   });
 
   it('keeps every destination when no tab is given, a single page linking to itself', () => {
     const groups = morePageGroups(NAV_ENTRIES, []);
-    expect(groups).toHaveLength(6);
+    expect(groups).toHaveLength(7);
     expect(shape(groups)[0]).toEqual(['more-dashboard', 'Dashboard', [['Dashboard', '/dashboard']]]);
-    expect(shape(groups)[2]).toEqual(['more-trades', 'Trades',
-      [['Book', '/trades'], ['Calendar', '/trades/calendar']]]);
+    expect(shape(groups)[2]).toEqual(['more-trades', 'Trades', [['Trades', '/trades']]]);
+    expect(shape(groups)[3]).toEqual(['more-calendar', 'Calendar', [['Calendar', '/calendar']]]);
   });
 
   it('is empty for an empty model', () => {

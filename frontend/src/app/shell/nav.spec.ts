@@ -6,8 +6,9 @@ import { describe, expect, it } from 'vitest';
 import { routes } from '../app.routes';
 import { ICON_NAMES } from '../ui/icon';
 import {
-  ALIASES, DESTINATION_LABEL_OVERRIDES, NAV_ENTRIES, PHONE_TABS, SECTION_LABEL_OVERRIDES, SECTION_WORDS,
-  breadcrumbFor, destinationFor, detailCrumb, isSectionUrl, navEntriesFor, navEntryFor, phoneTabPathFor,
+  ALIASES, DEFAULT_PHONE_TAB_PATHS, DESTINATION_LABEL_OVERRIDES, NAV_ENTRIES, PHONE_TABS, SECTION_LABEL_OVERRIDES,
+  SECTION_WORDS, breadcrumbFor, destinationFor, detailCrumb, isSectionUrl, navEntriesFor, navEntryFor,
+  phoneTabPathFor, phoneTabsFor,
 } from './nav';
 
 const paths = (entries: readonly { path: string }[]) => entries.map((entry) => entry.path);
@@ -15,21 +16,21 @@ const paths = (entries: readonly { path: string }[]) => entries.map((entry) => e
 const titleAt = (path: string) => routes.find((route) => `/${route.path}` === path)?.title;
 
 describe('NAV_ENTRIES (v202 §1)', () => {
-  it('is six destinations in rail order, System alone at the foot', () => {
+  it('is seven destinations in rail order, Calendar after Trades, System alone at the foot (v247)', () => {
     expect(NAV_ENTRIES.map((entry) => [entry.path, entry.label])).toEqual([
-      ['/dashboard', 'Dashboard'], ['/watchlist', 'Watchlist'], ['/trades', 'Trades'],
+      ['/dashboard', 'Dashboard'], ['/watchlist', 'Watchlist'], ['/trades', 'Trades'], ['/calendar', 'Calendar'],
       ['/risk', 'Risk'], ['/insights', 'Insights'], ['/system', 'System'],
     ]);
+    expect(NAV_ENTRIES.find((entry) => entry.path === '/calendar')?.icon).toBe('calendar');
     expect(paths(NAV_ENTRIES.filter((entry) => entry.foot))).toEqual(['/system']);
   });
 
-  it('gives Trades, Insights and System their sections, the first one the default', () => {
+  it('gives Insights and System their sections; Trades and Calendar are single pages (v247)', () => {
     const sections = Object.fromEntries(
       NAV_ENTRIES.map((entry) => [entry.path, entry.sections?.map((s) => [s.path, s.label]) ?? null]),
     );
     expect(sections).toEqual({
-      '/dashboard': null, '/watchlist': null, '/risk': null,
-      '/trades': [['/trades', 'Book'], ['/trades/calendar', 'Calendar']],
+      '/dashboard': null, '/watchlist': null, '/trades': null, '/calendar': null, '/risk': null,
       '/insights': [['/insights/analytics', 'Analytics'], ['/insights/research', 'Research'], ['/insights/reports', 'Reports'], ['/insights/guide', 'Guide']],
       '/system': [['/system', 'Health'], ['/system/versions', 'Versions']],
     });
@@ -60,7 +61,7 @@ describe('NAV_ENTRIES (v202 §1)', () => {
   });
 
   it('records exactly its overrides, each one differing from the title it stands in for', () => {
-    expect(SECTION_LABEL_OVERRIDES).toEqual({ '/trades': 'Book', '/system': 'Health' });
+    expect(SECTION_LABEL_OVERRIDES).toEqual({ '/system': 'Health' });
     expect(DESTINATION_LABEL_OVERRIDES).toEqual({ '/insights': 'Insights' });
     for (const [path, label] of Object.entries(SECTION_LABEL_OVERRIDES)) expect(titleAt(path)).not.toBe(label);
     expect(titleAt('/insights/analytics')).not.toBe(DESTINATION_LABEL_OVERRIDES['/insights']);
@@ -73,7 +74,7 @@ describe('NAV_ENTRIES (v202 §1)', () => {
   });
 
   it('names the section words of the second-segment rule', () => {
-    expect([...SECTION_WORDS].sort()).toEqual(['analytics', 'calendar', 'guide', 'reports', 'research', 'versions']);
+    expect([...SECTION_WORDS].sort()).toEqual(['analytics', 'guide', 'reports', 'research', 'versions']);
   });
 });
 
@@ -81,7 +82,7 @@ describe('ALIASES (v202 §1)', () => {
   it('maps every moved page and the older renames onto their new home', () => {
     expect(ALIASES).toEqual({
       '/plans': '/trades', '/universe': '/watchlist', '/cockpit': '/dashboard',
-      '/calendar': '/trades/calendar', '/cancels': '/insights/analytics',
+      '/cancels': '/insights/analytics',
       '/analytics': '/insights/analytics', '/research': '/insights/research', '/reports': '/insights/reports',
       '/versions': '/system/versions',
     });
@@ -103,13 +104,26 @@ describe('ALIASES (v202 §1)', () => {
   });
 });
 
-describe('PHONE_TABS', () => {
-  it('is Home, Watchlist, Calendar and Trades, each drawn with its destination or section icon', () => {
-    expect(paths(PHONE_TABS)).toEqual(['/dashboard', '/watchlist', '/trades/calendar', '/trades']);
-    expect(PHONE_TABS.map((tab) => tab.label)).toEqual(['Home', 'Watchlist', 'Calendar', 'Trades']);
-    for (const tab of PHONE_TABS.filter((candidate) => candidate.path !== '/trades/calendar')) {
+describe('phone tabs (v240 §6)', () => {
+  it('defaults to Home, Watchlist, Trades and Calendar, the rail order, each with its destination icon', () => {
+    expect(DEFAULT_PHONE_TAB_PATHS).toEqual(['/dashboard', '/watchlist', '/trades', '/calendar']);
+    expect(paths(PHONE_TABS)).toEqual([...DEFAULT_PHONE_TAB_PATHS]);
+    expect(PHONE_TABS.map((tab) => tab.label)).toEqual(['Home', 'Watchlist', 'Trades', 'Calendar']);
+    for (const tab of PHONE_TABS) {
       expect(NAV_ENTRIES.find((entry) => entry.path === tab.path)?.icon).toBe(tab.icon);
     }
+  });
+
+  it('maps paths in the order given, drops unknown ones and labels only the Dashboard Home', () => {
+    const tabs = phoneTabsFor(['/risk', '/nowhere', '/dashboard', '/trades/calendar']);
+    expect(tabs.map((tab) => [tab.path, tab.label])).toEqual([['/risk', 'Risk'], ['/dashboard', 'Home']]);
+    expect(phoneTabsFor([])).toEqual([]);
+  });
+
+  it('reads only the entries it is given and never relabels NAV_ENTRIES', () => {
+    expect(phoneTabsFor(['/system'], navEntriesFor(false))).toEqual([]);
+    expect(paths(phoneTabsFor(['/system'], navEntriesFor(true)))).toEqual(['/system']);
+    expect(NAV_ENTRIES[0].label).toBe('Dashboard');
   });
 });
 
@@ -121,17 +135,17 @@ describe('navEntryFor (v202 second-segment rule)', () => {
 
   it.each([
     ['/dashboard', ['Dashboard', null]],
-    ['/trades', ['Trades', 'Book']],
-    ['/trades/812?tab=plan#why', ['Trades', 'Book']],
-    ['/trades/calendar', ['Trades', 'Calendar']],
-    ['/trades/calendar/2026-10-01', ['Trades', 'Calendar']],
-    // Another destination's word is a detail id here, not a section.
-    ['/trades/analytics', ['Trades', 'Book']],
-    ['/plans/5', ['Trades', 'Book']],
+    ['/trades', ['Trades', null]],
+    ['/trades/812?tab=plan#why', ['Trades', null]],
+    // Before its redirect lands, the old address is a Trades URL with a detail segment.
+    ['/trades/calendar', ['Trades', null]],
+    ['/trades/analytics', ['Trades', null]],
+    ['/plans/5', ['Trades', null]],
+    ['/calendar', ['Calendar', null]],
+    ['/calendar/2026-10-01?strategy=EMA20', ['Calendar', null]],
     ['/watchlist/NVDA', ['Watchlist', null]],
     ['/universe', ['Watchlist', null]],
     ['/cockpit', ['Dashboard', null]],
-    ['/calendar/2026-10-01', ['Trades', 'Calendar']],
     ['/cancels', ['Insights', 'Analytics']],
     ['/analytics?tab=tuning#x', ['Insights', 'Analytics']],
     ['/research', ['Insights', 'Research']],
@@ -154,8 +168,8 @@ describe('navEntryFor (v202 second-segment rule)', () => {
 
 describe('phoneTabPathFor', () => {
   it.each([
-    ['/trades/calendar/2026-10-01', '/trades/calendar'],
-    ['/calendar', '/trades/calendar'],
+    ['/calendar/2026-10-01', '/calendar'],
+    ['/calendar?month=2026-11', '/calendar'],
     ['/trades', '/trades'],
     ['/trades/812', '/trades'],
     ['/plans/5', '/trades'],
@@ -166,13 +180,18 @@ describe('phoneTabPathFor', () => {
   ])('lights %s on the %j tab', (url, expected) => {
     expect(phoneTabPathFor(url)).toBe(expected);
   });
+
+  it('reads the tab list it is given', () => {
+    expect(phoneTabPathFor('/insights/research', phoneTabsFor(['/dashboard']))).toBe('/insights');
+    expect(phoneTabPathFor('/calendar/2026-10-01', phoneTabsFor(['/dashboard', '/calendar']))).toBe('/calendar');
+  });
 });
 
 describe('destinationFor', () => {
   it.each([
     ['/analytics?tab=tuning#x', '/insights'],
     ['/trades/812', '/trades'],
-    ['/trades/calendar/2026-10-01', '/trades'],
+    ['/calendar/2026-10-01', '/calendar'],
     ['/system/versions', '/system'],
     ['/risk', '/risk'],
     ['/ui', null],
@@ -183,13 +202,13 @@ describe('destinationFor', () => {
 });
 
 describe('isSectionUrl', () => {
-  it.each(['/trades/calendar', '/trades/calendar/2026-10-01', '/insights/analytics',
-    '/insights/guide', '/insights/guide/glossary', '/insights/research?page=2', '/system/versions', '/calendar', '/versions'])('is true for %s', (url) => {
+  it.each(['/insights/analytics', '/insights/guide', '/insights/guide/glossary', '/insights/research?page=2',
+    '/system/versions', '/versions'])('is true for %s', (url) => {
     expect(isSectionUrl(url)).toBe(true);
   });
 
-  it.each(['/trades', '/trades/812', '/trades/analytics', '/system', '/system?tab=logs', '/risk',
-    '/watchlist/NVDA', '/plans/5', '/ui', ''])('is false for %j', (url) => {
+  it.each(['/trades', '/trades/812', '/trades/analytics', '/trades/calendar', '/calendar', '/calendar/2026-10-01',
+    '/system', '/system?tab=logs', '/risk', '/watchlist/NVDA', '/plans/5', '/ui', ''])('is false for %j', (url) => {
     expect(isSectionUrl(url)).toBe(false);
   });
 });
@@ -198,13 +217,13 @@ describe('breadcrumbFor (Destination / Section)', () => {
   it.each([
     ['/risk', null, ['Risk']],
     ['/risk', '', ['Risk']],
-    ['/trades', null, ['Trades', 'Book']],
-    ['/trades/calendar', null, ['Trades', 'Calendar']],
+    ['/trades', null, ['Trades']],
+    ['/calendar', null, ['Calendar']],
     ['/insights/analytics?tab=edge', null, ['Insights', 'Analytics']],
     ['/system', null, ['System', 'Health']],
     ['/system/versions', null, ['System', 'Versions']],
-    ['/trades/812', 'NVDA #812', ['Trades', 'Book', 'NVDA #812']],
-    ['/trades/calendar/2026-10-01', 'Calendar day', ['Trades', 'Calendar', 'Calendar day']],
+    ['/trades/812', 'NVDA #812', ['Trades', 'NVDA #812']],
+    ['/calendar/2026-10-01', '23 Nov 2026', ['Calendar', '23 Nov 2026']],
     ['/watchlist/NVDA', 'NVDA', ['Watchlist', 'NVDA']],
     ['/insights/guide', null, ['Insights', 'Guide']],
     ['/insights/guide/glossary', 'Glossary', ['Insights', 'Guide', 'Glossary']],
@@ -249,7 +268,7 @@ describe('navEntriesFor (v207)', () => {
   });
 
   it('drops System for a viewer and keeps the rest in rail order', () => {
-    expect(paths(navEntriesFor(false))).toEqual(['/dashboard', '/watchlist', '/trades', '/risk', '/insights']);
+    expect(paths(navEntriesFor(false))).toEqual(['/dashboard', '/watchlist', '/trades', '/calendar', '/risk', '/insights']);
   });
 
   it('filters the entries it is given', () => {

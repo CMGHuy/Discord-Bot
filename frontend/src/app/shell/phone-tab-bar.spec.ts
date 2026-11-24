@@ -6,7 +6,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { PHONE_TABS } from './nav';
+import { DEFAULT_PHONE_TAB_PATHS } from './nav';
 import { PhoneTabBar } from './phone-tab-bar';
 
 @Component({ template: '' })
@@ -32,13 +32,13 @@ describe('PhoneTabBar (v195 Phase 3)', () => {
   const current = (el: HTMLElement) =>
     [...el.querySelectorAll('a.tab[aria-current="page"]')].map((a) => a.querySelector('.tab-label')!.textContent!.trim());
 
-  it('holds Home, Watchlist, Calendar, Trades and More, in that order', async () => {
+  it('holds Home, Watchlist, Trades, Calendar and More, in that order (v240 §6)', async () => {
     const { el } = await mount('/dashboard');
     expect(el.querySelector('nav')!.getAttribute('aria-label')).toBe('Main pages');
     expect([...el.querySelectorAll('.tab .tab-label')].map((n) => n.textContent!.trim()))
-      .toEqual(['Home', 'Watchlist', 'Calendar', 'Trades', 'More']);
+      .toEqual(['Home', 'Watchlist', 'Trades', 'Calendar', 'More']);
     expect([...el.querySelectorAll('a.tab')].map((a) => a.getAttribute('href')))
-      .toEqual(PHONE_TABS.map((tab) => tab.path));
+      .toEqual([...DEFAULT_PHONE_TAB_PATHS]);
   });
 
   it('marks the current tab, and the list tab for its detail pages', async () => {
@@ -47,8 +47,8 @@ describe('PhoneTabBar (v195 Phase 3)', () => {
     expect(current((await mount('/watchlist/NVDA')).el)).toEqual(['Watchlist']);
   });
 
-  it('lights Calendar on its section and Trades on the rest, old paths included', async () => {
-    for (const url of ['/trades/calendar', '/trades/calendar/2026-10-01', '/calendar/2026-10-01']) {
+  it('lights Calendar on a calendar day and Trades on the trade book', async () => {
+    for (const url of ['/calendar', '/calendar/2026-10-01', '/calendar?month=2026-11']) {
       expect(current((await mount(url)).el), url).toEqual(['Calendar']);
     }
     for (const url of ['/trades', '/trades/812']) {
