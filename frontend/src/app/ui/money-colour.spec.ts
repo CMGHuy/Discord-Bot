@@ -18,6 +18,7 @@ const NAV_FILES: readonly string[] = [
   'app/shell/more-sheet.ts',
   'app/shell/phone-tab-bar.ts',
   'app/shell/section-tabs.ts',
+  'app/shell/tab-bar-editor.ts',
 ];
 
 const SHELL_CSS = 'app/shell/shell.css';

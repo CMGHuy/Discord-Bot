@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { patchState } from '@ngrx/signals';
@@ -8,6 +11,7 @@ import { SessionStore } from '../stores/session.store';
 import { installDialogPolyfill } from '../testing/dialog-polyfill';
 import { ViewportService } from '../ui/breakpoints';
 import { provideMotion } from '../ui/motion/motion.service';
+import { navEntriesFor } from './nav';
 import { TAB_BAR_PREF_KEY, TAB_BAR_STORAGE } from './tab-bar-prefs';
 import { ADD_LIMIT_REASON, TabBarEditor } from './tab-bar-editor';
 
@@ -162,5 +166,96 @@ describe('TabBarEditor (v240 §6)', () => {
     el.querySelector<HTMLButtonElement>('sb-drawer header button.close')!.click();
     fixture.detectChanges();
     expect(closed).toBe(1);
+  });
+});
+
+describe('TabBarEditor preview and edge cases (v240 §6, §8)', () => {
+  it('previews the bar it edits, More last, and follows every edit', () => {
+    const { fixture, el } = mount();
+    const preview = el.querySelector('figure.preview')!;
+    expect(el.querySelector('.editor')!.firstElementChild).toBe(preview);
+    expect(preview.getAttribute('role')).toBe('img');
+    expect(preview.getAttribute('aria-label')).toBe('Tab bar preview: Home, Watchlist, Trades, Calendar, More');
+    expect([...preview.querySelectorAll('.preview-label')].map(text)).toEqual(['Home', 'Watchlist', 'Trades', 'Calendar', 'More']);
+    press(fixture, button(el, '/trades', 'remove'));
+    expect(preview.getAttribute('aria-label')).toBe('Tab bar preview: Home, Watchlist, Calendar, More');
+    expect([...preview.querySelectorAll('.preview-label')].map(text)).toEqual(['Home', 'Watchlist', 'Calendar', 'More']);
+  });
+
+  it('holds the minimum bar, Home alone, with every other page under More and no reason', () => {
+    const { el } = mount('admin', '["/dashboard"]');
+    expect(labels(el, 'on-bar')).toEqual(['Home']);
+    expect(el.querySelectorAll('.on-bar button')).toHaveLength(0);
+    expect(labels(el, 'under-more')).toEqual(['Watchlist', 'Trades', 'Calendar', 'Risk', 'Insights', 'System']);
+    expect(el.querySelector('p.reason')).toBeNull();
+    expect(el.querySelector('figure.preview')!.getAttribute('aria-label')).toBe('Tab bar preview: Home, More');
+  });
+
+  it('never shows a viewer System, even when the stored bar holds it', () => {
+    const { el } = mount('viewer', '["/dashboard","/system"]');
+    expect(labels(el, 'on-bar')).toEqual(['Home']);
+    expect(labels(el, 'under-more')).toEqual(['Watchlist', 'Trades', 'Calendar', 'Risk', 'Insights']);
+    expect(el.querySelector('[data-path="/system"]')).toBeNull();
+  });
+});
+
+describe('TabBarEditor partition (v240 §6 "Risk is never out of reach", §11)', () => {
+  const STORED: [string, string | undefined][] = [
+    ['nothing', undefined],
+    ['Home alone', '["/dashboard"]'],
+    ['System and two more', '["/dashboard","/system","/insights","/risk"]'],
+    ['an old Calendar path', '["/dashboard","/trades/calendar"]'],
+    ['not JSON', 'not json'],
+    ['an empty list', '[]'],
+  ];
+
+  for (const role of ['admin', 'viewer'] as const) {
+    it.each(STORED)(`${role}, stored %s: every page the login may open is in exactly one list`, (_name, value) => {
+      const { el } = mount(role, value);
+      const all = [...rowPaths(el, 'on-bar'), ...rowPaths(el, 'under-more')];
+      expect(new Set(all).size).toBe(all.length);
+      expect([...all].sort()).toEqual(navEntriesFor(role === 'admin').map((entry) => entry.path).sort());
+      expect(rowPaths(el, 'on-bar')[0]).toBe('/dashboard');
+      expect(all).toContain('/risk');
+      if (role === 'viewer') expect(all).not.toContain('/system');
+    });
+  }
+
+  it('keeps the partition through a remove and an add', () => {
+    const { fixture, el } = mount();
+    press(fixture, button(el, '/watchlist', 'remove'));
+    press(fixture, button(el, '/risk', 'add'));
+    const all = [...rowPaths(el, 'on-bar'), ...rowPaths(el, 'under-more')];
+    expect([...all].sort()).toEqual(navEntriesFor(true).map((entry) => entry.path).sort());
+    expect(rowPaths(el, 'on-bar')).toEqual(['/dashboard', '/trades', '/calendar', '/risk']);
+  });
+});
+
+describe('TabBarEditor styles (v240 §6, §9)', () => {
+  const source = readFileSync(join(process.cwd(), 'src/app/shell/tab-bar-editor.ts'), 'utf8');
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rule = (selector: string) => source.match(new RegExp(`^\\s*${esc(selector)} \\{[^}]*\\}`, 'm'))?.[0] ?? '';
+
+  it('gives every row button and every row a 44px target at every width', () => {
+    expect(rule('.act')).toContain('min-width: 44px');
+    expect(rule('.act')).toContain('min-height: 44px');
+    expect(rule('.row')).toContain('min-height: 44px');
+  });
+
+  it('never fixes a width, so the drawer sets it (sheet below 640px, 85vw, then 480px)', () => {
+    expect(source).not.toMatch(/(?:^|[\s;{])width:\s*\d/m);
+  });
+
+  it('wraps a long row label, shares the preview equally, and reads no faint text token', () => {
+    expect(rule('.row-label')).toContain('overflow-wrap: anywhere');
+    expect(rule('.row-label')).toContain('min-width: 0');
+    expect(rule('.preview')).toContain('grid-auto-columns: minmax(0, 1fr)');
+    expect(rule('.preview-label')).toContain('text-overflow: ellipsis');
+    expect(source).not.toContain('--text-faint');
+  });
+
+  it('marks an unavailable button without the disabled attribute, and rounds with tokens only', () => {
+    expect(source).toContain(".act[aria-disabled='true']");
+    expect(source).not.toMatch(/border-radius:\s*\d+px/);
   });
 });

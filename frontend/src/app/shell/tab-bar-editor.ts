@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, computed, inject, input, output, signal } from '@angular/core';
 
 import { Icon } from '../ui/icon';
 import { Drawer } from '../ui/layout';
@@ -16,8 +16,8 @@ type RowAction = 'up' | 'down' | 'remove' | 'add';
  * hosts beside the More sheet. Two lists that partition the pages this
  * login may open: "In the tab bar" (Home pinned first, then up, down and
  * remove) and "Under More" (add). Edits apply at once through TabBarPrefs,
- * which validates and saves them; every edit is announced in one polite
- * live region.
+ * which validates and saves them; a live preview shows the bar, and every
+ * edit is announced in one polite live region.
  *
  * Buttons only, no drag-reorder, so nothing competes with the sheet's drag
  * to close. Unavailable buttons are aria-disabled, not disabled: a disabled
@@ -31,6 +31,12 @@ type RowAction = 'up' | 'down' | 'remove' | 'add';
   template: `
     <sb-drawer [open]="open()" heading="Edit tab bar" (closed)="onDrawerClosed()">
       <div class="editor">
+        <figure class="preview" role="img" [attr.aria-label]="previewLabel()">
+          @for (tab of prefs.tabs(); track tab.path) {
+            <span class="preview-tab"><sb-icon [name]="tab.icon" title="" [size]="20" /><span class="preview-label">{{ tab.label }}</span></span>
+          }
+          <span class="preview-tab"><sb-icon name="more" title="" [size]="20" /><span class="preview-label">More</span></span>
+        </figure>
         <h3 class="list-label" id="tab-bar-on">In the tab bar</h3>
         <ol class="rows on-bar" aria-labelledby="tab-bar-on">
           @for (tab of prefs.tabs(); track tab.path; let i = $index, last = $last) {
@@ -73,6 +79,54 @@ type RowAction = 'up' | 'down' | 'remove' | 'add';
   `,
   styles: `
     :host { display: contents; }
+    .editor { display: flex; flex-direction: column; gap: var(--space-10); }
+    /* The bar as it will look: equal shares, the label truncating like the real bar's. */
+    .preview {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
+      gap: var(--space-4);
+      margin: 0;
+      padding: var(--space-6);
+      border: 1px solid var(--border);
+      border-radius: var(--panel-radius);
+      background: var(--bg);
+    }
+    .preview-tab { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); min-width: 0; color: var(--text-muted); }
+    .preview-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-micro); font-weight: 600; }
+    .list-label { margin: var(--space-4) 0 0; color: var(--text-muted); font-size: var(--text-micro); font-weight: 600; }
+    .rows { display: flex; flex-direction: column; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-8);
+      min-height: 44px;
+      padding: 0 var(--space-4) 0 var(--space-10);
+      border: 1px solid var(--border);
+      border-radius: var(--control-radius);
+      background: var(--surface-raised);
+    }
+    .glyph { display: inline-flex; line-height: 0; color: var(--text-muted); }
+    .row-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; color: var(--text); font-size: var(--text-body); }
+    .pinned { padding-right: var(--space-10); color: var(--text-muted); font-size: var(--text-micro); }
+    /* 44x44 at every width: the editor is a touch surface first (spec v240 §6). */
+    .act {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 0;
+      border: 0;
+      border-radius: var(--control-radius);
+      background: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .act:hover { background: var(--surface-overlay); color: var(--text); }
+    .act:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .act[aria-disabled='true'] { color: var(--text-muted); opacity: 0.5; cursor: not-allowed; }
+    .reason { margin: 0; color: var(--text-secondary); font-size: var(--text-micro); }
     .announce { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   `,
 })
@@ -84,6 +138,9 @@ export class TabBarEditor {
   protected readonly prefs = inject(TabBarPrefs);
   protected readonly reason = ADD_LIMIT_REASON;
   protected readonly announcement = signal('');
+  /** The preview's accessible name: the bar left to right, then More. */
+  protected readonly previewLabel = computed(() =>
+    `Tab bar preview: ${[...this.prefs.tabs().map((tab) => tab.label), 'More'].join(', ')}`);
 
   private readonly host = inject(ElementRef<HTMLElement>).nativeElement as HTMLElement;
   private readonly cdr = inject(ChangeDetectorRef);
