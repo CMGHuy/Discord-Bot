@@ -1,6 +1,7 @@
-import { InjectionToken } from '@angular/core';
+import { Injectable, InjectionToken, Signal, computed, inject, signal } from '@angular/core';
 
-import { DEFAULT_PHONE_TAB_PATHS, NavEntry } from './nav';
+import { SessionStore } from '../stores/session.store';
+import { DEFAULT_PHONE_TAB_PATHS, NAV_ENTRIES, NavEntry, navEntriesFor, phoneTabsFor } from './nav';
 
 /**
  * The pages the phone's bottom tab bar holds -- spec v240 §6 (D9).
@@ -16,6 +17,9 @@ import { DEFAULT_PHONE_TAB_PATHS, NavEntry } from './nav';
  * duplicate and admin-only-for-a-viewer paths drop, the Dashboard is forced
  * first, the list is cut to MAX_TAB_PAGES; nothing valid, or not JSON, gives
  * the default. A stored '/trades/calendar' (pre-v247) is '/calendar'.
+ *
+ * TabBarPrefs (below) re-validates on every read and never rewrites storage
+ * by reading; only an edit saves.
  */
 export const TAB_BAR_PREF_KEY = 'ui.tabbar';
 
@@ -82,4 +86,81 @@ function parseStored(storage: TabBarStorage): unknown {
 
 export function readTabPaths(storage: TabBarStorage, visible: readonly NavEntry[]): string[] {
   return sanitizeTabPaths(parseStored(storage), visible);
+}
+
+const samePaths = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((path, index) => path === b[index]);
+
+/**
+ * The phone tab bar's pages as signals (spec v240 §6). PhoneTabBar,
+ * MoreSheet and phoneTabPathFor read `tabs()`; the tab-bar editor reads
+ * `tabs()`/`underMore()` and calls the edit methods. Every edit goes
+ * through set(), which validates like a read and saves the result.
+ */
+@Injectable({ providedIn: 'root' })
+export class TabBarPrefs {
+  private readonly storage = inject(TAB_BAR_STORAGE);
+  private readonly session = inject(SessionStore);
+
+  /** Validated against the whole model, not the login: the session loads after
+   *  the shell boots, and an admin's System tab must survive that moment. */
+  private readonly stored = signal<readonly string[]>(readTabPaths(this.storage, NAV_ENTRIES));
+  private readonly visible = computed(() => navEntriesFor(this.session.isAdmin()));
+
+  /** The bar's pages in order, valid for this login. */
+  readonly paths: Signal<readonly string[]> = computed(
+    () => sanitizeTabPaths(this.stored(), this.visible()),
+    { equal: samePaths },
+  );
+  /** The bar's entries, with the phone labels (the Dashboard reads Home). */
+  readonly tabs: Signal<readonly NavEntry[]> = computed(() => phoneTabsFor(this.paths(), this.visible()));
+  /** Every other page the login may open, in rail order, with rail labels. */
+  readonly underMore: Signal<readonly NavEntry[]> = computed(() => {
+    const onBar = new Set(this.paths());
+    return this.visible().filter((entry) => !onBar.has(entry.path));
+  });
+  readonly canAdd: Signal<boolean> = computed(() => this.paths().length < MAX_TAB_PAGES);
+  readonly isDefault: Signal<boolean> = computed(() =>
+    samePaths(this.paths(), sanitizeTabPaths(DEFAULT_PHONE_TAB_PATHS, this.visible())));
+
+  /** Validates `paths` like a read, then saves them. A throwing store keeps the change for this session. */
+  set(paths: readonly string[]): void {
+    const next = sanitizeTabPaths([...paths], this.visible());
+    this.stored.set(next);
+    try { this.storage.set(TAB_BAR_PREF_KEY, JSON.stringify(next)); } catch { /* A custom store may throw; the bar still changes. */ }
+  }
+
+  add(path: string): void {
+    if (!this.canAdd() || !this.underMore().some((entry) => entry.path === path)) return;
+    this.set([...this.paths(), path]);
+  }
+
+  remove(path: string): void {
+    if (path === HOME_PATH || !this.paths().includes(path)) return;
+    this.set(this.paths().filter((kept) => kept !== path));
+  }
+
+  moveUp(path: string): void {
+    this.swap(this.paths().indexOf(path), -1);
+  }
+
+  moveDown(path: string): void {
+    this.swap(this.paths().indexOf(path), 1);
+  }
+
+  /** Back to the default; returns the list it replaced, for an Undo. */
+  reset(): readonly string[] {
+    const before = this.paths();
+    this.set(DEFAULT_PHONE_TAB_PATHS);
+    return before;
+  }
+
+  /** Swaps index with index + step; the pinned Dashboard (0) never moves. */
+  private swap(index: number, step: -1 | 1): void {
+    const paths = [...this.paths()];
+    const target = index + step;
+    if (index < 1 || target < 1 || target >= paths.length) return;
+    [paths[index], paths[target]] = [paths[target], paths[index]];
+    this.set(paths);
+  }
 }
