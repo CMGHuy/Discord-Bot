@@ -106,4 +106,17 @@ describe('TimeScaleSync (v246 §A3 linked scrolling)', () => {
     a.scroll(range(3, 4));
     expect(b.set).toHaveBeenLastCalledWith(range(3, 4));
   });
+  it('leaves a new subscription active if an old release callback runs again', () => {
+    const first = fakeChart();
+    const second = fakeChart();
+    const sync = new TimeScaleSync();
+    const oldRelease = sync.register(first.chart);
+    sync.register(second.chart);
+    oldRelease();
+    sync.register(first.chart);
+    oldRelease();
+    const visible = range(2, 7);
+    second.scroll(visible);
+    expect(first.set).toHaveBeenCalledWith(visible);
+  });
 });

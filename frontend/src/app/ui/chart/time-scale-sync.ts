@@ -22,19 +22,18 @@ export class TimeScaleSync {
 
   /** Joins `chart` to the group; the returned function leaves it (safe to call twice). */
   register(chart: IChartApi): () => void {
-    if (!this.handlers.has(chart)) {
-      const handler: LogicalRangeChangeEventHandler = (range) => this.follow(chart, range);
+    let handler = this.handlers.get(chart);
+    if (!handler) {
+      handler = (range) => this.follow(chart, range);
       this.handlers.set(chart, handler);
       chart.timeScale().subscribeVisibleLogicalRangeChange(handler);
     }
-    return () => this.release(chart);
-  }
-
-  private release(chart: IChartApi): void {
-    const handler = this.handlers.get(chart);
-    if (!handler) return;
-    this.handlers.delete(chart);
-    chart.timeScale().unsubscribeVisibleLogicalRangeChange(handler);
+    const subscription = handler;
+    return () => {
+      if (this.handlers.get(chart) !== subscription) return;
+      this.handlers.delete(chart);
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(subscription);
+    };
   }
 
   private follow(source: IChartApi, range: LogicalRange | null): void {
