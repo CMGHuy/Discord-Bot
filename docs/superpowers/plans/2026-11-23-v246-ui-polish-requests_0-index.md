@@ -177,6 +177,7 @@ their reasons:
   and its spec.
 - V246-12 → V246-13, V246-16, V246-17: they consume `applyChartTheme`,
   `priceFormat`, `rFormat`, `pctFormat` and `SVG_CHART_TOKENS`.
+- V246-16 → V246-16b: same file; 16b edits the `timeScaleOptions()` 16 defines.
 - V246-13 → V246-13b → V246-14: all three edit `time-series.ts` in order; V246-14 adds the `sync` input.
 - V246-14 → V246-15: Overview links its two charts with `TimeScaleSync`.
 - Every task → V246-18: the browser check exercises the finished pages.
@@ -207,9 +208,10 @@ default is one subagent at a time; parallel runs only when asked.
 | V246-13b | `sb-time-series` edge states: non-finite dropped, 0/1 point, fit on first width, ResizeObserver, theme repaint, destroy releases all | 4 | opus | M `frontend/src/app/ui/chart/time-series.ts`, M `frontend/src/app/ui/chart/time-series.spec.ts` | none |
 | V246-14 | Linked scrolling: `TimeScaleSync` with a ping-pong guard; `sb-time-series` `sync` input released on destroy | 4 | sonnet | C `frontend/src/app/ui/chart/time-scale-sync.ts`, C `frontend/src/app/ui/chart/time-scale-sync.spec.ts`, M `frontend/src/app/ui/chart/time-series.ts`, M `frontend/src/app/ui/chart/time-series.spec.ts` | `export class TimeScaleSync { register(chart: IChartApi): () => void }`; `TimeSeries.sync = input<TimeScaleSync \| null>(null)` |
 | V246-15 | Analytics Overview equity (area) and drawdown (baseline) on `sb-time-series`, linked; drawdown header shows max drawdown € and longest losing streak | 5 | sonnet | M `frontend/src/app/workspaces/analytics/tabs/overview.ts`, M `.../tabs/overview.spec.ts` | none |
-| V246-16 | Dashboard equity candles: `applyChartTheme`, `priceFormat`, last-value tag clear of axis labels at 390, stray `)` gone, whole hour/day ticks | 5 | opus | M `frontend/src/app/workspaces/dashboard/panels/equity-candles.ts`, M `.../panels/equity-candles.spec.ts` (plus the primitive under `frontend/src/app/ui/chart/primitives/` the browser pins the `)` on) | none |
+| V246-16 | Dashboard equity candles: `applyChartTheme`, `priceFormat`, last-value tag clear of axis labels at 390, whole hour/day ticks | 5 | opus | M `frontend/src/app/workspaces/dashboard/panels/equity-candles.ts`, M `.../panels/equity-candles.spec.ts` | `CANDLE_SCALE_MARGINS`, `wholeTickLabel(time, type)` (exported from `equity-candles.ts`; its spec and V246-16b only) |
+| V246-16b | Dashboard equity candles: confirm the stray `)` at the left of the time axis in Chromium and keep edge tick labels whole | 5 | opus | M `frontend/src/app/workspaces/dashboard/panels/equity-candles.ts`, M `.../panels/equity-candles.spec.ts` | none |
 | V246-17 | SVG token sweep: line-chart, histogram, bar-list, sparkline, share-bar, gauge read `SVG_CHART_TOKENS` | 5 | sonnet | M `frontend/src/app/ui/line-chart.ts`, M `frontend/src/app/ui/line-chart.spec.ts`, M `frontend/src/app/ui/histogram.ts`, M `frontend/src/app/ui/histogram.spec.ts`, M `frontend/src/app/ui/bar-list.ts`, M `frontend/src/app/ui/bar-list.spec.ts`, M `frontend/src/app/ui/sparkline.ts`, C `frontend/src/app/ui/sparkline.spec.ts`, M `frontend/src/app/ui/share-bar.ts`, M `frontend/src/app/ui/share-bar.spec.ts`, M `frontend/src/app/ui/gauge.ts`, M `frontend/src/app/ui/gauge.spec.ts` | none |
-| V246-18 | Closing browser check: bottom-edge alignment per bar and the layout audit at 390/820/1440 | 5 | sonnet | C `frontend/scripts/v246-bar-alignment-check.mjs` | none |
+| V246-18 | Closing browser check: bottom-edge alignment per bar and the layout audit at 390/820/1440 | 5 | sonnet | C `frontend/scripts/v246-bar-alignment-check.mjs`, C `frontend/scripts/v246-bar-alignment-check-lib.mjs`, C `frontend/scripts/v246-bar-alignment-check-lib.test.mjs` | none |
 
 `.../panels/` is `frontend/src/app/workspaces/dashboard/panels/`;
 `.../tabs/` is `frontend/src/app/workspaces/analytics/tabs/`. 18 rows; the
@@ -223,7 +225,7 @@ cap is 20, so at most two `b` splits fit before this plan is a `SCOPE`.
 | 2 | `2026-11-23-v246-ui-polish-requests_2-bars-trades-calendar.md` | V246-5..V246-8 | Segmented phone rule, flex-end bars, Trades and Calendar wrapped |
 | 3 | `2026-11-23-v246-ui-polish-requests_3-analytics-watchlist-gate.md` | V246-9..V246-11 | Analytics scope bar, Watchlist and Dashboard toggles, the consistency gate |
 | 4 | `2026-11-23-v246-ui-polish-requests_4-chart-theme-and-time-series.md` | V246-12..V246-14 (incl. V246-13b) | Theme exports, `sb-time-series`, linked scrolling |
-| 5 | `2026-11-23-v246-ui-polish-requests_5-chart-consumers-and-check.md` | V246-15..V246-18 | Overview charts, Dashboard candles, SVG sweep, closing check |
+| 5 | `2026-11-23-v246-ui-polish-requests_5-chart-consumers-and-check.md` | V246-15..V246-18 (incl. V246-16b) | Overview charts, Dashboard candles, SVG sweep, closing check |
 
 ## Handoff
 
@@ -320,3 +322,16 @@ Controller decisions (part 4, 2026-11-25):
     Gallery does not render. V246-3 gains Step 6b (an `sb-field` exhibit) and
     V246-13 adds the `sb-time-series` exhibit; part-5 writers check this for
     any new `ui/` selector.
+
+Controller decisions (part 5, 2026-11-25):
+
+18. **V246-16 split into V246-16 + V246-16b**; 20 ledger rows, the cap. The
+    stray `)` is inferred from lightweight-charts source (a half-cut edge
+    tick label); V246-16b confirms it in Chromium first and fixes it with
+    `timeScale.fixLeftEdge: true` (no drag past the oldest loaded candle;
+    paging still fires). Any other source returns BLOCKED.
+19. **Visible changes accepted as spec-following:** V246-15 plots drawdown in
+    R in every unit (fixes R printed as € today); V246-16 hides the
+    last-value tag below 640px (the balance above shows it); V246-17 single-series
+    `sb-line-chart` → `--accent`, histogram/bar-list labels →
+    `--text-secondary`, sparkline stroke 1px.
