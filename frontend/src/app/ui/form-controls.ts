@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, input, model } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, model } from '@angular/core';
+
+import { FieldContext, SB_FIELD } from './field';
 
 /* Spec 3's input inventory: select, text input, checkbox.
  *
@@ -19,18 +21,30 @@ export interface SelectOption {
   label: string;
 }
 
+/** The accessible name of a select or text input (v246 Handoff 2).
+ *  Outside an sb-field nothing changes: the visible <label> names the
+ *  control, and aria-label is used only when there is no label. Inside a
+ *  field the field draws the (aria-hidden) caption, so the control names
+ *  itself: its own label, else its ariaLabel, else the field's label;
+ *  null removes the attribute rather than printing an empty one. */
+function controlName(field: FieldContext | null, label: string | null, ariaLabel: string): string | null {
+  if (!field) return label ? null : ariaLabel;
+  return label || ariaLabel || field.label() || null;
+}
+
 @Component({
   selector: 'sb-select',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.in-field]': 'inField' },
   template: `
     <label class="field">
-      @if (label(); as text) {
+      @if (visibleLabel(); as text) {
         <span class="sb-label">{{ text }}</span>
       }
       <select
         [value]="value()"
         [disabled]="disabled()"
-        [attr.aria-label]="label() ? null : ariaLabel()"
+        [attr.aria-label]="accessibleName()"
         (change)="value.set($any($event.target).value)"
       >
         @if (placeholder(); as text) {
@@ -44,6 +58,10 @@ export interface SelectOption {
   `,
   styles: `
     .field { display: inline-flex; flex-direction: column; gap: var(--space-4); }
+    /* v246: inside an sb-field the control is block-level, so a width of
+       100% (below 640px) resolves against the field, not its own content. */
+    :host(.in-field) { display: block; min-width: 0; }
+    :host(.in-field) .field { display: flex; }
     /* v80 D4: a hairline field; the caption is the global .sb-label.
        --text-control is 16px on touch, the size below which a phone zooms
        into a focused field. v195 Phase 2: the panel is the flat --surface
@@ -51,6 +69,9 @@ export interface SelectOption {
        control border (v240, 3:1 in Navy), and its edge brightens on hover. */
     select {
       height: var(--control-h);
+      /* The field's size token (ui/field.ts); native width standalone. */
+      width: var(--sb-control-w, auto);
+      max-width: 100%;
       padding: 0 var(--space-8);
       background: var(--bg);
       border: 1px solid var(--control-border);
@@ -75,14 +96,21 @@ export class Select {
   /** The empty choice — "Any strategy", "All horizons". */
   readonly placeholder = input<string | null>(null);
   readonly disabled = input(false);
+
+  private readonly field = inject(SB_FIELD, { optional: true });
+  /** Inside an sb-field the field draws the one label (v246 Handoff 2). */
+  protected readonly inField = this.field !== null;
+  protected readonly visibleLabel = computed(() => (this.inField ? null : this.label()));
+  protected readonly accessibleName = computed(() => controlName(this.field, this.label(), this.ariaLabel()));
 }
 
 @Component({
   selector: 'sb-text-input',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.in-field]': 'inField' },
   template: `
     <label class="field">
-      @if (label(); as text) {
+      @if (visibleLabel(); as text) {
         <span class="sb-label">{{ text }}</span>
       }
       <input
@@ -95,7 +123,7 @@ export class Select {
         [attr.step]="step()"
         [attr.name]="name()"
         [attr.autocomplete]="autocomplete()"
-        [attr.aria-label]="label() ? null : ariaLabel()"
+        [attr.aria-label]="accessibleName()"
         (input)="value.set($any($event.target).value)"
       />
     </label>
@@ -106,10 +134,15 @@ export class Select {
        columns at 390) the field shrinks to the cell instead of keeping the
        native 20-character input width and running past the panel. */
     .field { display: inline-flex; flex-direction: column; gap: var(--space-4); max-width: 100%; }
+    /* v246: see sb-select above. */
+    :host(.in-field) { display: block; min-width: 0; }
+    :host(.in-field) .field { display: flex; }
     /* Same field as sb-select above (v80 D4). */
     input {
       min-width: 0;
       height: var(--control-h);
+      /* The field's size token (ui/field.ts); native width standalone. */
+      width: var(--sb-control-w, auto);
       padding: 0 var(--space-8);
       background: var(--bg);
       border: 1px solid var(--control-border);
@@ -157,6 +190,12 @@ export class TextInput {
   readonly min = input<number | null>(null);
   readonly max = input<number | null>(null);
   readonly step = input<number | null>(null);
+
+  private readonly field = inject(SB_FIELD, { optional: true });
+  /** Inside an sb-field the field draws the one label (v246 Handoff 2). */
+  protected readonly inField = this.field !== null;
+  protected readonly visibleLabel = computed(() => (this.inField ? null : this.label()));
+  protected readonly accessibleName = computed(() => controlName(this.field, this.label(), this.ariaLabel()));
 
   /** `name` and `autocomplete` pass straight through to the native input.
    *  Login is the one call site that needs them -- a password manager
