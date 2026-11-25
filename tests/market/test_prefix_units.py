@@ -13,7 +13,7 @@ import pytest
 from swingbot.core.market import indicators, levels
 from swingbot.core.market.indicators import (
     ZIGZAG_PREFIX_UNIT, zigzag_pivots, zigzag_prefix_state, zigzag_prefix_states)
-from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS
+from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS, live_horizons
 from swingbot.core.scanning import structure
 from swingbot.core.scanning.structure import StructureCache
 from tests.scanning.v245_golden_cases import CASE_BY_NAME
@@ -182,7 +182,7 @@ def test_the_unit_is_registered_and_keyed_by_the_thresholds(monkeypatch):
     unit = next(u for u in structure.PREFIX_UNITS if u.name == ZIGZAG_PREFIX_UNIT)
     df = CASE_BY_NAME["wave_forming"].frame()
     key, build = unit.build(df)
-    assert key[-1] == tuple(sorted({h["max_risk_pct"] for h in HORIZONS.values()}))
+    assert key[-1] == tuple(sorted({HORIZONS[k]["max_risk_pct"] for k in live_horizons()}))
     assert key[:-1] == structure.prefix_fingerprint(df, len(df) - structure.ZIGZAG_TAIL_BARS)
     assert {t for t, _ in build()} == set(key[-1])
     monkeypatch.setitem(HORIZONS["4w"], "max_risk_pct", 4.25)

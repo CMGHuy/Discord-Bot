@@ -19,7 +19,7 @@ from swingbot import config
 from swingbot.core.infra import store_generation
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import indicators, trendlines
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market.strategy_types import HORIZONS, live_horizons
 
 log = logging.getLogger(__name__)
 
@@ -182,7 +182,7 @@ ZIGZAG_TAIL_BARS = 1     # the zigzag walk resumes from its state: only the last
 
 def _horizon_thresholds() -> tuple:
     """Every horizon's zigzag threshold (levels' "Pivot high/low" source), read per build."""
-    return tuple(sorted({h["max_risk_pct"] for h in HORIZONS.values()}))
+    return tuple(sorted({HORIZONS[key]["max_risk_pct"] for key in live_horizons()}))
 
 
 def _zigzag_build(df):

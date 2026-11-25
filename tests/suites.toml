@@ -30,6 +30,10 @@ paths = ["tests/market/"]
 description = "the scan engine and everything it posts"
 paths = ["tests/scanning/"]
 
+[suites.analysis-cache]
+description = "the v245 exact analysis cache: structure cache, wiring, shadow comparator, telemetry"
+paths = ["tests/analysis_cache/"]
+
 [suites.planning]
 description = "trade-plan construction, exits and sizing: tests/planning/ files test_a* .. test_o* and test_q* .. test_z*"
 paths = ["tests/planning/test_[a-o]*.py", "tests/planning/test_[q-z]*.py"]
