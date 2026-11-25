@@ -741,6 +741,13 @@ describe('Trades — leg rows (v194 B3)', () => {
     expect(tips[1]).toContain('count plans on Analytics');   // A4 audit
   });
 
+  it('gives a leg tooltip its own touch area below the trade identifier', () => {
+    const el = renderLegRows([row({ leg_index: 0, leg_total: 2, leg_exit_reason: 'tp1' })]);
+    expect(el.querySelector('sb-leg-name .name')?.getAttribute('tabindex')).toBe('0');
+    const source = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/leg-name.ts'), 'utf8');
+    expect(source).toMatch(/@media \(pointer: coarse\), \(max-width: 1023px\)\s*\{\s*\.name\s*\{[^}]*min-height: var\(--control-h\)/);
+  });
+
   it('carries the label into the expansion the phone drawer reuses', () => {
     const el = renderLegRows([row({ leg_index: 1, leg_total: 2, leg_exit_reason: 'stop' })]);
     // numText is what the drawer's "Hidden in this view" list prints for the
