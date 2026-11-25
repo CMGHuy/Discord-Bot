@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -12,6 +15,14 @@ function render(entry: number | null, target: number | null, stop: number | null
   f.detectChanges();
   return f.nativeElement as HTMLElement;
 }
+
+describe('PlanCell compact rows', () => {
+  it('wraps plan text and retains the separator spacing only in a compact cell', () => {
+    const source = readFileSync(join(process.cwd(), 'src/app/ui/plan-cell.ts'), 'utf8');
+    expect(source).toMatch(/:host-context\(\.compact-cell\) \.plan,\s*:host-context\(\.compact-cell\) \.line \{ white-space: normal; \}/);
+    expect(source).toMatch(/:host-context\(\.compact-cell\) \.sep \{ white-space: pre-wrap; \}/);
+  });
+});
 
 describe('PlanCell', () => {
   beforeEach(() => {
