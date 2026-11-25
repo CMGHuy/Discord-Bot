@@ -266,6 +266,97 @@ describe('Trades — the opened-at range', () => {
   });
 });
 
+/* -- v246 §A2 -- every toolbar control in one sb-field ------------------- */
+
+describe('Trades toolbar fields (v246 §A2)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/workspaces/trades/trades.ts'), 'utf8');
+  const FIELDS: [slot: string, label: string, size: string][] = [
+    ['density', 'Density', 'auto'],
+    ['dates', 'Opened', 'auto'],
+    ['ticker', 'Ticker', 'l'],
+    ['origin', 'Origin', 's'],
+    ['strategy', 'Strategy', 'm'],
+    ['horizon', 'Horizon', 's'],
+    ['confidence', 'Confidence', 's'],
+    ['tier', 'Tier', 's'],
+    ['badge', 'Badge', 's'],
+    ['note', 'Note', 's'],
+  ];
+  const slot = (el: HTMLElement, id: string) =>
+    el.querySelector(`sb-toolbar [slot="${id}"]`) as HTMLElement;
+
+  it.each(FIELDS)('puts %s in an sb-field labelled %s at size %s, the field carrying the slot', (id, label, size) => {
+    const field = slot(render().nativeElement as HTMLElement, id);
+    expect(field.tagName.toLowerCase()).toBe('sb-field');
+    expect(field.getAttribute('data-size')).toBe(size);
+    expect(field.querySelector('.field-label')!.textContent!.trim()).toBe(label);
+  });
+
+  it('draws one caption per field: no wrapped control prints its own label', () => {
+    const el = render().nativeElement as HTMLElement;
+    for (const [id] of FIELDS) expect(slot(el, id).querySelectorAll('.sb-label'), id).toHaveLength(1);
+  });
+
+  it('names every wrapped control from its field', () => {
+    const el = render().nativeElement as HTMLElement;
+    for (const [id, label] of FIELDS.filter(([id]) => id !== 'density' && id !== 'dates')) {
+      expect(slot(el, id).querySelector('select, input')!.getAttribute('aria-label'), id).toBe(label);
+    }
+    expect(slot(el, 'dates').querySelector('input.from')!.getAttribute('aria-label')).toBe('Opened from');
+    expect(slot(el, 'dates').querySelector('input.to')!.getAttribute('aria-label')).toBe('Opened to');
+  });
+
+  it('gives the date range the whole row: flex row on a phone, grid row in the sheet', () => {
+    const dates = slot(render().nativeElement as HTMLElement, 'dates');
+    expect(dates.classList).toContain('full-row');
+    expect(dates.classList).toContain('range-field');
+    expect(SOURCE).toMatch(/\.range-field \{ grid-column: 1 \/ -1; \}/);
+  });
+
+  it('wraps every select, text input, date range and segmented in the template in a field', () => {
+    const template = SOURCE.slice(SOURCE.indexOf('<sb-toolbar'), SOURCE.indexOf('</sb-toolbar>'));
+    const controls = template.match(/<sb-(select|text-input|date-range|segmented)\b/g) ?? [];
+    const fields = template.match(/<sb-field\b/g) ?? [];
+    expect(controls).toHaveLength(10);
+    expect(fields).toHaveLength(10);
+    expect(template).not.toMatch(/<sb-(select|text-input|date-range|segmented)\b[^>]*\bslot=/);
+  });
+
+  it('renders Compact / Full as one sb-segmented group, not two ghost buttons', () => {
+    const el = render().nativeElement as HTMLElement;
+    const group = slot(el, 'density').querySelector('sb-segmented [role="group"]')!;
+    expect(group.getAttribute('aria-label')).toBe('Row density');
+    expect([...group.querySelectorAll('button')].map((b) => b.textContent!.trim())).toEqual(['Compact', 'Full']);
+    expect(el.querySelector('.density')).toBeNull();
+    expect(SOURCE).not.toMatch(/\.density \{/);
+  });
+
+  it('presses the current density (compact by default) and switches on a press', () => {
+    const f = render();
+    const el = f.nativeElement as HTMLElement;
+    const buttons = () => [...slot(el, 'density').querySelectorAll<HTMLButtonElement>('button')];
+    const density = (f.componentInstance as unknown as { density: () => string }).density;
+    expect(density()).toBe('compact');
+    expect(buttons().map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+
+    buttons()[1].click();
+    f.detectChanges();
+    expect(density()).toBe('full');
+    expect(buttons().map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+  });
+
+  it('ignores a value that is not a density', () => {
+    const f = render();
+    const trades = f.componentInstance as unknown as { density: () => string; onDensity(v: string): void };
+    trades.onDensity('roomy');
+    expect(trades.density()).toBe('compact');
+  });
+
+  it('centres the Export CSV link on the control row: its box is one control tall', () => {
+    expect(SOURCE).toMatch(/\.export-wrap \{[^}]*min-height: var\(--control-h\)/);
+  });
+});
+
 /* -- R6-05 -- the count footer ------------------------------------------- */
 
 /*

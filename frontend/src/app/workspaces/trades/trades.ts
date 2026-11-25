@@ -51,6 +51,8 @@ import { RowLink } from '../../ui/row-link';
 import { Icon } from '../../ui/icon';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { DateRange } from '../../ui/date-range';
+import { Field } from '../../ui/field';
+import { SegmentOption, Segmented } from '../../ui/segmented';
 import { Toolbar, ToolbarControl } from '../../ui/toolbar';
 import { DirectionArrow } from '../../ui/direction-arrow';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
@@ -166,6 +168,8 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
     Toolbar,
     DataTable,
     DateRange,
+    Field,
+    Segmented,
     ColumnPickerComponent,
     FilterBar,
     FilterChips,
@@ -277,26 +281,15 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
           [visible]="visible()"
           (visibleChange)="visible.set($event)"
         />
-        <div slot="density" class="density" role="group" aria-label="Row density">
-          <button
-            sb-button
-            variant="ghost"
-            type="button"
-            [attr.aria-pressed]="density() === 'compact'"
-            (click)="setDensity('compact')"
-          >
-            Compact
-          </button>
-          <button
-            sb-button
-            variant="ghost"
-            type="button"
-            [attr.aria-pressed]="density() === 'full'"
-            (click)="setDensity('full')"
-          >
-            Full
-          </button>
-        </div>
+        <!-- v246 §A2: the density pair uses the toolbar's shared toggle style. -->
+        <sb-field slot="density" label="Density" size="auto">
+          <sb-segmented
+            label="Row density"
+            [options]="densityOptions"
+            [value]="density()"
+            (valueChange)="onDensity($event)"
+          />
+        </sb-field>
         <!-- A plain anchor, not a fetch: the browser gets a Save dialog and
              the server's filename, both of which an XHR throws away.
              The hint names what comes out, because it is NOT what is on
@@ -309,79 +302,80 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
         <!-- v85 D32: the opened-at range narrows WHEN, not WHAT -- a scope
              control rather than a field filter, same distinction that used to
              separate the control bar from the filter bar. -->
-        <sb-date-range
-          slot="dates"
-          [from]="opened_from() ?? null"
-          [to]="opened_to() ?? null"
-          (changed)="onDateRange($event)"
-        />
-        <sb-text-input
-          slot="ticker"
-          type="search"
-          label="Ticker"
-          placeholder="AAPL"
-          [value]="ticker() ?? ''"
-          (valueChange)="navigate({ ticker: $event })"
-        />
-        <sb-select
-          slot="origin"
-          label="Origin"
-          placeholder="Any"
-          [value]="origin() ?? ''"
-          [options]="originOptions"
-          (valueChange)="navigate({ origin: $event })"
-        />
+        <sb-field slot="dates" class="range-field" label="Opened" size="auto" [fullRow]="true">
+          <sb-date-range
+            [from]="opened_from() ?? null"
+            [to]="opened_to() ?? null"
+            (changed)="onDateRange($event)"
+          />
+        </sb-field>
+        <sb-field slot="ticker" label="Ticker" size="l">
+          <sb-text-input
+            type="search"
+            placeholder="AAPL"
+            [value]="ticker() ?? ''"
+            (valueChange)="navigate({ ticker: $event })"
+          />
+        </sb-field>
+        <sb-field slot="origin" label="Origin" size="s">
+          <sb-select
+            placeholder="Any"
+            [value]="origin() ?? ''"
+            [options]="originOptions"
+            (valueChange)="navigate({ origin: $event })"
+          />
+        </sb-field>
         <!-- SR52. The five the parity audit found, in the order they narrow a
              search: what the setup was, then how it was graded, then whether it
              has been written up. -->
-        <sb-text-input
-          slot="strategy"
-          type="search"
-          label="Strategy"
-          placeholder="RSI"
-          [value]="strategy() ?? ''"
-          (valueChange)="navigate({ strategy: $event })"
-        />
-        <sb-select
-          slot="horizon"
-          label="Horizon"
-          placeholder="Any"
-          [value]="horizon() ?? ''"
-          [options]="horizonOptions"
-          (valueChange)="navigate({ horizon: $event })"
-        />
-        <sb-select
-          slot="confidence"
-          label="Confidence"
-          placeholder="Any"
-          [value]="confidence() ?? ''"
-          [options]="confidenceOptions"
-          (valueChange)="navigate({ confidence: $event })"
-        />
-        <sb-select
-          slot="tier"
-          label="Tier"
-          placeholder="Any"
-          [value]="tier() ?? ''"
-          [options]="tierOptions"
-          (valueChange)="navigate({ tier: $event })"
-        />
-        <sb-select
-          slot="badge"
-          label="Badge"
-          placeholder="Any"
-          [value]="badge() ?? ''"
-          [options]="badgeOptions"
-          (valueChange)="navigate({ badge: $event })"
-        />
-        <sb-select
-          slot="note"
-          label="Note"
-          placeholder="Any"
-          [value]="has_note() ?? ''"
-          [options]="noteOptions"
-          (valueChange)="navigate({ has_note: $event })"
-        />
+        <sb-field slot="strategy" label="Strategy" size="m">
+          <sb-text-input
+            type="search"
+            placeholder="RSI"
+            [value]="strategy() ?? ''"
+            (valueChange)="navigate({ strategy: $event })"
+          />
+        </sb-field>
+        <sb-field slot="horizon" label="Horizon" size="s">
+          <sb-select
+            placeholder="Any"
+            [value]="horizon() ?? ''"
+            [options]="horizonOptions"
+            (valueChange)="navigate({ horizon: $event })"
+          />
+        </sb-field>
+        <sb-field slot="confidence" label="Confidence" size="s">
+          <sb-select
+            placeholder="Any"
+            [value]="confidence() ?? ''"
+            [options]="confidenceOptions"
+            (valueChange)="navigate({ confidence: $event })"
+          />
+        </sb-field>
+        <sb-field slot="tier" label="Tier" size="s">
+          <sb-select
+            placeholder="Any"
+            [value]="tier() ?? ''"
+            [options]="tierOptions"
+            (valueChange)="navigate({ tier: $event })"
+          />
+        </sb-field>
+        <sb-field slot="badge" label="Badge" size="s">
+          <sb-select
+            placeholder="Any"
+            [value]="badge() ?? ''"
+            [options]="badgeOptions"
+            (valueChange)="navigate({ badge: $event })"
+          />
+        </sb-field>
+        <sb-field slot="note" label="Note" size="s">
+          <sb-select
+            placeholder="Any"
+            [value]="has_note() ?? ''"
+            [options]="noteOptions"
+            (valueChange)="navigate({ has_note: $event })"
+          />
+        </sb-field>
       </sb-toolbar>
 
       <!-- What sb-filter-bar keeps after C1: no projected controls (those all
@@ -663,11 +657,10 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
     .page-actions { display: contents; }
     .prices-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-6); }
     .page-actions p { flex: 1 0 100%; margin: 0; text-align: right; }
-    .export-wrap { display: inline-flex; align-items: center; gap: var(--space-4); }
+    .export-wrap { display: inline-flex; align-items: center; gap: var(--space-4); min-height: var(--control-h); }
 
-    /* v95 C1: sb-toolbar lays out its slotted children; this is just the
-       group's own internal gap, which sb-control-row used to supply. */
-    .density { display: flex; gap: var(--space-4); }
+    /* v246 §A2: fullRow handles flex; the range also spans the sheet grid. */
+    .range-field { grid-column: 1 / -1; }
     .export { color: var(--accent); font-size: var(--text-table); text-decoration: none; }
     .export:hover { text-decoration: underline; }
 
@@ -902,6 +895,17 @@ export class Trades {
       readTableColumns(this.preferences.values(), TRADES_TABLE_ID, next,
                        baselineColumns(next, this.viewport.isPhone())),
     );
+  }
+
+  /** v246 §A2: the Density segmented's options, in reading order. */
+  protected readonly densityOptions: SegmentOption[] = [
+    { value: 'compact', label: 'Compact' },
+    { value: 'full', label: 'Full' },
+  ];
+
+  /** The segmented speaks strings; only the two densities reach setDensity. */
+  protected onDensity(value: string): void {
+    if (value === 'compact' || value === 'full') this.setDensity(value);
   }
 
   protected onReorder(order: string[]): void {
