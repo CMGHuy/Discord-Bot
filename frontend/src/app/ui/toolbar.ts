@@ -73,16 +73,18 @@ export interface ToolbarControl {
     <div class="toolbar-source" hidden #sourceHost><ng-content /></div>
   `,
   styles: `
+    /* v246 §A2: projected controls sit in sb-fields (the field carries the
+       slot); flex-end lines their bottom edges up, labelled or not. */
     :host {
       display: flex;
       flex: 1 1 auto;
       min-width: 0;
-      align-items: center;
+      align-items: flex-end;
       gap: var(--space-10);
       flex-wrap: wrap;
       container: toolbar / inline-size;
     }
-    .toolbar-inline { display: flex; align-items: center; gap: var(--space-10); flex-wrap: wrap; min-width: 0; max-width: 100%; }
+    .toolbar-inline { display: flex; align-items: flex-end; gap: var(--space-10); flex-wrap: wrap; min-width: 0; max-width: 100%; }
     /* v179 §3.3: the same button as sb-column-picker's .trigger -- one
        height, one surface, the count as a badge. Without these rules the
        browser's default grey button showed through ("Filters 13"). */
@@ -122,7 +124,9 @@ export interface ToolbarControl {
     /* Selects in the sheet share one width rule: equal columns, two on a
        phone-width bar (the rule sb-filter-bar's container query already uses). */
     .toolbar-sheet { display: none; width: 100%; gap: var(--space-10); }
-    .toolbar-sheet.open { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); align-items: end; }
+    /* v246 §A2: a column is at least the widest field (--field-l), so an L
+       field fits its cell when the sheet opens at tablet width. */
+    .toolbar-sheet.open { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--field-l), 1fr)); align-items: end; }
     @container toolbar (max-width: 639px) {
       .toolbar-sheet.open { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }

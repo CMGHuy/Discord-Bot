@@ -382,6 +382,11 @@ export class TabBar {
 }
 
 
+/** How an `sb-control-row` lines up its items (v246 §A2): `baseline` (the
+ * default, v179 §3.4) or `end`, the bottom edge, for a bar whose controls
+ * all sit in sb-fields. */
+export type ControlRowAlign = 'baseline' | 'end';
+
 /**
  * The one sanctioned control row.
  *
@@ -401,6 +406,14 @@ export class TabBar {
  * now" label, a count, an N=) now sits on the controls' text line instead
  * of on their bottom border.
  *
+ * **`align="end"`, opt-in** (v246 §A2, index Handoff 8 as amended). A bar
+ * whose every control sits in an `sb-field` (ui/field.ts) opts into
+ * `flex-end`: each field's label line is always present (an aria-hidden
+ * filler when unlabelled), so its bottom edge is its control's bottom edge.
+ * Only v246's bars set it (Calendar's month row); other rows keep the last
+ * baseline above, so plain text stays on the controls' text line. From
+ * 640px up only: below that every row is the full-width column.
+ *
  * Flexbox already aligns per-line when wrapping — `align-items` applies within
  * each flex line, not across the container — so a wrapped second line aligns
  * with itself for free. That was never the bug; mismatched control heights
@@ -412,6 +425,7 @@ export class TabBar {
 @Component({
   selector: 'sb-control-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[attr.data-align]': 'align()' },
   template: `<div class="row" [class.stacked]="stacked()"><ng-content /></div>`,
   styles: `
     /* Block, not the inline default. Consumers put margin, padding, a
@@ -432,10 +446,18 @@ export class TabBar {
     @media (max-width: 639px) {
       .row { flex-direction: column; align-items: stretch; }
     }
+    /* v246 §A2: opt-in bottom alignment from 640px up; the phone column
+       keeps align-items: stretch. */
+    @media (min-width: 640px) {
+      :host([data-align='end']) .row { align-items: flex-end; }
+    }
   `,
 })
 export class ControlRow {
   readonly stacked = input(false);
+  /** Bottom alignment for bars whose controls all sit in sb-fields.
+   * Default: last baseline (v246 §A2). */
+  readonly align = input<ControlRowAlign>('baseline');
 }
 
 

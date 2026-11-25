@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ComponentFixture } from '@angular/core/testing';
 
 import { Viewport } from './breakpoints';
-import { Drawer, Panel, Tab, TabBar } from './layout';
+import { ControlRow, Drawer, Panel, Tab, TabBar } from './layout';
+import { Field } from './field';
 import { ViewportService } from './breakpoints';
 import { installDialogPolyfill } from '../testing/dialog-polyfill';
 import { provideMotion } from './motion/motion.service';
@@ -400,6 +401,48 @@ describe('sb-control-row on the last baseline (v179 §3.4)', () => {
 
   it('still stacks below 640px', () => {
     expect(ROW).toMatch(/@media \(max-width: 639px\) \{\s*\.row \{ flex-direction: column; align-items: stretch; \}/);
+  });
+});
+
+
+@Component({
+  imports: [ControlRow, Field],
+  template: `
+    <sb-control-row id="plain"><button type="button">Run</button></sb-control-row>
+    <sb-control-row id="bar" align="end">
+      <sb-field id="arrows" size="auto" [fullRow]="true"><button type="button">‹</button></sb-field>
+      <sb-field id="horizon" label="Horizon" size="s"><select><option>Any</option></select></sb-field>
+    </sb-control-row>
+  `,
+})
+class RowHost {}
+
+// v246 §A2: field bars opt in; the v179 baseline pin above stays unchanged.
+describe('sb-control-row align="end" opt-in (v246 §A2)', () => {
+  const ROW = stylesOf('sb-control-row', 'ControlRow');
+  function mount(): HTMLElement {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const f = TestBed.createComponent(RowHost);
+    f.detectChanges();
+    return f.nativeElement as HTMLElement;
+  }
+  it('reflects the alignment on the host: baseline by default, end when asked', () => {
+    const el = mount();
+    expect(el.querySelector('#plain')!.getAttribute('data-align')).toBe('baseline');
+    expect(el.querySelector('#bar')!.getAttribute('data-align')).toBe('end');
+  });
+  it('aligns an opted-in row along the bottom edge from 640px up', () => {
+    expect(ROW).toMatch(
+      /@media \(min-width: 640px\) \{\s*:host\(\[data-align='end'\]\) \.row \{ align-items: flex-end; \}\s*\}/,
+    );
+  });
+  it('keeps last baseline as the default rule', () => {
+    expect(ruleIn(ROW, '.row')).toContain('align-items: last baseline');
+    expect(ruleIn(ROW, '.row')).not.toContain('flex-end');
+  });
+  it('holds sb-field wrappers as its direct items', () => {
+    const ids = [...mount().querySelectorAll('#bar .row > sb-field')].map((n) => n.id);
+    expect(ids).toEqual(['arrows', 'horizon']);
   });
 });
 
