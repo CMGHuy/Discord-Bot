@@ -25,6 +25,7 @@ from swingbot.core.edge import regime2
 from swingbot.core.infra.jsonio import read_json
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import atr_band, earnings_calendar, levels, trendlines
+from swingbot.core.market import frame_memo
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
@@ -882,7 +883,8 @@ def _band_live(df, current_price: float, k: float, now, ticker: str,
 
 
 def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
-                       hard_filters: dict, *, ticker: str = "", now=None) -> HorizonBuild:
+                       hard_filters: dict, *, ticker: str = "", now=None,
+                       atr14: float | None = None) -> HorizonBuild:
     """One horizon's level map and scenarios at `current_price` (v171 D5 seam:
     `_scan_one` at the scan price, `rescenario` at a re-quoted one)."""
     # Computed once here and threaded through to build_level_map() and
@@ -895,7 +897,7 @@ def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
     candidates = levels.collect_candidate_levels(df, h, current_price,
                                                    trendline_candidates=trendline_candidates)
     supports, resistances = levels.build_level_map(df, h, current_price, candidates=candidates)
-    floor_pct = levels.atr_floor_pct(df, current_price, h)
+    floor_pct = levels.atr_floor_pct(df, current_price, h, atr14=atr14)
     # Reward/stop bounds are widened toward this horizon's OWN scale
     # (h["sr_target_min_pct"] / h["max_risk_pct"], defined per-horizon
     # in strategy_types.py -- up to 22%/11% for a 9-month swing)
@@ -938,6 +940,7 @@ def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
     return HorizonBuild(candidates, supports, resistances, scenarios)
 
 
+@frame_memo.with_ticker_memo
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
               regime, effective_min_confluence: int, effective_min_confidence: int,
               rs_cache: dict = None, spy_df=None, breadth: float = None,
@@ -1109,6 +1112,9 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     # 100% incident this fix responds to. See trendlines.py's
     # MAX_PIVOT_SCAN_BARS and custom_scanner_levels() docstrings.
     trendline_candidates = trendlines.custom_scanner_levels(df, current_price)
+    # v245 F1: ATR(14) of this same df, once per ticker rather than once per
+    # horizon inside atr_floor_pct (the horizon only scales it afterwards).
+    atr14 = levels.atr14_last(df)
 
     for horizon_key in horizons_to_scan:
         h = HORIZONS[horizon_key]
@@ -1119,7 +1125,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
 
         log.debug("%s (%s): building levels (price=%.2f, bars=%d)", ticker, horizon_key, current_price, bars_available)
         candidates, supports, resistances, scenarios = _horizon_scenarios(
-            df, h, current_price, trendline_candidates, hard_filters, ticker=ticker)
+            df, h, current_price, trendline_candidates, hard_filters, ticker=ticker, atr14=atr14)
         log.debug("%s (%s): %d support level(s), %d resistance level(s) found",
                    ticker, horizon_key, len(supports), len(resistances))
         stats["checked"] += 1

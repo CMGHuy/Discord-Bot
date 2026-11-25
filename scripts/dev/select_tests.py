@@ -313,6 +313,9 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("tests/fixtures/shock_replay/", ("tests/market/test_shock_acceptance_a1.py",)),
     ("tests/fixtures/shock_replay_2026_11_05.json",
      ("tests/market/test_shock_acceptance_a1.py",)),
+    # v245: the _scan_one golden is read by its characterisation test.
+    ("tests/fixtures/scanning/v245_scan_one_golden.json",
+     ("tests/scanning/test_v245_scan_one_golden.py",)),
     # sync_codex.py does a bare `import skill_frontmatter` and test_codex_mirror
     # loads sync_codex.py by path, so no import graph links them (v154). An
     # exact Python key is the one Python form this table accepts.

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-24 14:10:05 UTC",
+  "generated_at": "2026-11-25 10:20:54 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.48.0",
-    "bot": "2.19.7"
+    "bot": "2.19.8"
   },
   "releases": [
     {
@@ -2822,6 +2822,19 @@
       "versions": {
         "ui": "1.48.0",
         "bot": "2.19.7"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-25",
+      "last_seen": "2026-11-25",
+      "commit": "d5a77ceb",
+      "subject": "release(bot): 2.19.8 -- v245 Phase A: per-scan indicator sharing across horizons",
+      "versions": {
+        "ui": "1.48.0",
+        "bot": "2.19.8"
       },
       "changed": [
         "bot"
