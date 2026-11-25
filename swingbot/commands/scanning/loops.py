@@ -21,6 +21,7 @@ from swingbot.core.infra.swallowed import swallowed
 from swingbot.core import presentation as ui
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.scanning import outlook_session
+from swingbot.core.scanning import structure as analysis_structure
 from swingbot.core.tracking import live_loss_watch as loss_watch
 from . import loop_guard
 from . import book_status, cooldown, equity_recorder, monitor_liveness, notices, ops_watch, outlook, presence, recap, runstate
@@ -410,6 +411,7 @@ async def config_watcher():
         if "LOG_LEVEL" in changed:
             apply_log_level(config.LOG_LEVEL)
         _apply_scan_interval_change(changed)
+        _apply_structure_cache_change(changed)
 
         # Notify Discord about key setting changes (v110: CONFIG embeds).
         await _post_config_notices(changed)
@@ -1408,6 +1410,14 @@ def _apply_scan_interval_change(changed: dict):
         session_scan.change_interval(minutes=new_minutes)
         log.info("Scan interval hot-reloaded to every %d minute(s) (takes effect next tick).", new_minutes)
     _apply_market_data_refresh_config(changed)
+
+
+@on_config_reload
+def _apply_structure_cache_change(changed: dict):
+    """v245: any config change clears the analysis prefix cache (resized when
+    STRUCTURE_CACHE_MAX changed), so no scan reads a prefix built under the
+    previous config."""
+    analysis_structure.apply_config_change(changed)
 
 
 # Every background loop logs its traceback and restarts when its body raises
