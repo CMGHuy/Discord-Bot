@@ -1252,7 +1252,7 @@ FIELDS: list[Field] = [
                "watchlist re-run uncached and compared (logs/analysis_cache_shadow.jsonl)."),
     Field("STRUCTURE_CACHE_MAX", "STRUCTURE_CACHE_MAX", "Universe & Scanning",
           "Analysis cache entries",
-          type="number", default="256", min=0, max=20000, step=10,
+          type="number", default="320", min=0, max=20000, step=10,
           help="v245. Most entries the analysis cache keeps (LRU; two per ticker). Sized so the "
                "worst case stays under 150 MB; watch rss_mb in scan telemetry."),
     Field("SCAN_CACHE_MAX_AGE_HOURS", "SCAN_CACHE_MAX_AGE_HOURS", "Universe & Scanning",
