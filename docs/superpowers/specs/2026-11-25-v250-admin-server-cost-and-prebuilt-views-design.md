@@ -266,6 +266,90 @@ in the tag, or are excluded — builder's call, documented per route.
 `fill_flat(now)` are applied per request after the memo. `equity_samples`
 has no NOTIFY trigger; the `max(id)` read is the key.
 
+### B6. Rules added by the panel review
+
+These rules override B1–B5 where they differ.
+
+**Storage and ownership**
+- The fingerprint is stored **inside the existing `admin_snapshots.inputs`
+  JSONB** (`core/db/schema.py`), under a `fingerprint` key. No new column,
+  no Alembic revision, nothing to order on rollback. (staff-engineer 1,
+  BLOCKING)
+- The fingerprint functions and the view registry (key → builder, declared
+  inputs) live in `swingbot/core/analytics/` beside `admin_snapshots.py`.
+  Both `refresher/snapshot_job.py` and `admin/api_v1` import them from
+  there; nothing in `core` imports `admin` or `refresher`.
+
+**Fingerprint inputs**
+- The **trades** fingerprint hashes the whole `doc` of every trade whose
+  status is neither PENDING nor ACTIVE (closed, cancelled and PARTIAL), not
+  a hand-picked field list. PARTIAL is included because the Dashboard's
+  realized block counts partial exits. The plan first measures whether
+  PARTIAL docs churn during a scan (near-TP snapshot writes); if they do,
+  the realized block moves to the live overlay instead and PARTIAL leaves
+  the hash.
+- **Daily bars** (quant-engineer 1, BLOCKING): the signature covers exactly
+  the files cancel-precision reads: for each ticker in its plans,
+  `cache_file(ticker, basis_for(ticker))` **and** its `.meta.json` sidecar
+  (`core/marketdata/daily_delta.py`), each as `(name, mtime_ns, size)`, plus
+  the resolved basis per ticker, so an `ALPACA_ENABLED` flip changes it. The
+  plan confirms every bar write moves `mtime_ns`.
+- The **refresher computes the daily-bars signature** on its inner tick and
+  writes it to a tiny `admin_snapshots` row (`sig.daily_bars`); the admin
+  reads it with the other fingerprints in SQL, so no request stats files.
+- `equity_samples` is keyed on `(count, max(id))`; the plan confirms the
+  table is append-only.
+- The poll includes the Berlin date, so 30d/90d/ytd keys rebuild right after
+  midnight.
+
+**Build correctness**
+- A build reads its fingerprints **before** it starts and re-reads them
+  after it finishes; if any changed, the row is discarded and the next poll
+  rebuilds (quant-engineer 2, BLOCKING). Test: a bar file rewritten during
+  a build leaves no row stamped with the new signature.
+- Only the refresher writes stored rows; the admin's on-miss compute never
+  writes one.
+- On a stored-body hit the admin runs only the fingerprint SQL (no
+  memoised table load); test: zero trade/plan loads on a hit.
+- The fingerprint-coverage test derives each view's inputs from a
+  recording fake of the stores the builder reads, so a new read in a
+  builder that its declaration misses fails the test.
+
+**Load and rollback**
+- `ADMIN_PREBUILT_VIEWS=off` stops the refresher's B2 builders as well as
+  the admin's stored-view reads.
+- The refresher polls fingerprints on its inner `QUEUE_POLL_S` tick
+  (`refresher/loop.py`) rather than its 5–60 min cycle, and rebuilds only
+  the views whose fingerprint changed, one at a time on one thread, cheapest
+  first, each within `ADMIN_SNAPSHOT_BUDGET_S`. The plan measures a full
+  pass after Phase A; if it exceeds Goal 4's 2 minutes, the 30d/90d/ytd ×
+  weak/both keys are dropped first and the miss recorded.
+- Single-flight (A4) keys on route + full query string + principal. A failed
+  build releases the key and raises to every waiter; failures are never
+  cached. At most two cold builds run at once (a semaphore); a waiter that
+  cannot start within 25 s gets a 503 with `Retry-After`, so cold builds can
+  never take all 8 request threads (`deploy/gunicorn.conf.py`).
+
+**Resampling (A3)**
+- The tolerance is calibrated against the spread of five old-loop seeds on
+  the frozen book; the new band must lie within that spread or within
+  `max(0.01 R, 2 % of width)`, whichever is wider.
+- `week_cluster_bootstrap` keeps `WEEK_BOOTSTRAP_SEED`; every call site
+  creates its own `numpy.random.Generator` per call, never a shared
+  module-level one, so results do not depend on thread or call order.
+- An exact-equality golden pins the sample statistics on the frozen book,
+  including every per-card and per-split `cancel_precision.figure()` call,
+  and the summation order is unchanged.
+
+**Tests and goldens**
+- The golden-body comparison masks a named list of JSON paths (the band
+  edges only); the list lives next to the golden test.
+- Per route, a test pins `generated_at` = the stored row's build time on a
+  hit and the compute time on a miss, and that any `asof` is live.
+- `performance_body` and `default_view_body` (and any other legacy function
+  over complexity 15 the diff touches) get no worse against
+  `complexity_baseline.json`.
+
 ## Ops
 
 - Refresher builds run in the refresher container, never the admin
@@ -310,3 +394,32 @@ numbers become v249's new "before" baseline (v249 § 7, Ops and ownership).
 v249 (client data layer) is re-baselined against this spec's after-numbers
 and then planned; project 3 (Dashboard "right now" vs Trades history)
 follows.
+
+## Panel review
+
+Spec review, 2026-11-25, on 20b33e2b. Three BLOCKING findings, all applied;
+every ADVISORY applied in B6 unless noted.
+
+- staff-engineer 1 (BLOCKING): fingerprint storage location unstated, migration/rollback -- applied (inside `inputs` JSONB, no migration)
+- staff-engineer 2: ~37 keys vs 2-min goal and refresher duties; "low priority" undefined -- applied (changed-only rebuilds, one thread, cheapest first, measured, drop order named)
+- staff-engineer 3: switch doesn't stop builders -- applied
+- staff-engineer 4: single-flight waiters can take all 8 threads -- applied (2-build semaphore, 25 s then 503)
+- staff-engineer 5: hand-picked doc fields; PARTIAL realized -- applied (whole doc incl. PARTIAL, churn measured first)
+- staff-engineer 6: package owner unnamed -- applied (`core/analytics`)
+- staff-engineer 7: per-request file stats -- applied (refresher writes the signature row)
+- staff-engineer 8: relative scopes at midnight -- applied
+- quant-engineer 1 (BLOCKING): daily-bars file set, basis, sidecar -- applied
+- quant-engineer 2 (BLOCKING): signature read vs build race -- applied (read before, re-check after, discard on change)
+- quant-engineer 3: signature scope and cost -- applied (plan tickers only, refresher-computed)
+- quant-engineer 4: mtime-only identity -- applied (`mtime_ns`, size; writes confirmed to move mtime)
+- quant-engineer 5: tolerance vs old-loop noise; seeds -- applied
+- quant-engineer 6: `generated_at` meaning on miss path -- applied (per-route test; compute time on miss)
+- quant-engineer 7: exact golden incl. per-card/per-split -- applied
+- senior-engineer 1: single-flight key and error path -- applied
+- senior-engineer 2: hit path must not pay the memoised load -- applied
+- senior-engineer 3: pin `generated_at`/`asof` per route -- applied
+- senior-engineer 4: coverage test needs derived inputs -- applied (recording fake)
+- senior-engineer 5: request path must not write rows -- applied
+- senior-engineer 6: golden masking mechanism -- applied (named JSON paths)
+- senior-engineer 7: legacy complexity functions named -- applied
+- senior-engineer 8: equity_samples key ignores rewrites -- applied (`count, max(id)`, append-only confirmed)
