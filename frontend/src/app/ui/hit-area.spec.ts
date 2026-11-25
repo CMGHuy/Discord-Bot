@@ -60,15 +60,19 @@ describe('v179: the .sb-hit utility', () => {
 
 describe('v179: controls that grow to the hit size', () => {
   const GROWN: [file: string, selector: string, declaration: string][] = [
-    // v202 §3: a 64x52 rail entry is past the 44px hit size at every width.
-    ['src/app/shell/shell.css', '.rail-link', 'min-height: 52px'],
-    ['src/app/shell/shell.css', '.rail-link', 'width: 64px'],
+    // v247 (spec v240 §5): a 44x44 rail entry is the 44px hit size at every width.
+    ['src/app/shell/shell.css', '.rail-link', 'width: 44px'],
+    ['src/app/shell/shell.css', '.rail-link', 'height: 44px'],
     ['src/app/ui/filter-bar.ts', '.chip', 'min-height: var(--control-h)'],
     ['src/app/ui/filter-bar.ts', '.chip', 'min-width: var(--hit-min)'],
     ['src/app/ui/column-picker.ts', '.trigger', 'min-height: var(--control-h)'],
     ['src/app/ui/column-picker.ts', 'label', 'min-height: var(--hit-min)'],
     ['src/app/ui/column-picker.ts', '.reset', 'min-height: var(--hit-min)'],
     ['src/app/ui/segmented.ts', '.segment', 'min-width: var(--hit-min)'],
+    // v246 §A2: every option is one control tall (44px below 1024px), and the
+    // equal phone segments of a 3+ option group never shrink under the target.
+    ['src/app/ui/segmented.ts', '.segment', 'min-height: var(--control-h)'],
+    ['src/app/ui/segmented.ts', ':host(.many) .segment', 'min-width: var(--hit-min)'],
     ['src/app/ui/form-controls.ts', '.box', 'min-width: var(--hit-min)'],
     ['src/app/workspaces/system/settings-tab.ts', '.import-file input', 'min-height: var(--control-h)'],
   ];
@@ -86,7 +90,7 @@ describe('v179: controls that keep their look and take .sb-hit', () => {
     ['src/app/workspaces/dashboard/panels/recent-activity.ts', /<a panel-actions class="all-link sb-hit"/],
     ['src/app/workspaces/plans/plan-detail.ts', /<a class="record-link sb-hit"/],
     ['src/app/workspaces/watchlist/ticker-detail.ts', /<a panel-actions class="all-link sb-hit"/],
-    ['src/app/workspaces/analytics/tabs/overview.ts', /<a class="sb-hit" routerLink="\/trades\/calendar"/],
+    ['src/app/workspaces/analytics/tabs/overview.ts', /<a class="sb-hit" routerLink="\/calendar"/],
     ['src/app/workspaces/system/logs-tab.ts', /<a slot="raw" class="raw sb-hit"/],
     ['src/app/workspaces/system/settings-tab.ts', /<a class="export sb-hit"/],
     ['src/app/workspaces/system/settings-tab.ts', /<summary class="sb-hit">/],

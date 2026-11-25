@@ -1,9 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Provider, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TickMarkType } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts';
+
+import { ViewportService } from '../../../ui/breakpoints';
+import { resolveTokenIn } from '../../../ui/testing/theme-tokens';
 
 import { EquityCandle, EquityCandlesResponse } from '../../../api/models';
 import { EquityCandlesStore } from '../../../stores/equity-candles.store';
@@ -11,7 +16,7 @@ import { equityCandlesStoreStub } from '../../../testing/equity-candles-store.st
 import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
 import { chartPalette, token } from '../../../ui/chart/chart-theme';
 import { THEME_STORAGE, ThemeService } from '../../../ui/theme.service';
-import { EquityCandles, GESTURE_GRACE_MS, targetLogicalRange, targetNeedsOlder } from './equity-candles';
+import { CANDLE_SCALE_MARGINS, EquityCandles, GESTURE_GRACE_MS, targetLogicalRange, targetNeedsOlder, wholeTickLabel } from './equity-candles';
 import { TimeWindow, inWindowCandles } from './equity-range.model';
 
 // A real lightweight-charts chart is created; fancy-canvas needs matchMedia.
@@ -33,13 +38,13 @@ const MIXED = [
   candle('2026-10-20', { o: 105, c: 112, change: 7, change_pct: 6.67, skipped: 2 }),
 ];
 
-function render(data: EquityCandlesResponse | null, error: string | null = null) {
+function render(data: EquityCandlesResponse | null, error: string | null = null, extra: Provider[] = []) {
   const stub = equityCandlesStoreStub(data);
   stub.error.set(error);
   TestBed.configureTestingModule({
     providers: [provideZonelessChangeDetection(), { provide: EquityCandlesStore, useValue: stub },
       // Start in Black: Navy is the default since v240, and these specs flip to Navy.
-      { provide: THEME_STORAGE, useValue: { get: () => 'graphite', set: () => {} } }],
+      { provide: THEME_STORAGE, useValue: { get: () => 'graphite', set: () => {} } }, ...extra],
   });
   const fixture = TestBed.createComponent(EquityCandles);
   fixture.componentRef.setInput('currency', '€');
@@ -523,9 +528,9 @@ describe('sb-equity-candles', () => {
     expect(stub.calls.load).toBe(1);
   });
 
-  it('puts the controls and the readout on one baseline on desktop, now the caption row is gone', () => {
+  it('puts the readout on the toggle buttons\' text line on desktop (v246 §A2: last baseline, the fields\' first line is a caption)', () => {
     const source = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/panels/equity-candles.ts'), 'utf8');
-    expect(source).toMatch(/\.controls, \.readout \{ align-self: baseline; \}/);
+    expect(source).toMatch(/\.controls, \.readout \{ align-self: last baseline; \}/);
   });
 
   it('carries no "Paper account" caption under the readout (dropped 2026-10-23)', () => {
@@ -549,23 +554,23 @@ describe('sb-equity-candles', () => {
 
   it('offers the four timeframes with the stored one pressed', () => {
     const { el } = render(response(MIXED));
-    const chips = buttons(el, 'Candle timeframe');
+    const chips = buttons(el, 'Candle interval');
     expect(chips.map((b) => b.textContent!.trim())).toEqual(['1H', '4H', '1D', '1W']);
     expect(chips.find((b) => b.getAttribute('aria-pressed') === 'true')?.textContent?.trim()).toBe('1D');
   });
 
   it('switches timeframe through the store', () => {
     const { fixture, el, stub } = render(response(MIXED));
-    buttons(el, 'Candle timeframe').find((b) => b.textContent!.trim() === '1W')!.click();
+    buttons(el, 'Candle interval').find((b) => b.textContent!.trim() === '1W')!.click();
     fixture.detectChanges();
     expect(stub.calls.tf).toEqual(['1W']);
-    expect(buttons(el, 'Candle timeframe').find((b) => b.getAttribute('aria-pressed') === 'true')
+    expect(buttons(el, 'Candle interval').find((b) => b.getAttribute('aria-pressed') === 'true')
       ?.textContent?.trim()).toBe('1W');
   });
 
   it('offers the two bases by name and switches through the store', () => {
     const { fixture, el, stub } = render(response(MIXED));
-    const toggle = buttons(el, 'Equity basis');
+    const toggle = buttons(el, 'Trades counted');
     expect(toggle.map((b) => b.textContent!.trim())).toEqual(['Open + closed', 'Closed trades only']);
     toggle[1].click();
     fixture.detectChanges();
@@ -574,8 +579,8 @@ describe('sb-equity-candles', () => {
 
   it('keeps the controls when there is nothing to draw', () => {
     const { el } = render(response([], { tf: '1H' }));
-    expect(buttons(el, 'Candle timeframe').length).toBe(4);
-    expect(buttons(el, 'Equity basis').length).toBe(2);
+    expect(buttons(el, 'Candle interval').length).toBe(4);
+    expect(buttons(el, 'Trades counted').length).toBe(2);
   });
 
   it('fits the view once, only after the host has a width (first load)', () => {
@@ -860,7 +865,10 @@ describe('sb-equity-candles', () => {
   describe('follows the theme (v225)', () => {
     // jsdom resolves token() against the flat Graphite fixture (test-setup.ts);
     // the Navy ground is layered here the way tokens.css layers it.
-    const NAVY_CSS = ':root[data-theme="navy"]{--surface:#0c1424;--text-muted:#9fb0c8;--text-faint:#5f6f8a}';
+    // v246: the shared theme writes axis text in --text-secondary, so Navy layers that ink too.
+    const NAVY_TEXT_SECONDARY = resolveTokenIn('navy', '--text-secondary');
+    const NAVY_CSS = ':root[data-theme="navy"]{--surface:#0c1424;--text-muted:#9fb0c8;--text-faint:#5f6f8a;'
+      + `--text-secondary:${NAVY_TEXT_SECONDARY}}`;
     let style: HTMLStyleElement;
     type Internals = {
       chart: { applyOptions(o: unknown): void; options(): { timeScale: { timeVisible: boolean } } };
@@ -894,7 +902,7 @@ describe('sb-equity-candles', () => {
       await flip(fixture, 'navy');
 
       expect(applied).toHaveBeenCalledWith(expect.objectContaining({
-        layout: expect.objectContaining({ background: { color: '#0c1424' }, textColor: '#9fb0c8' }),
+        layout: expect.objectContaining({ background: { color: '#0c1424' }, textColor: NAVY_TEXT_SECONDARY }),
       }));
       expect(series).toHaveBeenCalledWith(expect.objectContaining({
         upColor: chartPalette().up, downColor: chartPalette().down, wickUpColor: chartPalette().up,
@@ -920,5 +928,132 @@ describe('sb-equity-candles', () => {
       expect(graphiteFaint).not.toBe('#5f6f8a');
       expect(internals(fixture).seam!.current()!.color).toBe(graphiteFaint);
     });
+  });
+});
+
+/* -- v246 §A2 -- the Interval and Trades toggles in sb-field --------------- */
+
+describe('sb-equity-candles toggles in sb-field (v246 §A2)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/panels/equity-candles.ts'), 'utf8');
+  const fields = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>('.controls > sb-field')];
+  const caption = (field: HTMLElement) => field.querySelector('.field-label')!.textContent!.trim();
+
+  it('puts Interval and Trades each in one captioned sb-field, a whole row each on a phone', () => {
+    const all = fields(render(response(MIXED)).el);
+    expect(all.map(caption)).toEqual(['Interval', 'Trades']);
+    for (const field of all) {
+      expect(field.getAttribute('data-size')).toBe('auto');
+      expect(field.classList).toContain('full-row');
+      expect(field.querySelectorAll('.sb-label')).toHaveLength(1);
+      expect(field.querySelectorAll('sb-segmented')).toHaveLength(1);
+    }
+  });
+
+  it('names each group with a phrase that holds its caption (WCAG 2.5.3)', () => {
+    const all = fields(render(response(MIXED)).el);
+    const names = all.map((f) => f.querySelector('[role="group"]')!.getAttribute('aria-label')!);
+    expect(names).toEqual(['Candle interval', 'Trades counted']);
+    all.forEach((f, i) => expect(names[i].toLowerCase()).toContain(caption(f).toLowerCase()));
+  });
+
+  it('splits the four intervals evenly on a phone; the two-option Trades keeps its width', () => {
+    const { el } = render(response(MIXED));
+    expect(el.querySelector('sb-segmented.timeframe')!.classList).toContain('many');
+    expect(el.querySelector('sb-segmented.basis')!.classList).not.toContain('many');
+  });
+
+  it('keeps both captioned toggles when there is nothing to draw', () => {
+    expect(fields(render(response([], { tf: '1H' })).el).map(caption)).toEqual(['Interval', 'Trades']);
+  });
+
+  it('lines the fields up on their bottom edge; the field, not a page rule, takes the phone row', () => {
+    expect(SOURCE).toMatch(/\.controls \{[^}]*align-items: flex-end;/);
+    expect(SOURCE).not.toMatch(/\.controls \{[^}]*align-items: center;/);
+    expect(SOURCE).not.toMatch(/\.controls sb-segmented/);
+  });
+
+  it('wraps both segmented groups of the toggle row in a field', () => {
+    const row = SOURCE.slice(SOURCE.indexOf('<div class="controls">'), SOURCE.indexOf('@if (readout().length)'));
+    expect(row.match(/<sb-segmented\b/g)).toHaveLength(2);
+    expect(row.match(/<sb-field\b/g)).toHaveLength(2);
+  });
+});
+
+describe('sb-equity-candles on the shared chart theme (v246 §A3)', () => {
+  type Internals = { chart: IChartApi; series: ISeriesApi<'Candlestick'> };
+  const inner = (fixture: { componentInstance: EquityCandles }) => fixture.componentInstance as unknown as Internals;
+  const at = (iso: string) => (Date.parse(iso) / 1000) as Time;
+
+  /** A ViewportService stand-in whose phone flag the test moves. */
+  function viewport(phone: boolean) {
+    const isPhone = signal(phone);
+    return { isPhone, provider: { provide: ViewportService, useValue: {
+      isPhone, isNarrow: signal(phone), viewport: signal(phone ? 'xs' : 'lg'),
+    } } };
+  }
+
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('groups thousands on the price axis and signs a loss with the true minus', () => {
+    const { fixture } = render(response(MIXED));
+    const formatter = inner(fixture).series.priceFormatter();
+    expect(formatter.format(997800)).toBe('997,800.00');
+    expect(formatter.format(-1234.5)).toBe('−1,234.50');
+  });
+
+  it('takes the shared theme and still sizes itself', () => {
+    const { fixture } = render(response(MIXED));
+    const options = inner(fixture).chart.options();
+    expect(options.layout.textColor).toBe(token('--text-secondary'));
+    expect(options.autoSize).toBe(true);
+    expect(options.layout.attributionLogo).toBe(false);
+  });
+
+  it('keeps the last-value tag from 640px up, with room above and below the candles', () => {
+    const { fixture } = render(response(MIXED), null, [viewport(false).provider]);
+    expect(inner(fixture).series.options().lastValueVisible).toBe(true);
+    expect(inner(fixture).series.priceScale().options().scaleMargins).toEqual(CANDLE_SCALE_MARGINS);
+  });
+
+  it('drops the tag on a phone, where the balance above the chart states it, and follows a crossing', () => {
+    const phone = viewport(true);
+    const { fixture } = render(response(MIXED), null, [phone.provider]);
+    expect(inner(fixture).series.options().lastValueVisible).toBe(false);
+    phone.isPhone.set(false);
+    fixture.detectChanges();
+    expect(inner(fixture).series.options().lastValueVisible).toBe(true);
+  });
+
+  it('labels intraday ticks on whole hours only and leaves day ticks to the library', () => {
+    expect(wholeTickLabel(at('2026-10-01T15:00:00Z'), TickMarkType.Time)).toBe('15:00');
+    expect(wholeTickLabel(at('2026-10-01T09:00:00Z'), TickMarkType.Time)).toBe('09:00');
+    expect(wholeTickLabel(at('2026-10-01T15:30:00Z'), TickMarkType.Time)).toBe('');
+    // The repeated fall-back hour sits one second later and is still its whole hour.
+    expect(wholeTickLabel(at('2026-10-25T01:00:01Z'), TickMarkType.TimeWithSeconds)).toBe('01:00');
+    expect(wholeTickLabel(at('2026-10-01T00:00:00Z'), TickMarkType.DayOfMonth)).toBeNull();
+    expect(wholeTickLabel('2026-10-01' as Time, TickMarkType.Time)).toBeNull();
+  });
+
+  it('keeps the whole-hour formatter and the intraday axis through a theme flip', async () => {
+    const { fixture } = render(response(hourlyCandles(30), { tf: '1H' }));
+    const chart = inner(fixture).chart;
+    expect(chart.options().timeScale).toMatchObject({ tickMarkFormatter: wholeTickLabel });
+    TestBed.inject(ThemeService).set('navy');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(chart.options().timeScale).toMatchObject({ tickMarkFormatter: wholeTickLabel });
+    expect(chart.options().timeScale.timeVisible).toBe(true);
+  });
+  it('keeps the leftmost tick label whole: the left edge is fixed, through render and a theme flip', async () => {
+    const { fixture, stub } = render(response(dailyCandles(40)));
+    const chart = inner(fixture).chart;
+    expect(chart.options().timeScale.fixLeftEdge).toBe(true);
+    stub.data.set(response(hourlyCandles(30), { tf: '1H' }));
+    fixture.detectChanges();
+    expect(chart.options().timeScale.fixLeftEdge).toBe(true);
+    TestBed.inject(ThemeService).set('navy');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(chart.options().timeScale.fixLeftEdge).toBe(true);
   });
 });

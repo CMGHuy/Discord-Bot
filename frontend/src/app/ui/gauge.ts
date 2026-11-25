@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { SVG_CHART_TOKENS } from './chart/chart-theme';
 
 import { DrawIn } from './motion/draw-in';
 
@@ -55,15 +56,15 @@ import { DrawIn } from './motion/draw-in';
   `,
   styles: `
     .gauge { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-    .track { stroke: var(--border); }
-    .needle { stroke: var(--accent); }
-    .over .needle { stroke: var(--neg); }
+    .track { stroke: var(${SVG_CHART_TOKENS.grid}); }
+    .needle { stroke: var(${SVG_CHART_TOKENS.line}); }
+    .over .needle { stroke: var(${SVG_CHART_TOKENS.neg}); }
     .readout {
       font-size: var(--text-metric);
       font-variant-numeric: tabular-nums;
       color: var(--text);
     }
-    .over .readout { color: var(--neg); }
+    .over .readout { color: var(${SVG_CHART_TOKENS.neg}); }
     .flag { font-size: var(--text-micro); font-style: italic; }
     .label {
       font-size: var(--text-micro);

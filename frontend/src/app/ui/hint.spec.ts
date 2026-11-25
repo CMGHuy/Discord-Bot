@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
+import { Component, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DIALOG_CLOSING_EVENT, Hint, clampPopover, placeBeside, supportsPopover } from './hint';
+import { DIALOG_CLOSING_EVENT, HINT_HOVER_DELAY_MS, Hint, clampPopover, placeAbove, placeBeside, supportsPopover } from './hint';
 import { ConfirmDialog } from './confirm-dialog';
 import { Drawer } from './layout';
 import { provideMotion } from './motion/motion.service';
@@ -39,6 +40,49 @@ class Host {}
 })
 class AnchorHost {
   readonly anchored = signal(true);
+}
+
+/** v247 Decision 6: a rail-style label and a glyph hint, both with the hover delay. */
+@Component({
+  imports: [Hint],
+  template: `
+    <a #a href="/dashboard" class="link-a" aria-label="Dashboard">D</a>
+    <sb-hint class="anchored-hint" [anchor]="a" text="Dashboard" [openDelay]="delay" />
+    <sb-hint class="glyph-hint" text="Explained." label="About it" [openDelay]="delay" />
+  `,
+})
+class DelayHost {
+  readonly delay = HINT_HOVER_DELAY_MS;
+}
+
+/** v247 Decision 7: two rail labels and a glyph hint on one page. */
+@Component({
+  imports: [Hint],
+  template: `
+    <a #a href="/dashboard" class="link-a" aria-label="Dashboard">D</a>
+    <sb-hint [anchor]="a" text="Dashboard" />
+    <a #b href="/watchlist" class="link-b" aria-label="Watchlist">W</a>
+    <sb-hint [anchor]="b" text="Watchlist" />
+    <sb-hint class="glyph-hint" text="Explained." label="About it" />
+    <span class="outside">Elsewhere</span>
+  `,
+})
+class PairHost {}
+
+/** v247: a tab-bar tab with its name above it, and a rail label beside its link. */
+@Component({
+  imports: [Hint],
+  template: `
+    <a #tab href="/trades" class="tab" aria-label="Trades">T</a>
+    <sb-hint #tip [anchor]="tab" text="Trades" placement="above" />
+    <a #rail href="/dashboard" class="rail-link" aria-label="Dashboard">D</a>
+    <sb-hint #railTip [anchor]="rail" text="Dashboard" />
+    <span class="outside">Elsewhere</span>
+  `,
+})
+class PinHost {
+  readonly tip = viewChild.required<Hint>('tip');
+  readonly railTip = viewChild.required<Hint>('railTip');
 }
 
 describe('Hint (v80 D4)', () => {
@@ -602,5 +646,300 @@ describe('placeBeside (v195 correction 10)', () => {
 
   it('shifts left rather than run off a narrow viewport', () => {
     expect(placeBeside(rail, label, { width: 100, height: 900 }).left).toBe(12);
+  });
+});
+
+describe('Hint hover delay and dismiss() (v247 Decision 6)', () => {
+  let fixture: ComponentFixture<DelayHost>;
+
+  beforeEach(async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(DelayHost);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    // Only the delay timer is faked: the open effect's requestAnimationFrame stays real.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const link = () => el().querySelector('a.link-a') as HTMLAnchorElement;
+  const popFor = (hint: string) => el().querySelector(`sb-hint.${hint} [role=tooltip]`) as HTMLElement;
+  const trigger = () => el().querySelector('sb-hint.glyph-hint button.trigger') as HTMLButtonElement;
+  const isOpen = (hint: string) => popFor(hint).hasAttribute(POPOVER_OPEN_ATTR);
+  const fire = (target: Element, event: Event) => {
+    target.dispatchEvent(event);
+    fixture.detectChanges();
+  };
+  const tick = (ms: number) => {
+    vi.advanceTimersByTime(ms);
+    fixture.detectChanges();
+  };
+  const instance = (hint: string): Hint =>
+    fixture.debugElement.query(By.css(`sb-hint.${hint}`)).componentInstance as Hint;
+
+  it('exports the 300ms hover delay the rail and the tab bar pass', () => {
+    expect(HINT_HOVER_DELAY_MS).toBe(300);
+  });
+
+  it('opens an anchor label only once the hover has lasted the delay', () => {
+    fire(link(), new MouseEvent('mouseenter'));
+    tick(HINT_HOVER_DELAY_MS - 1);
+    expect(isOpen('anchored-hint')).toBe(false);
+    tick(1);
+    expect(isOpen('anchored-hint')).toBe(true);
+    fire(link(), new MouseEvent('mouseleave'));
+    expect(isOpen('anchored-hint')).toBe(false);
+  });
+
+  it('never opens for a pointer that leaves before the delay', () => {
+    fire(link(), new MouseEvent('mouseenter'));
+    tick(HINT_HOVER_DELAY_MS - 50);
+    fire(link(), new MouseEvent('mouseleave'));
+    tick(HINT_HOVER_DELAY_MS);
+    expect(isOpen('anchored-hint')).toBe(false);
+  });
+
+  it('delays hover only: keyboard focus on the anchor opens at once', () => {
+    fire(link(), new FocusEvent('focus'));
+    expect(isOpen('anchored-hint')).toBe(true);
+  });
+
+  it('delays a glyph trigger hover too, but a click pins it at once', () => {
+    const host = el().querySelector('sb-hint.glyph-hint')!;
+    fire(host, new MouseEvent('mouseenter'));
+    expect(isOpen('glyph-hint')).toBe(false);
+    fire(trigger(), new MouseEvent('click', { bubbles: true }));
+    expect(isOpen('glyph-hint')).toBe(true);
+  });
+
+  it('dismiss() closes a hint held by focus and hover, and cancels a pending hover', () => {
+    fire(link(), new FocusEvent('focus'));
+    fire(link(), new MouseEvent('mouseenter'));
+    tick(HINT_HOVER_DELAY_MS);
+    instance('anchored-hint').dismiss();
+    fixture.detectChanges();
+    expect(isOpen('anchored-hint')).toBe(false);
+
+    fire(link(), new MouseEvent('mouseleave'));
+    fire(link(), new FocusEvent('blur'));
+    fire(link(), new MouseEvent('mouseenter'));
+    instance('anchored-hint').dismiss();
+    tick(HINT_HOVER_DELAY_MS * 2);
+    expect(isOpen('anchored-hint')).toBe(false);
+  });
+
+  it('has no protected close() left: dismiss() is the one way to close', () => {
+    expect(SOURCE).not.toMatch(/\bclose\(\): void/);
+    expect(SOURCE).not.toMatch(/this\.close\(\)|'close\(\)'/);
+    expect(SOURCE).toMatch(/^ {2}dismiss\(\): void \{/m);
+  });
+});
+
+describe('Hint: one open at a time, app-wide (v247 Decision 7)', () => {
+  let fixture: ComponentFixture<PairHost>;
+
+  beforeEach(async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(PairHost);
+    fixture.detectChanges();
+    await fixture.whenStable();
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const popOf = (anchor: Element) =>
+    el().querySelector(`[id="${anchor.getAttribute('aria-describedby')}"]`) as HTMLElement;
+  const linkA = () => el().querySelector('a.link-a') as HTMLAnchorElement;
+  const linkB = () => el().querySelector('a.link-b') as HTMLAnchorElement;
+  const glyphPop = () => el().querySelector('sb-hint.glyph-hint [role=tooltip]') as HTMLElement;
+  const trigger = () => el().querySelector('sb-hint.glyph-hint button.trigger') as HTMLButtonElement;
+  const open = (pop: HTMLElement) => pop.hasAttribute(POPOVER_OPEN_ATTR);
+  const fire = async (target: Element, event: Event) => {
+    target.dispatchEvent(event);
+    fixture.detectChanges();
+    await fixture.whenStable();
+  };
+
+  it('closes the open label when another label opens', async () => {
+    await fire(linkA(), new MouseEvent('mouseenter'));
+    expect(open(popOf(linkA()))).toBe(true);
+    await fire(linkB(), new FocusEvent('focus'));
+    expect(open(popOf(linkB()))).toBe(true);
+    expect(open(popOf(linkA()))).toBe(false);
+  });
+
+  it('closes an open label when a glyph hint is pinned, and the other way round', async () => {
+    await fire(linkA(), new FocusEvent('focus'));
+    await fire(trigger(), new MouseEvent('click', { bubbles: true }));
+    expect(open(glyphPop())).toBe(true);
+    expect(open(popOf(linkA()))).toBe(false);
+    await fire(linkB(), new MouseEvent('mouseenter'));
+    expect(open(popOf(linkB()))).toBe(true);
+    expect(open(glyphPop())).toBe(false);
+  });
+
+  it('does not reopen the displaced hint when the newer one closes', async () => {
+    await fire(linkA(), new MouseEvent('mouseenter'));
+    await fire(linkB(), new MouseEvent('mouseenter'));
+    await fire(linkB(), new MouseEvent('mouseleave'));
+    expect(open(popOf(linkA()))).toBe(false);
+    expect(open(popOf(linkB()))).toBe(false);
+  });
+
+  it('frees the slot when an open hint is destroyed', async () => {
+    await fire(linkA(), new MouseEvent('mouseenter'));
+    fixture.destroy();
+    const next = TestBed.createComponent(PairHost);
+    next.detectChanges();
+    await next.whenStable();
+    const link = (next.nativeElement as HTMLElement).querySelector('a.link-b') as HTMLAnchorElement;
+    link.dispatchEvent(new MouseEvent('mouseenter'));
+    next.detectChanges();
+    await next.whenStable();
+    const pop = (next.nativeElement as HTMLElement)
+      .querySelector(`[id="${link.getAttribute('aria-describedby')}"]`) as HTMLElement;
+    expect(open(pop)).toBe(true);
+  });
+});
+
+describe('Hint.openPinned() and placement (v247)', () => {
+  let fixture: ComponentFixture<PinHost>;
+  const root = document.documentElement;
+
+  beforeEach(async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    fixture = TestBed.createComponent(PinHost);
+    fixture.detectChanges();
+    await fixture.whenStable();
+  });
+
+  afterEach(() => {
+    // Undo the viewport stub: the own properties shadow Element.prototype's getters.
+    delete (root as unknown as Record<string, unknown>)['clientWidth'];
+    delete (root as unknown as Record<string, unknown>)['clientHeight'];
+  });
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const tab = () => el().querySelector('a.tab') as HTMLAnchorElement;
+  const rail = () => el().querySelector('a.rail-link') as HTMLAnchorElement;
+  const popOf = (anchor: Element) =>
+    el().querySelector(`[id="${anchor.getAttribute('aria-describedby')}"]`) as HTMLElement;
+  const open = (anchor: Element) => popOf(anchor).hasAttribute(POPOVER_OPEN_ATTR);
+  const settle = async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  };
+  const fire = async (target: Element, event: Event) => {
+    target.dispatchEvent(event);
+    await settle();
+  };
+  const pin = async () => {
+    fixture.componentInstance.tip().openPinned();
+    await settle();
+  };
+  /** jsdom has no layout: give the anchor a rect, the popover a size and the page a viewport. */
+  const stubGeometry = (
+    anchor: HTMLElement,
+    rect: { top: number; bottom: number; left: number; right: number; width: number },
+    size: { width: number; height: number },
+    viewport: { width: number; height: number },
+  ) => {
+    anchor.getBoundingClientRect = () =>
+      ({ ...rect, x: rect.left, y: rect.top, height: rect.bottom - rect.top, toJSON: () => ({}) }) as DOMRect;
+    const pop = popOf(anchor);
+    Object.defineProperty(pop, 'offsetWidth', { configurable: true, value: size.width });
+    Object.defineProperty(pop, 'offsetHeight', { configurable: true, value: size.height });
+    Object.defineProperty(root, 'clientWidth', { configurable: true, value: viewport.width });
+    Object.defineProperty(root, 'clientHeight', { configurable: true, value: viewport.height });
+  };
+
+  it('opens the label at once, with no hover and no focus', async () => {
+    expect(open(tab())).toBe(false);
+    await pin();
+    expect(open(tab())).toBe(true);
+  });
+
+  it('stays open after the hover and the focus that came with the press end', async () => {
+    await fire(tab(), new MouseEvent('mouseenter'));
+    await fire(tab(), new FocusEvent('focus'));
+    await pin();
+    await fire(tab(), new MouseEvent('mouseleave'));
+    await fire(tab(), new FocusEvent('blur'));
+    expect(open(tab())).toBe(true);
+  });
+
+  it('survives the long-press order: press, then openPinned(), then the focus the press causes', async () => {
+    await fire(tab(), new Event('pointerdown', { bubbles: true }));
+    await pin();
+    await fire(tab(), new FocusEvent('focus'));
+    expect(open(tab())).toBe(true);
+  });
+
+  it('closes on the next pointerdown anywhere, the anchor included', async () => {
+    await pin();
+    await fire(el().querySelector('.outside')!, new MouseEvent('pointerdown', { bubbles: true }));
+    expect(open(tab())).toBe(false);
+    await pin();
+    await fire(tab(), new Event('pointerdown', { bubbles: true }));
+    expect(open(tab())).toBe(false);
+  });
+
+  it('closes on Escape pressed anywhere in the document, with no focus on it', async () => {
+    await pin();
+    await fire(document.body, new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(open(tab())).toBe(false);
+  });
+
+  it('dismisses the other open hint (one at a time)', async () => {
+    await fire(rail(), new FocusEvent('focus'));
+    expect(open(rail())).toBe(true);
+    await pin();
+    expect(open(tab())).toBe(true);
+    expect(open(rail())).toBe(false);
+  });
+
+  it('places an above label centred over its anchor, 8px off it', async () => {
+    stubGeometry(tab(), { top: 788, bottom: 844, left: 78, right: 156, width: 78 },
+      { width: 70, height: 24 }, { width: 390, height: 844 });
+    await pin();
+    expect(popOf(tab()).style.top).toBe('756px');
+    expect(popOf(tab()).style.left).toBe('82px');
+  });
+
+  it('keeps the default placement beside its anchor', async () => {
+    stubGeometry(rail(), { top: 100, bottom: 144, left: 10, right: 54, width: 44 },
+      { width: 80, height: 24 }, { width: 1440, height: 900 });
+    fixture.componentInstance.railTip().openPinned();
+    await settle();
+    expect(popOf(rail()).style.top).toBe('110px');
+    expect(popOf(rail()).style.left).toBe('62px');
+  });
+});
+
+describe('placeAbove (v247)', () => {
+  const tab = { top: 788, bottom: 844, left: 78, right: 156, width: 78 };
+  const label = { width: 70, height: 24 };
+  const phone = { width: 390, height: 844 };
+
+  it('sits above the anchor, 8px off it, horizontally centred on it', () => {
+    expect(placeAbove(tab, label, phone)).toEqual({ top: 756, left: 82 });
+  });
+
+  it('stays 8px inside the left edge for the first tab', () => {
+    expect(placeAbove({ ...tab, left: 0, right: 78 }, { width: 100, height: 24 }, phone).left).toBe(8);
+  });
+
+  it('stays 8px inside the right edge for the last tab', () => {
+    expect(placeAbove({ ...tab, left: 312, right: 390 }, { width: 100, height: 24 }, phone).left).toBe(282);
+  });
+
+  it('stays 8px inside the top edge for an anchor at the top of the screen', () => {
+    expect(placeAbove({ ...tab, top: 10, bottom: 50 }, label, phone).top).toBe(8);
+  });
+
+  it('takes the margin as a parameter', () => {
+    expect(placeAbove({ ...tab, left: 0, right: 78 }, { width: 100, height: 24 }, phone, 16).left).toBe(16);
   });
 });

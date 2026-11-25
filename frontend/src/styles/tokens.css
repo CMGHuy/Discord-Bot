@@ -310,6 +310,16 @@
    */
   --control-h: 28px;
 
+  /* v246 §A2: the width of an sb-field in a filter bar (ui/field.ts sets
+   * --sb-control-w from these). Chosen from the widest current option text
+   * at the 16px touch control text: S a short select ("Any horizon",
+   * "Confidence"), M a native date input or "Any strategy", L a free-text
+   * search. The touch block below raises heights only, never these; below
+   * 640px a field fills its row or grid cell instead. */
+  --field-s: 136px;
+  --field-m: 176px;
+  --field-l: 240px;
+
   /* v80 D3: one row height for every table row, so a table beside a list
    * lines up. v195 §1.4: 28px is the dense default (was 32px); the touch
    * block below and the comfortable density raise it to 44px. */

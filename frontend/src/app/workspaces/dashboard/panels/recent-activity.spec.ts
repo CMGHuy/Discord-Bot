@@ -113,7 +113,7 @@ describe('recent activity rows open a trade (v179 section 3.2, section 6b.3)', (
     { kind: 'opened', at: '2026-09-11T15:00:00Z', ticker: 'ASTS', direction: 'bullish', status: 'ACTIVE',
       detail: 'at 60.54', r: null, id: 't1:opened', tradeId: 't1' },
     { kind: 'closed', at: '2026-09-11T14:00:00Z', ticker: 'HOOD', direction: 'bearish', status: 'CLOSED',
-      detail: 'Closed at +1.20R', r: 1.2, id: 't2:closed', tradeId: 't2' },
+      detail: '+1.20R', r: 1.2, id: 't2:closed', tradeId: 't2' },
   ];
 
   function mount() {
@@ -161,5 +161,61 @@ describe('recent activity row glyphs on the text baseline (v179 layout audit)', 
   it('lets the direction arrow, a text glyph, share the ticker baseline; only the svg icon centres', () => {
     expect(rule('.event-hit sb-direction-arrow')).toBe('');
     expect(rule('.event-hit sb-icon')).toContain('align-self: center');
+  });
+});
+
+describe('recent activity row names (v246 §A1)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
+    });
+  });
+
+  const ROWS = [
+    { kind: 'closed', at: '2026-09-11T14:00:00Z', ticker: 'SOFI', direction: 'bullish', status: 'CLOSED',
+      detail: '−1.00R', r: -1, id: 's:closed', tradeId: 's' },
+    { kind: 'closed', at: '2026-09-11T13:00:00Z', ticker: 'HOOD', direction: 'bullish', status: 'CLOSED',
+      detail: 'Closed', r: null, id: 'h:closed', tradeId: 'h' },
+    { kind: 'opened', at: '2026-09-11T12:00:00Z', ticker: 'ASTS', direction: 'bearish', status: 'PARTIAL',
+      detail: 'at 60.54', r: null, id: 'a:opened', tradeId: 'a' },
+    { kind: 'opened', at: '2026-09-11T11:00:00Z', ticker: 'NVDA', direction: 'bullish', status: 'ACTIVE',
+      detail: 'at 120.10', r: null, id: 'n:opened', tradeId: 'n' },
+  ];
+
+  function mount() {
+    const f = TestBed.createComponent(RecentActivity);
+    f.componentRef.setInput('events', ROWS);
+    f.detectChanges();
+    return f.nativeElement as HTMLElement;
+  }
+
+  function names(): string[] {
+    return [...mount().querySelectorAll<HTMLButtonElement>('button.event-hit')]
+      .map((b) => b.getAttribute('aria-label') ?? '');
+  }
+
+  it('keeps the status word in the accessible name although the row no longer prints it', () => {
+    const [sofi] = names();
+    expect(sofi.startsWith('SOFI closed, −1.00R, ')).toBe(true);
+  });
+
+  it('names a close with no R once, not "closed, Closed"', () => {
+    const hood = names()[1];
+    expect(hood.startsWith('HOOD closed, ')).toBe(true);
+    expect(hood).not.toContain('Closed');
+  });
+
+  it('says where an opened plan stands now when it has moved on, and only then', () => {
+    const [, , asts, nvda] = names();
+    expect(asts.startsWith('ASTS opened, at 60.54, ')).toBe(true);
+    expect(asts.endsWith(', now Partial')).toBe(true);
+    expect(nvda).not.toContain('now');
+  });
+
+  it('prints the signed R alone and colours it by sign only, never by a verdict class', () => {
+    const detail = mount().querySelector('.detail')!;
+    expect(detail.textContent!.trim()).toBe('−1.00R');
+    expect(detail.classList).toContain('neg');
+    expect(SOURCE).not.toMatch(/class\.(win|loss)/);
   });
 });

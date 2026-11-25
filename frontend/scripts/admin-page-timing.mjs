@@ -28,7 +28,7 @@ export const PAGES = [
   { name: 'Trades', rail: 'Trades' }, { name: 'Trade detail', path: 'TRADE' }, { name: 'Watchlist', rail: 'Watchlist' },
   { name: 'Risk', rail: 'Risk', phrases: ['FX rates as of', 'daily bars through', PNL_BASIS] },
   { name: 'Analytics', rail: 'Analytics', route: '/insights/analytics', phrases: [PNL_BASIS] },
-  { name: 'Calendar', rail: 'Calendar', route: '/trades/calendar', phrases: [PNL_BASIS] },
+  { name: 'Calendar', rail: 'Calendar', route: '/calendar', phrases: [PNL_BASIS] },
 ];
 const LABEL = /\bago\b|last close|\bas of\b/;
 const ENV_FILE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '.env');
@@ -162,10 +162,11 @@ async function navigate(ctx, spec, hardLoad) {
   if (spec.path === 'TRADE') { await page.goto(`${base}/trades/${tradeId}`, { waitUntil: 'domcontentloaded' }); return; }
   if (hardLoad) { await page.goto(`${base}/${spec.rail.toLowerCase()}`, { waitUntil: 'domcontentloaded' }); return; }
   const before = page.url();
-  // The deployed rail carries its label as text, not aria-label, and Analytics / Calendar are
-  // sub-pages of Insights / Trades rather than rail entries: reach those by an in-app router
-  // navigation (history + popstate, no reload), the same path a link click takes.
-  const link = page.locator('a.rail-link').filter({ has: page.locator('.rail-label', { hasText: new RegExp(`^\\s*${spec.rail}\\s*$`) }) });
+  // The rail names each link by its visible label (before v247) or its aria-label (v247 on),
+  // and Analytics is a section of Insights rather than a rail entry: reach it by an in-app
+  // router navigation (history + popstate, no reload), the same path a link click takes.
+  const byText = page.locator('a.rail-link').filter({ has: page.locator('.rail-label', { hasText: new RegExp(`^\\s*${spec.rail}\\s*$`) }) });
+  const link = page.locator(`a.rail-link[aria-label="${spec.rail}"]`).or(byText);
   if (await link.count()) await link.first().click();
   else if (spec.route) await page.evaluate((r) => { history.pushState({}, '', r); dispatchEvent(new PopStateEvent('popstate')); }, spec.route);
   else throw new Error(`no navigation for ${spec.name}`);

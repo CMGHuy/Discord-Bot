@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TestBed } from '@angular/core/testing';
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { Checkbox, Select, TextInput } from './form-controls';
+import { Field } from './field';
 
 const SOURCE = readFileSync(join(process.cwd(), 'src/app/ui/form-controls.ts'), 'utf8');
 
@@ -105,5 +106,91 @@ describe('v195 Phase 2: flat fields', () => {
     expect(SOURCE).toMatch(/select:focus-visible \{ outline: 1px solid var\(--accent\); outline-offset: 1px; \}/);
     expect(SOURCE).toMatch(/input:focus-visible \{ outline: 1px solid var\(--accent\); outline-offset: 1px; \}/);
     expect(SOURCE).toMatch(/input \{ accent-color: var\(--accent\); \}/);
+  });
+});
+
+const OPTIONS = [{ value: 'rsi', label: 'RSI' }];
+
+@Component({
+  imports: [Field, Select, TextInput],
+  template: `
+    <sb-field id="f-strategy" label="Strategy" size="m">
+      <sb-select id="strategy" label="Strategy" [options]="options" />
+    </sb-field>
+    <sb-field id="f-ticker" label="Ticker" size="l">
+      <sb-text-input id="ticker" placeholder="AAPL" />
+    </sb-field>
+    <sb-field id="f-bare" size="s">
+      <sb-select id="bare" [options]="options" ariaLabel="Horizon filter" />
+    </sb-field>
+    <sb-field id="f-origin" label="Origin" size="s">
+      <sb-select id="origin" [options]="options" ariaLabel="Plan origin" />
+    </sb-field>
+    <sb-field id="f-empty" size="s">
+      <sb-select id="empty" [options]="options" />
+    </sb-field>
+    <sb-select id="standalone" label="Strategy" [options]="options" />
+  `,
+})
+class InField {
+  readonly options = OPTIONS;
+}
+
+describe('v246 §A2: controls inside sb-field', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  function mount(): HTMLElement {
+    const f = TestBed.createComponent(InField);
+    f.detectChanges();
+    return f.nativeElement as HTMLElement;
+  }
+
+  const control = (el: HTMLElement, id: string) =>
+    el.querySelector(`#${id} select, #${id} input`) as HTMLElement;
+
+  it('draws one label per field: the field\'s, never the control\'s own', () => {
+    const el = mount();
+    for (const id of ['f-strategy', 'f-ticker', 'f-origin']) {
+      expect(el.querySelectorAll(`#${id} .sb-label`)).toHaveLength(1);
+      expect(el.querySelector(`#${id} .sb-label`)!.classList).toContain('field-label');
+    }
+  });
+
+  it('names the control by its own label, then its ariaLabel, then the field\'s label', () => {
+    const el = mount();
+    expect(control(el, 'strategy').getAttribute('aria-label')).toBe('Strategy');
+    expect(control(el, 'ticker').getAttribute('aria-label')).toBe('Ticker');
+    expect(control(el, 'bare').getAttribute('aria-label')).toBe('Horizon filter');
+    expect(control(el, 'origin').getAttribute('aria-label')).toBe('Plan origin');
+  });
+
+  it('drops the aria-label attribute rather than printing an empty one when nothing names the control', () => {
+    expect(control(mount(), 'empty').hasAttribute('aria-label')).toBe(false);
+  });
+
+  it('marks a control inside a field, and only there', () => {
+    const el = mount();
+    expect(el.querySelector('#strategy')!.classList).toContain('in-field');
+    expect(el.querySelector('#ticker')!.classList).toContain('in-field');
+    expect(el.querySelector('#standalone')!.classList).not.toContain('in-field');
+  });
+
+  it('leaves a standalone control exactly as before: its own visible label, no aria-label', () => {
+    const el = mount();
+    expect(el.querySelector('#standalone .sb-label')!.textContent!.trim()).toBe('Strategy');
+    expect(control(el, 'standalone').hasAttribute('aria-label')).toBe(false);
+  });
+
+  it('sizes the select and the input from the field\'s width, native width standalone', () => {
+    const block = (selector: string, from: string) => {
+      const at = SOURCE.indexOf(from);
+      return SOURCE.slice(at).match(new RegExp(`\\n {4}${selector} \\{[^}]*\\}`))?.[0] ?? '';
+    };
+    expect(block('select', "selector: 'sb-select'")).toContain('width: var(--sb-control-w, auto)');
+    expect(block('input', "selector: 'sb-text-input'")).toContain('width: var(--sb-control-w, auto)');
+    expect(SOURCE.match(/:host\(\.in-field\) \{ display: block;/g)?.length ?? 0).toBe(2);
+    expect(SOURCE.match(/:host\(\.in-field\) \.field \{ display: flex; \}/g)?.length ?? 0).toBe(2);
   });
 });

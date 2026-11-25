@@ -25,6 +25,7 @@ import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DataTable } from '../../ui/data-table/data-table';
 import { createClientPage } from '../../ui/data-table/client-page';
 import { FilterChip, FilterChips } from '../../ui/filter-bar';
+import { Field } from '../../ui/field';
 import { Freshness } from '../../ui/freshness';
 import { tablePerPage } from '../../ui/table-per-page';
 import { ColumnDef, DetailLink, RowContext, SortSpec } from '../../ui/data-table/data-table.types';
@@ -185,7 +186,7 @@ export const WATCHLIST_OLD_PRINT_HINT =
 @Component({
   selector: 'sb-watchlist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, Page, Async, Icon, Sparkline, MarketValue, Hint, IfAdminDirective],
+  imports: [DataTable, Panel, Button, Chip, ConfirmDialog, Toolbar, ControlRow, FilterChips, Field, Freshness, Select, TabBar, TextInput, EarningsCalendar, RowLink, Page, Async, Icon, Sparkline, MarketValue, Hint, IfAdminDirective],
   // v54 D1: the whole point of this workspace (spec v14 Decision 9) is the
   // ticker table -- tight rows, more per screen -- so it defaults to the
   // instrument register. On the host (a static class, not a template
@@ -229,14 +230,18 @@ export const WATCHLIST_OLD_PRINT_HINT =
               label="Tag"
               (selectedChange)="onTagChip($event)"
             />
-            <sb-text-input
-              slot="search"
-              type="search"
-              ariaLabel="Filter the watchlist by symbol"
-              placeholder="Filter by symbol"
-              [value]="symbolQuery()"
-              (valueChange)="symbolQuery.set($event)"
-            />
+            <!-- v246 §A2: the search is an L sb-field; the field carries the
+                 toolbar slot and the one caption, and the input keeps its
+                 longer name, which holds the caption's word. -->
+            <sb-field slot="search" label="Symbol" size="l">
+              <sb-text-input
+                type="search"
+                ariaLabel="Filter the watchlist by symbol"
+                placeholder="Filter by symbol"
+                [value]="symbolQuery()"
+                (valueChange)="symbolQuery.set($event)"
+              />
+            </sb-field>
             <button
               slot="add-tag"
               type="button"

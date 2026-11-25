@@ -5,7 +5,8 @@ import { FocusTrap } from '../ui/focus-trap';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { SessionStore } from '../stores/session.store';
-import { NAV_ENTRIES, NavEntry, PHONE_TABS, navEntriesFor } from './nav';
+import { NavEntry, navEntriesFor } from './nav';
+import { TabBarPrefs } from './tab-bar-prefs';
 
 /** One group of the More sheet: a destination, and the pages it links to. */
 export interface MoreGroup {
@@ -17,13 +18,12 @@ export interface MoreGroup {
 /**
  * The destinations the phone's tab bar does not hold, in rail order (v202
  * §3), each with its sections as links; a single page links to itself.
- * Today: Insights (Analytics, Research, Reports) and, for the admin only,
- * System (Health, Versions). Trades' sections are reached from its section tabs.
+ * With the default bar: Risk, Insights (Analytics, Research, Reports,
+ * Guide) and, for the admin only, System (Health, Versions). The bar is
+ * the partner's choice (v240 §6), so the caller passes it: MoreSheet hands
+ * in TabBarPrefs.tabs(). Pure.
  */
-export function morePageGroups(
-  entries: readonly NavEntry[] = NAV_ENTRIES,
-  tabs: readonly NavEntry[] = PHONE_TABS,
-): MoreGroup[] {
+export function morePageGroups(entries: readonly NavEntry[], tabs: readonly NavEntry[]): MoreGroup[] {
   const onBar = new Set(tabs.map((tab) => tab.path));
   return entries
     .filter((entry) => !onBar.has(entry.path))
@@ -36,7 +36,8 @@ export function morePageGroups(
 
 /**
  * The phone's More sheet -- v195 Phase 3: every destination the tab bar does
- * not hold, with its sections (v202 §3), and the search field.
+ * not hold (TabBarPrefs, v240 §6), with its sections (v202 §3), and the
+ * search field.
  *
  * A modal bottom sheet: scrim, `role=dialog`, focus trapped while open and
  * returned to the More tab on close (FocusTrap restores what had focus).
@@ -71,6 +72,9 @@ export function morePageGroups(
             }
           </ul>
         }
+        <button sb-button variant="secondary" type="button" class="edit" (click)="requestEdit($event)">
+          <sb-icon name="edit" title="" /> Edit tab bar
+        </button>
         <button sb-button variant="secondary" type="button" class="close" (click)="closed.emit()">Close</button>
       </div>
     }
@@ -137,11 +141,23 @@ export class MoreSheet {
   readonly open = input(false);
   readonly closed = output<void>();
   readonly searchRequested = output<void>();
+  /** Asks the shell for the tab-bar editor (v240 §6). */
+  readonly editRequested = output<void>();
+  /** True while the editor is open over this sheet: its Escape is the editor's. */
+  readonly editing = input(false);
 
   private readonly session = inject(SessionStore);
-  protected readonly groups = computed(() => morePageGroups(navEntriesFor(this.session.isAdmin())));
+  private readonly prefs = inject(TabBarPrefs);
+  protected readonly groups = computed(() =>
+    morePageGroups(navEntriesFor(this.session.isAdmin()), this.prefs.tabs()));
 
   protected onEscape(): void {
-    if (this.open()) this.closed.emit();
+    if (this.open() && !this.editing()) this.closed.emit();
+  }
+
+  /** Focus first: the editor's FocusTrap returns focus to whatever held it on open, and Safari does not focus a clicked button. */
+  protected requestEdit(event: Event): void {
+    (event.currentTarget as HTMLElement).focus();
+    this.editRequested.emit();
   }
 }

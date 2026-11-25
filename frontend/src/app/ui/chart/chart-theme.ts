@@ -1,6 +1,7 @@
 import { CrosshairMode, DeepPartial } from 'lightweight-charts';
-import type { ChartOptions } from 'lightweight-charts';
+import type { ChartOptions, IChartApi, PriceFormatCustom } from 'lightweight-charts';
 
+import { num, pct, rMultiple } from '../format';
 import { CHART_CHROME, token, tokenPx } from './chart-frame';
 
 // Re-exported so this file's existing importers (legend-primitive.ts,
@@ -54,6 +55,8 @@ export { token, tokenPx };
  * crash that takes the workspace with it. lightweight-charts ignores an empty
  * colour string. */
 
+// Canvas colours come from the active stylesheet. themedToken reads Navy when a token is missing.
+
 export interface ChartPalette {
   up: string;
   down: string;
@@ -104,27 +107,27 @@ export interface ChartPalette {
 
 export function chartPalette(): ChartPalette {
   return {
-    up: token('--pos'),
-    down: token('--neg'),
-    accent: token('--accent'),
-    warn: token('--warn'),
-    text: token('--text'),
-    textMuted: token('--text-muted'),
+    up: themedToken('--pos'),
+    down: themedToken('--neg'),
+    accent: themedToken('--accent'),
+    warn: themedToken('--warn'),
+    text: themedToken('--text'),
+    textMuted: themedToken('--text-muted'),
     // CHART_CHROME.grid -- this palette's only consumer is chartOptions()'s
     // grid.vertLines/horzLines below, so it reads the shared constant like
     // axis/tooltipSurface/tooltipBorder do, not a second literal of --border.
-    border: token(CHART_CHROME.grid),
-    surface: token('--surface'),
-    volume: token('--text-faint'),
-    separator: token('--border-strong'),
-    separatorHover: token('--accent'),
-    info: token('--info'),
-    posSoft: token('--pos-soft'),
-    negSoft: token('--neg-soft'),
-    infoSoft: token('--info-soft'),
-    axis: token(CHART_CHROME.axis),
-    tooltipSurface: token(CHART_CHROME.tooltipSurface),
-    tooltipBorder: token(CHART_CHROME.tooltipBorder),
+    border: themedToken(CHART_CHROME.grid),
+    surface: themedToken('--surface'),
+    volume: themedToken('--text-faint'),
+    separator: themedToken('--border-strong'),
+    separatorHover: themedToken('--accent'),
+    info: themedToken('--info'),
+    posSoft: themedToken('--pos-soft'),
+    negSoft: themedToken('--neg-soft'),
+    infoSoft: themedToken('--info-soft'),
+    axis: themedToken(CHART_CHROME.axis),
+    tooltipSurface: themedToken(CHART_CHROME.tooltipSurface),
+    tooltipBorder: themedToken(CHART_CHROME.tooltipBorder),
   };
 }
 
@@ -174,4 +177,90 @@ export function chartOptions(palette: ChartPalette): DeepPartial<ChartOptions> {
       horzLine: { color: palette.textMuted, labelBackgroundColor: palette.accent },
     },
   };
+}
+
+/* -- v246 §A3: one chart theme -------------------------------------------- */
+
+/** Token names logged once already (v246 edge states: "logs once"). */
+const warnedTokens = new Set<string>();
+
+/**
+ * `token(name)`, falling back to the value `name` takes under Navy -- the
+ * default theme since v240 -- when the current theme resolves it empty, and
+ * saying so once per name. The Navy values live only in the stylesheet's
+ * `:root[data-theme="navy"]` block (the colour gate forbids a copy in a `.ts`
+ * file), so the fallback reads them by switching the root attribute to
+ * `navy` for one synchronous read and restoring it; no frame paints in
+ * between. A token missing under Navy too stays empty, which
+ * lightweight-charts draws as nothing rather than crashing.
+ */
+export function themedToken(name: string): string {
+  const value = token(name);
+  if (value) return value;
+  const navy = navyValue(name);
+  if (!warnedTokens.has(name)) {
+    warnedTokens.add(name);
+    console.warn(`chart-theme: ${name} did not resolve; ${navy ? 'using its Navy value' : 'it is missing under Navy too'}`);
+  }
+  return navy;
+}
+
+function navyValue(name: string): string {
+  const root = document.documentElement;
+  const previous = root.getAttribute('data-theme');
+  if (previous === 'navy') return '';
+  root.setAttribute('data-theme', 'navy');
+  try {
+    return token(name);
+  } finally {
+    if (previous === null) root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', previous);
+  }
+}
+
+/**
+ * Tokens and dimensions for the six SVG charts (line-chart, histogram,
+ * bar-list, sparkline, share-bar, gauge; V246-17), so they stop carrying
+ * their own literals. Colour, radius and size entries are bare custom-property
+ * NAMES, like `CHART_CHROME`: a stylesheet embeds `var(<name>)`, a canvas
+ * reads `themedToken(<name>)`. The numbers are px, the values those charts
+ * draw today (series stroke 2, zero line and grid 1, bar gap 2).
+ * The spec's names are mapped onto real tokens (v246 Handoff 3).
+ */
+export const SVG_CHART_TOKENS = {
+  line: '--accent',
+  pos: '--pos',
+  neg: '--neg',
+  grid: CHART_CHROME.grid,
+  axisText: '--text-secondary',
+  crosshair: '--text-muted',
+  strokeWidth: 2,
+  strokeWidthThin: 1,
+  barRadius: '--radius-sm',
+  barGap: 2,
+  labelSize: CHART_CHROME.tickSize,
+} as const;
+
+/** A money or price axis: thousands grouped, two decimals, a true minus on a loss (`997,800.00`, `−1,234.50`). */
+export const priceFormat = { type: 'custom', minMove: 0.01, formatter: (value: number) => num(value, 2) } satisfies PriceFormatCustom;
+
+/** An R axis: signed, `R` suffix (`+1.50R`, `−1.00R`, `0.00R`). */
+export const rFormat = { type: 'custom', minMove: 0.01, formatter: (value: number) => rMultiple(value) } satisfies PriceFormatCustom;
+
+/** A percentage axis: signed (`+3.00%`, `−2.50%`). */
+export const pctFormat = { type: 'custom', minMove: 0.01, formatter: (value: number) => pct(value, 2) } satisfies PriceFormatCustom;
+
+/**
+ * Themes any lightweight-charts instance: layout, grid, crosshair, time and
+ * price scale borders from `chartOptions(palette)`, with the scale text in
+ * the SVG charts' axis ink so canvas and SVG axes read alike. `autoSize` is
+ * left out: theming must not change how a chart sizes itself. Like
+ * `chartOptions()`, this sets `timeScale.timeVisible: false`; a chart with an
+ * intraday axis re-applies its own time-scale options after calling this.
+ * Call again on a theme switch: every colour is read at call time.
+ */
+export function applyChartTheme(chart: IChartApi, palette: ChartPalette = chartPalette()): void {
+  const options = chartOptions(palette);
+  delete options.autoSize;
+  chart.applyOptions({ ...options, layout: { ...options.layout, textColor: themedToken(SVG_CHART_TOKENS.axisText) } });
 }

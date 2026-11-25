@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { SVG_CHART_TOKENS } from './chart/chart-theme';
 
 import { DrawIn } from './motion/draw-in';
 
@@ -78,16 +79,17 @@ export function sparklinePath(points: readonly number[]): string {
     svg { display: block; width: 100%; height: 100%; overflow: visible; }
     path {
       fill: none;
+      /* Flat or unknown: use a quieter ink for a trend inside a tile. */
       stroke: var(--text-muted);
-      stroke-width: 1.25;
+      stroke-width: ${SVG_CHART_TOKENS.strokeWidthThin};
       stroke-linejoin: round;
       stroke-linecap: round;
       /* The line is scaled non-uniformly by preserveAspectRatio, which would
          otherwise stretch the stroke with it. */
       vector-effect: non-scaling-stroke;
     }
-    .pos { stroke: var(--pos); }
-    .neg { stroke: var(--neg); }
+    .pos { stroke: var(${SVG_CHART_TOKENS.pos}); }
+    .neg { stroke: var(${SVG_CHART_TOKENS.neg}); }
   `,
 })
 export class Sparkline {

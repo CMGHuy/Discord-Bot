@@ -8,16 +8,23 @@ import { provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { MarketMeta } from '../../../api/models';
+import { installMatchMediaPolyfill } from '../../../testing/match-media-polyfill';
+import { TimeScaleSync } from '../../../ui/chart/time-scale-sync';
+import { TimeSeries } from '../../../ui/chart/time-series';
+import { money } from '../../../ui/format';
 
 import { AnalyticsStore, RELOCATED_METRICS } from '../../../stores/analytics.store';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { LiveValuesStore } from '../../../stores/live-values.store';
 import { FakeLiveValues } from '../../../testing/fake-live-values';
 import { PreferencesStore } from '../../../stores/preferences.store';
-import { ANALYTICS_DRAWDOWN_LABEL, ANALYTICS_EXPR_ABOUT, ANALYTICS_SHARPE_LABEL, OverviewTab } from './overview';
+import { ANALYTICS_DRAWDOWN_LABEL, ANALYTICS_EXPR_ABOUT, ANALYTICS_SHARPE_LABEL, DRAWDOWN_CHART_LABEL, OverviewTab } from './overview';
 import { BAND_OK } from './variance-band.fixture';
 import { Hint } from '../../../ui/hint';
 import { PERFORMANCE_CAVEAT, StatTile } from '../../../ui/stat-tile';
+
+// sb-time-series creates a real lightweight-charts chart; fancy-canvas needs matchMedia.
+installMatchMediaPolyfill();
 
 const SNAP_META: MarketMeta = {
   as_of: '2026-10-29', refreshing: false, stale_count: 0, missing_count: 0, incomplete: false,
@@ -147,7 +154,7 @@ describe('OverviewTab', () => {
 
   it('draws equity and drawdown as two panes, not a toggle', () => {
     const { el } = render();
-    expect(el.querySelectorAll('sb-line-chart').length).toBeGreaterThanOrEqual(2);
+    expect(el.querySelectorAll('sb-time-series')).toHaveLength(2);
     expect(el.textContent).toContain('Drawdown');
     expect(el.querySelector('sb-segmented[aria-label="Equity view"]')).toBeNull();
   });
@@ -240,6 +247,8 @@ describe('OverviewTab hint and tooltip copy (A4 audit)', () => {
   it('Equity and R distribution hints state the paper, gross, pre-tax basis', () => {
     const { fixture } = render();
     expect(hintText(fixture, 'Equity definition')).toContain('per closed trade, ordered by close date');
+    expect(hintText(fixture, 'Equity definition')).toContain("one point per closing day, at the day's last close");
+    expect(hintText(fixture, 'Equity definition')).not.toContain('the x-axis is the sequence of trades');
     expect(hintText(fixture, 'Equity definition')).toContain(PERFORMANCE_CAVEAT);
     expect(hintText(fixture, 'R distribution definition')).toContain(PERFORMANCE_CAVEAT);
   });
@@ -408,5 +417,151 @@ describe('OverviewTab as-of labels (v204)', () => {
     expect(el.querySelector('.as-of sb-market-value')).toBeNull();
     expect(el.querySelector('.req-as-of')).toBeNull();
     expect(el.querySelector('sb-incomplete-note')).toBeNull();
+  });
+});
+
+describe('R distribution on whole-R edges (v246 §A3)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  const BUCKETS = [
+    { lo: -5, hi: -4, count: 1 },
+    { lo: -1, hi: 0, count: 4 },
+    { lo: 0, hi: 1, count: 3 },
+    { lo: 1, hi: 2, count: 2 },
+  ];
+
+  function withBuckets() {
+    return render({
+      performance: signal({
+        totals: { total: 40, open: 6, closed: 34 }, win_rate: 53.5, win_rate_n: 34,
+        expectancy_r: -0.136, expectancy_n: 34, derived: { total_return_pct: 4.2 },
+        distributions: { returns: [], r_multiples: BUCKETS },
+        calendar: [], rolling_wr: [], rolling_exp_r: [], relocated: {}, by_confidence: {},
+        scope: {}, n: 312,
+      }),
+    });
+  }
+
+  it('labels each bucket by its lower edge: true minus, plus for a gain, bare zero', () => {
+    const { fixture } = withBuckets();
+    expect(fixture.componentInstance.rBins().map((b) => b.label)).toEqual(['−5R', '−1R', '0R', '+1R']);
+    expect(fixture.componentInstance.rBins().map((b) => b.count)).toEqual([1, 4, 3, 2]);
+  });
+
+  it('marks only the buckets below zero as negative', () => {
+    const { fixture } = withBuckets();
+    const tab = fixture.componentInstance;
+    expect(tab.rBins().map((b) => tab.negativeBin(b))).toEqual([true, true, false, false]);
+  });
+
+  it('prints the table range with the true minus, never a hyphen', () => {
+    const { fixture } = withBuckets();
+    const range = fixture.componentInstance['rColumns'].find((c) => c.key === 'range')!;
+    expect(range.value!(BUCKETS[0])).toBe('−5R to −4R');
+    expect(range.value!(BUCKETS[2])).toBe('0R to +1R');
+    expect(String(range.value!(BUCKETS[0]))).not.toContain('-');
+  });
+});
+
+/** The tab's sb-time-series instances in template order: equity, then drawdown. */
+function timeSeries(fixture: ComponentFixture<unknown>): TimeSeries[] {
+  return fixture.debugElement.queryAll(By.directive(TimeSeries)).map((debug) => debug.componentInstance as TimeSeries);
+}
+
+/** The drawdown pane's header facts, whitespace collapsed. */
+function paneFacts(el: HTMLElement): string {
+  return el.querySelector('.pane-facts')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+describe('OverviewTab equity and drawdown on sb-time-series (v246 §A3)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('draws equity as an area and drawdown as a baseline, never the SVG line chart', () => {
+    const { fixture, el } = render();
+    const charts = timeSeries(fixture);
+    expect(charts.map((chart) => chart.kind())).toEqual(['area', 'baseline']);
+    expect(charts.map((chart) => chart.height())).toEqual([200, 120]);
+    expect(el.querySelector('sb-line-chart')).toBeNull();
+  });
+
+  it('feeds equity in the selected unit and formats its axis to match', () => {
+    const cases = [
+      { unit: 'r', values: [1, 0.5], format: 'r' },
+      { unit: 'pct', values: [0.7, 0.4], format: 'pct' },
+      { unit: 'money', values: [70, 40], format: 'price' },
+    ] as const;
+    for (const { unit, values, format } of cases) {
+      TestBed.resetTestingModule();
+      const [equity] = timeSeries(render({ unit: signal(unit) }).fixture);
+      expect(equity.points(), unit).toEqual([
+        { time: '2026-08-01', value: values[0] }, { time: '2026-08-02', value: values[1] },
+      ]);
+      expect(equity.valueFormat(), unit).toBe(format);
+    }
+  });
+
+  it('draws drawdown below zero in R whatever the unit, with a plain zero', () => {
+    for (const unit of ['r', 'pct', 'money']) {
+      TestBed.resetTestingModule();
+      const [, drawdown] = timeSeries(render({ unit: signal(unit) }).fixture);
+      const values = drawdown.points().map((point) => 'value' in point ? point.value : undefined);
+      expect(values, unit).toEqual([0, -0.5]);
+      expect(Object.is(values[0], -0), unit).toBe(false);
+      expect(drawdown.valueFormat(), unit).toBe('r');
+    }
+  });
+
+  it('links the two charts through one TimeScaleSync', () => {
+    const [equity, drawdown] = timeSeries(render().fixture);
+    expect(equity.sync()).toBeInstanceOf(TimeScaleSync);
+    expect(drawdown.sync()).toBe(equity.sync());
+  });
+
+  it('names each canvas for assistive technology, in the selected unit', () => {
+    const [equity, drawdown] = timeSeries(render({ unit: signal('money') }).fixture);
+    expect(equity.label()).toBe('Equity curve, cumulative $ per closed trade');
+    expect(drawdown.label()).toBe(DRAWDOWN_CHART_LABEL);
+  });
+
+  it('heads the drawdown pane with max drawdown in money and the longest losing streak', () => {
+    const performance = storeStub().performance();
+    const { el } = render({ performance: signal({
+      ...performance,
+      streaks: { current: 1, current_kind: 'loss', best_win_streak: 3, worst_loss_streak: 4 },
+    }) });
+    // cum_pnl 70 -> 40: the largest fall is 30, shown as a loss.
+    expect(paneFacts(el)).toBe(`Max drawdown ${money(-30, '$')} · Longest losing streak 4`);
+  });
+
+  it.each([
+    { label: 'one close', cumulative: [-30] },
+    { label: 'two closes', cumulative: [-10, -30] },
+  ])('measures drawdown from the start of the range with $label', ({ cumulative }) => {
+    const points = cumulative.map((cum_pnl, i) => ({
+      date: `2026-08-0${i + 1}`, cum_r: cum_pnl / 30, drawdown_r: -cum_pnl / 30, cum_pnl, cum_pct: cum_pnl / 100,
+    }));
+    const { el, fixture } = render({ equityCurve: signal({
+      points, points_n: points.length, as_of: points.at(-1)!.date, scope: {}, n: points.length,
+    }) });
+    expect(paneFacts(el)).toContain(`Max drawdown ${money(-30, '$')}`);
+    const tile = fixture.componentInstance.kpiTiles().find((item) => item.label === ANALYTICS_DRAWDOWN_LABEL);
+    expect(tile?.money).toBe(money(-30, '$'));
+  });
+
+  it('shows a dash for a streak the payload does not carry, and a plain zero drawdown', () => {
+    const { el } = render({ equityCurve: signal({
+      points: [{ date: '2026-08-01', cum_r: 1, drawdown_r: 0, cum_pnl: 70, cum_pct: 0.7 },
+               { date: '2026-08-02', cum_r: 2, drawdown_r: 0, cum_pnl: 90, cum_pct: 0.9 }],
+      points_n: 2, as_of: '2026-08-02', scope: {}, n: 2,
+    }) });
+    expect(paneFacts(el)).toBe(`Max drawdown ${money(0, '$')} · Longest losing streak —`);
+    expect(paneFacts(el)).not.toContain('−');
+  });
+
+  it('keeps the empty state and draws no chart when the scope has no closed trades', () => {
+    const { fixture, el } = render({ equityCurve: signal({ points: [], points_n: 0, as_of: null, scope: {}, n: 0 }) });
+    expect(timeSeries(fixture)).toHaveLength(0);
+    expect(el.textContent).toContain('No closed trades in this scope');
+    expect(el.querySelector('.pane-facts')).toBeNull();
   });
 });

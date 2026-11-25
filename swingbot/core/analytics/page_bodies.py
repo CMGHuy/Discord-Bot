@@ -194,7 +194,7 @@ def performance_body(scope, *, all_raw: list[dict] | None = None) -> dict:
         },
         "distributions": {
             "returns": m.histogram(returns, bins=12),
-            "r_multiples": m.histogram(m.r_multiples(scoped), bins=12),
+            "r_multiples": m.histogram(m.r_multiples(scoped), whole_r=True),
         },
         "rolling_returns": m.rolling_return_pct(scoped),
         "holding_period_split": m.holding_period_split(scoped),

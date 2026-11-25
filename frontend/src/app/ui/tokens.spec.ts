@@ -82,6 +82,10 @@ const REQUIRED = [
   '--ease-spring',
 
   '--control-h',
+  // v246 §A2: the widths of an sb-field in a filter bar
+  '--field-s',
+  '--field-m',
+  '--field-l',
   '--section-gap',
   // v195 §1.4: the tokens row density moves
   '--cell-pad-y',
@@ -123,6 +127,17 @@ describe('design tokens', () => {
 
   it('sizes controls with a single height token', () => {
     expect(CSS).toMatch(/^\s*--control-h:\s*28px;/m);
+  });
+
+  it('sizes bar fields S < M < L in px, and the touch block leaves widths alone (v246 §A2)', () => {
+    const px = (name: string) => Number(CSS.match(new RegExp(`^\\s*${name}:\\s*(\\d+)px;`, 'm'))?.[1]);
+    expect(px('--field-s')).toBe(136);
+    expect(px('--field-m')).toBe(176);
+    expect(px('--field-l')).toBe(240);
+    const at = CSS.indexOf('@media (pointer: coarse), (max-width: 1023px)');
+    const touch = CSS.slice(at, CSS.indexOf('\n}\n', at));
+    expect(touch).toContain('--control-h: 44px');
+    expect(touch).not.toContain('--field-');
   });
 
   /* Inverted by v168 (spec D2): the OS reduced-motion setting is ignored by

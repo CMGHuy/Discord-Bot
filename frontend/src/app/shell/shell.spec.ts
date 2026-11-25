@@ -25,14 +25,19 @@ import { PreferencesStore } from '../stores/preferences.store';
 import { LiveValuesStore } from '../stores/live-values.store';
 import { TapeFeed } from '../stores/tape-feed';
 import { TapeStore } from '../stores/tape.store';
+import { installDialogPolyfill } from '../testing/dialog-polyfill';
 import { ViewportService } from '../ui/breakpoints';
 import { CLOCK } from '../ui/clock';
 import { DENSITY_STORAGE } from '../ui/density.service';
 import { THEME_STORAGE, ThemeStorage } from '../ui/theme.service';
 import { styleRules } from '../ui/testing/style-rules';
+import { HINT_HOVER_DELAY_MS } from '../ui/hint';
+import { LONG_PRESS_MS } from '../ui/long-press';
+import { POPOVER_OPEN_ATTR } from '../testing/popover-polyfill';
 import { provideMotion } from '../ui/motion/motion.service';
 import { NAV_ENTRIES } from './nav';
 import { Shell } from './shell';
+import { TAB_BAR_STORAGE, TabBarStorage } from './tab-bar-prefs';
 import { SessionStore } from '../stores/session.store';
 
 /** Same fake as `chart.store.spec.ts`/`connection.store.spec.ts` -- a counter
@@ -98,6 +103,11 @@ function memoryThemeStorage(map = new Map<string, string>()): ThemeStorage {
   return { get: (key) => map.get(key) ?? null, set: (key, value) => void map.set(key, value) };
 }
 
+/** An in-memory ui.tabbar, so no shell spec writes jsdom's localStorage (v240 §6). */
+function memoryTabBarStorage(map = new Map<string, string>()): TabBarStorage {
+  return { get: (key) => map.get(key) ?? null, set: (key, value) => void map.set(key, value) };
+}
+
 /** The providers every v195 shell describe uses: the same fakes as the
  *  `shell navigation` block, with a route table the breadcrumb can read. */
 function shellProviders(routes: Routes = []) {
@@ -110,6 +120,7 @@ function shellProviders(routes: Routes = []) {
     { provide: TapeStore, useValue: { load: vi.fn(), visible: signal(false), rows: signal([]), asOf: signal(null) } },
     { provide: LiveValuesStore, useValue: fakeLiveValues() },
     { provide: THEME_STORAGE, useValue: memoryThemeStorage() },
+    { provide: TAB_BAR_STORAGE, useValue: memoryTabBarStorage() },
   ];
 }
 
@@ -314,23 +325,34 @@ describe('shell navigation', () => {
     expect(button.textContent?.trim()).toBe('Aa 90%');
   });
 
-  it('marks the active entry with the pill and a brighter glyph and label', () => {
+  it('marks the active entry with the accent-soft fill and a 3px accent bar on the inner edge (v247 §5)', () => {
     const css = readSource('src/app/shell/shell.css');
-    expect(css.match(/^\.rail-link\.active \.rail-pill \{[^}]*\}/m)?.[0]).toContain('background: var(--accent-soft);');
-    expect(css.match(/^\.rail-link\.active \{[^}]*\}/m)?.[0]).toContain('color: var(--text);');
-    expect(css.match(/^\.rail-link \{[^}]*\}/m)?.[0]).toContain('color: var(--text-muted);');
-    expect(css).not.toMatch(/sb-nav-indicator|border-left-color/);
+    const active = css.match(/^\.rail-link\.active \{[^}]*\}/m)?.[0] ?? '';
+    expect(active).toContain('background: var(--accent-soft);');
+    expect(active).toContain('color: var(--text);');
+    const bar = css.match(/^\.rail-link\.active::after \{[^}]*\}/m)?.[0] ?? '';
+    for (const declaration of ['content: "";', 'position: absolute;', 'width: 3px;',
+      'right: calc((var(--rail-width) - 44px) / -2);', 'border-radius: var(--pill-radius);',
+      'background: var(--accent);']) {
+      expect(bar, declaration).toContain(declaration);
+    }
+    // The bar is placed against the link, so the link is its containing block.
+    const link = css.match(/^\.rail-link \{[^}]*\}/m)?.[0] ?? '';
+    expect(link).toContain('position: relative;');
+    expect(link).toContain('color: var(--text-muted);');
+    expect(css).not.toMatch(/sb-nav-indicator|border-left-color|\.rail-pill/);
   });
 
-  it('sizes each entry 64x52, a 24px icon over a micro label', () => {
+  it('sizes each entry 44x44 with a 24px icon and no label rule (v247 §5)', () => {
     const css = readSource('src/app/shell/shell.css');
     const link = css.match(/^\.rail-link \{[^}]*\}/m)?.[0] ?? '';
-    expect(link).toContain('width: 64px;');
-    expect(link).toContain('min-height: 52px;');
+    expect(link).toContain('width: 44px;');
+    expect(link).toContain('height: 44px;');
+    expect(link).not.toContain('flex-direction: column;');
     // The icon draws at 24 through sb-icon's size input (v240 §4); no rule
     // reaches into the svg to resize it.
     expect(styleRules('shell.css', css).filter((rule) => /sb-icon\s+svg/.test(rule.selector))).toEqual([]);
-    expect(css.match(/^\.rail-label \{[^}]*\}/m)?.[0]).toContain('font-size: var(--text-micro);');
+    expect(css).not.toMatch(/\.rail-label/);
   });
 
   it('keeps the ui and bot versions in a hint at the foot of the rail', async () => {
@@ -568,12 +590,12 @@ describe('shell topbar centred on one axis (v179 layout audit)', () => {
   });
 });
 
-describe('shell labelled rail (v202 §3)', () => {
+describe('shell icon rail (v247, spec v240 §5)', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: shellProviders([
         { path: 'trades', component: Blank },
-        { path: 'trades/calendar', component: Blank },
+        { path: 'calendar', component: Blank }, { path: 'calendar/:date', component: Blank },
         { path: 'plans/:id', component: Blank },
         { path: 'insights/analytics', component: Blank },
         { path: 'system/versions', component: Blank },
@@ -589,9 +611,46 @@ describe('shell labelled rail (v202 §3)', () => {
     return { fixture, el: fixture.nativeElement as HTMLElement };
   }
 
-  const labelOf = (link: Element) => link.querySelector('.rail-label')!.textContent!.trim();
+  /** v247: a rail link is named by its aria-label alone; it draws no text. */
+  const labelOf = (link: Element) => link.getAttribute('aria-label') ?? '';
+  /** The role="tooltip" popover the link's aria-describedby points at (its sb-hint). */
+  const tooltipOf = (el: HTMLElement, link: Element) =>
+    el.querySelector(`[id="${link.getAttribute('aria-describedby')}"]`) as HTMLElement;
+  const isOpen = (tooltip: HTMLElement) => tooltip.hasAttribute(POPOVER_OPEN_ATTR);
+  async function settle(fixture: ComponentFixture<Shell>) {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+  const railLink = (el: HTMLElement, path: string) =>
+    el.querySelector<HTMLAnchorElement>(`nav.rail a.rail-link[href="${path}"]`)!;
 
-  it('draws six labelled destinations, five work entries then System at the foot (v202 §3)', async () => {
+  /** jsdom has no PointerEvent: a MouseEvent carrying pointerType and pointerId
+   *  is what sbLongPress reads (ui/long-press.spec.ts does the same). */
+  function pointer(type: string, pointerType = 'touch'): MouseEvent {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 30, clientY: 120 });
+    Object.defineProperty(event, 'pointerType', { value: pointerType });
+    Object.defineProperty(event, 'pointerId', { value: 1 });
+    return event;
+  }
+
+  /** Holds a pointer on the link for LONG_PRESS_MS and lifts it. Only
+   *  setTimeout is faked: the hint's requestAnimationFrame stays real. */
+  async function hold(fixture: ComponentFixture<Shell>, link: Element, pointerType = 'touch') {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      link.dispatchEvent(pointer('pointerdown', pointerType));
+      vi.advanceTimersByTime(LONG_PRESS_MS);
+      link.dispatchEvent(pointer('pointerup', pointerType));
+    } finally {
+      vi.useRealTimers();
+    }
+    await settle(fixture);
+  }
+
+  const tap = () => new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+
+  it('draws seven labelled destinations, six work entries then System at the foot (v247)', async () => {
     const { el } = await mount();
     const rail = el.querySelector('nav.rail')!;
     expect(rail.getAttribute('aria-label')).toBe('Primary');
@@ -599,7 +658,7 @@ describe('shell labelled rail (v202 §3)', () => {
     const lists = [...rail.querySelectorAll(':scope > ul.nav')];
     expect(lists.map((ul) => ul.className)).toEqual(['nav rail-work', 'nav rail-foot']);
     const labels = (ul: Element) => [...ul.querySelectorAll(':scope > li > a.rail-link')].map(labelOf);
-    expect(labels(lists[0])).toEqual(['Dashboard', 'Watchlist', 'Trades', 'Risk', 'Insights']);
+    expect(labels(lists[0])).toEqual(['Dashboard', 'Watchlist', 'Trades', 'Calendar', 'Risk', 'Insights']);
     expect(labels(lists[1])).toEqual(['System']);
     expect(lists[1].nextElementSibling!.matches('.rail-version')).toBe(true);
     expect(rail.querySelector('.rail-divider, sb-nav-indicator, .nav-group-label')).toBeNull();
@@ -615,7 +674,7 @@ describe('shell labelled rail (v202 §3)', () => {
     const lists = [...rail.querySelectorAll(':scope > ul.nav')];
     expect(lists.map((ul) => ul.className)).toEqual(['nav rail-work']);
     expect([...lists[0].querySelectorAll('a.rail-link')].map(labelOf))
-      .toEqual(['Dashboard', 'Watchlist', 'Trades', 'Risk', 'Insights']);
+      .toEqual(['Dashboard', 'Watchlist', 'Trades', 'Calendar', 'Risk', 'Insights']);
     expect(rail.querySelector('a[href="/system"]')).toBeNull();
     const version = lists[0].nextElementSibling as HTMLElement;
     expect(version.matches('.rail-version')).toBe(true);
@@ -636,26 +695,104 @@ describe('shell labelled rail (v202 §3)', () => {
     expect(el.querySelector('sb-read-only-badge')).toBeNull();
   });
 
-  it('draws each entry as its icon over its visible label, with no hint and no title', async () => {
+  it('names each entry by aria-label alone, draws no label, and gives it one anchored hint with that name', async () => {
     const { el } = await mount();
     const links = [...el.querySelectorAll<HTMLAnchorElement>('nav.rail a.rail-link')];
     expect(links.map((a) => a.getAttribute('href'))).toEqual(NAV_ENTRIES.map((entry) => entry.path));
-    for (const link of links) {
-      const label = labelOf(link);
-      // The visible label is the accessible name; the icon is aria-hidden.
-      expect(link.hasAttribute('aria-label'), label).toBe(false);
+    expect(el.querySelector('nav.rail .rail-label, nav.rail .rail-pill')).toBeNull();
+    links.forEach((link, index) => {
+      const label = NAV_ENTRIES[index].label;
+      expect(link.getAttribute('aria-label'), label).toBe(label);
       expect(link.hasAttribute('title'), label).toBe(false);
-      expect(link.querySelector(':scope > .rail-pill > sb-icon')!.getAttribute('title'), label).toBe('');
-      expect(link.textContent!.trim(), label).toBe(label);
-      expect(link.parentElement!.querySelector('sb-hint'), label).toBeNull();
-    }
+      // No visible text: the icon is the link's only child, and it is unnamed.
+      expect(link.textContent!.trim(), label).toBe('');
+      expect([...link.children].map((child) => child.tagName.toLowerCase()), label).toEqual(['sb-icon']);
+      expect(link.querySelector(':scope > sb-icon')!.getAttribute('title'), label).toBe('');
+      // One hint per entry, beside the link in its <li>, describing it with the same name.
+      expect(link.parentElement!.querySelectorAll('sb-hint'), label).toHaveLength(1);
+      const tooltip = tooltipOf(el, link);
+      expect(tooltip.getAttribute('role'), label).toBe('tooltip');
+      expect(tooltip.textContent!.trim(), label).toBe(label);
+      expect(isOpen(tooltip), label).toBe(false);
+    });
     expect(el.querySelectorAll('nav.rail ul.nav button')).toHaveLength(0);
+  });
+
+  it('gives a viewer a hint on every entry it sees and none naming System (v207)', async () => {
+    asViewer();
+    const { el } = await mount();
+    const links = [...el.querySelectorAll<HTMLAnchorElement>('nav.rail a.rail-link')];
+    expect(links.map(labelOf)).toEqual(['Dashboard', 'Watchlist', 'Trades', 'Calendar', 'Risk', 'Insights']);
+    expect(el.querySelectorAll('nav.rail li > sb-hint')).toHaveLength(links.length);
+    expect([...el.querySelectorAll('nav.rail li [role="tooltip"]')].map((tip) => tip.textContent!.trim()))
+      .not.toContain('System');
+  });
+
+  it('opens the entry hint at once on keyboard focus, and closes it on blur and on Escape', async () => {
+    const { fixture, el } = await mount();
+    const link = railLink(el, '/watchlist');
+    const tooltip = tooltipOf(el, link);
+    link.dispatchEvent(new FocusEvent('focus'));
+    await settle(fixture);
+    expect(isOpen(tooltip)).toBe(true);
+    link.dispatchEvent(new FocusEvent('blur'));
+    await settle(fixture);
+    expect(isOpen(tooltip)).toBe(false);
+    link.dispatchEvent(new FocusEvent('focus'));
+    await settle(fixture);
+    expect(isOpen(tooltip)).toBe(true);
+    link.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle(fixture);
+    expect(isOpen(tooltip)).toBe(false);
+  });
+
+  it('opens the entry hint on hover only after the hint delay, and a leave before it cancels', async () => {
+    const { fixture, el } = await mount();
+    const link = railLink(el, '/risk');
+    const tooltip = tooltipOf(el, link);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      link.dispatchEvent(new MouseEvent('mouseenter'));
+      fixture.detectChanges();
+      vi.advanceTimersByTime(HINT_HOVER_DELAY_MS - 1);
+      fixture.detectChanges();
+      expect(isOpen(tooltip)).toBe(false);
+      vi.advanceTimersByTime(1);
+      fixture.detectChanges();
+      expect(isOpen(tooltip)).toBe(true);
+      link.dispatchEvent(new MouseEvent('mouseleave'));
+      fixture.detectChanges();
+      expect(isOpen(tooltip)).toBe(false);
+      // A pass over the link shorter than the delay never opens it.
+      link.dispatchEvent(new MouseEvent('mouseenter'));
+      vi.advanceTimersByTime(HINT_HOVER_DELAY_MS - 50);
+      link.dispatchEvent(new MouseEvent('mouseleave'));
+      vi.advanceTimersByTime(HINT_HOVER_DELAY_MS);
+      fixture.detectChanges();
+      expect(isOpen(tooltip)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows one rail tooltip at a time', async () => {
+    const { fixture, el } = await mount();
+    const first = railLink(el, '/trades');
+    const second = railLink(el, '/calendar');
+    first.dispatchEvent(new FocusEvent('focus'));
+    await settle(fixture);
+    expect(isOpen(tooltipOf(el, first))).toBe(true);
+    second.dispatchEvent(new FocusEvent('focus'));
+    await settle(fixture);
+    expect(isOpen(tooltipOf(el, second))).toBe(true);
+    expect(isOpen(tooltipOf(el, first))).toBe(false);
+    expect(el.querySelectorAll(`nav.rail li [role="tooltip"][${POPOVER_OPEN_ATTR}]`)).toHaveLength(1);
   });
 
   it('draws the brand and every destination icon at 24px through sb-icon size (v240 §4)', async () => {
     const { el } = await mount();
     const svgs = [...el.querySelectorAll(
-      'nav.rail > a.rail-brand > sb-icon svg, nav.rail .rail-pill > sb-icon svg',
+      'nav.rail > a.rail-brand > sb-icon svg, nav.rail a.rail-link > sb-icon svg',
     )];
     // The brand plus one icon per destination.
     expect(svgs).toHaveLength(1 + NAV_ENTRIES.length);
@@ -668,7 +805,7 @@ describe('shell labelled rail (v202 §3)', () => {
 
   it.each([
     ['/trades', 'Trades'],
-    ['/trades/calendar', 'Trades'],
+    ['/calendar', 'Calendar'], ['/calendar/2026-10-01', 'Calendar'],
     ['/plans/7', 'Trades'],
     ['/insights/analytics?tab=tuning#x', 'Insights'],
     ['/system/versions', 'System'],
@@ -709,6 +846,83 @@ describe('shell labelled rail (v202 §3)', () => {
       expect(code, word).not.toContain(word);
     }
   });
+
+  it('makes every rail link a long-press host, and the brand mark not one', async () => {
+    const { el } = await mount();
+    const links = [...el.querySelectorAll('nav.rail a.rail-link')];
+    expect(links).toHaveLength(NAV_ENTRIES.length);
+    for (const link of links) expect(link.classList.contains('sb-long-press'), labelOf(link)).toBe(true);
+    expect(el.querySelector('nav.rail a.rail-brand')!.classList.contains('sb-long-press')).toBe(false);
+  });
+
+  it('opens the entry hint on a 500ms touch hold and not a moment before', async () => {
+    const { fixture, el } = await mount();
+    const link = railLink(el, '/calendar');
+    const tooltip = tooltipOf(el, link);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      link.dispatchEvent(pointer('pointerdown'));
+      vi.advanceTimersByTime(LONG_PRESS_MS - 1);
+      fixture.detectChanges();
+      expect(isOpen(tooltip)).toBe(false);
+      vi.advanceTimersByTime(1);
+    } finally {
+      vi.useRealTimers();
+    }
+    await settle(fixture);
+    expect(isOpen(tooltip)).toBe(true);
+    expect(tooltip.textContent!.trim()).toBe('Calendar');
+  });
+
+  it('keeps the held-open hint after the finger lifts, and swallows the click so it navigates nowhere', async () => {
+    const { fixture, el } = await mount();
+    const router = TestBed.inject(Router);
+    const before = router.url;
+    const link = railLink(el, '/trades');
+    await hold(fixture, link);
+    expect(isOpen(tooltipOf(el, link))).toBe(true);
+    link.dispatchEvent(tap());
+    await settle(fixture);
+    expect(router.url).toBe(before);
+    expect(isOpen(tooltipOf(el, link))).toBe(true);
+  });
+
+  it('closes the held-open hint on the next touch anywhere, and on Escape', async () => {
+    const { fixture, el } = await mount();
+    const link = railLink(el, '/risk');
+    await hold(fixture, link);
+    expect(isOpen(tooltipOf(el, link))).toBe(true);
+    document.body.dispatchEvent(pointer('pointerdown'));
+    await settle(fixture);
+    expect(isOpen(tooltipOf(el, link))).toBe(false);
+
+    await hold(fixture, link);
+    expect(isOpen(tooltipOf(el, link))).toBe(true);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle(fixture);
+    expect(isOpen(tooltipOf(el, link))).toBe(false);
+  });
+
+  it('never opens on a mouse held down, and that click still navigates (hover covers a mouse)', async () => {
+    const { fixture, el } = await mount();
+    const link = railLink(el, '/trades');
+    await hold(fixture, link, 'mouse');
+    expect(isOpen(tooltipOf(el, link))).toBe(false);
+    link.dispatchEvent(tap());
+    await settle(fixture);
+    expect(TestBed.inject(Router).url).toBe('/trades');
+  });
+
+  it('moves a held-open hint to the entry held next (one at a time)', async () => {
+    const { fixture, el } = await mount();
+    const first = railLink(el, '/dashboard');
+    const second = railLink(el, '/insights');
+    await hold(fixture, first);
+    expect(isOpen(tooltipOf(el, first))).toBe(true);
+    await hold(fixture, second);
+    expect(isOpen(tooltipOf(el, second))).toBe(true);
+    expect(isOpen(tooltipOf(el, first))).toBe(false);
+  });
 });
 
 describe('shell top bar (v195 Phase 3, correction 9)', () => {
@@ -730,7 +944,7 @@ describe('shell top bar (v195 Phase 3, correction 9)', () => {
       expect(bar.children[index].matches(selector), selector).toBe(true));
     const crumbs = [...bar.querySelectorAll('nav[aria-label="Breadcrumb"] li')]
       .map((li) => li.textContent!.replace('/', '').trim());
-    expect(crumbs).toEqual(['Trades', 'Book']);
+    expect(crumbs).toEqual(['Trades']);
     expect(el.querySelectorAll('h1')).toHaveLength(0);
     expect(el.querySelector('.page-title, .page-subtitle')).toBeNull();
   });
@@ -738,7 +952,7 @@ describe('shell top bar (v195 Phase 3, correction 9)', () => {
   it('sizes the rail and the bar from two shell tokens, with no animated width', () => {
     const css = readSource('src/app/shell/shell.css');
     const shell = css.match(/^\.shell \{[^}]*\}/m)?.[0] ?? '';
-    expect(shell).toContain('--rail-width: 80px;');
+    expect(shell).toContain('--rail-width: 64px;');
     expect(shell).toContain('--topbar-h: 40px;');
     expect(shell).toContain('grid-template-columns: var(--rail-width) 1fr;');
     expect(shell).not.toContain('transition');
@@ -1266,8 +1480,9 @@ describe('section tabs in the shell (v202 §1)', () => {
     TestBed.configureTestingModule({
       providers: shellProviders([
         { path: 'trades', component: Blank },
-        { path: 'trades/calendar', component: Blank },
         { path: 'trades/:id', component: Blank },
+        { path: 'insights/analytics', component: Blank },
+        { path: 'insights/research', component: Blank },
         { path: 'risk', component: Blank },
       ]),
     });
@@ -1291,16 +1506,17 @@ describe('section tabs in the shell (v202 §1)', () => {
     [...el.querySelectorAll('sb-section-tabs a[aria-current="page"]')].map((a) => a.textContent!.trim());
 
   it('draws the tabs at the top of the workspace, before the routed page', async () => {
-    const el = await at('/trades/calendar');
+    const el = await at('/insights/research');
     const content = el.querySelector('main.workspace > .workspace-content')!;
     expect(content.firstElementChild!.tagName.toLowerCase()).toBe('sb-section-tabs');
     expect([...content.querySelectorAll('sb-section-tabs a')].map((a) => a.textContent!.trim()))
-      .toEqual(['Book', 'Calendar']);
-    expect(current(el)).toEqual(['Calendar']);
+      .toEqual(['Analytics', 'Research', 'Reports', 'Guide']);
+    expect(current(el)).toEqual(['Research']);
   });
 
-  it("keeps the destination's first section active on a detail page", async () => {
-    expect(current(await at('/trades/812'))).toEqual(['Book']);
+  it('draws no tabs on Trades or a trade detail, a single page since v247', async () => {
+    expect((await at('/trades')).querySelectorAll('sb-section-tabs a')).toHaveLength(0);
+    expect((await at('/trades/812')).querySelectorAll('sb-section-tabs a')).toHaveLength(0);
   });
 
   it('draws no tabs on a single page', async () => {
@@ -1311,10 +1527,10 @@ describe('section tabs in the shell (v202 §1)', () => {
     const fixture = createShell();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    await go(fixture, '/trades');
-    expect(current(el)).toEqual(['Book']);
-    await go(fixture, '/trades/calendar');
-    expect(current(el)).toEqual(['Calendar']);
+    await go(fixture, '/insights/analytics');
+    expect(current(el)).toEqual(['Analytics']);
+    await go(fixture, '/insights/research');
+    expect(current(el)).toEqual(['Research']);
     await go(fixture, '/risk');
     expect(el.querySelectorAll('sb-section-tabs a')).toHaveLength(0);
   });
@@ -1512,24 +1728,35 @@ describe('shell top bar (v203, spec v202 §3)', () => {
     expect(bar.querySelector('span.topbar-divider')!.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('renders the two-tone wordmark as two spans, not one coloured string', () => {
-    // Restored from fdf6b78a^ (spec v202 D2).
-    expect(render().querySelectorAll('.brand .word span').length).toBe(2);
+  it('renders the two-tone wordmark as two spans with a real space between them (v247, spec v240 D8)', () => {
+    const word = render().querySelector('header.topbar > a.brand .word')!;
+    expect(word.querySelectorAll('span')).toHaveLength(2);
+    expect([...word.querySelectorAll('span')].map((x) => x.textContent)).toEqual(['Bomeo', 'Capital']);
+    // An ordinary U+0020, not a no-break space and not nothing.
+    expect(word.textContent).toBe('Bomeo Capital');
   });
 
-  it('gives the wordmark the pre-v195 treatment, Capital in the accent, linking to the Dashboard', () => {
+  it('draws Bomeo in the text colour at 700 and Capital in the accent at 500, in the sans face, linking to the Dashboard', () => {
     const brand = render().querySelector('header.topbar > a.brand')!;
-    expect([...brand.querySelectorAll('.word span')].map((x) => x.textContent)).toEqual(['Bomeo', 'Capital']);
     expect(brand.getAttribute('href')).toBe('/dashboard');
-    expect(brand.getAttribute('aria-label')).toContain('Bomeo Capital');
+    expect(brand.getAttribute('aria-label')).toBe('Bomeo Capital — go to the Dashboard');
     expect(brand.querySelector('sb-icon')).toBeNull();          // the diamond heads the rail above phone width
     const css = readSource('src/app/shell/shell.css').replace(/\/\*[\s\S]*?\*\//g, '');
-    const rule = (selector: string) => css.match(new RegExp('^' + selector.replace(/[.]/g, '[.]') + ' [{][^}]*[}]', 'm'))?.[0] ?? '';
-    for (const declaration of ['font-family: var(--font-mono);', 'font-size: var(--text-body);', 'font-weight: 700;',
-      'letter-spacing: -0.02em;', 'white-space: nowrap;']) {
-      expect(rule('.brand .word')).toContain(declaration);
+    const rule = (selector: string) =>
+      css.match(new RegExp('^' + selector.replace(/[.]/g, '[.]') + ' [{][^}]*[}]', 'm'))?.[0] ?? '';
+    const word = rule('.brand .word');
+    for (const declaration of ['font-family: var(--font-sans);', 'font-size: var(--text-body);', 'font-weight: 700;',
+      'letter-spacing: -0.02em;', 'white-space: nowrap;', 'color: var(--text);']) {
+      expect(word, declaration).toContain(declaration);
     }
-    expect(rule('.brand .word span:last-child')).toContain('color: var(--accent);');
+    // No figures in a wordmark: no mono face and no tabular figures (v247 Decision 10).
+    expect(word).not.toContain('--font-mono');
+    expect(word).not.toContain('tabular-nums');
+    const capital = rule('.brand .word span:last-child');
+    expect(capital).toContain('color: var(--accent);');
+    expect(capital).toContain('font-weight: 500;');
+    // Nav and brand never read the money colours (spec v240 §1).
+    expect(word + capital).not.toMatch(/--pos|--neg/);
   });
 });
 
@@ -1609,5 +1836,72 @@ describe('shell voice notifications (v227)', () => {
     const css = readSource('src/app/shell/shell.css');
     const phone = css.slice(css.lastIndexOf('@media (max-width: 639px)'));
     expect(phone).toMatch(/sb-voice-chip \{[^}]*flex: none;/);
+  });
+});
+
+describe('shell tab-bar editor (v240 §6)', () => {
+  let phone: WritableSignal<boolean>;
+
+  beforeEach(() => {
+    installDialogPolyfill();
+    phone = signal(true);
+    TestBed.configureTestingModule({ providers: [...shellProviders([{ path: 'dashboard', component: Blank }]), provideMotion('off')] });
+    TestBed.overrideProvider(ViewportService, { useValue: { isPhone: phone, isNarrow: signal(true), viewport: signal('xs') } });
+    patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: 'admin', role: 'admin' });
+  });
+
+  async function settle(fixture: ComponentFixture<Shell>): Promise<void> {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  async function openEditor() {
+    const fixture = createShell();
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('sb-phone-tab-bar button.more')!.click();
+    await settle(fixture);
+    const edit = el.querySelector<HTMLButtonElement>('sb-more-sheet button.edit')!;
+    edit.click();
+    await settle(fixture);
+    return { fixture, el, edit };
+  }
+
+  const editorOpen = (el: HTMLElement) => el.querySelector('sb-tab-bar-editor dialog')?.hasAttribute('open') ?? false;
+  const sheet = (el: HTMLElement) => el.querySelector('sb-more-sheet [role=dialog]');
+
+  it('opens the editor over the More sheet; Escape leaves the sheet; Done returns focus to Edit tab bar', async () => {
+    const { fixture, el, edit } = await openEditor();
+    expect(editorOpen(el)).toBe(true);
+    expect(sheet(el)).not.toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle(fixture);
+    expect(sheet(el)).not.toBeNull();
+    el.querySelector<HTMLButtonElement>('sb-tab-bar-editor .actions button.done')!.click();
+    await settle(fixture);
+    expect(editorOpen(el)).toBe(false);
+    expect(sheet(el)).not.toBeNull();
+    expect(document.activeElement).toBe(edit);
+  });
+
+  it('shows an edit on the bar and in the More sheet at once', async () => {
+    const { fixture, el } = await openEditor();
+    el.querySelector<HTMLButtonElement>('sb-tab-bar-editor li[data-path="/watchlist"] button.remove')!.click();
+    await settle(fixture);
+    expect([...el.querySelectorAll('sb-phone-tab-bar .tab-label')].map((n) => n.textContent!.trim()))
+      .toEqual(['Home', 'Trades', 'Calendar', 'More']);
+    expect([...el.querySelectorAll('sb-more-sheet .group-label')].map((n) => n.textContent!.trim())).toContain('Watchlist');
+  });
+
+  it('closes the editor with its sheet when the window leaves phone width', async () => {
+    const { fixture, el } = await openEditor();
+    phone.set(false);
+    await settle(fixture);
+    expect(el.querySelector('sb-tab-bar-editor')).toBeNull();
+    phone.set(true);
+    await settle(fixture);
+    expect(editorOpen(el)).toBe(false);
+    expect(sheet(el)).toBeNull();
   });
 });

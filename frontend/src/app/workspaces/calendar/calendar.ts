@@ -8,6 +8,8 @@ import { CalendarMetric, CalendarStore } from '../../stores/calendar.store';
 import { ConnectionStore } from '../../stores/connection.store';
 import { asyncInputs, Async } from '../../ui/async';
 import { Button } from '../../ui/button';
+import { Field } from '../../ui/field';
+import { Segmented } from '../../ui/segmented';
 import { IncompleteNote } from '../../ui/incomplete-note';
 import { MarketValue } from '../../ui/market-value';
 import { PnlBasis } from '../../ui/pnl-basis';
@@ -38,7 +40,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
   selector: 'sb-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Button, ControlRow, Drawer, ExcursionEstimate, LegName, Panel, Page, RouterLink, Select, StatStrip, StatTile, Async,
+    Button, ControlRow, Drawer, ExcursionEstimate, Field, LegName, Panel, Page, RouterLink, Segmented, Select, StatStrip, StatTile, Async,
     IncompleteNote, MarketValue, NgTemplateOutlet, PnlBasis, Spinner,
   ],
   // v54 D1: "how am I doing this month?" -- hero totals, room to breathe --
@@ -81,44 +83,47 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
         <ng-container *ngTemplateOutlet="asOf; context: { $implicit: store.meta() }" />
       </div>
 
-      <!-- v195 §5.2: the scope bar holds the month and the filters only. -->
-      <sb-control-row page-scope>
-        <div class="months">
-          <button sb-button type="button" variant="ghost"
-                  (click)="store.stepMonth(-1)" aria-label="Previous month">‹</button>
-          <span class="month">{{ label() }}</span>
-          <button sb-button type="button" variant="ghost"
-                  (click)="store.stepMonth(1)" aria-label="Next month">›</button>
-        </div>
+      <!-- v195 §5.2: the scope bar holds the month and the filters only.
+           v246 §A2: each control sits in one sb-field, and align="end" lines
+           the fields up along their bottom edge (the opt-in, V246-6). -->
+      <sb-control-row page-scope align="end">
+        <!-- No caption: the month name says what the arrows step. A full
+             row on a phone, where the empty label line drops. -->
+        <sb-field size="auto" [fullRow]="true">
+          <div class="months">
+            <button sb-button type="button" variant="ghost"
+                    (click)="store.stepMonth(-1)" aria-label="Previous month">‹</button>
+            <span class="month">{{ label() }}</span>
+            <button sb-button type="button" variant="ghost"
+                    (click)="store.stepMonth(1)" aria-label="Next month">›</button>
+          </div>
+        </sb-field>
 
-        <div class="metric" role="group" aria-label="Metric">
-          @for (option of metrics(); track option.value) {
-            <button
-              sb-button
-              variant="segment"
-              type="button"
-              [class.active]="store.metric() === option.value"
-              (click)="store.setMetric(option.value)"
-            >
-              {{ option.label }}
-            </button>
-          }
-        </div>
+        <sb-field label="Show" size="auto" [fullRow]="true">
+          <sb-segmented
+            label="Show"
+            [options]="metrics()"
+            [value]="store.metric()"
+            (valueChange)="onMetric($event)"
+          />
+        </sb-field>
 
-        <sb-select
-          label="Strategy"
-          placeholder="Any strategy"
-          [options]="store.strategyOptions()"
-          [value]="store.strategy()"
-          (valueChange)="store.setStrategy($event)"
-        />
-        <sb-select
-          label="Horizon"
-          placeholder="Any horizon"
-          [options]="store.horizonOptions()"
-          [value]="store.horizon()"
-          (valueChange)="store.setHorizon($event)"
-        />
+        <sb-field label="Strategy" size="m">
+          <sb-select
+            placeholder="Any strategy"
+            [options]="store.strategyOptions()"
+            [value]="store.strategy()"
+            (valueChange)="store.setStrategy($event)"
+          />
+        </sb-field>
+        <sb-field label="Horizon" size="s">
+          <sb-select
+            placeholder="Any horizon"
+            [options]="store.horizonOptions()"
+            [value]="store.horizon()"
+            (valueChange)="store.setHorizon($event)"
+          />
+        </sb-field>
       </sb-control-row>
 
       <!-- v195 §5.2: the month's totals are the KPI strip. Shown exactly when
@@ -305,7 +310,7 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
     >
       @if (store.selectedDay(); as day) {
         <!-- v165 D6: the drawer is the quick preview; the page is the full day. -->
-        <a class="open-day" [routerLink]="['/trades/calendar', day]" [queryParams]="dayLinkParams()">Open full day →</a>
+        <a class="open-day" [routerLink]="['/calendar', day]" [queryParams]="dayLinkParams()">Open full day →</a>
       }
       @if (store.dayLoading()) {
         <p class="day-loading">Loading...</p>
@@ -401,22 +406,12 @@ const SIGNED_METRICS: ReadonlySet<CalendarMetric> = new Set<CalendarMetric>(['r'
       .weekday-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
-    /* The month stepper: two buttons with the month between them. Centred
-       rather than bottom-aligned like the controls around it, because the
-       month is running text and sb-control-row's answer is for controls. */
-    .months { display: flex; align-items: center; gap: var(--space-8); }
+    /* The month stepper: two buttons with the month between them, in one
+       sb-field (v246 §A2). It centres its own three children, because the
+       month is running text, and is one control tall, so the field's bottom
+       edge -- where the align="end" row aligns it -- is the buttons'. */
+    .months { display: flex; align-items: center; gap: var(--space-8); min-height: var(--control-h); }
     .month { min-width: 10ch; font-weight: 600; }
-
-    .metric { display: inline-flex; border: 1px solid var(--border); border-radius: var(--control-radius); }
-    /* padding/border override the segment variant's defaults for a
-       tighter two-cell toggle; the variant owns colour, weight and the
-       active-cell background is our own since this pair has no divider. */
-    .metric button {
-      min-width: var(--hit-min);
-      padding: 0 var(--space-10);
-      border: 0;
-    }
-    .metric button.active { background: var(--surface-raised); color: var(--text); }
 
     /* Exactly 4 columns, 2 below sm -- on request (2026-09-14, "at most 2
        rows"): eight tiles at four per row is two rows. v186 D3: the totals
@@ -613,6 +608,13 @@ export class Calendar {
     { value: 'win_rate', label: 'Win rate' },
   ]);
 
+  /** v246 §A2: the Show segmented speaks strings; only a listed metric
+   *  reaches the store. */
+  protected onMetric(value: string): void {
+    const option = this.metrics().find((candidate) => candidate.value === value);
+    if (option) this.store.setMetric(option.value);
+  }
+
   protected readonly label = computed(() => monthLabel(this.store.month()));
   protected readonly weeks = computed<GridCell[][]>(() =>
     monthMatrix(this.store.month()),
@@ -788,7 +790,7 @@ export class Calendar {
   protected readonly paperCaption = PAPER_CAPTION;
   protected readonly legsNote = legsSampleNote;
 
-  /** Only the filters that are set, so a bare day links as `/trades/calendar/<date>`. */
+  /** Only the filters that are set, so a bare day links as `/calendar/<date>`. */
   protected readonly dayLinkParams = computed(() => ({
     ...(this.store.strategy() ? { strategy: this.store.strategy() } : {}),
     ...(this.store.horizon() ? { horizon: this.store.horizon() } : {}),

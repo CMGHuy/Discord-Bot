@@ -6,6 +6,7 @@ import { Async, AsyncEmptyReason } from '../../ui/async';
 import { BarList, BarRow } from '../../ui/bar-list';
 import { Button, ButtonVariant } from '../../ui/button';
 import { ChartContainer } from '../../ui/chart-container';
+import { TimeSeries, TimeSeriesPoint } from '../../ui/chart/time-series';
 import { TradeChart } from '../../ui/chart/trade-chart';
 import { ChartTooltip, HoverState } from '../../ui/chart-tooltip';
 import { Chip, ChipTone, QualityChip, qualityTone } from '../../ui/chip';
@@ -15,6 +16,7 @@ import { ConfidenceCell } from '../../ui/confidence-cell';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { ControlBar } from '../../ui/control-bar';
 import { DateRange } from '../../ui/date-range';
+import { Field } from '../../ui/field';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, PageSpec, RowContext } from '../../ui/data-table/data-table.types';
 import { DirectionArrow } from '../../ui/direction-arrow';
@@ -146,6 +148,7 @@ interface ContractRow {
   imports: [
     Async,
     BarList,
+    Field,
     Button,
     ChartContainer,
     Checkbox,
@@ -218,6 +221,7 @@ interface ContractRow {
     StripPlot,
     TabBar,
     TextInput,
+    TimeSeries,
     Timeline,
     Toolbar,
     TradeChart,
@@ -582,6 +586,8 @@ interface ContractRow {
       <sb-donut [slices]="[{label: 'A', count: 3}, {label: 'B', count: 1}, {label: 'Absent', count: 0}]" />
       <sb-scatter [points]="[{x: .2, y: 2, tone: 'pos'}, {x: 1, y: .4, tone: 'neg'}]" xLabel="MAE (R)" yLabel="MFE (R)" />
       <sb-line-chart [series]="lineChartSeries" />
+      <sb-time-series kind="area" [points]="timeSeriesEquity" [height]="160" label="Gallery equity curve" />
+      <sb-time-series kind="baseline" [points]="timeSeriesDrawdown" valueFormat="r" [height]="120" label="Gallery drawdown in R" />
       <sb-exposure-strip [dates]="exposureDates" [bars]="exposureBars" />
       <sb-chart-container [loading]="false" [error]="null" [hasData]="true" [height]="200" caption="AAPL -- daily">
         <sb-trade-chart [data]="null" />
@@ -647,6 +653,9 @@ interface ContractRow {
         <sb-select scope label="Range" placeholder="YTD" [options]="selectOptions" />
       </sb-control-bar>
       <sb-date-range [from]="'2026-01-01'" [to]="'2026-09-12'" />
+      <sb-field label="Strategy" size="m">
+        <sb-select ariaLabel="Strategy" placeholder="All" [options]="selectOptions" />
+      </sb-field>
     </sb-panel>
 
     <!-- -- charts -- one shared chrome (v54 D5) -------------------------------- -->
@@ -1143,6 +1152,16 @@ export class Gallery {
     { label: 'Flat', value: null, n: 4, withheld: true },
   ];
   protected readonly barListFormat = (value: number) => `${value.toFixed(1)}%`;
+  /** v246 §A3: sb-time-series, an equity area and a drawdown baseline on the same days. */
+  protected readonly timeSeriesEquity: TimeSeriesPoint[] = [
+    { time: '2026-09-01', value: 0 }, { time: '2026-09-02', value: 180 }, { time: '2026-09-03', value: 95 },
+    { time: '2026-09-04', value: 260 }, { time: '2026-09-07', value: 210 },
+  ];
+  protected readonly timeSeriesDrawdown: TimeSeriesPoint[] = [
+    { time: '2026-09-01', value: 0 }, { time: '2026-09-02', value: 0 }, { time: '2026-09-03', value: -0.85 },
+    { time: '2026-09-04', value: 0 }, { time: '2026-09-07', value: -0.5 },
+  ];
+
   protected readonly lineChartSeries: LineChartSeries[] = [
     {
       name: 'Equity',

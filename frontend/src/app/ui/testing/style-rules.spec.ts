@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { CHART_CHROME } from '../chart/chart-frame';
-import { styleRules, withChartChrome } from './style-rules';
+import { styleRules, withChartTokens } from './style-rules';
 
 describe('styleRules (v240)', () => {
   it('reads a .css file whole, including the rules inside @media', () => {
@@ -87,12 +87,17 @@ describe('styleRules (v240)', () => {
     expect(selectors).toContain(':host(.link)');
   });
 
-  it('withChartChrome puts the CHART_CHROME token names back before parsing', () => {
+  it('resolves chart token names and numeric values before parsing', () => {
     const ts = 'styles:`.label{color:var(${CHART_CHROME.tickColour});font-size:var(${CHART_CHROME.tickSize})}`';
-    expect(styleRules('app/ui/x.ts', withChartChrome(ts))).toEqual([
+    expect(styleRules('app/ui/x.ts', withChartTokens(ts))).toEqual([
       { selector: '.label', body: `color:var(${CHART_CHROME.tickColour});font-size:var(${CHART_CHROME.tickSize})` },
     ]);
-    expect(withChartChrome('a ${CHART_CHROME.nope} b')).toBe('a ${CHART_CHROME.nope} b');
-    expect(withChartChrome('a ${BREAKPOINTS.sm - 1} b')).toBe('a ${BREAKPOINTS.sm - 1} b');
+    const svg = 'styles:`.gain{stroke:var(${SVG_CHART_TOKENS.pos});stroke-width:${SVG_CHART_TOKENS.strokeWidthThin}}`';
+    expect(styleRules('app/ui/x.ts', withChartTokens(svg))).toEqual([
+      { selector: '.gain', body: 'stroke:var(--pos);stroke-width:1' },
+    ]);
+    expect(withChartTokens('a ${SVG_CHART_TOKENS.toString} b')).toBe('a ${SVG_CHART_TOKENS.toString} b');
+    expect(withChartTokens('a ${CHART_CHROME.nope} b')).toBe('a ${CHART_CHROME.nope} b');
+    expect(withChartTokens('a ${BREAKPOINTS.sm - 1} b')).toBe('a ${BREAKPOINTS.sm - 1} b');
   });
 });

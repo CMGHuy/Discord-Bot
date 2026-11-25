@@ -18,6 +18,7 @@ import {
   IChartApi,
   ISeriesApi,
   Time,
+  TickMarkType,
   createChart,
 } from 'lightweight-charts';
 
@@ -27,12 +28,14 @@ import { Async } from '../../../ui/async';
 import { Button } from '../../../ui/button';
 import { BaselinePrimitive } from '../../../ui/chart/primitives/baseline-primitive';
 import { ChartTarget, TimeWindow, bucketEndInstant, bucketStartInstant, windowBounds, LogicalWindow, inWindowCandles, nextTimeframe, rangeStats, shouldLoadOlder } from './equity-range.model';
-import { ChartPalette, chartOptions, chartPalette, token } from '../../../ui/chart/chart-theme';
+import { ChartPalette, applyChartTheme, chartPalette, priceFormat, token } from '../../../ui/chart/chart-theme';
+import { ViewportService } from '../../../ui/breakpoints';
 import { ThemeService } from '../../../ui/theme.service';
 import { VLinePrimitive } from '../../../ui/chart/primitives/vline-primitive';
 import { EQUITY_BASES, EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
 import { Hint } from '../../../ui/hint';
 import { SegmentOption, Segmented } from '../../../ui/segmented';
+import { Field } from '../../../ui/field';
 import {
   WallSpan,
   chartRangeFor,
@@ -63,10 +66,33 @@ function candleSeriesColors(palette: ChartPalette) {
   };
 }
 
-/** Time on the axis for 1H/4H only; one place for render() and a theme flip,
- *  because chartOptions() alone resets timeVisible to false. */
+/** v246 §A3: room above and below the candles, so the newest candle's
+ *  last-value tag is never pushed onto the top or bottom price label. */
+export const CANDLE_SCALE_MARGINS = { top: 0.12, bottom: 0.12 } as const;
+
+/** v246 §A3: an intraday tick is labelled only on a whole hour; any other
+ *  time tick is blank. Times are Berlin wall time read as UTC (`toChartTime`),
+ *  so UTC minutes are wall minutes; the fall-back repeat (one second later)
+ *  is still its whole hour. Day, month and year ticks keep the library's
+ *  labels (`null`). */
+export function wholeTickLabel(time: Time, type: TickMarkType): string | null {
+  const timeTick = type === TickMarkType.Time || type === TickMarkType.TimeWithSeconds;
+  if (!timeTick || typeof time !== 'number') return null;
+  const at = new Date(time * 1000);
+  return at.getUTCMinutes() === 0 ? `${String(at.getUTCHours()).padStart(2, '0')}:00` : '';
+}
+
+/** Time on the axis for 1H/4H only, whole hours only; one place for create(),
+ *  render() and a theme flip, because applyChartTheme() alone resets timeVisible.
+ *  v246 §A3: the left edge is fixed, so lightweight-charts keeps the leftmost
+ *  tick label inside the axis instead of cutting it in half (the stray ")"). */
 function timeScaleOptions(data: EquityCandlesResponse | null) {
-  return { timeVisible: data ? isIntraday(data.tf) : false, secondsVisible: false };
+  return {
+    timeVisible: data ? isIntraday(data.tf) : false,
+    secondsVisible: false,
+    tickMarkFormatter: wholeTickLabel,
+    fixLeftEdge: true,
+  };
 }
 
 type ChartState = 'loading' | 'error' | 'empty' | 'chart';
@@ -128,23 +154,30 @@ export function targetNeedsOlder(
 @Component({
   selector: 'sb-equity-candles',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Segmented, Button, Hint],
+  imports: [Async, Segmented, Button, Hint, Field],
   template: `
+    <!-- v246 §A2: each toggle sits in a captioned sb-field ("Interval",
+         "Trades"), the label line and bottom edge every control row shares;
+         each group's name holds its caption's word. -->
     <div class="controls">
-      <sb-segmented
-        class="timeframe"
-        label="Candle timeframe"
-        [options]="timeframeOptions"
-        [value]="store.tf()"
-        (valueChange)="onTimeframe($event)"
-      />
-      <sb-segmented
-        class="basis"
-        label="Equity basis"
-        [options]="basisOptions"
-        [value]="store.basis()"
-        (valueChange)="onBasis($event)"
-      />
+      <sb-field label="Interval" size="auto" [fullRow]="true">
+        <sb-segmented
+          class="timeframe"
+          label="Candle interval"
+          [options]="timeframeOptions"
+          [value]="store.tf()"
+          (valueChange)="onTimeframe($event)"
+        />
+      </sb-field>
+      <sb-field label="Trades" size="auto" [fullRow]="true">
+        <sb-segmented
+          class="basis"
+          label="Trades counted"
+          [options]="basisOptions"
+          [value]="store.basis()"
+          (valueChange)="onBasis($event)"
+        />
+      </sb-field>
     </div>
     @if (readout().length) {
       <p class="readout">
@@ -205,11 +238,13 @@ export function targetNeedsOlder(
       row-gap: var(--space-6);
       min-width: 0;
     }
+    /* v246 §A2: the bottom edge, not the centre: both toggles sit in
+       captioned sb-fields, so their field bottoms are the button bottoms. */
     .controls {
       grid-area: controls;
       display: flex;
       flex-wrap: wrap;
-      align-items: center;
+      align-items: flex-end;
       gap: var(--space-6) var(--space-10);
       min-width: 0;
     }
@@ -257,7 +292,6 @@ export function targetNeedsOlder(
 
     @media (max-width: 639px) {
       :host { grid-template-areas: "controls" "chart" "states" "readout" "caption"; }
-      .controls sb-segmented { flex: 1 1 100%; }
       .chart { height: 160px; }
     }
 
@@ -272,8 +306,9 @@ export function targetNeedsOlder(
         column-gap: var(--space-10);
       }
       /* One row now (the account caption that made it two is gone): the
-         timeframe buttons and the readout share a text baseline. */
-      .controls, .readout { align-self: baseline; }
+         toggle buttons and the readout share a text line. v246 §A2: last
+         baseline, because each toggle's field starts with its caption. */
+      .controls, .readout { align-self: last baseline; }
       .readout { justify-self: end; text-align: right; }
     }
   `,
@@ -340,6 +375,8 @@ export class EquityCandles {
   private resizeObserver: ResizeObserver | null = null;
 
   private readonly theme = inject(ThemeService);
+  /** v246 §A3: below 640px the balance above the chart is the last value. */
+  private readonly viewport = inject(ViewportService);
 
   /** Chart colours from the tokens, re-read when the theme flips (spec v225).
    *  `--text-faint` is the hollow candle's wick. */
@@ -426,6 +463,13 @@ export class EquityCandles {
     effect(() => {
       this.colors();
       untracked(() => this.restyle());
+    });
+
+    // v246 §A3: the last-value tag sits on a price label at phone height; the
+    // balance printed above the chart carries that figure there instead.
+    effect(() => {
+      const phone = this.viewport.isPhone();
+      untracked(() => this.series?.applyOptions({ lastValueVisible: !phone }));
     });
 
     effect(() => {
@@ -606,12 +650,18 @@ export class EquityCandles {
   private create(element: HTMLElement): void {
     if (this.chart) return;
     const palette = chartPalette();
-    const chart = createChart(element, chartOptions(palette));
+    // Sized by the library (autoSize); themed by the shared module, which
+    // never sets sizing and resets timeVisible, hence the time scale after it.
+    const chart = createChart(element, { autoSize: true });
+    applyChartTheme(chart, palette);
+    chart.applyOptions({ timeScale: timeScaleOptions(this.store.data()) });
     const series = chart.addSeries(CandlestickSeries, {
       ...candleSeriesColors(palette),
       priceLineVisible: false,
-      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+      lastValueVisible: !this.viewport.isPhone(),
+      priceFormat,
     });
+    series.priceScale().applyOptions({ scaleMargins: CANDLE_SCALE_MARGINS });
     this.baseline = new BaselinePrimitive();
     series.attachPrimitive(this.baseline);
     this.seam = new VLinePrimitive();
@@ -638,7 +688,7 @@ export class EquityCandles {
     const series = this.series;
     if (!chart || !series) return;
     const palette = chartPalette();
-    chart.applyOptions(chartOptions(palette));
+    applyChartTheme(chart, palette);
     chart.applyOptions({ timeScale: timeScaleOptions(this.store.data()) });
     series.applyOptions(candleSeriesColors(palette));
   }

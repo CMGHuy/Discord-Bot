@@ -20,6 +20,21 @@ const STATUS_LABEL: Record<string, string> = {
   EXPIRED: 'Cancelled',
 };
 
+/** The event's own verb, for the row's accessible name (v246 §A1). */
+const KIND_WORD: Record<ActivityEvent['kind'], string> = {
+  opened: 'opened',
+  closed: 'closed',
+  cancelled: 'cancelled',
+};
+
+/** The status each kind implies; a row whose current status differs has
+ *  moved on since the event, and its name says so. */
+const KIND_STATUS: Record<ActivityEvent['kind'], string> = {
+  opened: 'Open',
+  closed: 'Closed',
+  cancelled: 'Cancelled',
+};
+
 /** What just happened, from the trade records themselves — v85 D15. */
 @Component({
   selector: 'sb-recent-activity',
@@ -35,6 +50,7 @@ const STATUS_LABEL: Record<string, string> = {
             <li [class]="'event ' + event.kind">
               <!-- A native button supplies keyboard activation and focus. -->
               <button type="button" class="event-hit" aria-haspopup="dialog"
+                      [attr.aria-label]="rowName(event)"
                       (click)="eventActivate.emit(event)">
                 <sb-icon [name]="icon(event)" [title]="statusLabel(event)"
                          [attr.aria-label]="statusLabel(event)" [size]="20" />
@@ -121,5 +137,18 @@ export class RecentActivity {
    *  a word, not an empty tooltip. */
   protected statusLabel(event: ActivityEvent): string {
     return STATUS_LABEL[event.status.toUpperCase()] ?? 'Open';
+  }
+
+  /** The row's accessible name: "SOFI closed, −1.00R, <time>". The button's
+   *  aria-label replaces its children's names, so the status word and the
+   *  time the row shows are both carried here (v246 §A1). A close with no R
+   *  prints "Closed" as its detail; the name says "closed" once. */
+  protected rowName(event: ActivityEvent): string {
+    const parts = [`${event.ticker} ${KIND_WORD[event.kind]}`];
+    if (event.detail && event.detail !== 'Closed') parts.push(event.detail);
+    parts.push(this.fmt(event.at));
+    const status = this.statusLabel(event);
+    if (status !== KIND_STATUS[event.kind]) parts.push(`now ${status}`);
+    return parts.join(', ');
   }
 }

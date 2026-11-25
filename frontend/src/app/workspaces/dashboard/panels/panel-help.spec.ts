@@ -36,6 +36,10 @@ describe('dashboard tooltip copy', () => {
 });
 
 describe('dashboard tooltip copy (A4 audit)', () => {
+  it('says the Recent activity R is pre-tax and before modelled frictions (v246 §A1)', () => {
+    expect(PANEL_HELP.recentActivity).toContain('pre-tax and before modelled frictions');
+  });
+
   it('states the paper, gross, pre-tax basis on every performance figure', () => {
     for (const key of ['openPnl', 'winRate', 'expectancy', 'payoffRatio', 'realizedToday', 'realized'] as const) {
       expect(KPI_HELP[key], key).toContain(PERFORMANCE_CAVEAT);

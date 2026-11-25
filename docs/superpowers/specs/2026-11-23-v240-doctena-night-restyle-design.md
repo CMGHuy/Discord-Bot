@@ -633,6 +633,13 @@ screen is checked against. Plans 3 and 4 both edit `shell/more-sheet.ts`
 `sb-drawer` use, so they never run in parallel. Plan 5 builds on plan 4's
 policy input.
 
+**Interleaved with v246 (2026-11-23).** Plans 1 and 2 shipped as v240 and
+v241. The remaining order is: plan 3 → v246 A → plan 4 → v246 B1 → v246
+B2 → plan 5 → v246 C1 → v246 C2. The strict order above still holds
+among this spec's own plans. v246's plans slot in where their shared files
+(control bars, `sb-data-table`, the bottom sheet) are already settled. See
+v246 § What follows.
+
 ## Panel review
 
 Run 2026-11-23 on a91c43db, serially: ux-designer (sonnet), staff-engineer

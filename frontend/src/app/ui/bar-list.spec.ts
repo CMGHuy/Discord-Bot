@@ -57,3 +57,20 @@ describe('BarList narrow container (v179 §3.3)', () => {
     expect(li.querySelector('.n')!.textContent!.trim()).toBe('n=41');
   });
 });
+
+describe('BarList reads SVG_CHART_TOKENS (v246 §A3)', () => {
+  it('imports the shared tokens and declares no chart ink, radius or hairline of its own', () => {
+    expect(BAR_SOURCE).toMatch(/import \{[^}]*SVG_CHART_TOKENS[^}]*\} from '\.\/chart\/chart-theme'/);
+    expect(BAR_SOURCE).not.toMatch(/var\(--(pos|neg|accent|radius-sm)\)/);
+    expect(BAR_SOURCE).not.toMatch(/border-left:1px/);
+  });
+
+  it('takes tones, the zero axis, the reference line and labels from the tokens', () => {
+    expect(BAR_SOURCE).toContain(".fill[data-tone='pos']{background:var(${SVG_CHART_TOKENS.pos})}");
+    expect(BAR_SOURCE).toContain(".fill[data-tone='neg']{background:var(${SVG_CHART_TOKENS.neg})}");
+    expect(BAR_SOURCE).toContain(".fill[data-tone='above']{background:var(${SVG_CHART_TOKENS.line})}");
+    expect(BAR_SOURCE).toContain('border-left:${SVG_CHART_TOKENS.strokeWidthThin}px solid var(${CHART_CHROME.axis})');
+    expect(BAR_SOURCE).toContain('border-left:${SVG_CHART_TOKENS.strokeWidthThin}px dashed var(${SVG_CHART_TOKENS.crosshair})');
+    expect(BAR_SOURCE).toContain('.label{color:var(${SVG_CHART_TOKENS.axisText});font-size:var(${SVG_CHART_TOKENS.labelSize})');
+  });
+});

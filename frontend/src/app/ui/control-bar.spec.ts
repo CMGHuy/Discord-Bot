@@ -6,6 +6,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ControlBar } from './control-bar';
+import { Field } from './field';
+import { Select } from './form-controls';
 
 @Component({
   imports: [ControlBar],
@@ -120,5 +122,59 @@ describe('ControlBar Clear is a quiet control (v195 Phase 2)', () => {
     expect(rule('.clear:hover')).toContain('background: var(--surface-raised)');
     expect(rule('.clear:hover')).not.toContain('accent');
     expect(rule('.clear:focus-visible')).toContain('outline: 1px solid var(--accent)');
+  });
+});
+
+@Component({
+  imports: [ControlBar, Field, Select],
+  template: `
+    <sb-control-bar [activeCount]="1">
+      <ng-container filters>
+        <sb-field id="f-strategy" label="Strategy" size="m"><sb-select [options]="options" /></sb-field>
+        <sb-field id="f-horizon" size="s"><sb-select ariaLabel="Horizon" [options]="options" /></sb-field>
+      </ng-container>
+      <ng-container scope>
+        <sb-field id="f-units" label="Units" size="auto"><button type="button">R</button></sb-field>
+      </ng-container>
+    </sb-control-bar>
+  `,
+})
+class FieldHost {
+  readonly options = [{ value: 'rsi', label: 'RSI' }];
+}
+
+// jsdom has no layout; V246-18 measures these bottom edges in Chromium.
+describe('ControlBar aligns fields on the bottom edge (v246 §A2)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+  const rule = (selector: string) =>
+    CONTROL_BAR_SOURCE.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{[^}]*\\}`))?.[0] ?? '';
+  const phoneBlock = () =>
+    CONTROL_BAR_SOURCE.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/)?.[1] ?? '';
+
+  it('projects sb-field wrappers into both slots, Clear after the scope fields', () => {
+    const f = TestBed.createComponent(FieldHost);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    expect([...el.querySelectorAll('.filters > sb-field')].map((n) => n.id)).toEqual(['f-strategy', 'f-horizon']);
+    expect(el.querySelector('.scope > sb-field#f-units')).not.toBeNull();
+    expect(el.querySelector('.scope > sb-field + .clear')).not.toBeNull();
+  });
+  it('aligns the bar and both groups along the bottom edge, never their centres', () => {
+    expect(rule('.bar')).toContain('align-items: flex-end');
+    expect(CONTROL_BAR_SOURCE).toMatch(/\.filters,\s*\.scope \{[^}]*align-items: flex-end;/);
+    expect(CONTROL_BAR_SOURCE).not.toMatch(/align-items:\s*center/);
+  });
+  it('makes Clear exactly one control tall, the box every field ends in', () => {
+    expect(rule('.clear')).toMatch(/\sheight: var\(--control-h\);/);
+    expect(rule('.clear')).toContain('min-height: var(--control-h);');
+  });
+  it('fills each phone grid cell with its field and keeps the bottoms on one line', () => {
+    const filters = phoneBlock().match(/\.filters \{[^}]*\}/)?.[0] ?? '';
+    expect(filters).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
+    expect(filters).toContain('align-items: end');
+    expect(filters).toContain('justify-items: stretch');
+    expect(phoneBlock()).toMatch(/\.bar \{ flex-direction: column; align-items: stretch; \}/);
   });
 });

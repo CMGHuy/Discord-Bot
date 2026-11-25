@@ -27,9 +27,10 @@ import { CLOCK } from '../ui/clock';
 import { ViewportService } from '../ui/breakpoints';
 import { Button } from '../ui/button';
 import { DensityService } from '../ui/density.service';
-import { Hint } from '../ui/hint';
+import { HINT_HOVER_DELAY_MS, Hint } from '../ui/hint';
 import { ThemeService } from '../ui/theme.service';
 import { Icon } from '../ui/icon';
+import { LongPress } from '../ui/long-press';
 import { ProfileMenu } from './profile-menu';
 import { RouteLoadingService } from '../routing/route-loading.service';
 import { RouteRefreshService } from '../routing/route-refresh.service';
@@ -37,6 +38,7 @@ import { SessionStore } from '../stores/session.store';
 import { Breadcrumb } from './breadcrumb';
 import { KillswitchChip } from './killswitch-chip';
 import { MoreSheet } from './more-sheet';
+import { TabBarEditor } from './tab-bar-editor';
 import { CommandPalette, isPaletteShortcut, shortcutLabel } from './palette/command-palette';
 import { PhoneTabBar } from './phone-tab-bar';
 import { RefresherBanner } from './refresher-banner';
@@ -64,10 +66,13 @@ import { VoiceNotifier } from '../voice/voice-notifier';
  * Rendered by App instead of the login form -- it is not itself routed, so
  * there is no state in which the shell exists without a session.
  *
- * **One rail state.** The rail is always 80px, each entry an icon over its label (v202 §3): there is no
- * expanded sidebar, no overlay and no stored collapse choice. The server's
- * pre-v195 sidebar preference is left in place (an older image reads it
- * again on rollback) and is never read or written here.
+ * **One rail state.** The rail is always 64px, each entry a 24px icon in a
+ * 44x44 link named by its aria-label, with an anchored sb-hint that shows
+ * the name on hover (after HINT_HOVER_DELAY_MS), on focus and on a touch
+ * long-press (v247, spec v240 §5). There is no expanded sidebar, no overlay
+ * and no stored collapse choice. The server's pre-v195 sidebar preference
+ * is left in place (an older image reads it again on rollback) and is never
+ * read or written here.
  *
  * **Scan and bot status live here and nowhere else.** They were on the old
  * Dashboard as well as the header, which meant two renderings of one fact
@@ -86,8 +91,8 @@ const ZOOM_DEFAULT = 100;
   selector: 'sb-shell',
   imports: [
     RouterOutlet, RouterLink, AlarmChip, ToastHost,
-    ScanProgressStrip, Icon, Hint, Breadcrumb, KillswitchChip, VoiceChip, ProfileMenu, Tape,
-    Button, PhoneTabBar, MoreSheet, CommandPalette, RefresherBanner, SectionTabs,
+    ScanProgressStrip, Icon, Hint, LongPress, Breadcrumb, KillswitchChip, VoiceChip, ProfileMenu, Tape,
+    Button, PhoneTabBar, MoreSheet, TabBarEditor, CommandPalette, RefresherBanner, SectionTabs,
     LiveDock, LiveEdgeTab, LiveStrip, LiveSheet, ReadOnlyBadge, ShockPill,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -113,6 +118,10 @@ export class Shell {
    *  (v202 §1). The /ui gallery is not on it: a developer surface. */
   protected readonly railWork = computed(() => navEntriesFor(this.session.isAdmin()).filter((entry) => !entry.foot));
   protected readonly railFoot = computed(() => navEntriesFor(this.session.isAdmin()).filter((entry) => entry.foot));
+
+  /** The rail hints wait this long on hover, so a pointer crossing the rail
+   *  does not flash every label (v247 Decision 6); focus opens at once. */
+  protected readonly railHintDelay = HINT_HOVER_DELAY_MS;
 
   private readonly router = inject(Router);
   private readonly url = toSignal(
@@ -152,7 +161,7 @@ export class Shell {
   /** A sheet left open on a phone must not reappear when the window is
    *  narrowed again later: leaving phone width closes it. */
   private readonly closeMoreOffPhone = effect(() => {
-    if (!this.isPhone()) untracked(() => this.moreOpen.set(false));
+    if (!this.isPhone()) untracked(() => this.closeMore());
   });
 
   protected toggleMore(): void {
@@ -161,6 +170,18 @@ export class Shell {
 
   protected closeMore(): void {
     this.moreOpen.set(false);
+    this.closeEditor();
+  }
+
+  /** The tab-bar editor (v240 §6) opens over the More sheet and never outlives it. */
+  protected readonly editorOpen = signal(false);
+
+  protected openEditor(): void {
+    this.editorOpen.set(true);
+  }
+
+  protected closeEditor(): void {
+    this.editorOpen.set(false);
   }
 
   /**

@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-23 17:07:51 UTC",
+  "generated_at": "2026-11-25 14:55:11 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.47.0",
-    "bot": "2.19.6"
+    "ui": "1.49.0",
+    "bot": "2.19.10"
   },
   "releases": [
     {
@@ -2799,6 +2799,84 @@
       },
       "changed": [
         "ui"
+      ]
+    },
+    {
+      "date": "2026-11-24",
+      "last_seen": "2026-11-24",
+      "commit": "1cdcd94e",
+      "subject": "release(ui): 1.48.0 -- doctena night shell: 64px icon rail, Calendar destination, Bomeo Capital wordmark, editable phone tab bar (v247)",
+      "versions": {
+        "ui": "1.48.0",
+        "bot": "2.19.6"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-11-24",
+      "last_seen": "2026-11-24",
+      "commit": "614f2161",
+      "subject": "release(bot): 2.19.7 -- spa.py serves calendar as a destination; probe and smoke route lists follow (v247)",
+      "versions": {
+        "ui": "1.48.0",
+        "bot": "2.19.7"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-25",
+      "last_seen": "2026-11-25",
+      "commit": "d5a77ceb",
+      "subject": "release(bot): 2.19.8 -- v245 Phase A: per-scan indicator sharing across horizons",
+      "versions": {
+        "ui": "1.48.0",
+        "bot": "2.19.8"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-25",
+      "last_seen": "2026-11-25",
+      "commit": "1cd96af4",
+      "subject": "release(ui): 1.49.0 -- v246 ui polish: sb-field bars aligned on one bottom edge, shared sb-time-series charts, whole-R distribution",
+      "versions": {
+        "ui": "1.49.0",
+        "bot": "2.19.8"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-11-25",
+      "last_seen": "2026-11-25",
+      "commit": "e71fd4ac",
+      "subject": "release(bot): 2.19.9 -- v246 R distribution on whole-R buckets (histogram whole_r)",
+      "versions": {
+        "ui": "1.49.0",
+        "bot": "2.19.9"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-25",
+      "last_seen": "2026-11-25",
+      "commit": "49bed000",
+      "subject": "release(bot): 2.19.10 -- v245 Phase B: exact analysis cache (off), shadow check, soak report",
+      "versions": {
+        "ui": "1.49.0",
+        "bot": "2.19.10"
+      },
+      "changed": [
+        "bot"
       ]
     }
   ]

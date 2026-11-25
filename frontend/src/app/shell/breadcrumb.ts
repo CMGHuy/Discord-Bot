@@ -12,8 +12,9 @@ export interface Crumb {
   link: string | null;
 }
 
-/** Path segments past the page itself: 0 on '/trades', '/trades/calendar'
- *  and '/system'; 1 on '/trades/812' and '/trades/calendar/2026-10-01'.
+/** Path segments past the page itself: 0 on '/trades', '/calendar',
+ *  '/insights/research' and '/system'; 1 on '/trades/812', '/calendar/2026-10-01'
+ *  and '/insights/guide/glossary'.
  *  Reads the router's URL, which is past every redirect by NavigationEnd. */
 function detailDepth(url: string): number {
   const depth = url.split(/[?#]/)[0].split('/').filter((part) => part !== '').length;

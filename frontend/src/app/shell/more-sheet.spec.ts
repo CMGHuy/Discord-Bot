@@ -6,8 +6,11 @@ import { unprotected } from '@ngrx/signals/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { MoreSheet, morePageGroups } from './more-sheet';
-import { NAV_ENTRIES } from './nav';
+import { DEFAULT_PHONE_TAB_PATHS, NAV_ENTRIES, phoneTabsFor } from './nav';
+import { TAB_BAR_PREF_KEY, TAB_BAR_STORAGE, TabBarPrefs } from './tab-bar-prefs';
 import { SessionStore } from '../stores/session.store';
+
+const DEFAULT_TABS = phoneTabsFor(DEFAULT_PHONE_TAB_PATHS);
 
 @Component({ template: '' })
 class Blank {}
@@ -17,7 +20,7 @@ describe('morePageGroups (v202 §3)', () => {
     groups.map((group) => [group.id, group.label, group.links.map((link) => [link.label, link.path])]);
 
   it('lists the destinations the tab bar does not hold, each with its sections, in rail order', () => {
-    expect(shape(morePageGroups())).toEqual([
+    expect(shape(morePageGroups(NAV_ENTRIES, DEFAULT_TABS))).toEqual([
       ['more-risk', 'Risk', [['Risk', '/risk']]],
       ['more-insights', 'Insights', [['Analytics', '/insights/analytics'], ['Research', '/insights/research'], ['Reports', '/insights/reports'], ['Guide', '/insights/guide']]],
       ['more-system', 'System', [['Health', '/system'], ['Versions', '/system/versions']]],
@@ -25,16 +28,22 @@ describe('morePageGroups (v202 §3)', () => {
   });
 
   it('lists no destination the tab bar holds', () => {
-    const ids = morePageGroups().map((group) => group.id);
-    for (const id of ['more-dashboard', 'more-watchlist', 'more-trades']) expect(ids).not.toContain(id);
+    const ids = morePageGroups(NAV_ENTRIES, DEFAULT_TABS).map((group) => group.id);
+    for (const id of ['more-dashboard', 'more-watchlist', 'more-trades', 'more-calendar']) expect(ids).not.toContain(id);
   });
 
   it('keeps every destination when no tab is given, a single page linking to itself', () => {
     const groups = morePageGroups(NAV_ENTRIES, []);
-    expect(groups).toHaveLength(6);
+    expect(groups).toHaveLength(7);
     expect(shape(groups)[0]).toEqual(['more-dashboard', 'Dashboard', [['Dashboard', '/dashboard']]]);
-    expect(shape(groups)[2]).toEqual(['more-trades', 'Trades',
-      [['Book', '/trades'], ['Calendar', '/trades/calendar']]]);
+    expect(shape(groups)[2]).toEqual(['more-trades', 'Trades', [['Trades', '/trades']]]);
+    expect(shape(groups)[3]).toEqual(['more-calendar', 'Calendar', [['Calendar', '/calendar']]]);
+  });
+
+  it('follows the tab list it is given', () => {
+    const tabs = phoneTabsFor(['/dashboard', '/risk']);
+    expect(morePageGroups(NAV_ENTRIES, tabs).map((group) => group.label))
+      .toEqual(['Watchlist', 'Trades', 'Calendar', 'Insights', 'System']);
   });
 
   it('is empty for an empty model', () => {
@@ -47,25 +56,66 @@ describe('MoreSheet (v195 Phase 3)', () => {
   let el: HTMLElement;
   let closed: number;
   let searched: number;
+  let edited: number;
+  let stored: Map<string, string>;
 
-  beforeEach(() => {
+  /** An in-memory ui.tabbar, read through the closure so a test may reseed it. */
+  const storageProvider = () => ({
+    provide: TAB_BAR_STORAGE,
+    useValue: { get: (key: string) => stored.get(key) ?? null, set: (key: string, value: string) => void stored.set(key, value) },
+  });
+
+  function configure(role: 'admin' | 'viewer'): void {
     TestBed.configureTestingModule({
-      providers: [provideZonelessChangeDetection(), provideRouter([{ path: '**', component: Blank }])],
+      providers: [provideZonelessChangeDetection(), provideRouter([{ path: '**', component: Blank }]), storageProvider()],
     });
-    patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: 'admin', role: 'admin' });
+    patchState(unprotected(TestBed.inject(SessionStore)), { status: 'authenticated', username: role, role });
+  }
+
+  function create(): void {
     fixture = TestBed.createComponent(MoreSheet);
     el = fixture.nativeElement as HTMLElement;
     closed = 0;
     searched = 0;
+    edited = 0;
     fixture.componentInstance.closed.subscribe(() => (closed += 1));
     fixture.componentInstance.searchRequested.subscribe(() => (searched += 1));
+    fixture.componentInstance.editRequested.subscribe(() => (edited += 1));
     fixture.detectChanges();
+  }
+
+  beforeEach(() => {
+    stored = new Map<string, string>();
+    configure('admin');
+    create();
   });
 
   function open(): void {
     fixture.componentRef.setInput('open', true);
     fixture.detectChanges();
   }
+
+  const groupLabels = () => [...el.querySelectorAll('.group-label')].map((n) => n.textContent!.trim());
+
+  it('lists what the partner took off the bar, and drops what they put on it (v240 §6)', () => {
+    const prefs = TestBed.inject(TabBarPrefs);
+    prefs.remove('/watchlist');
+    prefs.add('/risk');
+    open();
+    expect(groupLabels()).toEqual(['Watchlist', 'Insights', 'System']);
+    prefs.remove('/risk');
+    fixture.detectChanges();
+    expect(groupLabels()).toEqual(['Watchlist', 'Risk', 'Insights', 'System']);
+  });
+
+  it('reads the stored bar, ignoring a System tab for a viewer', () => {
+    TestBed.resetTestingModule();
+    stored = new Map([[TAB_BAR_PREF_KEY, '["/dashboard","/system","/insights"]']]);
+    configure('viewer');
+    create();
+    open();
+    expect(groupLabels()).toEqual(['Watchlist', 'Trades', 'Calendar', 'Risk']);
+  });
 
   const dialog = () => el.querySelector<HTMLElement>('[role=dialog]');
 
@@ -125,5 +175,34 @@ describe('MoreSheet (v195 Phase 3)', () => {
     open();
     el.querySelector<HTMLButtonElement>('button.search')!.click();
     expect(searched).toBe(1);
+  });
+
+  it('offers Edit tab bar with the pencil, just before Close (v240 §6)', () => {
+    open();
+    const edit = el.querySelector<HTMLButtonElement>('button.edit')!;
+    expect(edit.textContent!.trim()).toBe('Edit tab bar');
+    expect(edit.querySelector('sb-icon')).not.toBeNull();
+    expect(edit.nextElementSibling!.matches('button.close')).toBe(true);
+  });
+
+  it('takes focus on Edit before asking for the editor, so focus can come back to it', () => {
+    open();
+    const edit = el.querySelector<HTMLButtonElement>('button.edit')!;
+    edit.click();
+    expect(edited).toBe(1);
+    expect(document.activeElement).toBe(edit);
+    expect(closed).toBe(0);
+  });
+
+  it('leaves Escape to the editor while it is open over the sheet', () => {
+    open();
+    fixture.componentRef.setInput('editing', true);
+    fixture.detectChanges();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(closed).toBe(0);
+    fixture.componentRef.setInput('editing', false);
+    fixture.detectChanges();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(closed).toBe(1);
   });
 });

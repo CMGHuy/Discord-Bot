@@ -25,6 +25,7 @@ from swingbot.core.edge import regime2
 from swingbot.core.infra.jsonio import read_json
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import atr_band, earnings_calendar, levels, trendlines
+from swingbot.core.market import frame_memo
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
@@ -50,6 +51,7 @@ from .embeds import _build_requirement_checks
 from .regime import get_htf_bias
 from .singletons import trade_log
 from . import risk_features
+from . import structure as analysis_structure
 
 
 log = logging.getLogger(__name__)
@@ -107,6 +109,7 @@ class ScanItem:
     trendline_candidates: object = None   # the scan's per-ticker trendline levels
     scan_price: float | None = None       # current_price this item was built at
     hard_filters: dict | None = None      # the scan's hard-filter snapshot
+    prefix_results: dict | None = None    # v245: the prefix-cache values this item was built from
 
     @property
     def all_requirements_met(self) -> bool:
@@ -885,9 +888,14 @@ def _band_live(df, current_price: float, k: float, now, ticker: str,
 
 
 def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
-                       hard_filters: dict, *, ticker: str = "", now=None) -> HorizonBuild:
+                       hard_filters: dict, *, ticker: str = "", now=None,
+                       atr14: float | None = None,
+                       prefix_results: dict | None = None) -> HorizonBuild:
     """One horizon's level map and scenarios at `current_price` (v171 D5 seam:
-    `_scan_one` at the scan price, `rescenario` at a re-quoted one)."""
+    `_scan_one` at the scan price, `rescenario` at a re-quoted one).
+    `prefix_results` (v245): the ticker's prefix-cache values for horizon-level
+    units; None computes everything directly. Trendline units are consumed once
+    per ticker in `_scan_one`; the horizon zigzag states here."""
     # Computed once here and threaded through to build_level_map() and
     # every count_confirming_strategies() call below (up to 2 scenarios x
     # 2 calls each) -- all of them run against this exact same
@@ -896,9 +904,10 @@ def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
     # necessary CPU per ticker/horizon, the dominant cost of a scan over
     # a large universe. See levels.count_confirming_strategies's docstring.
     candidates = levels.collect_candidate_levels(df, h, current_price,
-                                                   trendline_candidates=trendline_candidates)
+                                                   trendline_candidates=trendline_candidates,
+                                                   prefix_results=prefix_results)
     supports, resistances = levels.build_level_map(df, h, current_price, candidates=candidates)
-    floor_pct = levels.atr_floor_pct(df, current_price, h)
+    floor_pct = levels.atr_floor_pct(df, current_price, h, atr14=atr14)
     # Reward/stop bounds are widened toward this horizon's OWN scale
     # (h["sr_target_min_pct"] / h["max_risk_pct"], defined per-horizon
     # in strategy_types.py -- up to 22%/11% for a 9-month swing)
@@ -941,14 +950,21 @@ def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
     return HorizonBuild(candidates, supports, resistances, scenarios)
 
 
+@frame_memo.with_ticker_memo
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
               regime, effective_min_confluence: int, effective_min_confidence: int,
               rs_cache: dict = None, spy_df=None, breadth: float = None,
               live_prices: dict = None, hard_filters: dict = None,
               opex_tier_today=None, allowed_directions=None, rs_frames=None,
               funnel_source: str = short_funnel.BASE_SOURCE, funnel_mode: str | None = None,
-              io: ScanIO | None = None) -> dict:
+              io: ScanIO | None = None,
+              structure: "analysis_structure.StructureCache | None" = None, now=None) -> dict:
     """
+    `structure` (v245): the live prefix cache, passed only by the two live call
+    sites; None = compute everything (outlook, replay). `now`: the scan's single
+    clock reading for `_band_live` and `_apply_pullback_dryup`; None reads the
+    wall clock there, as before.
+
     Per-ticker analysis body of _sync_run_scan's ANALYZE phase, extracted
     so it can run inside a map_tickers() worker thread (Task E20). Handles
     everything the old inline per-ticker loop did EXCEPT the confirmation
@@ -1111,7 +1127,12 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
     # cost of the whole scan and the direct cause of the CPU pegged at
     # 100% incident this fix responds to. See trendlines.py's
     # MAX_PIVOT_SCAN_BARS and custom_scanner_levels() docstrings.
-    trendline_candidates = trendlines.custom_scanner_levels(df, current_price)
+    prefix_results = analysis_structure.ticker_prefixes(structure, ticker, df)   # v245; None without a cache
+    trendline_candidates = trendlines.custom_scanner_levels(
+        df, current_price, prefixes=analysis_structure.trendline_prefixes(prefix_results))
+    # v245 F1: ATR(14) of this same df, once per ticker rather than once per
+    # horizon inside atr_floor_pct (the horizon only scales it afterwards).
+    atr14 = levels.atr14_last(df)
 
     for horizon_key in horizons_to_scan:
         h = HORIZONS[horizon_key]
@@ -1122,7 +1143,8 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
 
         log.debug("%s (%s): building levels (price=%.2f, bars=%d)", ticker, horizon_key, current_price, bars_available)
         candidates, supports, resistances, scenarios = _horizon_scenarios(
-            df, h, current_price, trendline_candidates, hard_filters, ticker=ticker)
+            df, h, current_price, trendline_candidates, hard_filters, ticker=ticker, atr14=atr14,
+            now=now, prefix_results=prefix_results)
         log.debug("%s (%s): %d support level(s), %d resistance level(s) found",
                    ticker, horizon_key, len(supports), len(resistances))
         stats["checked"] += 1
@@ -1148,7 +1170,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
             log.debug("%s (%s): no qualifying entry point (either no genuine support/resistance on both "
                        "sides, or the reward/stop/risk-reward requirements weren't met)", ticker, horizon_key)
 
-        scenarios = _apply_pullback_dryup(scenarios, df, stats, ticker, horizon_key)
+        scenarios = _apply_pullback_dryup(scenarios, df, stats, ticker, horizon_key, now=now)
         scenarios = _apply_headroom(scenarios, supports, resistances, stats, ticker, horizon_key)
         for scenario in scenarios_for_direction(scenarios, allowed_directions):
             stats["scenarios_found"] += 1
@@ -1296,6 +1318,7 @@ def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
                 rs_percentile=rs_pctile,
                 trendline_candidates=trendline_candidates, scan_price=current_price,
                 hard_filters=hard_filters,
+                prefix_results=prefix_results,
             )
             if all_ok:
                 item.level_map = (supports, resistances)
@@ -1318,7 +1341,8 @@ def rescenario(item, df, price: float):
         return None
     horizon_key = item.result.horizon_key
     build = _horizon_scenarios(df, HORIZONS[horizon_key], price, item.trendline_candidates,
-                               _default_hard_filters(item.hard_filters), ticker=item.result.ticker)
+                               _default_hard_filters(item.hard_filters), ticker=item.result.ticker,
+                               prefix_results=item.prefix_results)
     kept = _apply_headroom(build.scenarios, build.supports, build.resistances,
                            {"failed_counts": {"headroom": 0}}, item.result.ticker, horizon_key)
     scenario = next((s for s in kept if s.direction == item.plan.direction), None)
@@ -1349,6 +1373,7 @@ class ExtraScanContext:
     opex_tier: object
     now: object = None
     io: ScanIO | None = None          # V118-7: None = LIVE_IO; a replay injects its own
+    structure: object = None          # v245: the live prefix cache; replay leaves it None
     newly_closed: list = field(default_factory=list)
     near_close: list = field(default_factory=list)
     funnel_events: list = field(default_factory=list)
@@ -1381,7 +1406,8 @@ def scan_extra_candidate(candidate, frame, context: ExtraScanContext, horizons) 
         spy_df=context.spy_df, breadth=None, live_prices=context.live_prices,
         hard_filters=context.hard_filters, opex_tier_today=context.opex_tier,
         allowed_directions=BEARISH_ONLY, rs_frames=aligned[:2],
-        funnel_source=candidate.source, funnel_mode=candidate.mode, io=context.io)
+        funnel_source=candidate.source, funnel_mode=candidate.mode, io=context.io,
+        structure=context.structure)
     context.newly_closed.extend(stats["newly_closed"])
     context.near_close.extend(stats["near_close_warnings"])
     context.funnel_events.extend(stats["funnel_events"])

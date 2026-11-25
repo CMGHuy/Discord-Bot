@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { allSources, stripComments } from './testing/all-sources';
-import { StyleRule, styleRules, withChartChrome } from './testing/style-rules';
+import { StyleRule, styleRules, withChartTokens } from './testing/style-rules';
 
 /**
  * Spec v240 §2 and §11, two source gates over every style rule in src/
@@ -49,11 +49,11 @@ const GATES: Gate[] = [
   },
 ];
 
-/** Every source's style rules, with CHART_CHROME interpolations resolved. */
+/** Every source's style rules, with shared chart tokens resolved. */
 const SOURCES = allSources().map(({ name, source }) => ({
   name,
   source,
-  rules: styleRules(name, withChartChrome(source)),
+  rules: styleRules(name, withChartTokens(source)),
 }));
 
 const offenders = (gate: Gate, rules: StyleRule[]) => rules.filter(gate.offends).map((rule) => rule.selector);
@@ -107,13 +107,16 @@ describe('v240 type gates: they still have something to check', () => {
 });
 
 describe('v240 type gates: nothing hides from them', () => {
-  /* The seven chart components whose styles interpolate CHART_CHROME. */
+  /* The chart components whose styles use shared token interpolation. */
   const INTERPOLATED = [
     'app/ui/bar-list.ts',
     'app/ui/chart-tooltip.ts',
     'app/ui/dot-plot.ts',
+    'app/ui/gauge.ts',
     'app/ui/histogram.ts',
     'app/ui/line-chart.ts',
+    'app/ui/share-bar.ts',
+    'app/ui/sparkline.ts',
     'app/ui/strip-plot.ts',
     'app/ui/waterfall.ts',
   ];
@@ -124,7 +127,7 @@ describe('v240 type gates: nothing hides from them', () => {
     expect(raw).toEqual(INTERPOLATED);
   });
 
-  it('leaves no interpolation in any rule once CHART_CHROME is substituted', () => {
+  it('leaves no interpolation in any rule once shared chart tokens are substituted', () => {
     expect(SOURCES.filter(({ rules }) => holdsExpr(rules)).map(({ name }) => name)).toEqual([]);
   });
 

@@ -1,4 +1,5 @@
 import { CHART_CHROME } from '../chart/chart-frame';
+import { SVG_CHART_TOKENS } from '../chart/chart-theme';
 import { stripComments } from './all-sources';
 
 /**
@@ -76,16 +77,16 @@ function closingBacktick(source: string, from: number): number {
   return close;
 }
 
-const CHART_CHROME_RE = /\$\{CHART_CHROME\.(\w+)\}/g;
+const CHART_TOKEN_RE = /\$\{(CHART_CHROME|SVG_CHART_TOKENS)\.(\w+)\}/g;
+const CHART_TOKENS: Record<string, Readonly<Record<string, string | number>>> = {
+  CHART_CHROME, SVG_CHART_TOKENS,
+};
 
-/**
- * The source with every `${CHART_CHROME.<key>}` replaced by the token name
- * it holds (chart-frame.ts), so a gate reads `color:var(--text-muted)`
- * where bar-list.ts and six other charts interpolate it. Any other
- * interpolation, and an unknown key, is left as written (styleRules then
- * turns it into `__expr__`).
- */
-export function withChartChrome(source: string): string {
-  const chrome: Readonly<Record<string, string>> = CHART_CHROME;
-  return source.replace(CHART_CHROME_RE, (whole, key: string) => chrome[key] ?? whole);
+/** Resolve the shared chart tokens so the CSS gates can inspect their final
+ * values. Unknown keys and other expressions stay visible to styleRules(). */
+export function withChartTokens(source: string): string {
+  return source.replace(CHART_TOKEN_RE, (whole, family: string, key: string) => {
+    const tokens = CHART_TOKENS[family];
+    return Object.hasOwn(tokens, key) ? String(tokens[key]) : whole;
+  });
 }

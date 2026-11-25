@@ -29,10 +29,13 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
     </div>
   `,
   styles: `
+    /* v246 §A2: every control sits in an sb-field whose label line is
+       always present, so field bottoms are control bottoms even when a
+       label wraps. */
     .bar {
       display: flex;
       flex-wrap: wrap;
-      align-items: center;
+      align-items: flex-end;
       justify-content: space-between;
       gap: var(--space-10);
       padding: var(--space-10) 0;
@@ -41,15 +44,17 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
     .scope {
       display: flex;
       flex-wrap: wrap;
-      align-items: center;
+      align-items: flex-end;
       gap: var(--space-10);
       min-width: 0;
     }
+    /* v246: one control tall, the box every field ends in. */
     /* v195 Phase 2: the same quiet control as sb-filter-bar's ghost
        "Clear all" -- secondary text, the raised step on hover, the accent
        only as the keyboard focus ring. It used to be an accent link, and
        the accent is for selected state. */
     .clear {
+      height: var(--control-h);
       min-height: var(--control-h);
       min-width: var(--control-h);
       padding: 0 var(--space-8);
@@ -71,7 +76,9 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
        639px, not 640: 640 is the first tablet width (BREAKPOINTS.sm). */
     @media (max-width: 639px) {
       .bar { flex-direction: column; align-items: stretch; }
-      .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+      /* v246 §A2: fields fill each phone grid cell; end aligns bottoms
+         within each row, including a final single field. */
+      .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; justify-items: stretch; }
       .scope { justify-content: flex-start; }
     }
   `,

@@ -6,6 +6,8 @@ import { describe, beforeEach, expect, it } from 'vitest';
 
 import { Viewport } from './breakpoints';
 import { Toolbar, ToolbarControl } from './toolbar';
+import { Field } from './field';
+import { TextInput } from './form-controls';
 
 @Component({
   imports: [Toolbar],
@@ -221,5 +223,46 @@ describe('the control family is flat (v195 Phase 2)', () => {
         expect(allowed, `${file}: ${selector} { ${declaration.trim()} }`).toBe(true);
       }
     }
+  });
+});
+
+@Component({
+  imports: [Toolbar, Field, TextInput],
+  template: `
+    <sb-toolbar [controls]="controls" [viewportAt]="viewportAt()">
+      <sb-field slot="ticker" label="Ticker" size="l"><sb-text-input id="ticker" placeholder="AAPL" /></sb-field>
+    </sb-toolbar>
+  `,
+})
+class FieldToolbarHost {
+  readonly viewportAt = signal<Viewport | null>('md');
+  readonly controls: ToolbarControl[] = [{ id: 'ticker', label: 'Ticker', inlineFrom: 'md' }];
+}
+
+describe('sb-toolbar aligns fields on the bottom edge (v246 §A2)', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+  it('aligns the host row and the inline row along the bottom edge, never their centres', () => {
+    for (const selector of [':host', '.toolbar-inline']) {
+      expect(toolbarRule(selector), selector).toContain('align-items: flex-end');
+      expect(toolbarRule(selector), selector).not.toContain('align-items: center');
+    }
+  });
+  it('sizes the sheet columns so the widest field (L) fits one cell', () => {
+    expect(toolbarRule('.toolbar-sheet.open')).toContain('grid-template-columns: repeat(auto-fill, minmax(var(--field-l), 1fr))');
+    expect(toolbarRule('.toolbar-sheet.open')).toContain('align-items: end');
+  });
+  it('moves a slotted sb-field between the row and the sheet as one element, control and all', () => {
+    const f = TestBed.createComponent(FieldToolbarHost);
+    f.detectChanges();
+    const el = f.nativeElement as HTMLElement;
+    const field = el.querySelector('.toolbar-inline > sb-field[slot="ticker"]');
+    expect(field).not.toBeNull();
+    expect(field!.querySelector('#ticker input')).not.toBeNull();
+    f.componentInstance.viewportAt.set('sm');
+    f.detectChanges();
+    expect(el.querySelector('.toolbar-inline > sb-field')).toBeNull();
+    expect(el.querySelector('.toolbar-sheet > sb-field[slot="ticker"]')).toBe(field);
   });
 });

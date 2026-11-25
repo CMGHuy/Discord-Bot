@@ -62,18 +62,24 @@ would misrepresent the real technical level), just flagged, since a
 very tight stop is more exposed to being clipped by ordinary daily noise
 rather than a genuine reversal.
 """
+import logging
 import math
 from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
 
-from swingbot.core.market.indicators import atr, ema, fibonacci_levels, rolling_vwap, zigzag_pivots
+from swingbot.core.infra.swallowed import swallowed
+from swingbot.core.market import frame_memo
+from swingbot.core.market.indicators import (
+    ZIGZAG_PREFIX_UNIT, atr, ema, fibonacci_levels, rolling_vwap, zigzag_pivots)
 from swingbot.core.market.atr_band import AtrBand, band_stop
 from swingbot.core.market.volatility import bollinger_bands
 from swingbot.core.market.trendlines import trendline_levels
 from swingbot.core.market.fvg import find_fair_value_gaps
 from swingbot.core.market.strategy import compute_hvn_level
+
+log = logging.getLogger(__name__)
 
 # Candidate levels within this % of each other get merged into one,
 # combined-confidence level rather than shown as separate near-duplicate
@@ -177,6 +183,12 @@ def volume_profile_nodes(df: pd.DataFrame, lookback_days: int = 180,
     return {"hvn": hvn, "lvn": lvn}
 
 
+def _ema_last(df, close, span):
+    """Last EMA value; shared per frame and span inside a frame_memo scope
+    (v245 F6: the 3m slow and 6m fast spans are both 50)."""
+    return frame_memo.memo(df, ("ema_last", span), lambda: ema(close, span).iloc[-1])
+
+
 def _fvg_candidates(df: pd.DataFrame, params) -> list:
     """Fair Value Gap candidates under v128's FVG_LEVELS_MODE.
 
@@ -184,20 +196,38 @@ def _fvg_candidates(df: pd.DataFrame, params) -> list:
     does, so a renamed field fails loudly instead of silently dropping this
     source forever. "off" emits nothing: the FVG family then loses both its
     confluence vote and its candidate prices. Charts draw gaps from
-    fvg.find_fair_value_gaps_detailed and never see this filter."""
+    fvg.find_fair_value_gaps_detailed and never see this filter.
+
+    v245 F4: inside a frame_memo scope the gaps are computed once per frame
+    and (mode, k), both still read here on every call; callers only extend
+    a list with the shared (price, label) tuples."""
     mode = params.fvg_levels_mode
     k = params.fvg_displacement_atr_k
     if mode == "off":
         return []
     try:
-        return find_fair_value_gaps(df, mode=mode, k=k)
+        return frame_memo.memo(df, ("fvg", mode, k), lambda: find_fair_value_gaps(df, mode=mode, k=k))
     except Exception:
         return []
 
 
+def _donchian_20(df: pd.DataFrame) -> tuple:
+    """The prior bar's 20-bar Donchian high and low (v245 F3: one call per
+    frame inside a frame_memo scope; the window never depends on the horizon)."""
+    return (df["High"].rolling(20).max().shift(1).iloc[-1],
+            df["Low"].rolling(20).min().shift(1).iloc[-1])
+
+
+def _horizon_pivots(df, threshold_pct, prefix_results: dict | None) -> list:
+    """zigzag_pivots at a horizon's threshold, resumed from the ticker's cached
+    prefix walk when one is carried (v245 U2); the same list either way."""
+    states = dict((prefix_results or {}).get(ZIGZAG_PREFIX_UNIT) or ())
+    return zigzag_pivots(df, threshold_pct=threshold_pct, state=states.get(threshold_pct))
+
+
 def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
                               trendline_candidates: list | None = None,
-                              params=None) -> list:
+                              params=None, prefix_results: dict | None = None) -> list:
     """
     Gathers raw (price, source_label) candidates from every method this
     bot knows: EMA fast/slow, rolling VWAP, Fibonacci retracements +
@@ -210,6 +240,8 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
     and (see fvg.py) unfilled Fair Value Gaps.
     Any single method failing (e.g. not enough data yet) is skipped
     rather than failing the whole ticker.
+    `prefix_results` (v245): the ticker's prefix-cache values; only
+    the horizon zigzag reads them; None walks it from bar 0.
 
     `trendline_candidates`: pass trendlines.custom_scanner_levels(df,
     current_price)'s own result in when the caller already has it for
@@ -228,14 +260,14 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
     close = df["Close"]
 
     try:
-        fast = float(ema(close, h["ema_fast"]).iloc[-1])
+        fast = float(_ema_last(df, close, h["ema_fast"]))
         if pd.notna(fast):
             candidates.append((fast, f"EMA{h['ema_fast']}"))
     except Exception:
         pass
 
     try:
-        slow = float(ema(close, h["ema_slow"]).iloc[-1])
+        slow = float(_ema_last(df, close, h["ema_slow"]))
         if pd.notna(slow):
             candidates.append((slow, f"EMA{h['ema_slow']}"))
     except Exception:
@@ -273,7 +305,7 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
         # Reuses the horizon's own risk-scale % as pivot granularity -- same
         # convention strategy.py's Elliott Wave detector uses, so pivots
         # found here line up with the ones that would drive that strategy.
-        pivots = zigzag_pivots(df, threshold_pct=h["max_risk_pct"])
+        pivots = _horizon_pivots(df, h["max_risk_pct"], prefix_results)
         for _, price, kind in pivots[-MAX_RECENT_PIVOTS:]:
             candidates.append((float(price), "Pivot high" if kind == "high" else "Pivot low"))
     except Exception:
@@ -283,7 +315,8 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
         # Bollinger Bands -- a classic mean-reversion/volatility envelope
         # (see volatility.py); the bands themselves double as dynamic
         # support/resistance, independent of the trend-following EMAs.
-        bb = bollinger_bands(df, window=20, num_std=2.0)
+        bb = frame_memo.memo(df, ("bollinger", 20, 2.0),
+                             lambda: bollinger_bands(df, window=20, num_std=2.0))
         upper, lower = bb["upper"].iloc[-1], bb["lower"].iloc[-1]
         if pd.notna(upper):
             candidates.append((float(upper), "Bollinger upper"))
@@ -299,8 +332,7 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
         # is always a short, fixed window regardless of horizon, so it
         # tends to catch tighter, more recent structure than the
         # horizon-scaled rolling S/R does.
-        donchian_high = df["High"].rolling(20).max().shift(1).iloc[-1]
-        donchian_low = df["Low"].rolling(20).min().shift(1).iloc[-1]
+        donchian_high, donchian_low = frame_memo.memo(df, ("donchian", 20), lambda: _donchian_20(df))
         if pd.notna(donchian_high):
             candidates.append((float(donchian_high), "Donchian high"))
         if pd.notna(donchian_low):
@@ -644,7 +676,18 @@ class Scenario:
         return all(self.constraints.values())
 
 
-def atr_floor_pct(df, current_price: float, h: dict) -> float:
+def atr14_last(df) -> float | None:
+    """The last ATR(14) value of `df`, or None when `atr` raises. v245 F1:
+    `_scan_one` computes it once per frame and passes it to every horizon's
+    `atr_floor_pct`, which would otherwise recompute the same float."""
+    try:
+        return float(atr(df, 14).iloc[-1])
+    except Exception as exc:
+        swallowed(log, "scan.levels.atr14_last", exc, level=logging.DEBUG)
+        return None
+
+
+def atr_floor_pct(df, current_price: float, h: dict, *, atr14: float | None = None) -> float:
     """
     The minimum stop distance (%) this horizon's own volatility would
     normally call for -- ATR(14) scaled by the horizon's atr_stop_multiple
@@ -652,9 +695,12 @@ def atr_floor_pct(df, current_price: float, h: dict) -> float:
     as a % of current price. A structural stop tighter than this is at
     real risk of getting clipped by ordinary daily noise rather than a
     genuine reversal.
+
+    `atr14` is `atr14_last(df)` computed once by the caller; None recomputes
+    it here (also when the caller's own computation raised).
     """
     try:
-        atr_value = float(atr(df, 14).iloc[-1])
+        atr_value = atr14 if atr14 is not None else float(atr(df, 14).iloc[-1])
         if not atr_value or current_price <= 0:
             return 0.0
         return atr_value * h.get("atr_stop_multiple", 1.5) / current_price * 100

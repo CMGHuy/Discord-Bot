@@ -24,14 +24,25 @@ describe('activity derivation', () => {
     });
   });
 
-  it('words a close with the true minus for a loss, plain for zero, plus for a gain', () => {
+  it('shows a close as the signed R alone: true minus for a loss, plain for zero, plus for a gain (v246 §A1)', () => {
     const detail = (r: number) => deriveActivity([
       row({ status: 'CLOSED', closed_at: '2026-09-11T16:20:00Z', r_multiple: r }),
     ]).find((e) => e.kind === 'closed')!.detail;
-    expect(detail(-0.3)).toBe('Closed at −0.30R');
+    expect(detail(-0.3)).toBe('−0.30R');
     expect(detail(-0.3)).not.toContain('-');
-    expect(detail(0)).toBe('Closed at 0.00R');
-    expect(detail(1.5)).toBe('Closed at +1.50R');
+    expect(detail(-0.3)).not.toContain('Closed');
+    expect(detail(0)).toBe('0.00R');
+    expect(detail(1.5)).toBe('+1.50R');
+  });
+
+  it('keeps the word Closed for a close with no R, so the row is never blank (v246 §A1)', () => {
+    for (const r of [null, undefined]) {
+      const event = deriveActivity([
+        row({ status: 'CLOSED', closed_at: '2026-09-11T16:20:00Z', r_multiple: r }),
+      ]).find((e) => e.kind === 'closed')!;
+      expect(event.detail).toBe('Closed');
+      expect(event.r).toBeNull();
+    }
   });
 
   it('carries status through a closed event too, not just opened', () => {

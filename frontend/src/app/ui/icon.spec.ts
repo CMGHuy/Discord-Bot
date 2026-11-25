@@ -189,8 +189,10 @@ describe('Icon', () => {
     }
   });
 
-  it('renders the brand icon (R1-14)', () => {
+  it('renders the brand icon, named Bomeo Capital by default (R1-14, v247)', () => {
     expect(ICON_NAMES).toContain('brand');
+    expect(render('brand').querySelector('svg path')).not.toBeNull();
+    expect(render('brand').getAttribute('title')).toBe('Bomeo Capital');
   });
 
   it('carries the search glyph the top bar and the phone bar use (v195 correction 1)', () => {

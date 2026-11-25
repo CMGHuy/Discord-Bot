@@ -829,3 +829,52 @@ describe('Watchlist for a viewer (v207)', () => {
     expect((viewer.nativeElement as HTMLElement).textContent).toContain('AAPL');
   });
 });
+
+/* -- v246 §A2 -- the symbol search in an sb-field -------------------------- */
+
+describe('Watchlist toolbar field (v246 §A2)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/workspaces/watchlist/watchlist.ts'), 'utf8');
+  const search = (el: HTMLElement) => el.querySelector('sb-toolbar [slot="search"]') as HTMLElement;
+
+  it('puts the symbol search in an L sb-field captioned Symbol, the field carrying the toolbar slot', () => {
+    const field = search(render().nativeElement as HTMLElement);
+    expect(field.tagName.toLowerCase()).toBe('sb-field');
+    expect(field.getAttribute('data-size')).toBe('l');
+    expect(field.querySelector('.field-label')!.textContent!.trim()).toBe('Symbol');
+    expect(field.querySelectorAll('.sb-label')).toHaveLength(1);
+    expect(field.querySelector('input[type="search"]')).not.toBeNull();
+  });
+
+  it('keeps the input\'s own longer name, which holds the caption (WCAG 2.5.3)', () => {
+    const name = search(render().nativeElement as HTMLElement).querySelector('input')!.getAttribute('aria-label')!;
+    expect(name).toBe('Filter the watchlist by symbol');
+    expect(name.toLowerCase()).toContain('symbol');
+  });
+
+  it('still narrows the table by symbol through the field', () => {
+    const f = render({ symbols: ['AAPL', 'XOM'] });
+    const input = search(f.nativeElement as HTMLElement).querySelector('input')!;
+    input.value = 'xo';
+    input.dispatchEvent(new Event('input'));
+    f.detectChanges();
+    expect(visibleSymbols(f)).toEqual(['XOM']);
+  });
+
+  it('wraps the toolbar\'s one text input in a field; the field, not the input, carries the slot', () => {
+    const toolbar = SOURCE.slice(SOURCE.indexOf('<sb-toolbar'), SOURCE.indexOf('</sb-toolbar>'));
+    expect(toolbar.match(/<sb-(select|text-input|date-range|segmented)\b/g)).toHaveLength(1);
+    expect(toolbar.match(/<sb-field\b/g)).toHaveLength(1);
+    expect(toolbar).not.toMatch(/<sb-text-input\b[^>]*\bslot=/);
+  });
+
+  it('leaves the + Tag form alone: a form row, not a bar, its controls captioned by themselves', () => {
+    const f = render();
+    const el = f.nativeElement as HTMLElement;
+    (el.querySelector('.add-tag') as HTMLButtonElement).click();
+    f.detectChanges();
+    const form = el.querySelector('.tag-form')!;
+    expect(form.querySelector('sb-field')).toBeNull();
+    expect(form.getAttribute('data-align')).toBe('baseline');
+    expect([...form.querySelectorAll('.sb-label')].map((n) => n.textContent!.trim())).toEqual(['Symbol', 'Tag']);
+  });
+});

@@ -85,13 +85,14 @@ describe('ScopeBar', () => {
     expect(el.querySelector('.population')!.classList).toContain('num');
   });
 
-  it('sets the unit toggle, population and freshness on one baseline', () => {
+  it('sets the unit toggle, population and freshness on one text line: the buttons\' (v179 §3.4, v246 §A2)', () => {
     const { el } = create();
     const line = el.querySelector('sb-control-bar .scope .scope-line')!;
-    expect(line.querySelector('sb-segmented')).not.toBeNull();
+    expect(line.querySelector('sb-field sb-segmented')).not.toBeNull();
     expect(line.querySelector('.population')).not.toBeNull();
     const src = readFileSync(join(process.cwd(), 'src/app/workspaces/analytics/scope-bar.ts'), 'utf8');
-    expect(src).toMatch(/\.scope-line \{[^}]*align-items: baseline/);
+    // The Units field's first line is its caption; its last is the buttons'.
+    expect(src).toMatch(/\.scope-line \{[^}]*align-items: last baseline/);
   });
 
   it('labels the money toggle with the account currency, keeping the value key (v194 B7)', () => {
@@ -113,6 +114,93 @@ describe('ScopeBar', () => {
     expect(caveat.textContent!.trim()).toBe(fxMissingText(2));
     // Tuning shows no population and no money: no caveat either.
     expect(create({ fxMissing: 2, tuning: true }).el.querySelector('.fx-caveat')).toBeNull();
+  });
+});
+
+/* -- v246 §A2 -- every scope-bar control in one sb-field ------------------ */
+
+describe('ScopeBar fields (v246 §A2)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/workspaces/analytics/scope-bar.ts'), 'utf8');
+  const PHONE = SOURCE.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/)?.[1] ?? '';
+  /** Bounds no preset produces, so the preset select reads "Custom…". */
+  const CUSTOM = { ...DEFAULT_SCOPE, from: '2026-01-05', to: '2026-02-01' };
+
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+    connection.currency.set('€');
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), { provide: ConnectionStore, useValue: connection }],
+    });
+  });
+
+  const filterFields = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>('sb-control-bar .filters > sb-field')];
+  const caption = (field: HTMLElement) => field.querySelector('.field-label')!.textContent!.trim();
+
+  it('puts Range, Ledger, Strategy, Horizon and Direction each in one sb-field, in reading order', () => {
+    const fields = filterFields(create().el);
+    expect(fields.map(caption)).toEqual(['Range', 'Ledger', 'Strategy', 'Horizon', 'Direction']);
+    expect(fields.map((f) => f.getAttribute('data-size'))).toEqual(['m', 'm', 'm', 's', 's']);
+    for (const field of fields) expect(field.querySelector('sb-select')).not.toBeNull();
+  });
+
+  it('draws one caption per field and names every select from it', () => {
+    const fields = filterFields(create().el);
+    for (const field of fields) expect(field.querySelectorAll('.sb-label'), caption(field)).toHaveLength(1);
+    expect(fields.map((f) => f.querySelector('select')!.getAttribute('aria-label')))
+      .toEqual(['Range', 'Ledger', 'Strategy', 'Horizon', 'Direction']);
+  });
+
+  it('adds the custom dates as an uncaptioned field right after Range, a whole row wherever the bar is a grid', () => {
+    const fields = filterFields(create({ scope: CUSTOM }).el);
+    expect(fields).toHaveLength(6);
+    const dates = fields[1];
+    expect(dates.querySelector('sb-date-range')).not.toBeNull();
+    expect(caption(dates)).toBe('');
+    expect(dates.getAttribute('data-size')).toBe('auto');
+    expect([...dates.classList]).toEqual(expect.arrayContaining(['no-label', 'full-row', 'range-field']));
+    expect(dates.querySelector('input.from')!.getAttribute('aria-label')).toBe('From date');
+    expect(dates.querySelector('input.to')!.getAttribute('aria-label')).toBe('To date');
+    expect(caption(fields[0])).toBe('Range');
+  });
+
+  it('hides the custom dates field until the preset reads Custom', () => {
+    const { el } = create();
+    expect(el.querySelector('sb-date-range')).toBeNull();
+    expect(filterFields(el)).toHaveLength(5);
+  });
+
+  it('captions the benchmark date range "Range" and names its inputs from it', () => {
+    const fields = filterFields(create({ benchmark: true }).el);
+    expect(fields).toHaveLength(1);
+    expect(caption(fields[0])).toBe('Range');
+    expect([...fields[0].classList]).toEqual(expect.arrayContaining(['full-row', 'range-field']));
+    expect(fields[0].querySelector('input.from')!.getAttribute('aria-label')).toBe('Range from');
+    expect(fields[0].querySelector('input.to')!.getAttribute('aria-label')).toBe('Range to');
+  });
+
+  it('puts the unit switch in a Units field on the scope line, a whole row on a phone', () => {
+    for (const inputs of [{}, { tuning: true }]) {
+      const { el } = create(inputs);
+      const field = el.querySelector<HTMLElement>('sb-control-bar .scope .scope-line > sb-field')!;
+      expect(caption(field)).toBe('Units');
+      expect(field.getAttribute('data-size')).toBe('auto');
+      expect(field.classList).toContain('full-row');
+      expect(field.querySelector('[role="group"]')!.getAttribute('aria-label')).toBe('Units');
+      expect(field.querySelector('sb-segmented')!.classList).toContain('many');
+    }
+  });
+
+  it('spans the phone grid with the date range and the phone row with the scope line', () => {
+    expect(SOURCE).toMatch(/\.range-field \{ grid-column: 1 \/ -1; \}/);
+    expect(PHONE).toMatch(/\.scope-line \{ flex: 1 1 100%; \}/);
+  });
+
+  it('wraps every select, date range and segmented of the bar in a field, none captioning itself', () => {
+    const bar = SOURCE.slice(SOURCE.indexOf('<sb-control-bar'), SOURCE.indexOf('</sb-control-bar>'));
+    expect(bar.match(/<sb-(select|text-input|date-range|segmented)\b/g)).toHaveLength(8);
+    expect(bar.match(/<sb-field\b/g)).toHaveLength(8);
+    // \s before label: ariaLabel= is not a caption.
+    expect(bar).not.toMatch(/<sb-(select|date-range)\b[^>]*\slabel=/);
   });
 });
 

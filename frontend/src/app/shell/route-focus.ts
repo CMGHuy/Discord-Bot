@@ -30,7 +30,25 @@ export function focusWorkspaceHeading(doc: Document): void {
 }
 
 /**
- * Wires `focusWorkspaceHeading` to every route change.
+ * Returns a callback that focuses the heading on every call but the first.
+ *
+ * The first navigation is the page opening, not a route change: the user did
+ * not move anywhere, and focusing the heading then only paints a focus ring
+ * around the page title on every visit.
+ */
+export function createHeadingFocuser(doc: Document): () => void {
+  let opened = false;
+  return () => {
+    if (!opened) {
+      opened = true;
+      return;
+    }
+    focusWorkspaceHeading(doc);
+  };
+}
+
+/**
+ * Wires `focusWorkspaceHeading` to every route change after the first.
  *
  * The heading does not exist yet at `NavigationEnd` itself -- the new
  * workspace has not rendered. `afterNextRender` waits for that render before
@@ -43,10 +61,11 @@ export function provideRouteFocus(): EnvironmentProviders {
       const router = inject(Router);
       const doc = inject(DOCUMENT);
       const injector = inject(Injector);
+      const focusHeading = createHeadingFocuser(doc);
       router.events
         .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
         .subscribe(() => {
-          afterNextRender(() => focusWorkspaceHeading(doc), { injector });
+          afterNextRender(focusHeading, { injector });
         });
     }),
   ]);

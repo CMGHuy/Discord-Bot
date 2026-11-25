@@ -289,6 +289,17 @@ a:hover {
   transform: translate(-50%, -50%);
 }
 
+/* v247 (spec v240 section 6) -- the host of every sbLongPress (ui/long-press.ts sets
+ * the class). A held touch on a link otherwise opens the iOS/Android link
+ * preview or starts a text selection, which fights the press-and-hold
+ * tooltip. Global, because the class lands on links inside the shell's and
+ * the tab bar's templates. */
+.sb-long-press {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 
 /* v186 D3 -- the stat-strip grid, shared by sb-stat-strip and sb-async's
  * 'tiles' skeleton so a loading strip lays out like the strip it stands in

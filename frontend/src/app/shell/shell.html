@@ -1,9 +1,11 @@
 <div class="shell">
-  <!-- v203 (spec v202 §3): an 80px labelled rail. The diamond mark heads it,
-       the five work destinations follow, System sits at the foot. Each entry
-       draws its icon over its label, so it needs no hint, and the active
-       entry's pill is the indicator. "Active" comes from the nav model
-       (navHere), not routerLinkActive, so /plans/7 lights Trades. -->
+  <!-- v247 (spec v240 §5): a 64px icon rail. The diamond mark heads it, the
+       six work destinations follow, System sits at the foot. Each entry is a
+       24px icon in a 44x44 link named by its aria-label; its sb-hint shows
+       the name beside it on hover (after the hint delay), on focus and on a
+       touch long-press, one at a time. The active entry has the accent-soft
+       fill and the accent bar on the rail's inner edge. "Active" comes from
+       the nav model (navHere), not routerLinkActive, so /plans/7 lights Trades. -->
   <nav class="rail" aria-label="Primary">
     <a class="rail-brand sb-hit" routerLink="/dashboard" #brand aria-label="Bomeo Capital — go to the Dashboard">
       <sb-icon name="brand" title="" [size]="24" />
@@ -13,12 +15,14 @@
     <ul class="nav rail-work" aria-label="Destinations">
       @for (entry of railWork(); track entry.path) {
         <li>
-          <a class="rail-link" [routerLink]="entry.path"
+          <a #link class="rail-link" [routerLink]="entry.path"
+             [attr.aria-label]="entry.label"
              [class.active]="entry.path === activePath()"
-             [attr.aria-current]="entry.path === activePath() ? 'page' : null">
-            <span class="rail-pill"><sb-icon [name]="entry.icon" title="" [size]="24" /></span>
-            <span class="rail-label">{{ entry.label }}</span>
+             [attr.aria-current]="entry.path === activePath() ? 'page' : null"
+             sbLongPress (longPress)="hint.openPinned()">
+            <sb-icon [name]="entry.icon" title="" [size]="24" />
           </a>
+          <sb-hint #hint [anchor]="link" [text]="entry.label" [openDelay]="railHintDelay" />
         </li>
       }
     </ul>
@@ -27,12 +31,14 @@
       <ul class="nav rail-foot" aria-label="System">
         @for (entry of railFoot(); track entry.path) {
           <li>
-            <a class="rail-link" [routerLink]="entry.path"
+            <a #link class="rail-link" [routerLink]="entry.path"
+               [attr.aria-label]="entry.label"
                [class.active]="entry.path === activePath()"
-               [attr.aria-current]="entry.path === activePath() ? 'page' : null">
-              <span class="rail-pill"><sb-icon [name]="entry.icon" title="" [size]="24" /></span>
-              <span class="rail-label">{{ entry.label }}</span>
+               [attr.aria-current]="entry.path === activePath() ? 'page' : null"
+               sbLongPress (longPress)="hint.openPinned()">
+              <sb-icon [name]="entry.icon" title="" [size]="24" />
             </a>
+            <sb-hint #hint [anchor]="link" [text]="entry.label" [openDelay]="railHintDelay" />
           </li>
         }
       </ul>
@@ -49,15 +55,17 @@
 
   <div class="main">
     <header class="topbar">
-      <!-- v203 (spec v202 §3, D2): the two-tone BomeoCapital wordmark leads
-           the bar on every device. On a phone the diamond sits before it (the
-           rail that carries it elsewhere is hidden there). A link, never a
-           heading: the page's one <h1> belongs to sb-page (correction 9). -->
+      <!-- v247 (spec v240 §5, D8): the two-tone "Bomeo Capital" wordmark
+           leads the bar on every device: Bomeo in the text colour, Capital in
+           the accent. &ngsp; is the space Angular keeps between the two
+           spans. On a phone the diamond sits before it (the rail that carries
+           it elsewhere is hidden there). A link, never a heading: the page's
+           one <h1> belongs to sb-page (correction 9). -->
       <a class="brand sb-hit" routerLink="/dashboard" aria-label="Bomeo Capital — go to the Dashboard">
         @if (isPhone()) {
           <sb-icon name="brand" title="" />
         }
-        <span class="word"><span>Bomeo</span><span>Capital</span></span>
+        <span class="word"><span>Bomeo</span>&ngsp;<span>Capital</span></span>
       </a>
       @if (!isPhone()) {
         <span class="topbar-divider" aria-hidden="true"></span>
@@ -193,7 +201,11 @@
        display: contents. -->
   @if (isPhone()) {
     <sb-phone-tab-bar [moreOpen]="moreOpen()" (moreRequested)="toggleMore()" />
-    <sb-more-sheet [open]="moreOpen()" (closed)="closeMore()" (searchRequested)="onSearchRequested()" />
+    <sb-more-sheet [open]="moreOpen()" [editing]="editorOpen()" (closed)="closeMore()"
+                   (searchRequested)="onSearchRequested()" (editRequested)="openEditor()" />
+    <!-- v240 §6: the tab-bar editor, over the More sheet, which stays open so
+         the editor's FocusTrap can hand focus back to its Edit button. -->
+    <sb-tab-bar-editor [open]="editorOpen()" (closed)="closeEditor()" />
   }
 
   <!-- v203: the Live dock as a sheet below 1024px -- from the right on a

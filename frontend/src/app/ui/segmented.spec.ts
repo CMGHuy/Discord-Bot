@@ -33,3 +33,72 @@ describe('Segmented is flat (v195 Phase 2)', () => {
     expect(SOURCE).not.toMatch(/\.segment:hover \{/);
   });
 });
+
+/* v246 §A2 "Phone": a group of three or more options takes the full row
+ * below 640px, split into equal segments that never wrap. Two options keep
+ * their natural width. jsdom resolves no media query, so the phone rule is
+ * read from source (the pattern of control-bar.spec.ts). */
+const TWO: SegmentOption[] = [{ value: 'compact', label: 'Compact' }, { value: 'full', label: 'Full' }];
+@Component({ imports: [Segmented], template: `<sb-segmented label="Density" [options]="options()" [(value)]="value" />` })
+class SizedHost { readonly options = signal<SegmentOption[]>(TWO); readonly value = signal('compact'); }
+
+describe('Segmented on a phone (v246 §A2)', () => {
+  beforeEach(() => { TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] }); });
+
+  const PHONE = SOURCE.match(/@media \(max-width: 639px\) \{([\s\S]*?)\n {4}\}/)?.[1] ?? '';
+  const phoneRule = (selector: string) =>
+    PHONE.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{[^}]*\\}`))?.[0] ?? '';
+
+  function mount(options: SegmentOption[]) {
+    const f = TestBed.createComponent(SizedHost);
+    f.componentInstance.options.set(options);
+    f.detectChanges();
+    const debug = f.debugElement.query((d) => d.name === 'sb-segmented');
+    return { f, host: debug.nativeElement as HTMLElement, segmented: debug.componentInstance as Segmented };
+  }
+
+  it('marks a group of three or more options as many', () => {
+    const { host, segmented } = mount(OPTIONS);
+    expect(segmented.many()).toBe(true);
+    expect(host.classList).toContain('many');
+  });
+
+  it('leaves a two-option group at its natural width', () => {
+    const { host, segmented } = mount(TWO);
+    expect(segmented.many()).toBe(false);
+    expect(host.classList).not.toContain('many');
+  });
+
+  it('follows the options: a group that grows to three becomes many', () => {
+    const { f, host } = mount(TWO);
+    f.componentInstance.options.set([...TWO, { value: 'roomy', label: 'Roomy' }]);
+    f.detectChanges();
+    expect(host.classList).toContain('many');
+  });
+
+  it('stretches a many group across its row below 640px, and only there', () => {
+    expect(phoneRule(':host(.many)')).toContain('width: 100%');
+    expect(phoneRule(':host(.many) .track')).toContain('display: flex');
+    expect(phoneRule(':host(.many) .track')).toContain('width: 100%');
+    // Outside the phone block the track stays inline-flex at its natural width.
+    expect(SOURCE).toMatch(/\n {4}\.track \{ display: inline-flex;/);
+  });
+
+  it('splits the row into equal segments that keep the touch target', () => {
+    const segment = phoneRule(':host(.many) .segment');
+    expect(segment).toContain('flex: 1 1 0');
+    expect(segment).toContain('min-width: var(--hit-min)');
+    expect(SOURCE).toMatch(/\.segment \{[^}]*min-height: var\(--control-h\)/);
+  });
+
+  it('never wraps: a row too narrow for every option scrolls instead', () => {
+    expect(SOURCE).not.toMatch(/flex-wrap:\s*wrap/);
+    expect(SOURCE).toMatch(/\.track \{[^}]*overflow-x: auto/);
+    expect(SOURCE).toMatch(/\.segment \{[^}]*white-space: nowrap/);
+  });
+
+  it('declares the phone block at 639px, not one pixel into tablet', () => {
+    expect(SOURCE).toContain('@media (max-width: 639px)');
+    expect(SOURCE).not.toContain('max-width: 640px');
+  });
+});

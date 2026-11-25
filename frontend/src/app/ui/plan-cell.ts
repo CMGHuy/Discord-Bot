@@ -64,8 +64,8 @@ import { fixed, money, num, pct, rMultiple, share } from './format';
     }
   `,
   styles: `
-    /* Three prices and two separators read as one plan. The table's scroller
-       preserves that run on every viewport, including the pinned phone mode. */
+    /* Full tables keep the plan on one line. Compact rows have no
+       horizontal scroller, so their prices may wrap. */
     .plan {
       font-family: var(--font-mono);
       font-variant-numeric: tabular-nums;
@@ -87,9 +87,8 @@ import { fixed, money, num, pct, rMultiple, share } from './format';
     .rise   { color: var(--pos); }
     .drop   { color: var(--neg); }
     /* v177 -- a trailing runner with no TP2 reads on two lines: the original
-       plan, then the trail. Each line is its own block and never wraps, so
-       the 375px no-wrap rule (dashboard.ts) holds per line; the second line
-       adds height, not width. */
+       plan, then the trail. Each line is its own block; in a full table the trail
+       adds height without widening the original plan. */
     .plan.runner { display: inline-block; }
     .line { display: block; white-space: nowrap; }
     /* A small muted label, so line 2 is never read as a second plan. */
@@ -113,6 +112,9 @@ import { fixed, money, num, pct, rMultiple, share } from './format';
        mono font the literal spaces are exactly one cell wide anyway.
        Literal spaces preserve the relationship in the text as well. */
     .sep    { color: var(--text-muted); white-space: pre; }
+    :host-context(.compact-cell) .plan,
+    :host-context(.compact-cell) .line { white-space: normal; }
+    :host-context(.compact-cell) .sep { white-space: pre-wrap; }
   `,
 })
 export class PlanCell {

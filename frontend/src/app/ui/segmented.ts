@@ -3,9 +3,21 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, input, model,
 /** One choice in a segmented control. */
 export interface SegmentOption { value: string; label: string; count?: number; }
 
-/** A single-select toggle with roving tabindex and arrow-key navigation. */
+/** A group this long takes the full row on a phone (v246 §A2). */
+const MANY_OPTIONS = 3;
+
+/**
+ * A single-select toggle with roving tabindex and arrow-key navigation.
+ *
+ * v246 §A2 "Phone": below 640px a group of three or more options (`many`)
+ * fills its row and splits it into equal segments, each at least the touch
+ * target wide; the track never wraps, so a row too narrow for every option
+ * scrolls. Two options keep their natural width. In a filter bar the group
+ * sits in `<sb-field size="auto" [fullRow]="true">`, which gives it the row.
+ */
 @Component({
   selector: 'sb-segmented', changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.many]': 'many()' },
   template: `
     <div class="track" role="group" [attr.aria-label]="label()" (keydown)="onKeydown($event)">
       @for (option of options(); track option.value; let i = $index) {
@@ -25,10 +37,19 @@ export interface SegmentOption { value: string; label: string; count?: number; }
     .segment:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
     .current { background: var(--accent-soft); color: var(--text); }
     .count { color: var(--text-muted); font-size: var(--text-chip); }
+    /* v246 §A2: 3+ options fill the phone row in equal, never-wrapping
+       segments. 639px, not 640: 640 is the first tablet width (BREAKPOINTS.sm). */
+    @media (max-width: 639px) {
+      :host(.many) { width: 100%; }
+      :host(.many) .track { display: flex; width: 100%; }
+      :host(.many) .segment { flex: 1 1 0; min-width: var(--hit-min); padding: 0 var(--space-6); }
+    }
   `,
 })
 export class Segmented {
   readonly options = input.required<SegmentOption[]>(); readonly label = input.required<string>(); readonly value = model<string>('');
+  /** Three or more options: the group takes the full row on a phone. */
+  readonly many = computed(() => this.options().length >= MANY_OPTIONS);
   private readonly segments = viewChildren<ElementRef<HTMLButtonElement>>('segment');
   protected readonly focusIndex = computed(() => Math.max(0, this.options().findIndex((option) => option.value === this.value())));
   protected onKeydown(event: KeyboardEvent): void {
