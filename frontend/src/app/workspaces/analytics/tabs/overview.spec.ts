@@ -410,3 +410,46 @@ describe('OverviewTab as-of labels (v204)', () => {
     expect(el.querySelector('sb-incomplete-note')).toBeNull();
   });
 });
+
+describe('R distribution on whole-R edges (v246 §A3)', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  const BUCKETS = [
+    { lo: -5, hi: -4, count: 1 },
+    { lo: -1, hi: 0, count: 4 },
+    { lo: 0, hi: 1, count: 3 },
+    { lo: 1, hi: 2, count: 2 },
+  ];
+
+  function withBuckets() {
+    return render({
+      performance: signal({
+        totals: { total: 40, open: 6, closed: 34 }, win_rate: 53.5, win_rate_n: 34,
+        expectancy_r: -0.136, expectancy_n: 34, derived: { total_return_pct: 4.2 },
+        distributions: { returns: [], r_multiples: BUCKETS },
+        calendar: [], rolling_wr: [], rolling_exp_r: [], relocated: {}, by_confidence: {},
+        scope: {}, n: 312,
+      }),
+    });
+  }
+
+  it('labels each bucket by its lower edge: true minus, plus for a gain, bare zero', () => {
+    const { fixture } = withBuckets();
+    expect(fixture.componentInstance.rBins().map((b) => b.label)).toEqual(['−5R', '−1R', '0R', '+1R']);
+    expect(fixture.componentInstance.rBins().map((b) => b.count)).toEqual([1, 4, 3, 2]);
+  });
+
+  it('marks only the buckets below zero as negative', () => {
+    const { fixture } = withBuckets();
+    const tab = fixture.componentInstance;
+    expect(tab.rBins().map((b) => tab.negativeBin(b))).toEqual([true, true, false, false]);
+  });
+
+  it('prints the table range with the true minus, never a hyphen', () => {
+    const { fixture } = withBuckets();
+    const range = fixture.componentInstance['rColumns'].find((c) => c.key === 'range')!;
+    expect(range.value!(BUCKETS[0])).toBe('−5R to −4R');
+    expect(range.value!(BUCKETS[2])).toBe('0R to +1R');
+    expect(String(range.value!(BUCKETS[0]))).not.toContain('-');
+  });
+});

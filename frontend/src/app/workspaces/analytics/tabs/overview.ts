@@ -417,10 +417,11 @@ export class OverviewTab {
   });
 
   readonly rBins = computed(() => (this.store.performance()?.distributions.r_multiples ?? [])
-    // Rounded to 1 place: the server's bin edges are the span divided by the
-    // bin count, so "-4.688333R" and "-3.346667R" were shipped as floats.
-    // `-0` is normalised so a bin starting at zero is not marked negative.
-    .map((b) => ({ label: `${fixed(Math.round(b.lo * 10) / 10, 1)}R`, count: b.count })));
+    // v246 §A3: the server buckets R on whole edges ([−5, −4) …), so each
+    // bucket is labelled by its lower edge: "−5R", "0R", "+1R". `signed`
+    // prints the true minus and leaves zero unsigned, so a bucket starting
+    // at zero is never marked negative by `negativeBin`.
+    .map((b) => ({ label: `${signed(b.lo, 0)}R`, count: b.count })));
   readonly monthBars = computed(() => (this.store.performance()?.calendar ?? [])
     .map((m) => ({ label: m.month, value: m.return_pct, n: m.n })));
   readonly negativeBin = (bin: { label: string }) => /^[-−]/.test(bin.label);
@@ -437,7 +438,7 @@ export class OverviewTab {
 
   protected readonly rRows = computed<RBucketRow[]>(() => this.store.performance()?.distributions.r_multiples ?? []);
   protected readonly rColumns: ColumnDef<RBucketRow>[] = [
-    { key: 'range', header: 'R range', value: (row) => `${row.lo}R to ${row.hi}R` },
+    { key: 'range', header: 'R range', value: (row) => `${signed(row.lo, 0)}R to ${signed(row.hi, 0)}R` },
     { key: 'count', header: 'Count', numeric: true, value: (row) => row.count },
   ];
   protected readonly rVisible = ['range', 'count'];
