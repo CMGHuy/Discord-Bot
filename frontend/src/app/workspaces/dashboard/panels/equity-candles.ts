@@ -18,6 +18,7 @@ import {
   IChartApi,
   ISeriesApi,
   Time,
+  TickMarkType,
   createChart,
 } from 'lightweight-charts';
 
@@ -27,7 +28,8 @@ import { Async } from '../../../ui/async';
 import { Button } from '../../../ui/button';
 import { BaselinePrimitive } from '../../../ui/chart/primitives/baseline-primitive';
 import { ChartTarget, TimeWindow, bucketEndInstant, bucketStartInstant, windowBounds, LogicalWindow, inWindowCandles, nextTimeframe, rangeStats, shouldLoadOlder } from './equity-range.model';
-import { ChartPalette, chartOptions, chartPalette, token } from '../../../ui/chart/chart-theme';
+import { ChartPalette, applyChartTheme, chartPalette, priceFormat, token } from '../../../ui/chart/chart-theme';
+import { ViewportService } from '../../../ui/breakpoints';
 import { ThemeService } from '../../../ui/theme.service';
 import { VLinePrimitive } from '../../../ui/chart/primitives/vline-primitive';
 import { EQUITY_BASES, EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
@@ -64,10 +66,26 @@ function candleSeriesColors(palette: ChartPalette) {
   };
 }
 
-/** Time on the axis for 1H/4H only; one place for render() and a theme flip,
- *  because chartOptions() alone resets timeVisible to false. */
+/** v246 §A3: room above and below the candles, so the newest candle's
+ *  last-value tag is never pushed onto the top or bottom price label. */
+export const CANDLE_SCALE_MARGINS = { top: 0.12, bottom: 0.12 } as const;
+
+/** v246 §A3: an intraday tick is labelled only on a whole hour; any other
+ *  time tick is blank. Times are Berlin wall time read as UTC (`toChartTime`),
+ *  so UTC minutes are wall minutes; the fall-back repeat (one second later)
+ *  is still its whole hour. Day, month and year ticks keep the library's
+ *  labels (`null`). */
+export function wholeTickLabel(time: Time, type: TickMarkType): string | null {
+  const timeTick = type === TickMarkType.Time || type === TickMarkType.TimeWithSeconds;
+  if (!timeTick || typeof time !== 'number') return null;
+  const at = new Date(time * 1000);
+  return at.getUTCMinutes() === 0 ? `${String(at.getUTCHours()).padStart(2, '0')}:00` : '';
+}
+
+/** Time on the axis for 1H/4H only, whole hours only; one place for create(),
+ *  render() and a theme flip, because applyChartTheme() alone resets timeVisible. */
 function timeScaleOptions(data: EquityCandlesResponse | null) {
-  return { timeVisible: data ? isIntraday(data.tf) : false, secondsVisible: false };
+  return { timeVisible: data ? isIntraday(data.tf) : false, secondsVisible: false, tickMarkFormatter: wholeTickLabel };
 }
 
 type ChartState = 'loading' | 'error' | 'empty' | 'chart';
@@ -350,6 +368,8 @@ export class EquityCandles {
   private resizeObserver: ResizeObserver | null = null;
 
   private readonly theme = inject(ThemeService);
+  /** v246 §A3: below 640px the balance above the chart is the last value. */
+  private readonly viewport = inject(ViewportService);
 
   /** Chart colours from the tokens, re-read when the theme flips (spec v225).
    *  `--text-faint` is the hollow candle's wick. */
@@ -436,6 +456,13 @@ export class EquityCandles {
     effect(() => {
       this.colors();
       untracked(() => this.restyle());
+    });
+
+    // v246 §A3: the last-value tag sits on a price label at phone height; the
+    // balance printed above the chart carries that figure there instead.
+    effect(() => {
+      const phone = this.viewport.isPhone();
+      untracked(() => this.series?.applyOptions({ lastValueVisible: !phone }));
     });
 
     effect(() => {
@@ -616,12 +643,18 @@ export class EquityCandles {
   private create(element: HTMLElement): void {
     if (this.chart) return;
     const palette = chartPalette();
-    const chart = createChart(element, chartOptions(palette));
+    // Sized by the library (autoSize); themed by the shared module, which
+    // never sets sizing and resets timeVisible, hence the time scale after it.
+    const chart = createChart(element, { autoSize: true });
+    applyChartTheme(chart, palette);
+    chart.applyOptions({ timeScale: timeScaleOptions(this.store.data()) });
     const series = chart.addSeries(CandlestickSeries, {
       ...candleSeriesColors(palette),
       priceLineVisible: false,
-      priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+      lastValueVisible: !this.viewport.isPhone(),
+      priceFormat,
     });
+    series.priceScale().applyOptions({ scaleMargins: CANDLE_SCALE_MARGINS });
     this.baseline = new BaselinePrimitive();
     series.attachPrimitive(this.baseline);
     this.seam = new VLinePrimitive();
@@ -648,7 +681,7 @@ export class EquityCandles {
     const series = this.series;
     if (!chart || !series) return;
     const palette = chartPalette();
-    chart.applyOptions(chartOptions(palette));
+    applyChartTheme(chart, palette);
     chart.applyOptions({ timeScale: timeScaleOptions(this.store.data()) });
     series.applyOptions(candleSeriesColors(palette));
   }
