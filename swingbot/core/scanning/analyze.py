@@ -25,6 +25,7 @@ from swingbot.core.edge import regime2
 from swingbot.core.infra.jsonio import read_json
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import atr_band, earnings_calendar, levels, trendlines
+from swingbot.core.market import frame_memo
 from swingbot.core.market.mtf import adjacent_aligned, macro_aligned
 from swingbot.core.market.chart_patterns import dead_cat_bounce, params_from_config
 from swingbot.core.market.strategy import HORIZONS, MIN_BARS
@@ -939,6 +940,7 @@ def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
     return HorizonBuild(candidates, supports, resistances, scenarios)
 
 
+@frame_memo.with_ticker_memo
 def _scan_one(ticker: str, df, horizons_to_scan: list, progress: "ScanProgress",
               regime, effective_min_confluence: int, effective_min_confidence: int,
               rs_cache: dict = None, spy_df=None, breadth: float = None,

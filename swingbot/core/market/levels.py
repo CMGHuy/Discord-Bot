@@ -68,6 +68,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from swingbot.core.market import frame_memo
 from swingbot.core.market.indicators import atr, ema, fibonacci_levels, rolling_vwap, zigzag_pivots
 from swingbot.core.market.atr_band import AtrBand, band_stop
 from swingbot.core.market.volatility import bollinger_bands
@@ -283,7 +284,8 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
         # Bollinger Bands -- a classic mean-reversion/volatility envelope
         # (see volatility.py); the bands themselves double as dynamic
         # support/resistance, independent of the trend-following EMAs.
-        bb = bollinger_bands(df, window=20, num_std=2.0)
+        bb = frame_memo.memo(df, ("bollinger", 20, 2.0),
+                             lambda: bollinger_bands(df, window=20, num_std=2.0))
         upper, lower = bb["upper"].iloc[-1], bb["lower"].iloc[-1]
         if pd.notna(upper):
             candidates.append((float(upper), "Bollinger upper"))
