@@ -327,6 +327,39 @@ def _analysis_cache() -> tuple[str, "analysis_structure.StructureCache | None"]:
     return mode, analysis_structure.cache_for_mode(mode)
 
 
+_CACHE_COUNTERS = ("cache_hits", "cache_misses", "cache_evictions", "cache_entries")
+
+
+def _start_analysis_cache() -> tuple[str, "analysis_structure.StructureCache | None"]:
+    """The base lane's `_analysis_cache()` at the start of its analysis phase:
+    counters and the build timer restart at zero, so the telemetry row reports
+    this scan only (v245 V245-12). The SHORT lane keeps `_analysis_cache()`."""
+    mode, cache = _analysis_cache()
+    if cache is not None:
+        cache.reset_counters()
+    return mode, cache
+
+
+def _analysis_prefix_s(cache) -> float:
+    """Seconds the analysis phase spent building cache entries; 0.0 without a cache."""
+    return round(cache.prefix_build_s, 3) if cache is not None else 0.0
+
+
+def _cache_summary(mode: str, cache) -> str:
+    """The analysis-cache clause of the INFO "Scan pass:" line."""
+    if cache is None:
+        return f"analysis cache {mode}"
+    counts = cache.stats()
+    return f"analysis cache {mode}: {counts['cache_hits']} hit(s), {counts['cache_misses']} miss(es)"
+
+
+def _cache_telemetry(mode: str, cache) -> dict:
+    """scan_telemetry fields (v245 V245-12): the mode, the counters since the
+    scan start (None without a cache) and the bot's resident memory now."""
+    counters = cache.stats() if cache is not None else dict.fromkeys(_CACHE_COUNTERS)
+    return {"cache_mode": mode, **counters, "rss_mb": analysis_structure.rss_mb()}
+
+
 def _hard_filters_snapshot(params: ScanParams | None = None) -> dict:
     """Capture every per-ticker hard filter before worker threads start."""
     if params is None:
@@ -757,7 +790,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # _scan_one always builds and returns every scenario it finds,
     # qualifying or not -- the require_confirmation gate below is applied
     # uniformly to the aggregated candidates, not decided per-ticker.
-    cache_mode, analysis_cache = _analysis_cache()
+    cache_mode, analysis_cache = _start_analysis_cache()
     scan_now = datetime.now(timezone.utc)   # one clock for the whole analysis phase (v245 Decision 3)
     log.debug("analysis cache: %s", cache_mode)
     per_ticker_results = fetch.map_tickers(
@@ -769,6 +802,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         tickers,
     )
     _finish_phase("analysis")
+    phase_durations["analysis_prefix"] = _analysis_prefix_s(analysis_cache)   # v245: a sub-total of "analysis"
 
     for per_ticker in per_ticker_results:
         if per_ticker is None:
@@ -975,8 +1009,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     alerts = []
     skipped_already_open = 0
     reversed_count = 0
-    log.info("Scan pass: %d ticker(s) evaluated, %d scenario(s) shown, %d after dedup",
-              len(tickers), len(scan_items), len(deduped))
+    log.info("Scan pass: %d ticker(s) evaluated, %d scenario(s) shown, %d after dedup; %s",
+              len(tickers), len(scan_items), len(deduped), _cache_summary(cache_mode, analysis_cache))
     requote = Requote(deduped)
     for item in requote.iter_fresh(deduped, rebuild=functools.partial(
             _rebuild_item, fresh_data=fresh_data, regimes=regimes, regime=regime,
@@ -1367,6 +1401,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             "short_funnel": funnel.snapshot(),
             **fetch.fetch_stats(),
             **_rebuild_stats(requote),
+            **_cache_telemetry(cache_mode, analysis_cache),
         }
         scan_stats.update(_provider_health_fields(tickers, fresh_data, scan_stats))
         telemetry.log_scan_telemetry(scan_stats)
