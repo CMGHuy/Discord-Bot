@@ -69,6 +69,10 @@ describe('v179: controls that grow to the hit size', () => {
     ['src/app/ui/column-picker.ts', 'label', 'min-height: var(--hit-min)'],
     ['src/app/ui/column-picker.ts', '.reset', 'min-height: var(--hit-min)'],
     ['src/app/ui/segmented.ts', '.segment', 'min-width: var(--hit-min)'],
+    // v246 §A2: every option is one control tall (44px below 1024px), and the
+    // equal phone segments of a 3+ option group never shrink under the target.
+    ['src/app/ui/segmented.ts', '.segment', 'min-height: var(--control-h)'],
+    ['src/app/ui/segmented.ts', ':host(.many) .segment', 'min-width: var(--hit-min)'],
     ['src/app/ui/form-controls.ts', '.box', 'min-width: var(--hit-min)'],
     ['src/app/workspaces/system/settings-tab.ts', '.import-file input', 'min-height: var(--control-h)'],
   ];
