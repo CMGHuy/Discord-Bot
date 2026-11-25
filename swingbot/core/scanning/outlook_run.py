@@ -39,7 +39,7 @@ from swingbot.core.tracking.origin import NEXT_SESSION
 from swingbot.scan_params import ScanParams
 
 from . import (analyze, dedup, fetch, lane_overlap, outlook_context, outlook_embeds,
-               outlook_session, qualify, scan_run, short_run)
+               outlook_session, qualify, regime_scan, scan_run, short_run)
 from .embeds import build_embed, build_simple_alert
 from .outlook_types import OutlookLine, OutlookResult
 from .plan_table import plan_numbers_for_display
@@ -145,7 +145,9 @@ def _context(frames: dict, spy, regime, breadth, bar_date: dt.date, now: dt.date
     sector_of, etf_of, sector_frames = _sector_inputs(list(frames), bar_date, now)
     return qualify.QualifyContext(
         frames=frames, spy=spy, sector_of=sector_of, etf_symbol_of=etf_of,
-        sector_frames=sector_frames, regime=regime, regimes=_regimes(spy), breadth=breadth)
+        sector_frames=sector_frames, regime=regime, regimes=_regimes(spy), breadth=breadth,
+        # v239: outlook plans carry the bear-regime stamp; None under off (no fetch, no store)
+        regime_day=regime_scan.regime_for_pass(now=now))
 
 
 def _scenario_line(item, reason: str | None = None) -> OutlookLine:

@@ -1,5 +1,6 @@
 """Primary scan alert embed renderers."""
 import logging
+from collections.abc import Mapping
 from datetime import datetime, timezone
 
 import discord
@@ -8,7 +9,7 @@ from swingbot import config
 from swingbot.core.analytics.rank import follow_breakdown, follow_score
 from swingbot.core.market import opex
 from swingbot.core import presentation as ui
-from swingbot.core.presentation import kinds
+from swingbot.core.presentation import kinds, regime_text
 from swingbot.core.presentation.instructions import market_on_open_lines
 from swingbot.core.presentation.kinds import Kind
 from swingbot.core.presentation.short_notice import FIELD_NAME as SHORT_FIELD, alert_notice
@@ -28,6 +29,28 @@ MARKET_ON_OPEN_FIELD = "At the open"
 def _market_on_open_fields(plan) -> list:
     lines = market_on_open_lines(plan) if plan is not None else []
     return [(MARKET_ON_OPEN_FIELD, "\n".join(lines), False)] if lines else []
+
+
+#: v239: the alert's regime line (shadow): what the engine WOULD do, never an order.
+REGIME_FIELD = "Trend"
+
+
+def regime_fields(plan) -> list:
+    """``[("Trend", line, False)]`` from the plan's OWN entry_context stamp, else [].
+
+    Never today's state: an old plan keeps the regime it was issued under. A plan
+    without the keys (BEAR_REGIME_MODE off, or a record from before v239) gets
+    nothing, so every builder renders exactly as before."""
+    ctx = getattr(plan, "entry_context", None)
+    if not isinstance(ctx, Mapping):
+        return []
+    line = regime_text.alert_line(ctx.get("bear_regime"), ctx.get("regime_action"))
+    return [(REGIME_FIELD, line, False)] if line else []
+
+
+def _add_regime_field(embed, plan) -> None:
+    for name, value, inline in regime_fields(plan):
+        embed.add_field(name=name, value=value, inline=inline)
 
 
 def _strategy_levels(plan) -> str:
@@ -51,6 +74,7 @@ def build_strategy_alert_embed(plan) -> "discord.Embed":
         embed.add_field(name="TP2", value=f"{plan.tp2:.2f}")
     embed.add_field(name="Ledger", value=("main" if plan.ledger == "main" else
                     "weak — P&L tracked separately, never summed into main"), inline=False)
+    _add_regime_field(embed, plan)   # v239: after the ledger
     return embed
 
 
@@ -60,7 +84,8 @@ def build_strategy_simple_embed(plan) -> "discord.Embed":
     and no fields, so it reads on a phone. Replaces the plain ``str`` that
     `_send_alerts` could never send as ``embed=``."""
     description = f"{_strategy_levels(plan)}\n{strategy_plan_line(plan)} · ledger {plan.ledger}"
-    description = "\n".join([description, *market_on_open_lines(plan)])
+    description = "\n".join([description, *market_on_open_lines(plan),
+                             *(line for _, line, _ in regime_fields(plan))])
     embed = ui.push_embed(Kind.STRATEGY_SIGNAL, plan.ticker, plan.direction, plan.strategy,
                           description=description)
     ui.apply_chrome(embed, kind=Kind.STRATEGY_SIGNAL,
@@ -218,6 +243,7 @@ def build_embed(item, explanation, perf_stats, open_positions_warning, chart_fil
     sections["plan"].extend(_quote_fields(item))
     sections["plan"].extend(_gap_risk_fields(item))
     sections["plan"].extend(_market_on_open_fields(plan_v2))
+    sections["plan"].extend(regime_fields(plan_v2))   # v239: the last plan-table field
 
     unmet = [(requirement.label, requirement.detail)
              for requirement in item.requirements if not requirement.passed]
@@ -391,6 +417,7 @@ def build_simple_alert(item) -> discord.Embed:
     if notice:
         embed.add_field(name=SHORT_FIELD, value=notice, inline=False)
     _add_quote_field(embed, item)
+    _add_regime_field(embed, plan_v2)   # v239: both branches
     return embed
 
 
