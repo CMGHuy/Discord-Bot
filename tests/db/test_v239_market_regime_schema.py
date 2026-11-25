@@ -39,6 +39,10 @@ def test_columns_key_and_state_check():
         assert t.c[name].nullable is True, name
     assert isinstance(t.c.stress.type, sa.Boolean)
     assert t.c.computed_at.type.timezone is True
+
+
+def test_state_check_constraint_and_no_indexes():
+    t = schema.market_regime_days
     checks = {c.name: str(c.sqltext) for c in t.constraints if isinstance(c, sa.CheckConstraint)}
     assert checks == {"market_regime_days_state":
                       "state IN ('BEAR', 'CORRECTION', 'NORMAL', 'UNKNOWN')"}
