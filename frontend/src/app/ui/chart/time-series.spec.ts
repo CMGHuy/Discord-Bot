@@ -13,6 +13,7 @@ import { THEME_STORAGE, ThemeService } from '../theme.service';
 import {
   TimeSeries, TimeSeriesCandle, TimeSeriesDatum, TimeSeriesFormat, TimeSeriesKind, TimeSeriesPoint, collapseByDay,
 } from './time-series';
+import { TimeScaleSync } from './time-scale-sync';
 
 // A real lightweight-charts chart is created; fancy-canvas needs matchMedia.
 installMatchMediaPolyfill();
@@ -264,5 +265,75 @@ describe('sb-time-series edge states and lifecycle (v246 §A3)', () => {
     TestBed.inject(ThemeService).set('navy');
     await fixture.whenStable();
     expect(applied).not.toHaveBeenCalled();
+  });
+});
+
+describe('sb-time-series linked scrolling (v246 §A3)', () => {
+  function spiedSync() {
+    const sync = new TimeScaleSync();
+    const release = vi.fn();
+    const register = vi.spyOn(sync, 'register').mockReturnValue(release);
+    return { sync, register, release };
+  }
+
+  /** `sync` set before the first change detection, the way a template binds it. */
+  function mountSynced(sync: TimeScaleSync) {
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(),
+        { provide: THEME_STORAGE, useValue: { get: () => 'graphite', set: () => {} } }],
+    });
+    const fixture = TestBed.createComponent(TimeSeries);
+    fixture.componentRef.setInput('kind', 'area');
+    fixture.componentRef.setInput('points', EQUITY);
+    fixture.componentRef.setInput('label', 'Equity curve');
+    fixture.componentRef.setInput('sync', sync);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('registers its chart once with the sync it is given', () => {
+    const { sync, register } = spiedSync();
+    const fixture = mountSynced(sync);
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(register).toHaveBeenCalledWith(inside(fixture).chart);
+  });
+
+  it('keeps its registration across a kind change: the chart is the same', () => {
+    const { sync, register, release } = spiedSync();
+    const fixture = mountSynced(sync);
+    set(fixture, 'kind', 'baseline');
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(release).not.toHaveBeenCalled();
+  });
+
+  it('leaves the old sync for a new one, and any sync for null', () => {
+    const first = spiedSync();
+    const second = spiedSync();
+    const fixture = mountSynced(first.sync);
+    set(fixture, 'sync', second.sync);
+    expect(first.release).toHaveBeenCalledTimes(1);
+    expect(second.register).toHaveBeenCalledWith(inside(fixture).chart);
+    set(fixture, 'sync', null);
+    expect(second.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('joins a sync set after it was created', () => {
+    const { sync, register } = spiedSync();
+    const fixture = mount('area', EQUITY);
+    expect(register).not.toHaveBeenCalled();
+    set(fixture, 'sync', sync);
+    expect(register).toHaveBeenCalledWith(inside(fixture).chart);
+  });
+
+  it('releases its sync on destroy, before the chart is removed', () => {
+    const { sync, release } = spiedSync();
+    const fixture = mountSynced(sync);
+    const chart = inside(fixture).chart!;
+    const order: string[] = [];
+    const remove = chart.remove.bind(chart);
+    release.mockImplementation(() => order.push('sync'));
+    vi.spyOn(chart, 'remove').mockImplementation(() => { order.push('chart'); remove(); });
+    fixture.destroy();
+    expect(order).toEqual(['sync', 'chart']);
   });
 });

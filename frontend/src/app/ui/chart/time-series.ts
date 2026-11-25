@@ -9,6 +9,7 @@ import type {
 
 import { ThemeService } from '../theme.service';
 import { ChartPalette, applyChartTheme, chartPalette, pctFormat, priceFormat, rFormat, themedToken } from './chart-theme';
+import { TimeScaleSync } from './time-scale-sync';
 
 export type TimeSeriesKind = 'area' | 'baseline' | 'candles';
 export type TimeSeriesFormat = 'price' | 'r' | 'pct';
@@ -100,6 +101,9 @@ export class TimeSeries {
   readonly height = input<number>(220);
   readonly label = input.required<string>();
 
+  /** v246 §A3: charts bound to one TimeScaleSync scroll together (Overview's equity and drawdown). */
+  readonly sync = input<TimeScaleSync | null>(null);
+
   private readonly plot = viewChild.required<ElementRef<HTMLDivElement>>('plot');
   private chart: IChartApi | null = null;
   private series: ISeriesApi<SeriesType> | null = null;
@@ -108,12 +112,18 @@ export class TimeSeries {
   private resizeObserver: ResizeObserver | null = null;
   private count = 0;
   private pendingFit = false;
+  private linked: TimeScaleSync | null = null;
+  private releaseSync: (() => void) | null = null;
 
   constructor() {
     effect(() => {
       const element = this.plot().nativeElement;
       const kind = this.kind();
       untracked(() => this.build(element, kind));
+    });
+    effect(() => {
+      const sync = this.sync();
+      untracked(() => this.link(sync));
     });
     effect(() => {
       const data = rows(this.kind(), this.points());
@@ -136,6 +146,7 @@ export class TimeSeries {
     if (!this.chart) {
       this.chart = createChart(element, { width: element.clientWidth, height: this.height() });
       this.observe(element);
+      this.link(this.sync());
     }
     if (this.series) this.chart.removeSeries(this.series);
     this.series = addSeries(this.chart, kind);
@@ -150,6 +161,14 @@ export class TimeSeries {
     if (typeof ResizeObserver === 'undefined') return;
     this.resizeObserver = new ResizeObserver(() => this.resize(this.height()));
     this.resizeObserver.observe(element);
+  }
+
+  /** Joins `sync`, leaving the previous group first; a no-op when nothing changed or before the chart exists. */
+  private link(sync: TimeScaleSync | null): void {
+    if (!this.chart || sync === this.linked) return;
+    this.releaseSync?.();
+    this.linked = sync;
+    this.releaseSync = sync ? sync.register(this.chart) : null;
   }
 
   private render(data: Row[]): void {
@@ -183,10 +202,13 @@ export class TimeSeries {
     }
   }
 
-  /** Observer first, chart last: nothing may call into a removed chart. */
+  /** Observer, then the sync group, then the chart: nothing may call into a removed chart. */
   private teardown(): void {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.releaseSync?.();
+    this.releaseSync = null;
+    this.linked = null;
     this.chart?.remove();
     this.chart = null;
     this.series = null;
