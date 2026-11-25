@@ -23,6 +23,7 @@ import { IfItGetsThere } from '../trades/why/if-it-gets-there';
 import { LevelsBlock } from '../trades/why/levels-block';
 import { OutcomePath } from '../trades/why/outcome-path';
 import { PlanChart } from '../trades/why/plan-chart';
+import { RegimeChip, regimeChip } from '../trades/why/regime-chip';
 import { SizingPanel } from '../trades/why/sizing-panel';
 import { WHY_SECTIONS, WhyPanel } from '../trades/why/why-panel';
 
@@ -117,6 +118,7 @@ export function shortOrderNotes(
     QualityChip,
     StatusIndicator,
     WhyPanel,
+    RegimeChip,
     LevelsBlock,
     IfItGetsThere,
     SizingPanel,
@@ -144,6 +146,10 @@ export function shortOrderNotes(
               />
             </div>
             <div class="tags">
+              <!-- v239: the regime the plan was issued under (shadow). -->
+              @if (regimeContext(); as ctx) {
+                <sb-regime-chip [context]="ctx" />
+              }
               @if (strategyLine(); as line) {
                 <span class="tag">{{ line }}</span>
               }
@@ -386,6 +392,12 @@ export class PlanDetail {
   protected readonly strategyLine = computed(() => {
     const trade = this.store.trade();
     return [trade?.strategy, trade?.horizon].filter((part) => !!part).join(' · ');
+  });
+
+  /** v239: the stamped entry_context when it carries a regime chip, else null. */
+  protected readonly regimeContext = computed(() => {
+    const ctx = this.store.detail()?.entry_context ?? null;
+    return regimeChip(ctx) ? ctx : null;
   });
 
   protected readonly orderNotes = computed(() => shortOrderNotes(this.store.detail()));

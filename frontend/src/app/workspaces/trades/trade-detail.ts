@@ -40,6 +40,7 @@ import {
   runTradeAction,
 } from './trade-actions';
 import { PlanChart } from './why/plan-chart';
+import { RegimeChip, regimeChip } from './why/regime-chip';
 import { WHY_SECTIONS, WhyPanel, WhySection } from './why/why-panel';
 import { ScoresCard } from './scores-card';
 import { hasLevelSources, LevelSourcesCard } from './level-sources-card';
@@ -138,6 +139,7 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
     ConfirmDialog,
     MetricChip,
     ExcursionEstimate,
+    RegimeChip,
     Chip,
     Hint,
     Async,
@@ -205,6 +207,10 @@ export function tradeCrumb(ticker: string | null, id: string | null): string {
                   />
                 </div>
                 <div class="tags">
+                  <!-- v239: the regime the plan was issued under (shadow). -->
+                  @if (regimeContext(); as ctx) {
+                    <sb-regime-chip [context]="ctx" />
+                  }
                   @if (trade.horizon) {
                     <span class="tag">{{ trade.horizon }}</span>
                   }
@@ -669,6 +675,12 @@ export class TradeDetail {
   protected readonly side: Signal<'Long' | 'Short' | null> = computed(() =>
     sideLabel(this.store.trade()?.direction ?? null),
   );
+
+  /** v239: the stamped entry_context when it carries a regime chip, else null. */
+  protected readonly regimeContext = computed(() => {
+    const ctx = this.store.detail()?.entry_context ?? null;
+    return regimeChip(ctx) ? ctx : null;
+  });
 
   protected readonly earningsChip: Signal<string | null> = computed(() => {
     const trade = this.store.trade();

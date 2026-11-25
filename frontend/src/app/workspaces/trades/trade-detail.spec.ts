@@ -1405,3 +1405,48 @@ describe('TradeDetail — excursion estimates on the Journal tab (v228)', () => 
     expect(el.querySelector('sb-excursion-est')).toBeNull();
   });
 });
+
+describe('TradeDetail — regime chip (v239)', () => {
+  let backend: HttpTestingController;
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([]),
+        provideHttpClient(withInterceptors([loadingInterceptor, errorInterceptor, authInterceptor])),
+        provideHttpClientTesting(),
+        { provide: LiveValuesStore, useClass: FakeLiveValues },
+        TradeDetailStore,
+        ChartStore,
+        { provide: EventStream, useValue: new FakeEventStream() },
+      ],
+    });
+    signInAs('admin');
+    backend = TestBed.inject(HttpTestingController);
+  });
+
+  function tagRow(entryContext?: Record<string, unknown>): HTMLElement {
+    const fixture = TestBed.createComponent(TradeDetail);
+    fixture.componentRef.setInput('id', ID);
+    fixture.componentRef.setInput('tab', 'overview');
+    fixture.detectChanges();
+    const detail = entryContext === undefined ? DETAIL : { ...DETAIL, entry_context: entryContext };
+    backend.expectOne(`/api/v1/trades/${ID}`).flush(tradeResponse(detail));
+    fixture.detectChanges();
+    return (fixture.nativeElement as HTMLElement).querySelector('header.head > .identity > .tags') as HTMLElement;
+  }
+
+  it('leads the tag row, under the side label, with the stamped action', () => {
+    const row = tagRow({ bear_regime: 'CORRECTION', regime_action: 'would_veto' });
+    expect(row.firstElementChild?.tagName.toLowerCase()).toBe('sb-regime-chip');
+    expect(row.querySelector('sb-regime-chip')?.textContent).toContain('× would skip');
+  });
+
+  it.each([
+    ['without entry_context', undefined],
+    ['legacy keys only', { rs_pctile: 62 }],
+    ['action none', { bear_regime: 'NORMAL', regime_action: 'none' }],
+  ])('shows no regime chip %s', (_name, ctx) => {
+    expect(tagRow(ctx).querySelector('sb-regime-chip')).toBeNull();
+  });
+});

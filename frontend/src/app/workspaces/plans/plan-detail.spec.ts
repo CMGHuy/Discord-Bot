@@ -293,6 +293,17 @@ describe('PlanDetail', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('.failed')).toBeTruthy();
     expect(navigate).not.toHaveBeenCalled();
   });
+
+  it('leads the tag row with the regime chip the plan was issued under (v239)', () => {
+    const el = render('PENDING', {}, { entry_context: { bear_regime: 'CORRECTION', regime_action: 'pullback_watch' } });
+    const row = el.querySelector('header.plan-head > .tags') as HTMLElement;
+    expect(row.firstElementChild?.tagName.toLowerCase()).toBe('sb-regime-chip');
+    expect(row.querySelector('sb-regime-chip')?.textContent).toContain('↺ pullback watch');
+  });
+
+  it('shows no regime chip on a legacy plan (v239)', () => {
+    expect(render('ACTIVE').querySelector('sb-regime-chip')).toBeNull();
+  });
 });
 
 describe('looksLikePlanId', () => {
