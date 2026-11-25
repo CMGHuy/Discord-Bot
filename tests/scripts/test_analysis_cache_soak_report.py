@@ -109,3 +109,16 @@ def test_main_excludes_the_open_session(tmp_path, capsys):
 
 def test_main_missing_file(tmp_path):
     assert soak.main(["--path", str(tmp_path / "absent.jsonl")]) == 1
+
+@pytest.mark.parametrize("diffs, expected", [(0, "WAIT"), (1, "FAIL")])
+def test_main_partial_start_day_checks_diffs_without_counting_day(tmp_path, capsys, diffs, expected):
+    path = tmp_path / "scan_telemetry.jsonl"
+    _write(path, [_row("2026-11-25T16:30:00+00:00", diffs=diffs),
+                  _row("2026-11-27T15:00:00+00:00")])
+    argv = ["--path", str(path), "--first-full-day", "2026-11-27", "--need", "2",
+            "--now", "2026-11-27T22:00:00+00:00"]
+    assert soak.main(argv) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["counted"] == ["2026-11-27"]
+    assert out["days"][0]["diffs"] == diffs
+    assert out["verdict"] == expected
