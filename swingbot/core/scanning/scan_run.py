@@ -37,7 +37,7 @@ from swingbot.core.marketdata import data_store, universe
 from swingbot.core.marketdata.watchlist import load_watchlist
 from swingbot.core.planning import account as account_module
 from swingbot.core.planning.account import UnrealizedPnL, compute_unrealized_pnl, load_account_config
-from swingbot.core.planning.params import shock_asof
+from swingbot.core.planning.params import regime_asof, shock_asof
 from swingbot.core.planning.plan_manager import log_plan_armed
 from swingbot.core.planning.plan_store import PlanStore
 from swingbot.core.planning import rebuild
@@ -46,8 +46,8 @@ from swingbot.core.tracking import plan_links
 from swingbot.core.tracking.performance import TradeLog
 from swingbot.scan_params import ScanParams
 
-from . import (analyze, dedup, fetch, lane_overlap, progress_store, rejection_recorder, runstate,
-               shock_scan, short_funnel, strategy_pass, telemetry)
+from . import (analyze, dedup, fetch, lane_overlap, progress_store, regime_scan, rejection_recorder,
+               runstate, shock_scan, short_funnel, strategy_pass, telemetry)
 from . import cache_shadow
 from . import structure as analysis_structure
 from .short_candidates import ShortReference, build_reference_rels, extra_candidates
@@ -109,7 +109,8 @@ def _skip_rejected_plan(item, require_confirmation: bool) -> None:
 
 def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, sector_of_ticker,
                              etf_symbol_of_sector, sector_etf_frames, trade_log, alerts,
-                             require_confirmation, shock_state: str | None = None) -> dict:
+                             require_confirmation, shock_state: str | None = None,
+                             regime_day=None) -> dict:
     """Run v93's opt-in path; manual checks are strictly shadow-only.
 
     The compression short's shadow evidence (compression_shadow.jsonl, scan-level reasons) accrues ONLY
@@ -138,8 +139,8 @@ def _maybe_run_strategy_pass(*,tickers, fresh_data, spy_df, regimes, rs_cache, s
                 "rs_combined": rs_factors.rs_score(pct, sector_pct) if sector_pct is not None else pct}
 
     def asof_of(ticker):
-        # v209: the scan's shock label rides on every strategy plan's asof.
-        return {**rs_asof(ticker), **shock_asof(shock_state)}
+        # v209/v239: the scan's shock label and regime day ride on every strategy plan's asof.
+        return {**rs_asof(ticker), **shock_asof(shock_state), **regime_asof(regime_day)}
 
     def rs_combined_of(ticker):
         return rs_asof(ticker).get("rs_combined")
@@ -519,16 +520,19 @@ def _trade_quote(requote, ticker: str) -> dict | None:
     return rebuild.quote_record(price, requote.age_at_persist(ticker))
 
 
-def _attach_item_plan(item, scenario, df, regimes, regime, shock_state=None) -> None:
+def _attach_item_plan(item, scenario, df, regimes, regime, shock_state=None,
+                      regime_day=None) -> None:
     """Attach the v2 plan for `scenario` at the frame's last bar's regime;
     shared by the merge loop and the v171 pre-post rebuild. `shock_state` is
-    the scan's market-shock label (v209), None under MARKET_SHOCK_MODE=off."""
+    the scan's market-shock label (v209), None under MARKET_SHOCK_MODE=off.
+    `regime_day` is the pass's RegimeDay (v239), None under BEAR_REGIME_MODE=off."""
     regime2_state = analyze._regime_at(regimes, df.index[-1] if df is not None and len(df) > 0 else None)
     analyze.attach_plan_v2(item, scenario, df,
                            item.result.ticker, item.result.horizon_key,
                            level_map=item.level_map, regime=regime,
                            rs_percentile=item.rs_percentile, breadth=item.breadth,
-                           regime2_state=regime2_state, shock_state=shock_state)
+                           regime2_state=regime2_state, shock_state=shock_state,
+                           regime_day=regime_day)
     if item.plan_v2 is not None:
         item.plan_v2.regime_aligned = not (
             item.htf_info and item.htf_info.get("counter_trend", False)
@@ -536,14 +540,15 @@ def _attach_item_plan(item, scenario, df, regimes, regime, shock_state=None) -> 
 
 
 def _rebuild_item(item, price, *, fresh_data, regimes, regime, require_confirmation,
-                  shock_state=None):
+                  shock_state=None, regime_day=None):
     """v171 D5: rebuild `item` at `price` from the scan's own frame. A drop
     revokes the confirmation, so it consumes no cooldown and no dedup."""
     df = fresh_data.get(item.result.ticker)
     outcome = rebuild.rebuild_before_post(
         item, price,
         rescenario=lambda p: analyze.rescenario(item, df, p),
-        attach=lambda s: _attach_item_plan(item, s, df, regimes, regime, shock_state))
+        attach=lambda s: _attach_item_plan(item, s, df, regimes, regime, shock_state,
+                                           regime_day))
     if not outcome.kept:
         item.plan_v2_rejected = outcome.reason
         _skip_rejected_plan(item, require_confirmation)
@@ -767,6 +772,10 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     shock_state = _shock_state_for_pass(
         step_shock=step_shock, frames=fresh_data, live_prices=shock_prices,
         sector_of=sector_of_ticker, quotes_at=quotes_at, spy_df=spy_df)
+    # v239: the bear-regime day for the next session (compute or read, written once,
+    # notice only from the winning insert). Never raises; None under
+    # BEAR_REGIME_MODE=off or on any failure, and then no plan carries the keys.
+    regime_day = regime_scan.regime_for_pass()
 
     # Market context (P0): stamp every crawled frame with the ctx_* block so
     # entry_filters.entries_for() can read the regime straight off `df`. This
@@ -987,7 +996,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
                 # timing exactly -- a still-debouncing scenario no longer pays
                 # for plan construction on every scan pass.
                 _attach_item_plan(item, item.plan, fresh_data.get(item.result.ticker),
-                                  regimes, regime, shock_state=shock_state)
+                                  regimes, regime, shock_state=shock_state,
+                                  regime_day=regime_day)
                 if (config.PLAN_ENGINE_V2 == "on"
                         and getattr(item, "plan_v2_rejected", None)):
                     filtered_by_rr += 1
@@ -1084,7 +1094,8 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     requote = Requote(deduped)
     for item in requote.iter_fresh(deduped, rebuild=functools.partial(
             _rebuild_item, fresh_data=fresh_data, regimes=regimes, regime=regime,
-            require_confirmation=require_confirmation, shock_state=shock_state)):
+            require_confirmation=require_confirmation, shock_state=shock_state,
+            regime_day=regime_day)):
         if runstate.is_stop_requested():
             log.info("Alert building: stop requested -- ending early (%d/%d alert(s) built so far)",
                       len(alerts), len(deduped))
@@ -1431,7 +1442,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
         rs_cache=rs_cache, sector_of_ticker=sector_of_ticker,
         etf_symbol_of_sector=etf_symbol_of_sector, sector_etf_frames=sector_etf_frames,
         trade_log=trade_log, alerts=alerts, require_confirmation=require_confirmation,
-        shock_state=shock_state)
+        shock_state=shock_state, regime_day=regime_day)
 
     # Filled in only now that the alert-building loop (which is what actually
     # computes it) has finished -- lets callers explain gaps like "2

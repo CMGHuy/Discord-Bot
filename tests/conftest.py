@@ -136,6 +136,9 @@ def _pin_dotenv_settings(config, monkeypatch):
     # config.DATABASE_URL (the .env database), not the per-worker test engine.
     # Off for every test; recorder tests switch it on with their own database.
     monkeypatch.setattr(config, "FEED_POSTS_ENABLED", False)
+    # v239: the bear-regime pass fetches SPY/^VIX and writes market_regime_days;
+    # off for every test, the regime tests switch it on with their own fakes.
+    monkeypatch.setattr(config, "BEAR_REGIME_MODE", "off")
     # Strategy/plan knobs a deployment tunes in .env; the goldens and witnesses
     # replay the shipped defaults.
     by_key = {f.key: f for f in config.FIELDS}

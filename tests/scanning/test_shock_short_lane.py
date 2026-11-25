@@ -66,7 +66,7 @@ def test_the_lane_state_reads_the_stored_label_once(monkeypatch):
     assert reads == [{}]
     assert lane == {"sector_of": {"AAA": "Tech"}, "etf_symbol_of": {"Tech": "XLK"},
                     "sector_frames": {"XLK": "frame"}, "spy": "spy", "regime": "regime",
-                    "regimes": "series", "shock_state": "SHOCK"}
+                    "regimes": "series", "shock_state": "SHOCK", "regime_day": None}
 
 
 def test_under_off_the_lane_carries_no_label(monkeypatch):
