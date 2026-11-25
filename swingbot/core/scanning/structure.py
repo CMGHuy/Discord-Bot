@@ -12,10 +12,12 @@ import logging
 import threading
 import time
 from collections import OrderedDict
+from dataclasses import dataclass
 from typing import Callable
 
 from swingbot import config
 from swingbot.core.infra import store_generation
+from swingbot.core.market import trendlines
 
 log = logging.getLogger(__name__)
 
@@ -151,3 +153,51 @@ def apply_config_change(changed: dict) -> None:
         STRUCTURE_CACHE.resize(config.STRUCTURE_CACHE_MAX)
     STRUCTURE_CACHE.clear()
     log.info("analysis cache cleared: %d setting(s) changed", len(changed))
+
+
+TRENDLINE_UNITS = {"support": "trendline:support", "resistance": "trendline:resistance"}
+
+
+@dataclass(frozen=True)
+class PrefixUnit:
+    """``build(df) -> (fingerprint, builder)``; a horizon-specific unit names its horizon."""
+    name: str
+    build: Callable
+
+
+def _trendline_unit(side: str) -> PrefixUnit:
+    def build(df):
+        trimmed, _ = trendlines.trimmed_frame(df)
+        m = trendlines.prefix_length(trimmed)
+        return prefix_fingerprint(trimmed, m), lambda: trendlines.build_trendline_prefix(trimmed, side, m)
+    return PrefixUnit(TRENDLINE_UNITS[side], build)
+
+
+PREFIX_UNITS: tuple[PrefixUnit, ...] = tuple(_trendline_unit(side) for side in ("support", "resistance"))
+
+
+def _unit_value(cache: StructureCache, ticker: str, unit: PrefixUnit, df):
+    try:
+        fingerprint, builder = unit.build(df)
+    except Exception as exc:
+        log.warning("analysis cache: keying %s failed for %s; computing uncached this scan: %s",
+                    unit.name, ticker, exc)
+        return None
+    return cache.get_or_build((ticker, unit.name, fingerprint), builder, ticker=ticker)
+
+
+def ticker_prefixes(cache: StructureCache | None, ticker: str, df) -> dict | None:
+    """Unit name -> cached value for this ticker's frame; a unit whose build
+    failed is absent (its consumer computes it directly). None without a cache."""
+    if cache is None or df is None:
+        return None
+    found = {unit.name: _unit_value(cache, ticker, unit, df) for unit in PREFIX_UNITS}
+    return {name: value for name, value in found.items() if value is not None}
+
+
+def trendline_prefixes(prefix_results: dict | None) -> dict | None:
+    """side -> TrendlinePrefix for custom_scanner_levels; None when there are none."""
+    if not prefix_results:
+        return None
+    found = {side: prefix_results.get(name) for side, name in TRENDLINE_UNITS.items()}
+    return {side: value for side, value in found.items() if value is not None} or None
