@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-25 10:20:54 UTC",
+  "generated_at": "2026-11-25 12:21:55 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.48.0",
-    "bot": "2.19.8"
+    "ui": "1.49.0",
+    "bot": "2.19.9"
   },
   "releases": [
     {
@@ -2835,6 +2835,32 @@
       "versions": {
         "ui": "1.48.0",
         "bot": "2.19.8"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-25",
+      "last_seen": "2026-11-25",
+      "commit": "1cd96af4",
+      "subject": "release(ui): 1.49.0 -- v246 ui polish: sb-field bars aligned on one bottom edge, shared sb-time-series charts, whole-R distribution",
+      "versions": {
+        "ui": "1.49.0",
+        "bot": "2.19.8"
+      },
+      "changed": [
+        "ui"
+      ]
+    },
+    {
+      "date": "2026-11-25",
+      "last_seen": "2026-11-25",
+      "commit": "e71fd4ac",
+      "subject": "release(bot): 2.19.9 -- v246 R distribution on whole-R buckets (histogram whole_r)",
+      "versions": {
+        "ui": "1.49.0",
+        "bot": "2.19.9"
       },
       "changed": [
         "bot"
