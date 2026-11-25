@@ -47,6 +47,7 @@ from swingbot.scan_params import ScanParams
 
 from . import (analyze, dedup, fetch, lane_overlap, progress_store, rejection_recorder, runstate,
                shock_scan, short_funnel, strategy_pass, telemetry)
+from . import structure as analysis_structure
 from .short_candidates import ShortReference, build_reference_rels, extra_candidates
 from .short_reference import completed_frame as _completed, etf_for_sector
 from .analyze import paper_trade_decision
@@ -318,6 +319,12 @@ def _scan_tickers() -> list:
                  if s not in set(tickers)]
         tickers = tickers + extra
     return tickers
+
+
+def _analysis_cache() -> tuple[str, "analysis_structure.StructureCache | None"]:
+    """ANALYSIS_CACHE and the cache it selects, read once per scan (v245)."""
+    mode = analysis_structure.analysis_cache_mode()
+    return mode, analysis_structure.cache_for_mode(mode)
 
 
 def _hard_filters_snapshot(params: ScanParams | None = None) -> dict:
@@ -750,11 +757,15 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # _scan_one always builds and returns every scenario it finds,
     # qualifying or not -- the require_confirmation gate below is applied
     # uniformly to the aggregated candidates, not decided per-ticker.
+    cache_mode, analysis_cache = _analysis_cache()
+    scan_now = datetime.now(timezone.utc)   # one clock for the whole analysis phase (v245 Decision 3)
+    log.debug("analysis cache: %s", cache_mode)
     per_ticker_results = fetch.map_tickers(
         lambda t: analyze._scan_one(t, fresh_data.get(t), horizons_to_scan, progress, regime, effective_min_confluence,
                             effective_min_confidence,
                             rs_cache=rs_cache, spy_df=spy_df, breadth=breadth, live_prices=live_prices,
-                            hard_filters=hard_filters, opex_tier_today=opex_tier_today),
+                            hard_filters=hard_filters, opex_tier_today=opex_tier_today,
+                            structure=analysis_cache, now=scan_now),
         tickers,
     )
     _finish_phase("analysis")
