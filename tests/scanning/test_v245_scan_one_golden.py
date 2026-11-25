@@ -2,6 +2,7 @@
 
 A golden failure after a v245 change is a behaviour change: stop and report,
 never regenerate (index § Global Constraints)."""
+import os
 from datetime import timezone
 
 import numpy as np
@@ -10,8 +11,12 @@ import pytest
 
 from swingbot import config
 from swingbot.core.scanning import analyze
-from tests.scanning.v245_golden_cases import (CASE_BY_NAME, CASES, GOLDEN_NOW, first_diff,
-                                              frozen_clock, run_case, snapshot)
+from tests.scanning.v245_golden_cases import (CASE_BY_NAME, CASES, GOLDEN_NOW, GOLDEN_PATH,
+                                              REGEN_ENV, first_diff, frozen_clock, load_golden,
+                                              run_case, snapshot, write_golden)
+
+REGEN = os.environ.get(REGEN_ENV) == "1"
+LONG_HORIZONS = {"4m", "5m", "6m", "7m", "8m", "9m"}
 
 
 def test_clock_is_frozen_for_analyze(monkeypatch):
@@ -87,3 +92,38 @@ def test_first_diff_names_the_path():
     assert first_diff({"a": [1, 2]}, {"a": [1, 3]}) == "$.a[1]: 2 != 3"
     assert first_diff({"a": 1}, {"b": 1}) == "$.a: present on one side only"
     assert first_diff([1], [1, 2]) == "$: length 1 != 2"
+
+
+@pytest.mark.skipif(not REGEN, reason=f"set {REGEN_ENV}=1 to rewrite the golden")
+def test_regenerate_golden(monkeypatch):
+    frozen_clock(monkeypatch)
+    write_golden({case.name: run_case(case) for case in CASES})
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c.name)
+def test_scan_one_matches_golden(case, monkeypatch):
+    frozen_clock(monkeypatch)
+    golden = load_golden()
+    assert case.name in golden, f"{case.name} missing from {GOLDEN_PATH.name}"
+    got = run_case(case)
+    assert got == golden[case.name], first_diff(got, golden[case.name])
+
+
+def test_golden_holds_exactly_the_cases():
+    assert sorted(load_golden()) == sorted(case.name for case in CASES)
+
+
+def test_golden_exercises_the_analysis():
+    """The fixture frames reach every stage the v245 refactors touch."""
+    golden = load_golden()
+    items = [item for doc in golden.values() for item in doc["items"]]
+    assert len(items) >= 10
+    assert {item["plan"]["direction"] for item in items} == {"bullish", "bearish"}
+    assert {item["all_requirements_met"] for item in items} == {True, False}
+    assert len({item["result"]["horizon_key"] for item in items}) >= 3
+    assert any(item["trendline_candidates"] for item in items), "custom trendline scanner never fired"
+    assert any(item["level_map"] for item in items), "no fully qualifying item staged a level map"
+    assert golden["long_completed"]["checked"] == 10
+    short = {item["result"]["horizon_key"] for item in golden["short_history_completed"]["items"]}
+    assert not short & LONG_HORIZONS
+    assert golden["short_history_completed"]["checked"] <= 4
