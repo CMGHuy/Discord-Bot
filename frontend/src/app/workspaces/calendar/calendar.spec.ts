@@ -842,8 +842,14 @@ describe('Calendar totals: one stat tile (v179 §3.3)', () => {
     expect(calendar.monthWinRate()).toBe('33.3%');
   });
 
-  it('keeps the metric toggle cells a hit-minimum wide: the one-character currency cell was 29px (v179 layout audit)', () => {
-    expect(SOURCE).toMatch(/\.metric button \{[^}]*min-width:\s*var\(--hit-min\)/);
+  it('draws the metric switch with the shared segmented, whose cells keep the hit minimum (v179 layout audit, v246 §A2)', () => {
+    // The one-character currency cell was 29px wide. sb-segmented's .segment
+    // carries min-width: var(--hit-min) (pinned in ui/hit-area.spec.ts).
+    // A CSS rule starting a line; `store.metric()` in the class is not one.
+    expect(SOURCE).not.toMatch(/^\s*\.metric\b/m);
+    expect(SOURCE).not.toContain('variant="segment"');
+    const segmented = readFileSync(join(process.cwd(), 'src/app/ui/segmented.ts'), 'utf8');
+    expect(segmented).toMatch(/\.segment \{[^}]*min-width: var\(--hit-min\)/);
   });
 
   it('restyles no tile from outside and fixes no row height', () => {
@@ -990,7 +996,7 @@ describe('Calendar on sb-page (v195 Phase 4, §5.2)', () => {
     const scope = el(fixture).querySelector('sb-page [page-scope]')!;
     expect(scope.tagName.toLowerCase()).toBe('sb-control-row');
     expect(scope.querySelector('.months')).not.toBeNull();
-    expect(scope.querySelector('.metric')).not.toBeNull();
+    expect(scope.querySelector('sb-segmented')).not.toBeNull();
     expect(scope.querySelectorAll('sb-select')).toHaveLength(2);
     expect(scope.querySelector('.danger, .danger-quiet')).toBeNull();
   });
@@ -1063,6 +1069,85 @@ describe('Calendar on sb-page (v195 Phase 4, §5.2)', () => {
     expect(SOURCE).toMatch(/import \{ Page \} from '\.\.\/\.\.\/ui\/page';/);
     expect(SOURCE).not.toContain('<sb-section-head');
     expect(SOURCE).not.toMatch(/import \{ SectionHead \}/);
+  });
+});
+
+/* -- v246 §A2 -- the month row: every control in one sb-field ------------ */
+
+describe('Calendar month row in sb-field (v246 §A2)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/workspaces/calendar/calendar.ts'), 'utf8');
+
+  async function scope(): Promise<{ fixture: ComponentFixture<Calendar>; row: HTMLElement }> {
+    const fixture = seed();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, row: el(fixture).querySelector('sb-page [page-scope]') as HTMLElement };
+  }
+  const fields = (row: HTMLElement) => [...row.querySelectorAll<HTMLElement>('.row > sb-field')];
+  const showButtons = (row: HTMLElement) => [...fields(row)[1].querySelectorAll<HTMLButtonElement>('sb-segmented button')];
+
+  it('puts the arrows, the Show switch and both selects each in one sb-field, in reading order', async () => {
+    const { row } = await scope();
+    const all = fields(row);
+    expect(all.map((f) => f.querySelector('.field-label')!.textContent!.trim())).toEqual(['', 'Show', 'Strategy', 'Horizon']);
+    expect(all.map((f) => f.getAttribute('data-size'))).toEqual(['auto', 'auto', 'm', 's']);
+    expect(all[0].querySelector('.months button[aria-label="Previous month"]')).not.toBeNull();
+    expect(all[0].querySelector('.months button[aria-label="Next month"]')).not.toBeNull();
+    expect(all[1].querySelector('sb-segmented')).not.toBeNull();
+    expect(all[2].querySelector('sb-select')).not.toBeNull();
+    expect(all[3].querySelector('sb-select')).not.toBeNull();
+  });
+
+  it('gives the arrows and the switch a whole phone row, the arrows without a filler line there', async () => {
+    const [month, show, strategy] = fields((await scope()).row);
+    expect(month.classList).toContain('full-row');
+    expect(month.classList).toContain('no-label');
+    expect(show.classList).toContain('full-row');
+    expect(show.classList).not.toContain('no-label');
+    expect(strategy.classList).not.toContain('full-row');
+  });
+
+  it('draws one caption per field and names the selects from them', async () => {
+    const { row } = await scope();
+    for (const field of fields(row)) expect(field.querySelectorAll('.sb-label')).toHaveLength(1);
+    const selects = [...row.querySelectorAll('sb-select select')];
+    expect(selects.map((s) => s.getAttribute('aria-label'))).toEqual(['Strategy', 'Horizon']);
+  });
+
+  it('names the switch "Show" and lists the four metrics in order', async () => {
+    const { row } = await scope();
+    expect(fields(row)[1].querySelector('[role="group"]')!.getAttribute('aria-label')).toBe('Show');
+    const labels = showButtons(row).map((b) => b.textContent!.trim());
+    expect(labels).toHaveLength(4);
+    expect(labels.slice(1)).toEqual(['R', 'Trades', 'Win rate']);
+  });
+
+  it('switches the metric from the segmented and presses the chosen one', async () => {
+    const { fixture, row } = await scope();
+    showButtons(row)[1].click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.store.metric()).toBe('r');
+    expect(showButtons(row).map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true', 'false', 'false']);
+    expect(el(fixture).querySelector('.cell[data-date="2026-08-03"] .value')?.textContent).toContain('R');
+  });
+
+  it('ignores a value that is not a calendar metric', async () => {
+    const { fixture } = await scope();
+    const before = fixture.componentInstance.store.metric();
+    (fixture.componentInstance as unknown as { onMetric(v: string): void }).onMetric('sharpe');
+    expect(fixture.componentInstance.store.metric()).toBe(before);
+  });
+
+  it('opts the month row into bottom-edge alignment', async () => {
+    expect((await scope()).row.getAttribute('data-align')).toBe('end');
+  });
+
+  it('keeps every select and segmented of the row inside a field in the template', () => {
+    const row = SOURCE.slice(SOURCE.indexOf('<sb-control-row page-scope align="end">'), SOURCE.indexOf('</sb-control-row>'));
+    expect(row).not.toBe('');
+    expect(row.match(/<sb-(select|segmented)\b/g)).toHaveLength(3);
+    expect(row.match(/<sb-field\b/g)).toHaveLength(4);
+    expect(row).not.toContain('role="group" aria-label="Metric"');
   });
 });
 
