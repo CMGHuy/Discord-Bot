@@ -88,6 +88,17 @@ describe('ApiClient — scope and analytics', () => {
     expect(got).toEqual(body);
   });
 
+  it('marketRegime GETs /market/regime with no params and returns the body untouched', () => {
+    let got: unknown;
+    api.marketRegime().subscribe((r) => (got = r));
+    const req = http.expectOne((r) => r.url.endsWith('/market/regime'));
+    expect(req.request.method).toBe('GET');
+    expect(req.request.params.keys()).toEqual([]);
+    const body = { mode: 'shadow', today: null, history: [], episode: null };
+    req.flush(body);
+    expect(got).toEqual(body);
+  });
+
   it('reportExpectancyAttribution GETs /reports/expectancy-attribution and returns the envelope untouched', () => {
     let got: unknown;
     api.reportExpectancyAttribution().subscribe((r) => (got = r));
