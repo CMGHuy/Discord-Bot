@@ -33,6 +33,28 @@ export { token, tokenPx };
  * built after a token change gets the new values.
  */
 
+/* There are no hex fallbacks here any more, and that is the point.
+ *
+ * There used to be eight — SR3's audit classified them as the one permitted
+ * exemption to "no hex outside `tokens.css`" — and they existed only for
+ * jsdom, where nothing had ever loaded the stylesheet so every custom property
+ * read back empty. They were already stale when the audit found them: they
+ * still held the v20 palette that SR2 had replaced. A stale fallback does not
+ * throw and does not look broken; it silently paints the previous design
+ * wherever the token read fails.
+ *
+ * `src/test-setup.ts` now injects the real `tokens.css` into the test document
+ * (read off disk, so the values are the file's own — see that file for why
+ * `?raw` does not work here), and jsdom resolves custom properties from an
+ * injected `<style>`. So the fallback's only caller
+ * is gone, and the values cannot go stale because there is no second copy of
+ * them anywhere.
+ *
+ * An empty read is still tolerated rather than thrown on: a chart mounted
+ * before the stylesheet lands should be the wrong colour for a frame, not a
+ * crash that takes the workspace with it. lightweight-charts ignores an empty
+ * colour string. */
+
 // Canvas colours come from the active stylesheet. themedToken reads Navy when a token is missing.
 
 export interface ChartPalette {
