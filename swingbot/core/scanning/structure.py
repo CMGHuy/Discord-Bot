@@ -221,3 +221,14 @@ def trendline_prefixes(prefix_results: dict | None) -> dict | None:
         return None
     found = {side: prefix_results.get(name) for side, name in TRENDLINE_UNITS.items()}
     return {side: value for side, value in found.items() if value is not None} or None
+
+
+def rss_mb(status_path: str = "/proc/self/status") -> float | None:
+    """This process's resident memory in MB (``VmRSS`` kB / 1024, one decimal);
+    None where the file or the line is missing or unreadable (Windows, macOS)."""
+    try:
+        with open(status_path, encoding="ascii", errors="replace") as handle:
+            line = next((row for row in handle if row.startswith("VmRSS:")), None)
+        return None if line is None else round(int(line.split()[1]) / 1024, 1)
+    except (OSError, ValueError, IndexError):
+        return None
