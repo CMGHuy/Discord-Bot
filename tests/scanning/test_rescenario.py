@@ -78,9 +78,9 @@ def test_rescenario_rebuilds_at_the_new_price_from_the_stored_inputs(loose, monk
     seen = {}
     real_collect, real_build = levels.collect_candidate_levels, levels.build_scenarios
 
-    def collect(df_, h, price, trendline_candidates=None):
+    def collect(df_, h, price, trendline_candidates=None, **kw):
         seen["collect"] = (price, trendline_candidates)
-        return real_collect(df_, h, price, trendline_candidates=trendline_candidates)
+        return real_collect(df_, h, price, trendline_candidates=trendline_candidates, **kw)
 
     def build(price, *a, **k):
         seen["build_price"] = price

@@ -30,13 +30,13 @@ def test_cache_on_matches_the_golden_cold_and_warm(case, monkeypatch):
         assert got == golden, first_diff(got, golden)
 
 
-def test_a_warm_scan_hits_both_trendline_units(monkeypatch):
+def test_a_warm_scan_hits_every_unit(monkeypatch):
     frozen_clock(monkeypatch)
     cache = StructureCache(100)
     run_case(LONG, structure=cache)
     cache.reset_counters()
     run_case(LONG, structure=cache)
-    assert cache.stats()["cache_hits"] == 2 and cache.stats()["cache_misses"] == 0
+    assert cache.stats()["cache_hits"] == len(structure.PREFIX_UNITS) and cache.stats()["cache_misses"] == 0
 
 
 def test_a_failing_prefix_build_warns_and_computes_uncached(monkeypatch, caplog):
@@ -50,7 +50,7 @@ def test_a_failing_prefix_build_warns_and_computes_uncached(monkeypatch, caplog)
     with caplog.at_level(logging.WARNING, logger=structure.__name__):
         got = run_case(LONG, structure=cache)
     assert got == load_golden()[LONG.name]
-    assert "GOLD" in caplog.text and cache.stats()["cache_entries"] == 0
+    assert "GOLD" in caplog.text and cache.stats()["cache_entries"] == len(structure.PREFIX_UNITS) - len(structure.TRENDLINE_UNITS)
 
 
 def test_now_reaches_both_clock_readers(monkeypatch):
@@ -88,7 +88,7 @@ def _items(df, cache):
 def test_items_carry_prefix_results_and_rescenario_never_looks_up(loose, monkeypatch):
     df = _structured_df()
     cached_items, plain_items = _items(df, StructureCache(10)), _items(df, None)
-    assert set(cached_items[0].prefix_results) == set(structure.TRENDLINE_UNITS.values())
+    assert set(cached_items[0].prefix_results) == {unit.name for unit in structure.PREFIX_UNITS}
     assert plain_items[0].prefix_results is None
 
     def no_lookup(*args, **kwargs):

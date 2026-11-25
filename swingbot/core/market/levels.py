@@ -71,7 +71,8 @@ import pandas as pd
 
 from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import frame_memo
-from swingbot.core.market.indicators import atr, ema, fibonacci_levels, rolling_vwap, zigzag_pivots
+from swingbot.core.market.indicators import (
+    ZIGZAG_PREFIX_UNIT, atr, ema, fibonacci_levels, rolling_vwap, zigzag_pivots)
 from swingbot.core.market.atr_band import AtrBand, band_stop
 from swingbot.core.market.volatility import bollinger_bands
 from swingbot.core.market.trendlines import trendline_levels
@@ -217,9 +218,16 @@ def _donchian_20(df: pd.DataFrame) -> tuple:
             df["Low"].rolling(20).min().shift(1).iloc[-1])
 
 
+def _horizon_pivots(df, threshold_pct, prefix_results: dict | None) -> list:
+    """zigzag_pivots at a horizon's threshold, resumed from the ticker's cached
+    prefix walk when one is carried (v245 U2); the same list either way."""
+    states = dict((prefix_results or {}).get(ZIGZAG_PREFIX_UNIT) or ())
+    return zigzag_pivots(df, threshold_pct=threshold_pct, state=states.get(threshold_pct))
+
+
 def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
                               trendline_candidates: list | None = None,
-                              params=None) -> list:
+                              params=None, prefix_results: dict | None = None) -> list:
     """
     Gathers raw (price, source_label) candidates from every method this
     bot knows: EMA fast/slow, rolling VWAP, Fibonacci retracements +
@@ -232,6 +240,8 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
     and (see fvg.py) unfilled Fair Value Gaps.
     Any single method failing (e.g. not enough data yet) is skipped
     rather than failing the whole ticker.
+    `prefix_results` (v245): the ticker's prefix-cache values; only
+    the horizon zigzag reads them; None walks it from bar 0.
 
     `trendline_candidates`: pass trendlines.custom_scanner_levels(df,
     current_price)'s own result in when the caller already has it for
@@ -295,7 +305,7 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
         # Reuses the horizon's own risk-scale % as pivot granularity -- same
         # convention strategy.py's Elliott Wave detector uses, so pivots
         # found here line up with the ones that would drive that strategy.
-        pivots = zigzag_pivots(df, threshold_pct=h["max_risk_pct"])
+        pivots = _horizon_pivots(df, h["max_risk_pct"], prefix_results)
         for _, price, kind in pivots[-MAX_RECENT_PIVOTS:]:
             candidates.append((float(price), "Pivot high" if kind == "high" else "Pivot low"))
     except Exception:

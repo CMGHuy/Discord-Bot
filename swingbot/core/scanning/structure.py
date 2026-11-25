@@ -18,11 +18,12 @@ from typing import Callable
 from swingbot import config
 from swingbot.core.infra import store_generation
 from swingbot.core.infra.swallowed import swallowed
-from swingbot.core.market import trendlines
+from swingbot.core.market import indicators, trendlines
+from swingbot.core.market.strategy_types import HORIZONS
 
 log = logging.getLogger(__name__)
 
-DEFAULT_MAX_ENTRIES = 256
+DEFAULT_MAX_ENTRIES = 320
 _MISSING = object()
 
 
@@ -176,6 +177,22 @@ def _trendline_unit(side: str) -> PrefixUnit:
 
 
 PREFIX_UNITS: tuple[PrefixUnit, ...] = tuple(_trendline_unit(side) for side in ("support", "resistance"))
+ZIGZAG_TAIL_BARS = 1     # the zigzag walk resumes from its state: only the last row is per scan
+
+
+def _horizon_thresholds() -> tuple:
+    """Every horizon's zigzag threshold (levels' "Pivot high/low" source), read per build."""
+    return tuple(sorted({h["max_risk_pct"] for h in HORIZONS.values()}))
+
+
+def _zigzag_build(df):
+    thresholds = _horizon_thresholds()
+    m = max(len(df) - ZIGZAG_TAIL_BARS, 0)
+    return (prefix_fingerprint(df, m) + (thresholds,),
+            lambda: indicators.zigzag_prefix_states(df, thresholds, m))
+
+
+PREFIX_UNITS = PREFIX_UNITS + (PrefixUnit(indicators.ZIGZAG_PREFIX_UNIT, _zigzag_build),)
 
 
 def _unit_value(cache: StructureCache, ticker: str, unit: PrefixUnit, df):

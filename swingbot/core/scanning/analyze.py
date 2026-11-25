@@ -892,7 +892,7 @@ def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
     `_scan_one` at the scan price, `rescenario` at a re-quoted one).
     `prefix_results` (v245): the ticker's prefix-cache values for horizon-level
     units; None computes everything directly. Trendline units are consumed once
-    per ticker in `_scan_one`, not here."""
+    per ticker in `_scan_one`; the horizon zigzag states here."""
     # Computed once here and threaded through to build_level_map() and
     # every count_confirming_strategies() call below (up to 2 scenarios x
     # 2 calls each) -- all of them run against this exact same
@@ -901,7 +901,8 @@ def _horizon_scenarios(df, h: dict, current_price: float, trendline_candidates,
     # necessary CPU per ticker/horizon, the dominant cost of a scan over
     # a large universe. See levels.count_confirming_strategies's docstring.
     candidates = levels.collect_candidate_levels(df, h, current_price,
-                                                   trendline_candidates=trendline_candidates)
+                                                   trendline_candidates=trendline_candidates,
+                                                   prefix_results=prefix_results)
     supports, resistances = levels.build_level_map(df, h, current_price, candidates=candidates)
     floor_pct = levels.atr_floor_pct(df, current_price, h, atr14=atr14)
     # Reward/stop bounds are widened toward this horizon's OWN scale

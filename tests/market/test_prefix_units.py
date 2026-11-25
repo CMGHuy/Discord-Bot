@@ -10,9 +10,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from swingbot.core.market import indicators
-from swingbot.core.market.indicators import zigzag_pivots, zigzag_prefix_state, zigzag_prefix_states
-from swingbot.core.market.strategy_types import HORIZONS
+from swingbot.core.market import indicators, levels
+from swingbot.core.market.indicators import (
+    ZIGZAG_PREFIX_UNIT, zigzag_pivots, zigzag_prefix_state, zigzag_prefix_states)
+from swingbot.core.market.strategy_types import HORIZONS, LEGACY_HORIZONS
+from swingbot.core.scanning import structure
+from swingbot.core.scanning.structure import StructureCache
+from tests.scanning.v245_golden_cases import CASE_BY_NAME
 
 
 def _old_zigzag(df, threshold_pct):
@@ -146,3 +150,40 @@ def test_prefix_states_are_frozen_pairs():
     assert isinstance(state.pivots, tuple) and isinstance(state.walk, tuple) and len(state.digest) == 16
     with pytest.raises(dataclasses.FrozenInstanceError):
         state.m = 1
+
+
+def test_horizon_pivots_reads_the_carried_state(monkeypatch):
+    df, t = FRAMES["walk"], HORIZONS["4w"]["max_risk_pct"]
+    states = zigzag_prefix_states(df, (t,), len(df) - 1)
+    seen, real = [], levels.zigzag_pivots
+
+    def spy(frame, threshold_pct, state=None):
+        seen.append(state)
+        return real(frame, threshold_pct, state=state)
+
+    monkeypatch.setattr(levels, "zigzag_pivots", spy)
+    for carried in ({ZIGZAG_PREFIX_UNIT: states}, None, {}):
+        _same(levels._horizon_pivots(df, t, carried), _old_zigzag(df, t))
+    assert seen == [states[0][1], None, None]
+
+
+@pytest.mark.parametrize("case", ["wave_forming", "long_completed"])
+def test_collect_candidate_levels_is_unchanged_with_prefix_results(case):
+    df = CASE_BY_NAME[case].frame()
+    values = structure.ticker_prefixes(StructureCache(10), "T", df)
+    assert ZIGZAG_PREFIX_UNIT in values
+    price = float(df["Close"].iloc[-1])
+    for key in LEGACY_HORIZONS:
+        h = HORIZONS[key]
+        assert levels.collect_candidate_levels(df, h, price, prefix_results=values) ==             levels.collect_candidate_levels(df, h, price)
+
+
+def test_the_unit_is_registered_and_keyed_by_the_thresholds(monkeypatch):
+    unit = next(u for u in structure.PREFIX_UNITS if u.name == ZIGZAG_PREFIX_UNIT)
+    df = CASE_BY_NAME["wave_forming"].frame()
+    key, build = unit.build(df)
+    assert key[-1] == tuple(sorted({h["max_risk_pct"] for h in HORIZONS.values()}))
+    assert key[:-1] == structure.prefix_fingerprint(df, len(df) - structure.ZIGZAG_TAIL_BARS)
+    assert {t for t, _ in build()} == set(key[-1])
+    monkeypatch.setitem(HORIZONS["4w"], "max_risk_pct", 4.25)
+    assert unit.build(df)[0] != key
