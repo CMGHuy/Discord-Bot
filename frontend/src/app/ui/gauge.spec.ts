@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -50,5 +53,18 @@ describe('Gauge (v85 D36)', () => {
     const el = render({ value: 62 });
     expect(el.getAttribute('role')).toBe('meter');
     expect(el.getAttribute('aria-valuenow')).toBe('62');
+  });
+});
+
+describe('Gauge reads SVG_CHART_TOKENS (v246 §A3)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/ui/gauge.ts'), 'utf8');
+
+  it('draws the track, the needle and the over-limit state in the shared inks', () => {
+    expect(src).toMatch(/import \{[^}]*SVG_CHART_TOKENS[^}]*\} from '\.\/chart\/chart-theme'/);
+    expect(src).toContain('.track { stroke: var(${SVG_CHART_TOKENS.grid}); }');
+    expect(src).toContain('.needle { stroke: var(${SVG_CHART_TOKENS.line}); }');
+    expect(src).toContain('.over .needle { stroke: var(${SVG_CHART_TOKENS.neg}); }');
+    expect(src).toContain('.over .readout { color: var(${SVG_CHART_TOKENS.neg}); }');
+    expect(src).not.toMatch(/var\(--(neg|accent|border)\)/);
   });
 });

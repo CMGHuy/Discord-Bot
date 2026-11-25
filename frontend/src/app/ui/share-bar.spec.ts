@@ -19,3 +19,21 @@ describe('ShareBar containment (v179 §3.3)', () => {
     expect(src).toMatch(/\.legend li span:not\(\.key\) \{ overflow-wrap:anywhere; \}/);
   });
 });
+
+describe('ShareBar reads SVG_CHART_TOKENS (v246 §A3)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/ui/share-bar.ts'), 'utf8');
+
+  it('imports the shared tokens and declares no chart ink, radius or gap of its own', () => {
+    expect(src).toMatch(/import \{[^}]*SVG_CHART_TOKENS[^}]*\} from '\.\/chart\/chart-theme'/);
+    expect(src).not.toMatch(/var\(--(pos|neg|accent|radius-sm)\)/);
+    expect(src).not.toContain('gap:2px');
+  });
+
+  it('takes the tones, the segment gap and the radius from the tokens', () => {
+    expect(src).toContain("[data-tone='pos'] { background:var(${SVG_CHART_TOKENS.pos}); }");
+    expect(src).toContain("[data-tone='neg'] { background:var(${SVG_CHART_TOKENS.neg}); }");
+    expect(src).toContain("[data-tone='accent'] { background:var(${SVG_CHART_TOKENS.line}); }");
+    expect(src).toContain('gap:${SVG_CHART_TOKENS.barGap}px;');
+    expect(src).toContain('border-radius:var(${SVG_CHART_TOKENS.barRadius});');
+  });
+});

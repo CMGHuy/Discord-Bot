@@ -2,6 +2,7 @@ import { fixed } from './format';
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
 import { CHART_CHROME, token } from './chart/chart-frame';
+import { SVG_CHART_TOKENS, themedToken } from './chart/chart-theme';
 
 export interface LineChartPoint {
   date: string;
@@ -144,11 +145,11 @@ function seriesColour(index: number): string {
   styles: `
     :host { display: block; }
     svg { width: 100%; height: 140px; }
-    path.series { stroke-width: 2; vector-effect: non-scaling-stroke; }
-    line.zero { stroke: var(--text-faint); stroke-width: 1; vector-effect: non-scaling-stroke; }
+    path.series { stroke-width: ${SVG_CHART_TOKENS.strokeWidth}; vector-effect: non-scaling-stroke; }
+    line.zero { stroke: var(${CHART_CHROME.axis}); stroke-width: ${SVG_CHART_TOKENS.strokeWidthThin}; vector-effect: non-scaling-stroke; }
     line.reference {
-      stroke: var(--text-faint);
-      stroke-width: 1;
+      stroke: var(${SVG_CHART_TOKENS.crosshair});
+      stroke-width: ${SVG_CHART_TOKENS.strokeWidthThin};
       stroke-dasharray: 4 3;
       vector-effect: non-scaling-stroke;
     }
@@ -206,8 +207,11 @@ export class LineChart {
     return (1 - this.yScale()(value)) * 220;
   }
 
+  /** An explicit token wins; a lone series is the neutral line (v246 §A3,
+   *  the accent); several series take the categorical palette by index. */
   protected colorOf(series: LineChartSeries, index: number): string {
-    return series.color ? token(series.color) : seriesColour(index);
+    if (series.color) return token(series.color);
+    return this.series().length === 1 ? themedToken(SVG_CHART_TOKENS.line) : seriesColour(index);
   }
 
   protected readonly hoverIndex = signal<number | null>(null);

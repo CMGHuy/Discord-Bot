@@ -154,3 +154,23 @@ describe('Histogram containment (v179 §3.3)', () => {
     expect(src).toMatch(/:host \{ display: block; min-width: 0; \}/);
   });
 });
+
+describe('Histogram reads SVG_CHART_TOKENS (v246 §A3)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/ui/histogram.ts'), 'utf8');
+
+  it('imports the shared tokens and declares no chart ink, radius or gap of its own', () => {
+    expect(src).toMatch(/import \{[^}]*SVG_CHART_TOKENS[^}]*\} from '\.\/chart\/chart-theme'/);
+    expect(src).not.toMatch(/var\(--(pos|neg|accent|radius-sm)\)/);
+    expect(src).not.toMatch(/gap: 2px|border-left: 1px/);
+  });
+
+  it('colours gains and losses, rounds bars and spaces them from the tokens', () => {
+    expect(src).toMatch(/\.fill \{[^}]*background: var\(\$\{SVG_CHART_TOKENS\.pos\}\);[^}]*border-radius: var\(\$\{SVG_CHART_TOKENS\.barRadius\}\);/);
+    expect(src).toContain('.fill.negative { background: var(${SVG_CHART_TOKENS.neg}); }');
+    expect(src).toContain('ul { display: grid; gap: ${SVG_CHART_TOKENS.barGap}px; list-style: none; }');
+  });
+
+  it('writes bin labels in the axis-text ink at the label size', () => {
+    expect(src).toMatch(/\.label \{\s*color: var\(\$\{SVG_CHART_TOKENS\.axisText\}\);\s*font-size: var\(\$\{SVG_CHART_TOKENS\.labelSize\}\);/);
+  });
+});

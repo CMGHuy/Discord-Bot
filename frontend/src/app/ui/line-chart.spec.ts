@@ -1,3 +1,7 @@
+import { themedToken } from './chart/chart-theme';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -267,4 +271,40 @@ describe('LineChart v208 options', () => {
     expect(on.nativeElement.querySelector('line.zero')).not.toBeNull();
   });
 
+});
+
+describe('LineChart reads SVG_CHART_TOKENS (v246 §A3)', () => {
+  const src = readFileSync(join(process.cwd(), 'src/app/ui/line-chart.ts'), 'utf8');
+
+  function render(series: { name: string; color?: string; points: { date: string; value: number }[] }[]) {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const fixture = TestBed.createComponent(LineChart);
+    fixture.componentRef.setInput('series', series);
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+  const POINTS = [{ date: '2026-01-01', value: 0 }, { date: '2026-01-02', value: 1 }];
+
+  it('draws a lone series in the accent, not the categorical blue', () => {
+    const stroke = render([{ name: 'Equity', points: POINTS }]).querySelector('path.series')!.getAttribute('stroke');
+    expect(stroke).toBe(themedToken('--accent'));
+    expect(stroke).not.toBe(themedToken('--chart-1'));
+  });
+
+  it('keeps the categorical palette for several series and an explicit colour for any', () => {
+    const el = render([{ name: 'a', points: POINTS }, { name: 'b', points: POINTS }]);
+    expect([...el.querySelectorAll('path.series')].map((p) => p.getAttribute('stroke')))
+      .toEqual([themedToken('--chart-1'), themedToken('--chart-2')]);
+    TestBed.resetTestingModule();
+    const lone = render([{ name: 'a', color: '--chart-3', points: POINTS }]);
+    expect(lone.querySelector('path.series')!.getAttribute('stroke')).toBe(themedToken('--chart-3'));
+  });
+
+  it('takes stroke widths and line inks from the shared tokens', () => {
+    expect(src).toMatch(/import \{[^}]*SVG_CHART_TOKENS[^}]*\} from '\.\/chart\/chart-theme'/);
+    expect(src).toMatch(/path\.series \{ stroke-width: \$\{SVG_CHART_TOKENS\.strokeWidth\};/);
+    expect(src).toMatch(/line\.zero \{ stroke: var\(\$\{CHART_CHROME\.axis\}\); stroke-width: \$\{SVG_CHART_TOKENS\.strokeWidthThin\};/);
+    expect(src).toMatch(/stroke: var\(\$\{SVG_CHART_TOKENS\.crosshair\}\);/);
+    expect(src).not.toMatch(/stroke-width:\s*[\d.]/);
+  });
 });

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
-import { CHART_CHROME } from './chart/chart-frame';
+import { SVG_CHART_TOKENS } from './chart/chart-theme';
 import { ChartTooltip, HoverState, hoverPosition } from './chart-tooltip';
 
 /** One bar: a bin's label and how many observations fell in it. */
@@ -74,9 +74,9 @@ export interface HistogramBin {
       position: absolute;
       top: 0;
       bottom: 0;
-      border-left: 1px dashed var(--text-faint);
+      border-left: ${SVG_CHART_TOKENS.strokeWidthThin}px dashed var(${SVG_CHART_TOKENS.crosshair});
     }
-    ul { display: grid; gap: 2px; list-style: none; }
+    ul { display: grid; gap: ${SVG_CHART_TOKENS.barGap}px; list-style: none; }
     li {
       display: grid;
       grid-template-columns: 4rem 1fr 2.5rem;
@@ -84,7 +84,7 @@ export interface HistogramBin {
       gap: var(--space-8);
     }
     /* v54 D5: "The bin labels are the axis" (this file's own docstring) --
-       so the LABEL takes CHART_CHROME's tick colour/size, the same as every
+       so the LABEL takes the shared axis ink and size, as on every
        other chart's axis text. The count is the observation itself, not the
        axis -- it keeps the body-text pair every other value in this app
        uses, so the number the reader is there to read does not get dimmer
@@ -93,8 +93,8 @@ export interface HistogramBin {
        a label longer than its 4rem track pushes the bar column out of the
        panel rather than ellipsising -- v95 A4. */
     .label {
-      color: var(${CHART_CHROME.tickColour});
-      font-size: var(${CHART_CHROME.tickSize});
+      color: var(${SVG_CHART_TOKENS.axisText});
+      font-size: var(${SVG_CHART_TOKENS.labelSize});
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -104,7 +104,7 @@ export interface HistogramBin {
     .track {
       height: 10px;
       background: var(--bg);
-      border-radius: var(--radius-sm);
+      border-radius: var(${SVG_CHART_TOKENS.barRadius});
       overflow: hidden;
     }
     .fill {
@@ -112,10 +112,10 @@ export interface HistogramBin {
       height: 100%;
       /* Gains and losses are P&L direction — the one place the green/red pair
          is allowed by the colour rule. */
-      background: var(--pos);
-      border-radius: var(--radius-sm);
+      background: var(${SVG_CHART_TOKENS.pos});
+      border-radius: var(${SVG_CHART_TOKENS.barRadius});
     }
-    .fill.negative { background: var(--neg); }
+    .fill.negative { background: var(${SVG_CHART_TOKENS.neg}); }
   `,
 })
 export class Histogram {
