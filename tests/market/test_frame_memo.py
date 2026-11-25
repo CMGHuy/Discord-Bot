@@ -137,3 +137,37 @@ def test_scan_one_computes_bollinger_once(name, monkeypatch):
     bb = _count(monkeypatch, levels, "bollinger_bands")
     run_case(case)
     assert bb["n"] == 1
+
+
+# -- F3: Donchian 20 -------------------------------------------------------
+
+def test_donchian_is_shared_across_horizons_and_unchanged(monkeypatch):
+    df = _frame()
+    plain = _all_horizons(df)
+    donchian = _count(monkeypatch, levels, "_donchian_20")
+    with frame_memo.ticker_memo():
+        memoed = _all_horizons(df)
+    assert memoed == plain
+    assert donchian["n"] == 1
+
+
+def test_donchian_helper_matches_the_inline_expressions():
+    df = _frame()
+    high, low = levels._donchian_20(df)
+    assert float.hex(float(high)) == float.hex(float(df["High"].rolling(20).max().shift(1).iloc[-1]))
+    assert float.hex(float(low)) == float.hex(float(df["Low"].rolling(20).min().shift(1).iloc[-1]))
+
+
+def test_donchian_on_a_short_frame_still_emits_nothing():
+    df = _frame(10)
+    labels = {label for _, label in levels.collect_candidate_levels(
+        df, HORIZONS["3m"], float(df["Close"].iloc[-1]), trendline_candidates=[])}
+    assert not labels & {"Donchian high", "Donchian low"}
+
+
+@pytest.mark.parametrize("name", ["wave_completed", "wave_forming"])
+def test_scan_one_computes_donchian_once(name, monkeypatch):
+    frozen_clock(monkeypatch)
+    donchian = _count(monkeypatch, levels, "_donchian_20")
+    run_case(CASE_BY_NAME[name])
+    assert donchian["n"] == 1

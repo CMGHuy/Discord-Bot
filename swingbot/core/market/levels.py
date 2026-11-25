@@ -196,6 +196,13 @@ def _fvg_candidates(df: pd.DataFrame, params) -> list:
         return []
 
 
+def _donchian_20(df: pd.DataFrame) -> tuple:
+    """The prior bar's 20-bar Donchian high and low (v245 F3: one call per
+    frame inside a frame_memo scope; the window never depends on the horizon)."""
+    return (df["High"].rolling(20).max().shift(1).iloc[-1],
+            df["Low"].rolling(20).min().shift(1).iloc[-1])
+
+
 def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
                               trendline_candidates: list | None = None,
                               params=None) -> list:
@@ -301,8 +308,7 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
         # is always a short, fixed window regardless of horizon, so it
         # tends to catch tighter, more recent structure than the
         # horizon-scaled rolling S/R does.
-        donchian_high = df["High"].rolling(20).max().shift(1).iloc[-1]
-        donchian_low = df["Low"].rolling(20).min().shift(1).iloc[-1]
+        donchian_high, donchian_low = frame_memo.memo(df, ("donchian", 20), lambda: _donchian_20(df))
         if pd.notna(donchian_high):
             candidates.append((float(donchian_high), "Donchian high"))
         if pd.notna(donchian_low):
