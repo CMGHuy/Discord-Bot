@@ -83,14 +83,17 @@ The partner chose C on 2026-11-25.
 ### 1. Honest panel (frontend)
 
 **1a. Progress follows the shown price.** Move the progress computation that
-`/api/v1/trades` does (`api_v1/trades.py:1280-1284`: `progress_pct`,
-`progress_band`, `bar_kind` from entry/stop/target and `current_price`) into
+`/api/v1/trades` does (`api_v1/trades.py:1300-1345`: `progress_pct` and
+`progress_band` from entry/stop/target and `current_price`, plus the
+trailing-runner variant; `bar_kind` comes from `_row_from_plan`, l.317) into
 one pure function shared in shape by server and client. The server keeps
 computing it for the initial response. The client recomputes it in
 `overlayQuote` (`live-values.store.ts`) whenever the overlay replaces
 `current_price`, so `StatusCell` (`ui/status-cell.ts:200, 219-226`) never
-shows `no price` next to a priced NOW cell. P&L % and R already follow
-`current_price` on the client; verify, and cover with a test.
+shows `no price` next to a priced NOW cell. P&L % already follows
+`current_price` on the client (`livePnlPct`); `r_multiple` does not, it is the
+server value, so the same recompute updates R from the shown price. Cover
+both with tests.
 
 **1b. The error clears when a newer good price exists.** `sb-market-value`
 shows `refresh failed` only when `price_error` is set **and** the failure is
