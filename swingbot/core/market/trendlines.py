@@ -139,7 +139,43 @@ MAX_PIVOT_SCAN_BARS = 1500
 
 # ── Volume-confirmed pivot scanner ────────────────────────────────────────────
 
-def _volume_confirmed_pivots(df: pd.DataFrame, kind: str) -> list:
+def _volume_average(df: pd.DataFrame) -> pd.Series | None:
+    """The rolling volume mean the pivot filter compares against, or None
+    when volume is absent or mostly zero (index symbols: filter bypassed)."""
+    if "Volume" not in df.columns:
+        return None
+    vol = df["Volume"].replace(0, np.nan)
+    if vol.count() <= len(df) * 0.3:             # need at least 30 % non-zero bars
+        return None
+    return vol.rolling(
+        VOL_ROLLING_WINDOW,
+        min_periods=max(3, VOL_ROLLING_WINDOW // 4),
+    ).mean()
+
+
+def _zigzag_or_empty(df: pd.DataFrame) -> list:
+    """zigzag_pivots at the scanner's threshold; a failure means no pivots."""
+    try:
+        return zigzag_pivots(df, threshold_pct=PIVOT_THRESHOLD_PCT)
+    except Exception:
+        return []
+
+
+def _pivot_ratio(df: pd.DataFrame, vol_avg: pd.Series | None, bar_idx: int) -> float | None:
+    """The pivot's volume ratio, 1.0 when it cannot be judged, None when it fails."""
+    if vol_avg is None:
+        return 1.0                               # no volume data: accept ungated
+    bar_vol = df["Volume"].iloc[bar_idx]
+    avg_vol = vol_avg.iloc[bar_idx]
+    if pd.isna(bar_vol) or pd.isna(avg_vol) or avg_vol <= 0:
+        # Missing local average (can happen at the very start of the
+        # series): accept without filtering rather than silently drop.
+        return 1.0
+    ratio = float(bar_vol / avg_vol)
+    return ratio if ratio >= VOL_MIN_RATIO else None
+
+
+def _volume_confirmed_pivots(df: pd.DataFrame, kind: str, all_pivots: list | None = None) -> list:
     """
     Returns [(bar_index, price, vol_ratio), ...] for all swing pivots of
     `kind` ("high" or "low") where the bar's volume passes the
@@ -155,54 +191,26 @@ def _volume_confirmed_pivots(df: pd.DataFrame, kind: str) -> list:
     When volume data is absent or mostly zero the volume filter is
     bypassed so the scanner can still run on index symbols (^GSPC, etc.)
     that carry no volume.
+
+    ``all_pivots``: ``zigzag_pivots(df, threshold_pct=PIVOT_THRESHOLD_PCT)``
+    of this same ``df`` when the caller already has it (both trendline sides
+    share one, v245); None computes it here. The result is the same.
     """
     if len(df) < MIN_BARS_FOR_TRENDLINE:
         return []
-
-    # Check whether usable volume data exists.
-    has_volume = False
-    vol_avg: pd.Series | None = None
-    if "Volume" in df.columns:
-        vol = df["Volume"].replace(0, np.nan)
-        if vol.count() > len(df) * 0.3:          # at least 30 % non-zero bars
-            has_volume = True
-            vol_avg = vol.rolling(
-                VOL_ROLLING_WINDOW,
-                min_periods=max(3, VOL_ROLLING_WINDOW // 4),
-            ).mean()
-
-    try:
-        all_pivots = zigzag_pivots(df, threshold_pct=PIVOT_THRESHOLD_PCT)
-    except Exception:
-        return []
+    vol_avg = _volume_average(df)
+    if all_pivots is None:
+        all_pivots = _zigzag_or_empty(df)
 
     confirmed: list = []
     for bar_idx, _close_price, pkind in all_pivots:
         if pkind != kind or bar_idx >= len(df):
             continue
-
         # Use High/Low of the pivot bar for line fitting accuracy.
-        if kind == "high":
-            price = float(df["High"].iloc[bar_idx])
-        else:
-            price = float(df["Low"].iloc[bar_idx])
-
-        if not has_volume or vol_avg is None:
-            # No volume data: accept the pivot without volume gating.
-            confirmed.append((bar_idx, price, 1.0))
-            continue
-
-        bar_vol = df["Volume"].iloc[bar_idx]
-        avg_vol = vol_avg.iloc[bar_idx]
-        if pd.isna(bar_vol) or pd.isna(avg_vol) or avg_vol <= 0:
-            # Missing local average (can happen at the very start of the
-            # series): accept without filtering rather than silently drop.
-            confirmed.append((bar_idx, price, 1.0))
-        else:
-            ratio = float(bar_vol / avg_vol)
-            if ratio >= VOL_MIN_RATIO:
-                confirmed.append((bar_idx, price, ratio))
-
+        price = float(df["High" if kind == "high" else "Low"].iloc[bar_idx])
+        ratio = _pivot_ratio(df, vol_avg, bar_idx)
+        if ratio is not None:
+            confirmed.append((bar_idx, price, ratio))
     return confirmed
 
 
@@ -268,7 +276,31 @@ def _score_candidate(slope: float, intercept: float, pivots: list,
     }
 
 
-def _find_best_trendline(df: pd.DataFrame, current_price: float, side: str) -> dict | None:
+def _trimmed_zigzag(df: pd.DataFrame) -> list:
+    """The zigzag _find_best_trendline's pivot scan runs: over the last
+    MAX_PIVOT_SCAN_BARS rows, at PIVOT_THRESHOLD_PCT. Computed once per frame
+    and shared by both sides (v245); a failure gives [] (no pivots), as each
+    side's own zigzag would."""
+    trimmed = df.tail(MAX_PIVOT_SCAN_BARS) if len(df) > MAX_PIVOT_SCAN_BARS else df
+    return _zigzag_or_empty(trimmed)
+
+
+def _shift_to_full_frame(best: dict | None, trim_start: int) -> dict | None:
+    """Pivot indices are relative to the trimmed frame. Convert the line
+    back to the caller's full-frame coordinate system before any
+    display-window conversion uses it."""
+    if best is None or not trim_start:
+        return best
+    best["intercept"] -= best["slope"] * trim_start
+    best["touches"] = [
+        (bar_idx + trim_start, price, vol_ratio)
+        for bar_idx, price, vol_ratio in best["touches"]
+    ]
+    return best
+
+
+def _find_best_trendline(df: pd.DataFrame, current_price: float, side: str, *,
+                         all_pivots: list | None = None) -> dict | None:
     """
     Finds the strongest volume-confirmed S/R trendline for `side`
     ("support" or "resistance") by scanning the FULL df history.
@@ -283,13 +315,16 @@ def _find_best_trendline(df: pd.DataFrame, current_price: float, side: str) -> d
     the single point both the hot scan path (trendline_levels) and the
     chart-drawing path (strongest_trendline_pair) funnel through, so the
     two can never disagree about which bars were even considered.
+
+    ``all_pivots``: ``_trimmed_zigzag(df)`` when the caller scans both sides
+    of the same frame (v245); None computes it inside the pivot filter.
     """
     trim_start = max(len(df) - MAX_PIVOT_SCAN_BARS, 0)
     if trim_start:
         df = df.tail(MAX_PIVOT_SCAN_BARS)
 
     kind = "low" if side == "support" else "high"
-    pivots = _volume_confirmed_pivots(df, kind)
+    pivots = _volume_confirmed_pivots(df, kind, all_pivots=all_pivots)
 
     if len(pivots) < 2:
         return None
@@ -309,16 +344,7 @@ def _find_best_trendline(df: pd.DataFrame, current_price: float, side: str) -> d
             if result and (best is None or result["score"] > best["score"]):
                 best = result
 
-    if best is not None and trim_start:
-        # Pivot indices are relative to the trimmed frame. Convert the line
-        # back to the caller's full-frame coordinate system before any
-        # display-window conversion uses it.
-        best["intercept"] -= best["slope"] * trim_start
-        best["touches"] = [
-            (bar_idx + trim_start, price, vol_ratio)
-            for bar_idx, price, vol_ratio in best["touches"]
-        ]
-    return best
+    return _shift_to_full_frame(best, trim_start)
 
 
 # ── Coordinate conversion ─────────────────────────────────────────────────────
@@ -362,10 +388,11 @@ def custom_scanner_levels(df: pd.DataFrame, current_price: float) -> list:
     if len(df) < MIN_BARS_FOR_TRENDLINE or current_price <= 0:
         return []
 
+    shared = _trimmed_zigzag(df)
     candidates: list = []
     for side in ("support", "resistance"):
         try:
-            result = _find_best_trendline(df, current_price, side)
+            result = _find_best_trendline(df, current_price, side, all_pivots=shared)
             if result:
                 candidates.append((
                     float(result["line_at_now"]),
@@ -440,14 +467,15 @@ def strongest_trendline_pair(df: pd.DataFrame, lookback: int,
     display_bars = min(display_bars, len(df))
     n_bars = len(df)
 
+    shared = _trimmed_zigzag(df)
     support_raw: dict | None = None
     resistance_raw: dict | None = None
     try:
-        support_raw = _find_best_trendline(df, current_price, "support")
+        support_raw = _find_best_trendline(df, current_price, "support", all_pivots=shared)
     except Exception:
         pass
     try:
-        resistance_raw = _find_best_trendline(df, current_price, "resistance")
+        resistance_raw = _find_best_trendline(df, current_price, "resistance", all_pivots=shared)
     except Exception:
         pass
 

@@ -73,8 +73,6 @@
     "swingbot.core.market.levels_lifecycle:classify_levels": 22,
     "swingbot.core.market.reversal:evaluate_reversal": 19,
     "swingbot.core.market.signals:rsi_divergence_signal": 33,
-    "swingbot.core.market.trendlines:_find_best_trendline": 15,
-    "swingbot.core.market.trendlines:_volume_confirmed_pivots": 15,
     "swingbot.core.marketdata.data_refresh:refresh_all": 17,
     "swingbot.core.planning.account:get_daily_summary": 16,
     "swingbot.core.planning.plan_manager:PlanManager._step_active": 21,
