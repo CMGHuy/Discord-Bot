@@ -2577,6 +2577,59 @@ export interface TapeResponse {
   shock?: TapeShock | null;
 }
 
+/* -- bear regime (v239) --------------------------------------------------- */
+
+/** v239: `GET /market/regime`; shadow only, labels come from the server's
+ *  `regime_text`. */
+export type RegimeState = 'BEAR' | 'CORRECTION' | 'NORMAL' | 'UNKNOWN';
+
+export type RegimeAction = 'would_veto' | 'caution' | 'pullback_watch' | 'aligned' | 'none';
+
+/** Server-composed words for one day (`regime_text.display`). */
+export interface RegimeDisplay {
+  label: string;
+  words: string;
+  numbers: string | null;
+}
+
+/** One stored regime day: the `bear_regime.ROW_COLUMNS` plus `computed_at`
+ *  and the server's `display`. Dates are ISO strings. */
+export interface RegimeDay {
+  session_date: string;
+  last_bar_date: string | null;
+  state: RegimeState;
+  stress: boolean | null;
+  pullback_trigger: boolean;
+  pullback_reason: string | null;
+  spy_close: number | null;
+  sma50: number | null;
+  sma200: number | null;
+  sma50_lag5: number | null;
+  sma200_lag20: number | null;
+  spy_high_prev: number | null;
+  vix_close: number | null;
+  vix_max5: number | null;
+  spy_provider: string | null;
+  vix_provider: string | null;
+  computed_at: string | null;
+  display: RegimeDisplay;
+}
+
+/** The confirmed episode the latest day belongs to. */
+export interface RegimeEpisode {
+  label: string;
+  since_sessions: number;
+}
+
+export interface RegimeResponse {
+  mode: 'off' | 'shadow' | 'live';
+  /** The stored row for the coming session D; null when none exists. */
+  today: RegimeDay | null;
+  /** Up to 60 stored sessions. */
+  history: RegimeDay[];
+  episode: RegimeEpisode | null;
+}
+
 /* -- equity candles (v172) ------------------------------------------------ */
 
 /** Candle width. Buckets are Berlin wall clock, weekdays 08:00-22:00: 4H starts at

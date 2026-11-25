@@ -57,6 +57,7 @@ import {
   Preferences,
   Proposal,
   ProposalList,
+  RegimeResponse,
   ReportEnvelope,
   ResearchLedger,
   Risk,
@@ -651,6 +652,11 @@ export class ApiClient {
     if (!symbols.length) return of({ as_of: new Date().toISOString(), rows: [] });
     const query = encodeURIComponent(symbols.join(','));
     return this.http.get<TapeResponse>(`${this.base}/market/tape?symbols=${query}`);
+  }
+
+  /** v239: the daily bear-regime reading for the coming session (shadow). */
+  marketRegime(): Observable<RegimeResponse> {
+    return this.http.get<RegimeResponse>(`${this.base}/market/regime`);
   }
 
   /** Equity candles for the Dashboard chart (v172). `limit` is left to the
