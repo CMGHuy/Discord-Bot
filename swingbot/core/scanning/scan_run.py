@@ -4,6 +4,7 @@ import functools
 import logging
 import math
 import hashlib
+import threading
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -47,6 +48,7 @@ from swingbot.scan_params import ScanParams
 
 from . import (analyze, dedup, fetch, lane_overlap, progress_store, rejection_recorder, runstate,
                shock_scan, short_funnel, strategy_pass, telemetry)
+from . import cache_shadow
 from . import structure as analysis_structure
 from .short_candidates import ShortReference, build_reference_rels, extra_candidates
 from .short_reference import completed_frame as _completed, etf_for_sector
@@ -358,6 +360,75 @@ def _cache_telemetry(mode: str, cache) -> dict:
     scan start (None without a cache) and the bot's resident memory now."""
     counters = cache.stats() if cache is not None else dict.fromkeys(_CACHE_COUNTERS)
     return {"cache_mode": mode, **counters, "rss_mb": analysis_structure.rss_mb()}
+
+
+@dataclass
+class _AnalysisCtx:
+    """The base lane's analysis settings for one scan (v245): cache mode and
+    cache read once, one clock, the shadow scan number and its counts."""
+    mode: str
+    cache: object
+    scan_now: datetime
+    scan_seq: int
+    compared: int = 0
+    diffs: int = 0
+
+
+_SHADOW_LOCK = threading.Lock()
+
+
+def _new_analysis_ctx(mode: str, cache) -> _AnalysisCtx:
+    seq = cache_shadow.next_scan_seq() if mode == "shadow" else 0
+    return _AnalysisCtx(mode, cache, datetime.now(timezone.utc), seq)
+
+
+def _shadow_sampled(ticker: str, df, ctx: _AnalysisCtx) -> bool:
+    return (ctx.mode == "shadow" and ctx.cache is not None and df is not None
+            and cache_shadow.in_sample(ticker, ctx.scan_seq))
+
+
+def _scan_ticker(ticker: str, df, scan_kwargs: dict, ctx: _AnalysisCtx) -> dict:
+    """One base-lane `_scan_one` (v245), cached per `ctx`; in shadow, a sampled
+    ticker is also rerun uncached and compared. The cached stats are returned."""
+    if not _shadow_sampled(ticker, df, ctx):
+        return analyze._scan_one(ticker, df, **scan_kwargs, structure=ctx.cache, now=ctx.scan_now)
+    io, answers = cache_shadow.recording_io(analyze.LIVE_IO)
+    stats = analyze._scan_one(ticker, df, **scan_kwargs, structure=ctx.cache, now=ctx.scan_now, io=io)
+    _shadow_compare(ticker, df, stats, scan_kwargs, ctx, answers)
+    return stats
+
+
+def _shadow_compare(ticker: str, df, cached: dict, scan_kwargs: dict, ctx: _AnalysisCtx,
+                    answers: dict) -> None:
+    """The uncached, side-effect-free rerun and the comparison; a failure is
+    logged and swallowed and never touches the cached result (spec § Error handling)."""
+    try:
+        with cache_shadow.demoted_logs():
+            uncached = analyze._scan_one(ticker, df, **{**scan_kwargs, "progress": None}, structure=None,
+                                         now=ctx.scan_now, io=cache_shadow.comparison_io(answers))
+        diffs = cache_shadow.compare_stats(ticker, cached, uncached)
+        cache_shadow.write_diffs(diffs, cache_shadow.SHADOW_LOG_PATH)
+    except Exception as exc:
+        swallowed(log, "scan.analysis_cache_shadow", exc,
+                  "analysis cache shadow: comparison failed for %s", ticker, exc_info=True)
+        return
+    _count_shadow(ctx, ticker, len(diffs))
+
+
+def _count_shadow(ctx: _AnalysisCtx, ticker: str, n_diffs: int) -> None:
+    with _SHADOW_LOCK:
+        ctx.compared += 1
+        ctx.diffs += n_diffs
+    if n_diffs:
+        log.warning("analysis cache shadow: %s: %d diff(s) between the cached and the uncached "
+                    "analysis (%s)", ticker, n_diffs, cache_shadow.SHADOW_LOG_PATH)
+
+
+def _shadow_telemetry(ctx: _AnalysisCtx) -> dict:
+    """cache_compared / cache_diffs: counts in shadow, None in off and on."""
+    if ctx.mode != "shadow":
+        return {"cache_compared": None, "cache_diffs": None}
+    return {"cache_compared": ctx.compared, "cache_diffs": ctx.diffs}
 
 
 def _hard_filters_snapshot(params: ScanParams | None = None) -> dict:
@@ -791,16 +862,15 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
     # qualifying or not -- the require_confirmation gate below is applied
     # uniformly to the aggregated candidates, not decided per-ticker.
     cache_mode, analysis_cache = _start_analysis_cache()
-    scan_now = datetime.now(timezone.utc)   # one clock for the whole analysis phase (v245 Decision 3)
+    analysis_ctx = _new_analysis_ctx(cache_mode, analysis_cache)   # one clock and shadow seq per scan (v245)
     log.debug("analysis cache: %s", cache_mode)
+    scan_kwargs = dict(horizons_to_scan=horizons_to_scan, progress=progress, regime=regime,
+                       effective_min_confluence=effective_min_confluence,
+                       effective_min_confidence=effective_min_confidence, rs_cache=rs_cache,
+                       spy_df=spy_df, breadth=breadth, live_prices=live_prices,
+                       hard_filters=hard_filters, opex_tier_today=opex_tier_today)
     per_ticker_results = fetch.map_tickers(
-        lambda t: analyze._scan_one(t, fresh_data.get(t), horizons_to_scan, progress, regime, effective_min_confluence,
-                            effective_min_confidence,
-                            rs_cache=rs_cache, spy_df=spy_df, breadth=breadth, live_prices=live_prices,
-                            hard_filters=hard_filters, opex_tier_today=opex_tier_today,
-                            structure=analysis_cache, now=scan_now),
-        tickers,
-    )
+        lambda t: _scan_ticker(t, fresh_data.get(t), scan_kwargs, analysis_ctx), tickers)
     _finish_phase("analysis")
     phase_durations["analysis_prefix"] = _analysis_prefix_s(analysis_cache)   # v245: a sub-total of "analysis"
 
@@ -1402,6 +1472,7 @@ def _sync_run_scan(horizon_filter: str, require_confirmation: bool, progress: "S
             **fetch.fetch_stats(),
             **_rebuild_stats(requote),
             **_cache_telemetry(cache_mode, analysis_cache),
+            **_shadow_telemetry(analysis_ctx),
         }
         scan_stats.update(_provider_health_fields(tickers, fresh_data, scan_stats))
         telemetry.log_scan_telemetry(scan_stats)
