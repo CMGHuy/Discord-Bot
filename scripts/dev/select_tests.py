@@ -252,7 +252,11 @@ DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("scripts/research/README.md", ("tests/backtest_scripts/test_context_stems_never_listed.py",)),
     # v239: exact-date SPY/VIX fixture consumed by the raw regime replay and the regime pass.
     ("tests/fixtures/regime/spy_vix_replay.csv", ("tests/regime/test_bear_regime_replay.py",
-                                                  "tests/regime/test_regime_pass.py")),
+                                                  "tests/regime/test_regime_pass.py",
+                                                  "tests/regime/test_regime_parity.py")),
+    # v239 V239-16: market_regime_days export replayed by the parity check.
+    ("tests/fixtures/regime/market_regime_days_export.json",
+     ("tests/regime/test_regime_parity.py",)),
     # v161: the generator role skills, the playbook and the trade-scout skill
     # are read by tests/scout/ shape tests as well as tests/hooks/. Narrower
     # rows first (first match wins), repeating the broad row's target.
