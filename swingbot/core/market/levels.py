@@ -62,12 +62,14 @@ would misrepresent the real technical level), just flagged, since a
 very tight stop is more exposed to being clipped by ordinary daily noise
 rather than a genuine reversal.
 """
+import logging
 import math
 from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
 
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import frame_memo
 from swingbot.core.market.indicators import atr, ema, fibonacci_levels, rolling_vwap, zigzag_pivots
 from swingbot.core.market.atr_band import AtrBand, band_stop
@@ -75,6 +77,8 @@ from swingbot.core.market.volatility import bollinger_bands
 from swingbot.core.market.trendlines import trendline_levels
 from swingbot.core.market.fvg import find_fair_value_gaps
 from swingbot.core.market.strategy import compute_hvn_level
+
+log = logging.getLogger(__name__)
 
 # Candidate levels within this % of each other get merged into one,
 # combined-confidence level rather than shown as separate near-duplicate
@@ -668,7 +672,8 @@ def atr14_last(df) -> float | None:
     `atr_floor_pct`, which would otherwise recompute the same float."""
     try:
         return float(atr(df, 14).iloc[-1])
-    except Exception:
+    except Exception as exc:
+        swallowed(log, "scan.levels.atr14_last", exc, level=logging.DEBUG)
         return None
 
 
