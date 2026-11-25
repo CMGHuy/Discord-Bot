@@ -335,3 +335,8 @@ Controller decisions (part 5, 2026-11-25):
     last-value tag below 640px (the balance above shows it); V246-17 single-series
     `sb-line-chart` → `--accent`, histogram/bar-list labels →
     `--text-secondary`, sparkline stroke 1px.
+20. **`maxDrawdown()` starts its peak at 0 (d04e2b46, accepted 2026-11-25).**
+    Cumulative P&L is 0 before the first close, matching the server's
+    `drawdown_r` (`peak = 0.0` in `page_bodies.py`), so a scope whose first
+    close is a loss reports it as drawdown. This changes the Max drawdown
+    tile's money line and the V246-15 header; a spec pins it.
