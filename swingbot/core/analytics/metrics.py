@@ -867,14 +867,36 @@ def pct_in_market(closed: list[dict]) -> float | None:
     return round(min(held / span_days * 100.0, 100.0), 4)
 
 
-def histogram(values: list[float], *, bins: int = 20) -> list[dict]:
+def _whole_r_histogram(values: list[float]) -> list[dict]:
+    """Unit buckets `[k, k+1)` from floor(min) to floor(max) + 1 (v246).
+
+    Integer edges, so the chart labels each bucket by its lower edge
+    (-5R, 0R, +1R) instead of an odd centre. Empty interior buckets are
+    kept, like the equal-width mode, and nothing is clamped: an outlier
+    gets its own bucket rather than being folded into a neighbour.
+    """
+    if not values:
+        return []
+    start = math.floor(min(values))
+    counts = [0] * (math.floor(max(values)) + 1 - start)
+    for v in values:
+        counts[math.floor(v) - start] += 1
+    return [{"lo": start + i, "hi": start + i + 1, "count": c} for i, c in enumerate(counts)]
+
+
+def histogram(values: list[float], *, bins: int = 20, whole_r: bool = False) -> list[dict]:
     """Equal-width buckets spanning [min, max], as `{lo, hi, count}` rows.
 
     Empty interior buckets are KEPT. A histogram that drops them silently
     redraws its own x-axis and turns a bimodal distribution into a flat one.
     An empty input is an empty list, not `bins` zero-count rows -- "no data"
     and "all buckets empty" are different statements.
+
+    `whole_r=True` (v246, the R distribution only): unit buckets on whole
+    edges instead -- see `_whole_r_histogram`. `bins` is ignored there.
     """
+    if whole_r:
+        return _whole_r_histogram(values)
     if not values or bins < 1:
         return []
     lo, hi = min(values), max(values)

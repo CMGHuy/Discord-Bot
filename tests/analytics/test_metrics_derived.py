@@ -230,6 +230,51 @@ def test_histogram_of_a_single_repeated_value_does_not_divide_by_zero():
     assert sum(b["count"] for b in h) == 3
 
 
+def test_histogram_default_mode_is_unchanged_by_whole_r():
+    """v246: the equal-width mode `returns` and `exit_quality` use stays byte-identical."""
+    values = [-1.6, 2.0, -0.35, 0.4, 0.4]
+    expected = [
+        {"lo": -1.6, "hi": -0.7, "count": 1},
+        {"lo": -0.7, "hi": 0.2, "count": 1},
+        {"lo": 0.2, "hi": 1.1, "count": 2},
+        {"lo": 1.1, "hi": 2.0, "count": 1},
+    ]
+    assert histogram(values, bins=4) == expected
+    assert histogram(values, bins=4, whole_r=False) == expected
+
+
+def test_histogram_whole_r_puts_buckets_on_whole_r_edges():
+    h = histogram([-1.6, -0.35, 0.4, 0.4, 2.0], whole_r=True)
+    assert h == [
+        {"lo": -2, "hi": -1, "count": 1},
+        {"lo": -1, "hi": 0, "count": 1},
+        {"lo": 0, "hi": 1, "count": 2},
+        {"lo": 1, "hi": 2, "count": 0},   # empty interior bucket kept
+        {"lo": 2, "hi": 3, "count": 1},   # 2.0 is the lower edge of [2, 3)
+    ]
+    assert all(isinstance(b["lo"], int) and isinstance(b["hi"], int) for b in h)
+
+
+def test_histogram_whole_r_ignores_bins():
+    values = [-0.5, 0.5, 1.5]
+    assert histogram(values, bins=2, whole_r=True) == histogram(values, bins=50, whole_r=True)
+    assert len(histogram(values, bins=2, whole_r=True)) == 3
+
+
+def test_histogram_whole_r_keeps_an_outlier_in_its_own_bucket():
+    h = histogram([-1.0, -0.2, 6.3], whole_r=True)
+    assert [b["lo"] for b in h] == [-1, 0, 1, 2, 3, 4, 5, 6]
+    assert h[-1] == {"lo": 6, "hi": 7, "count": 1}
+    assert sum(b["count"] for b in h) == 3
+
+
+def test_histogram_whole_r_edge_cases():
+    assert histogram([], whole_r=True) == []
+    assert histogram([1.0, 1.0], whole_r=True) == [{"lo": 1, "hi": 2, "count": 2}]
+    assert histogram([-0.0], whole_r=True) == [{"lo": 0, "hi": 1, "count": 1}]
+    assert histogram([-3.0], whole_r=True) == [{"lo": -3, "hi": -2, "count": 1}]
+
+
 # ------------------------------------------------------ rolling / splits
 
 def test_rolling_return_pct_is_a_trailing_window():
