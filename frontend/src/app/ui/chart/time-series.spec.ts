@@ -238,6 +238,10 @@ describe('sb-time-series edge states and lifecycle (v246 §A3)', () => {
     style.textContent = `:root[data-theme="navy"]{${names.map((n) => `${n}:${resolveTokenIn('navy', n)}`).join(';')}}`;
     document.head.appendChild(style);
     try {
+      // jsdom quirk: with no computed-style read since the rule landed, the first read after the
+      // attribute flips still answers Graphite (the restyle effect would read that). One read primes it;
+      // real browsers resolve at once, so the component is unchanged.
+      getComputedStyle(document.documentElement).getPropertyValue('--accent');
       TestBed.inject(ThemeService).set('navy');
       fixture.detectChanges();
       await fixture.whenStable();
