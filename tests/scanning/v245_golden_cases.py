@@ -174,19 +174,20 @@ def _pin_config_defaults(mp) -> None:
         mp.setattr(config, f.attr, config._cast(f, f.default))
 
 
-def run_case(case: GoldenCase, *, structure=None) -> dict:
-    """Run `_scan_one` on the case, hermetically, and return its snapshot."""
+def run_case(case: GoldenCase, *, structure=None, now: datetime | None = GOLDEN_NOW) -> dict:
+    """Run `_scan_one` on the case, hermetically, and return its snapshot.
+    `now` is passed explicitly (V245-9); with frozen_clock it must give the same golden."""
     df = case.frame()
     live = case.live_price(df) if df is not None else None
     hard_filters = {**GOLDEN_HARD_FILTERS, "mtf_adjacent_gate": case.mtf_adjacent_gate,
                     "confluence_atr_stop_floor": case.atr_stop_floor}
-    extra = {} if structure is None else {"structure": structure}
     with pytest.MonkeyPatch.context() as mp:
         _pin_config_defaults(mp)
         stats = analyze._scan_one(
             TICKER, df, list(case.horizons), None, None, MIN_CONFLUENCE, MIN_CONFIDENCE,
             live_prices={TICKER: live} if live else None, hard_filters=hard_filters,
-            allowed_directions=case.allowed_directions, io=HERMETIC_IO, **extra)
+            allowed_directions=case.allowed_directions, io=HERMETIC_IO,
+            structure=structure, now=now)
     return snapshot(stats)
 
 

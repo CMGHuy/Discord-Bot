@@ -274,6 +274,10 @@ directory.
    comparator and the jsonl. That leaves `off`/`on` (kept as the rollback
    switch). The owner is whoever closes this plan out.
 
+## Results
+
+**Phase A (V245-1..6), measured on production 2026-11-25** with `scripts/perf/analysis_phase_report.py --since-deploy` (bot 2.19.8, deployed 10:31 UTC, 12 scans): analysis p50 **3.12 s per ticker**, p90 3.28 s, against the 0.7 s target and the ~3.2 s baseline. Verdict **MISSED**: the byte-identical fixes F1-F4 and F6 (F5 skipped: its frame is a fresh trim per call, and V245-8 reshapes that function) saved about 2.5 %, far under the profiler's forming-bar estimate. Phase B (Part 3 onward) starts.
+
 ## Deferred alternative: frozen completed-bar structure
 
 The first draft of this spec cached all structure on completed bars once per

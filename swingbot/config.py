@@ -1244,6 +1244,17 @@ FIELDS: list[Field] = [
                "(pure thread/GIL contention overhead). Only raise this with real multi-core "
                "speedup confirmed (e.g. after moving analyze to a process pool) or a much larger "
                "SCAN_UNIVERSE, watched with the E82 telemetry."),
+    Field("ANALYSIS_CACHE", "ANALYSIS_CACHE", "Universe & Scanning", "Analysis prefix cache",
+          type="select", default="off", options=["off", "shadow", "on"],
+          help="v245. on = work that is a pure function of the frame minus its last bar is "
+               "cached per ticker; the last bar and the live price are recomputed every scan, so "
+               "alerts are byte-identical to off. shadow = on, plus a rotating third of the "
+               "watchlist re-run uncached and compared (logs/analysis_cache_shadow.jsonl)."),
+    Field("STRUCTURE_CACHE_MAX", "STRUCTURE_CACHE_MAX", "Universe & Scanning",
+          "Analysis cache entries",
+          type="number", default="320", min=0, max=20000, step=10,
+          help="v245. Most entries the analysis cache keeps (LRU; two per ticker). Sized so the "
+               "worst case stays under 150 MB; watch rss_mb in scan telemetry."),
     Field("SCAN_CACHE_MAX_AGE_HOURS", "SCAN_CACHE_MAX_AGE_HOURS", "Universe & Scanning",
           "Scan cache max age (hours)",
           type="number", default="6", min=1, max=48, step=1,
@@ -1780,6 +1791,7 @@ _CASTERS = {
 _MODE_VALUES = {
     "CONFLUENCE_ATR_TARGET_MODE": ("rechoose", "keep"),
     "PLAN_ENGINE_V2": ("off", "shadow", "on"),
+    "ANALYSIS_CACHE": ("off", "shadow", "on"),
     "MARKETDATA_LAYER": ("off", "count", "on"),
     "RUNNER_STRUCTURE_EXIT": ("off", "hl_trail", "progress_stall"),
     "STRATEGY_ALERTS_MODE": ("off", "shadow", "live"),
