@@ -68,6 +68,7 @@ volume filter is too aggressive (no volume data, or very thin markets)
 and the custom scanner can't find 2 confirmed pivots per side.
 """
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -135,6 +136,33 @@ MAX_TRENDLINES_PER_SIDE = 2
 # hundredths of a second even on the oldest tickers (measured: AAPL/AMD
 # both drop to ~0.02s at this cap, same trendlines found).
 MAX_PIVOT_SCAN_BARS = 1500
+
+# v245 prefix/tail split (index Decision 4): the prefix is the trimmed window
+# minus its last row(s); its last pivots are left to the tail. Hit rate only:
+# _verified_prefix checks every call that the window's pivots start with it.
+TRENDLINE_PREFIX_TAIL_BARS = 1
+UNSTABLE_PREFIX_PIVOTS = 2
+
+
+@dataclass(frozen=True)
+class TrendlinePrefix:
+    """``confirmed``: (bar_idx, price, vol_ratio) pivots, trimmed-window coordinates.
+    ``pairs[i][j - i - 1]`` (i < j): None (skipped pair) or (slope, intercept, touches over confirmed)."""
+    side: str
+    m: int
+    confirmed: tuple
+    pairs: tuple
+
+
+def trimmed_frame(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """(last MAX_PIVOT_SCAN_BARS rows, their start offset in df)."""
+    trim_start = max(len(df) - MAX_PIVOT_SCAN_BARS, 0)
+    return (df.tail(MAX_PIVOT_SCAN_BARS) if trim_start else df), trim_start
+
+
+def prefix_length(trimmed: pd.DataFrame) -> int:
+    """Rows of the trimmed window the cached prefix covers."""
+    return max(len(trimmed) - TRENDLINE_PREFIX_TAIL_BARS, 0)
 
 
 # ── Volume-confirmed pivot scanner ────────────────────────────────────────────
@@ -221,6 +249,47 @@ def _eval_line(slope: float, intercept: float, bar_idx: int) -> float:
     return slope * bar_idx + intercept
 
 
+def _pair_line(p0: tuple, p1: tuple) -> tuple[float, float] | None:
+    """(slope, intercept) of the line through two pivots, None for a skipped pair."""
+    x0, y0, _ = p0
+    x1, y1, _ = p1
+    if x1 == x0 or y0 <= 0 or y1 <= 0:
+        return None
+    slope = (y1 - y0) / (x1 - x0)
+    return slope, y0 - slope * x0
+
+
+def _touches(slope: float, intercept: float, pivots) -> list:
+    """Every pivot (anchors included) within TOUCH_TOLERANCE_PCT of the line, in pivot order."""
+    touches: list = []
+    for bar_idx, price, vol_ratio in pivots:
+        line_here = _eval_line(slope, intercept, bar_idx)
+        if line_here > 0 and abs(price - line_here) / line_here * 100 <= TOUCH_TOLERANCE_PCT:
+            touches.append((bar_idx, price, vol_ratio))
+    return touches
+
+
+def _price_gates_pass(slope: float, line_at_now: float, current_price: float, side: str) -> bool:
+    """Side check (1 % tolerance: a line right at price still counts) and slope cap."""
+    if side == "support" and line_at_now > current_price * 1.01:
+        return False
+    if side == "resistance" and line_at_now < current_price * 0.99:
+        return False
+    return not (current_price > 0 and abs(slope / current_price * 100) > MAX_SLOPE_PCT_PER_BAR)
+
+
+def _scored(slope: float, intercept: float, touches: list, n_bars: int, line_at_now: float) -> dict | None:
+    """The candidate dict, or None under two touches."""
+    if len(touches) < 2:
+        return None
+    avg_vol = sum(v for _, _, v in touches) / len(touches)
+    last_touch_bar = max(b for b, _, _ in touches)
+    recency = last_touch_bar / max(n_bars - 1, 1)          # 0 … 1
+    score = len(touches) * avg_vol * (0.4 + 0.6 * recency)
+    return {"slope": slope, "intercept": intercept, "touches": touches,
+            "strength": len(touches), "score": score, "line_at_now": line_at_now}
+
+
 def _score_candidate(slope: float, intercept: float, pivots: list,
                      n_bars: int, current_price: float, side: str) -> dict | None:
     """
@@ -237,43 +306,9 @@ def _score_candidate(slope: float, intercept: float, pivots: list,
       the last touch occurred (older lines matter less).
     """
     line_at_now = _eval_line(slope, intercept, n_bars - 1)
-
-    # Side check: 1 % tolerance lets a line that's right at current price
-    # still count (it could be the current S/R being tested).
-    if side == "support" and line_at_now > current_price * 1.01:
+    if not _price_gates_pass(slope, line_at_now, current_price, side):
         return None
-    if side == "resistance" and line_at_now < current_price * 0.99:
-        return None
-
-    # Slope cap.
-    if current_price > 0:
-        slope_pct = abs(slope / current_price * 100)
-        if slope_pct > MAX_SLOPE_PCT_PER_BAR:
-            return None
-
-    # Count every pivot (including non-anchor ones) that touches the line.
-    touches: list = []
-    for bar_idx, price, vol_ratio in pivots:
-        line_here = _eval_line(slope, intercept, bar_idx)
-        if line_here > 0 and abs(price - line_here) / line_here * 100 <= TOUCH_TOLERANCE_PCT:
-            touches.append((bar_idx, price, vol_ratio))
-
-    if len(touches) < 2:
-        return None
-
-    avg_vol = sum(v for _, _, v in touches) / len(touches)
-    last_touch_bar = max(b for b, _, _ in touches)
-    recency = last_touch_bar / max(n_bars - 1, 1)          # 0 … 1
-    score = len(touches) * avg_vol * (0.4 + 0.6 * recency)
-
-    return {
-        "slope": slope,
-        "intercept": intercept,
-        "touches": touches,
-        "strength": len(touches),
-        "score": score,
-        "line_at_now": line_at_now,
-    }
+    return _scored(slope, intercept, _touches(slope, intercept, pivots), n_bars, line_at_now)
 
 
 def _trimmed_zigzag(df: pd.DataFrame) -> list:
@@ -281,8 +316,7 @@ def _trimmed_zigzag(df: pd.DataFrame) -> list:
     MAX_PIVOT_SCAN_BARS rows, at PIVOT_THRESHOLD_PCT. Computed once per frame
     and shared by both sides (v245); a failure gives [] (no pivots), as each
     side's own zigzag would."""
-    trimmed = df.tail(MAX_PIVOT_SCAN_BARS) if len(df) > MAX_PIVOT_SCAN_BARS else df
-    return _zigzag_or_empty(trimmed)
+    return _zigzag_or_empty(trimmed_frame(df)[0])
 
 
 def _shift_to_full_frame(best: dict | None, trim_start: int) -> dict | None:
@@ -299,8 +333,74 @@ def _shift_to_full_frame(best: dict | None, trim_start: int) -> dict | None:
     return best
 
 
+def _empty_prefix(side: str) -> TrendlinePrefix:
+    return TrendlinePrefix(side, 0, (), ())
+
+
+def _prefix_row(confirmed: tuple, i: int) -> tuple:
+    row = []
+    for j in range(i + 1, len(confirmed)):
+        line = _pair_line(confirmed[i], confirmed[j])
+        row.append(None if line is None else (*line, tuple(_touches(*line, confirmed))))
+    return tuple(row)
+
+
+def build_trendline_prefix(trimmed: pd.DataFrame, side: str, m: int) -> TrendlinePrefix:
+    """The cacheable half of the pair search over ``trimmed.iloc[:m]``: its
+    confirmed pivots (minus the last UNSTABLE_PREFIX_PIVOTS) and, per pair,
+    the line and its touches over those pivots."""
+    found = _volume_confirmed_pivots(trimmed.iloc[:m], "low" if side == "support" else "high")
+    confirmed = tuple(found[:max(len(found) - UNSTABLE_PREFIX_PIVOTS, 0)])
+    return TrendlinePrefix(side, m, confirmed, tuple(_prefix_row(confirmed, i) for i in range(len(confirmed))))
+
+
+def _verified_prefix(prefix: TrendlinePrefix | None, pivots: list, side: str) -> TrendlinePrefix:
+    """``prefix`` when the window's pivots start with its confirmed pivots, else the empty prefix."""
+    if prefix is None or prefix.side != side:
+        return _empty_prefix(side)
+    k = len(prefix.confirmed)
+    if k > len(pivots) or tuple(pivots[:k]) != prefix.confirmed:
+        return _empty_prefix(side)
+    return prefix
+
+
+def _cached_pair_result(cell, tail: list, n_bars: int, current_price: float, side: str) -> dict | None:
+    if cell is None:
+        return None
+    slope, intercept, prefix_touches = cell
+    line_at_now = _eval_line(slope, intercept, n_bars - 1)
+    if not _price_gates_pass(slope, line_at_now, current_price, side):
+        return None
+    touches = list(prefix_touches) + _touches(slope, intercept, tail)
+    return _scored(slope, intercept, touches, n_bars, line_at_now)
+
+
+def _live_pair_result(p0, p1, pivots: list, n_bars: int, current_price: float, side: str) -> dict | None:
+    line = _pair_line(p0, p1)
+    if line is None:
+        return None
+    return _score_candidate(line[0], line[1], pivots, n_bars, current_price, side)
+
+
+def _pick_best(pivots: list, prefix: TrendlinePrefix, n_bars: int, current_price: float, side: str) -> dict | None:
+    """The old i < j pair loop with strict ``>``; pairs inside the prefix read its cells."""
+    k = len(prefix.confirmed)
+    tail = pivots[k:]
+    best: dict | None = None
+    for i in range(len(pivots)):
+        for j in range(i + 1, len(pivots)):
+            if j < k:
+                result = _cached_pair_result(prefix.pairs[i][j - i - 1], tail, n_bars, current_price, side)
+            else:
+                result = _live_pair_result(pivots[i], pivots[j], pivots, n_bars, current_price, side)
+            if result and (best is None or result["score"] > best["score"]):
+                best = result
+    return best
+
+
 def _find_best_trendline(df: pd.DataFrame, current_price: float, side: str, *,
-                         all_pivots: list | None = None) -> dict | None:
+                         all_pivots: list | None = None,
+                         prefix: TrendlinePrefix | None = None) -> dict | None:
     """
     Finds the strongest volume-confirmed S/R trendline for `side`
     ("support" or "resistance") by scanning the FULL df history.
@@ -318,32 +418,15 @@ def _find_best_trendline(df: pd.DataFrame, current_price: float, side: str, *,
 
     ``all_pivots``: ``_trimmed_zigzag(df)`` when the caller scans both sides
     of the same frame (v245); None computes it inside the pivot filter.
+
+    ``prefix`` (v245): used only when the window's pivots start with its
+    confirmed pivots; otherwise every pair runs live. Same result either way.
     """
-    trim_start = max(len(df) - MAX_PIVOT_SCAN_BARS, 0)
-    if trim_start:
-        df = df.tail(MAX_PIVOT_SCAN_BARS)
-
-    kind = "low" if side == "support" else "high"
-    pivots = _volume_confirmed_pivots(df, kind, all_pivots=all_pivots)
-
+    df, trim_start = trimmed_frame(df)
+    pivots = _volume_confirmed_pivots(df, "low" if side == "support" else "high", all_pivots=all_pivots)
     if len(pivots) < 2:
         return None
-
-    n_bars = len(df)
-    best: dict | None = None
-
-    for i in range(len(pivots)):
-        x0, y0, _ = pivots[i]
-        for j in range(i + 1, len(pivots)):
-            x1, y1, _ = pivots[j]
-            if x1 == x0 or y0 <= 0 or y1 <= 0:
-                continue
-            slope = (y1 - y0) / (x1 - x0)
-            intercept = y0 - slope * x0
-            result = _score_candidate(slope, intercept, pivots, n_bars, current_price, side)
-            if result and (best is None or result["score"] > best["score"]):
-                best = result
-
+    best = _pick_best(pivots, _verified_prefix(prefix, pivots, side), len(df), current_price, side)
     return _shift_to_full_frame(best, trim_start)
 
 
@@ -372,7 +455,7 @@ def _to_display_coords(line: dict, n_bars_total: int, display_bars: int) -> dict
 
 # ── Public API (same signatures as original) ──────────────────────────────────
 
-def custom_scanner_levels(df: pd.DataFrame, current_price: float) -> list:
+def custom_scanner_levels(df: pd.DataFrame, current_price: float, prefixes: dict | None = None) -> list:
     """
     The volume-confirmed custom-scanner half of trendline_levels() --
     everything except the trendln-library fallback. Its result depends
@@ -384,15 +467,19 @@ def custom_scanner_levels(df: pd.DataFrame, current_price: float) -> list:
     instead of repeating the same O(pivots^3) scan 10 times over
     identical input (v56: measured live, this was the dominant cost of a
     production scan -- see MAX_PIVOT_SCAN_BARS's comment above).
+
+    ``prefixes``: side -> TrendlinePrefix (v245); same result.
     """
     if len(df) < MIN_BARS_FOR_TRENDLINE or current_price <= 0:
         return []
 
     shared = _trimmed_zigzag(df)
+    prefixes = prefixes or {}
     candidates: list = []
     for side in ("support", "resistance"):
         try:
-            result = _find_best_trendline(df, current_price, side, all_pivots=shared)
+            result = _find_best_trendline(df, current_price, side, all_pivots=shared,
+                                          prefix=prefixes.get(side))
             if result:
                 candidates.append((
                     float(result["line_at_now"]),
@@ -401,6 +488,11 @@ def custom_scanner_levels(df: pd.DataFrame, current_price: float) -> list:
         except Exception:
             pass
 
+    return _positive_levels(candidates)
+
+
+def _positive_levels(candidates: list) -> list:
+    """The (price, label) candidates with a positive, non-NaN price."""
     return [(p, s) for p, s in candidates if p and p > 0 and not pd.isna(p)]
 
 
