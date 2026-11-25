@@ -715,9 +715,9 @@ The `v171_001` tables stay on every rollback.
 Soak: 5 trading days of `shadow` with zero diffs (`cache_diffs` in
 `data/scan_telemetry.jsonl`, one JSON line per diff in
 `logs/analysis_cache_shadow.jsonl`). The switch landed mid-session, so
-2026-11-25 does not count; the first full soak day is 2026-11-26's successor
-trading day (2026-11-26 is Thanksgiving, closed): 2026-11-27 is a half session,
-and the report counts only days with compared tickers. Read-only verdict:
+2026-11-25 is a partial day; 2026-11-26 is Thanksgiving (closed) and 2026-11-27
+a half session. The report counts a day only with compared tickers and only
+after its 16:00 New York close. Read-only verdict:
 `bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python - --since-deploy" < scripts/perf/analysis_cache_soak_report.py`.
 Rollback: `python3 scripts/ops/env_set.py ANALYSIS_CACHE off` plus
 `docker compose kill -s HUP bot` (same alerts, slower scans).
