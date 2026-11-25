@@ -55,7 +55,9 @@ export function deriveActivity(
         status: row.status ?? '',
         detail: cancelled
           ? 'Plan cancelled before filling'
-          : `Closed${row.r_multiple != null ? ` at ${rMultiple(row.r_multiple)}` : ''}`,
+          // v246 §A1: the status icon already says "closed"; the row shows
+          // the signed R alone. No R -> the word, so the row is never blank.
+          : (row.r_multiple != null ? rMultiple(row.r_multiple) : 'Closed'),
         r: cancelled ? null : (row.r_multiple ?? null),
         id: `${row.id}:${cancelled ? 'cancelled' : 'closed'}`,
         tradeId: row.id,

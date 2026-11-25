@@ -17,7 +17,9 @@ export const PANEL_HELP = {
     'Every trade plan by stage: pending (waiting for entry), active (entered), partial (first target '
     + 'banked, the rest still running) and closed. Open one to see why it was taken.',
   recentActivity:
-    'The latest events on your trade plans, newest first: entries, partial exits, exits and cancellations.',
+    'The latest events on your trade plans, newest first: entries, partial exits, exits and cancellations. '
+    + 'A closed row shows its result in R, pre-tax and before modelled frictions, the same basis as the '
+    + 'figures above.',
   marketMovers:
     'The biggest price moves today among the symbols on your watchlist, winners and losers.',
   exposureByHorizon:
