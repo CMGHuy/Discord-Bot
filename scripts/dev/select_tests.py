@@ -250,8 +250,9 @@ REGISTRY_PREFIXES = (
 DATA_READERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # V239-1 research policy is named by the context-only CSV reader audit.
     ("scripts/research/README.md", ("tests/backtest_scripts/test_context_stems_never_listed.py",)),
-    # v239: exact-date SPY/VIX fixture consumed by the raw regime replay.
-    ("tests/fixtures/regime/spy_vix_replay.csv", ("tests/regime/test_bear_regime_replay.py",)),
+    # v239: exact-date SPY/VIX fixture consumed by the raw regime replay and the regime pass.
+    ("tests/fixtures/regime/spy_vix_replay.csv", ("tests/regime/test_bear_regime_replay.py",
+                                                  "tests/regime/test_regime_pass.py")),
     # v161: the generator role skills, the playbook and the trade-scout skill
     # are read by tests/scout/ shape tests as well as tests/hooks/. Narrower
     # rows first (first match wins), repeating the broad row's target.
