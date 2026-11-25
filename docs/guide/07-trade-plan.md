@@ -2,7 +2,7 @@
 title: Building the trade plan
 slug: trade-plan
 order: 7
-reviewed_for: 2.19.5
+reviewed_for: 2.19.10
 sources:
   - swingbot/core/planning/builders.py:build_confluence_plan
   - swingbot/core/planning/builders.py:build_strategy_plan
@@ -57,6 +57,11 @@ sources:
   - swingbot/config.py:RUNNER_GIVEBACK_ENABLED
   - swingbot/config.py:DATA_DRIVEN_STOPS_ENABLED
   - swingbot/config.py:PLAN_ENGINE_V2
+  - swingbot/core/planning/params.py:regime_asof
+  - swingbot/core/market/bear_regime.py:shadow_action
+  - swingbot/core/scanning/alert_embeds.py:regime_fields
+  - swingbot/core/presentation/regime_text.py:alert_line
+  - swingbot/config.py:BEAR_REGIME_MODE
 ---
 
 > **In plain words** A trade plan is the full set of numbers an alert carries: where to get in, where the idea is wrong (the stop), where to take profit (one or two targets), and how the stop follows the trade once it moves your way. The stop comes from the chart, is never further from the entry than a fixed cap, and never moves against you after entry. A target must pay enough for the risk taken, or there is no trade at all.
@@ -183,5 +188,17 @@ Everything in this chapter describes the plan engine setting `on`; it is now {{P
 <details><summary>Under the hood</summary>
 
 `build_strategy_plan` and `build_confluence_plan` build the plan in the scan and in the strategy-engine and armed-replay arms; the older single-strategy backtest loop assembles the same plan shape with the shared helpers (`plan_shape_for`, `select_structural_target`, `exit_params_for`). The walk is `exit_sim_v2.simulate_exit_v2` (instrument v2: fills and costs from `backtesting/instrument/`), with the horizon's `max_holding_days` as its hold cap.
+
+</details>
+
+## The trend line on the alert (shadow)
+
+While the setting `BEAR_REGIME_MODE` is not off (it is now {{BEAR_REGIME_MODE}}), every alert carries one Trend line under its plan. It reads the market's daily trend for the session the plan is issued for, from SPY's last completed close against its 50-day and 200-day averages and from the VIX close: **Bear** when the long trend has turned down, **Correction** when it is a dip while the long trend still rises (**Correction · Stress** when the VIX closed at 25 or above), and **Pullback watch** on the day the panic eases inside a correction. A **Normal** trend, or **No reading** when the data is missing or late, adds no line.
+
+The line says what the engine *would* do with this plan: skip a long in a bear or a stressed correction, take care with a long in a plain correction, watch a long on a pullback day, and note that a short goes with the tape (with the squeeze risk that comes with it). It is a shadow: no plan is blocked, sized, scored or cancelled because of it, and the plan's numbers above the line are the same with or without it. Whether acting on it would pay is decided later by its own screens, never by this line.
+
+<details><summary>Under the hood</summary>
+
+`regime_scan.regime_for_pass` labels the coming session once per scan pass with `bear_regime.classify` and stores it once in `market_regime_days`. `params.regime_asof` and `stamp_entry_context` write `bear_regime` and `regime_action` (from `bear_regime.shadow_action`, given the state, the stress flag, the pullback trigger and the direction) into the plan's `entry_context`. `alert_embeds.regime_fields` renders the stored pair through `regime_text.alert_line` as the `Trend` field. With the setting off nothing is fetched, stored, stamped or shown.
 
 </details>

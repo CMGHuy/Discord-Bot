@@ -521,7 +521,8 @@ def test_chapter_6_names_the_built_but_unused_vetoes():
 CH7_ANCHORS = ["entry", "the-stop", "the-stop-distance-cap-and-the-clamp",
                "the-stop-never-widens", "targets-that-pay-for-the-risk",
                "scale-out-and-the-runner", "how-a-plan-closes",
-               "backtest-and-live-use-the-same-plan"]
+               "backtest-and-live-use-the-same-plan",
+               "the-trend-line-on-the-alert-shadow"]
 CH7_LINKABLE = CH6_LINKABLE | {"trade-plan"}
 
 
@@ -786,3 +787,28 @@ def test_chapter_links_point_where_the_text_says():
     }
     for slug, links in expected.items():
         assert links <= set(_GUIDE_LINK.findall(_chapter(slug).body)), slug
+
+
+def test_chapter_7_trend_line_is_shadow_only():
+    section = _section(_chapter("trade-plan").body, "The trend line on the alert (shadow)")
+    assert "{{BEAR_REGIME_MODE}}" in section
+    for word in ("Bear", "Correction", "Stress", "Pullback watch", "No reading"):
+        assert word in section, word
+    assert "no plan is blocked, sized, scored or cancelled" in section
+    assert "`alert_embeds.regime_fields`" in section and "`bear_regime.shadow_action`" in section
+    sources = set(_chapter("trade-plan").sources)
+    assert {"swingbot/core/planning/params.py:regime_asof",
+            "swingbot/core/market/bear_regime.py:shadow_action",
+            "swingbot/core/scanning/alert_embeds.py:regime_fields",
+            "swingbot/core/presentation/regime_text.py:alert_line",
+            "swingbot/config.py:BEAR_REGIME_MODE"} <= sources
+
+
+def test_chapter_1_alert_lists_the_trend_line():
+    section = _section(_chapter("what-it-is").body, "What an alert is")
+    assert "](/insights/guide/trade-plan#the-trend-line-on-the-alert-shadow)" in section
+
+
+def test_chapter_3_alert_stage_names_the_trend_line_as_shadow():
+    section = _section(_chapter("pipeline").body, "Alert")
+    assert "Trend line" in section and "never changes the plan" in section

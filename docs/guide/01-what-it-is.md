@@ -2,7 +2,7 @@
 title: What the bot is (and isn't)
 slug: what-it-is
 order: 1
-reviewed_for: 2.19.2
+reviewed_for: 2.19.10
 sources:
   - swingbot/core/market/strategy_types.py:HORIZONS
   - swingbot/core/market/strategy_types.py:live_horizons
@@ -47,6 +47,7 @@ An [alert](/insights/guide/glossary#alert) is one trade plan for one ticker on o
 - the direction, [long or short](/insights/guide/glossary#long-and-short);
 - the entry, the stop, TP1 and TP2, and the [reward to risk](/insights/guide/glossary#reward-to-risk-rr) to TP1;
 - a [confidence](/insights/guide/glossary#confidence) level and, for a strategy setup, the strategy's [badge](/insights/guide/glossary#badge) with its sample size and date;
+- while the market-trend layer runs, a Trend line saying what the engine would do in today's market trend; it is a shadow and never changes the plan ([the trend line](/insights/guide/trade-plan#the-trend-line-on-the-alert-shadow));
 - a chart with the levels drawn on it;
 - warnings when something needs attention, for example an unusually tight stop, or a position the [portfolio heat](/insights/guide/glossary#portfolio-heat) cap blocks (the alert still posts, with a suggested size of zero).
 

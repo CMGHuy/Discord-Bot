@@ -9,6 +9,7 @@ SWITCH_NAMES = {
     "gates.switches", "STRATEGY_ALERTS_MODE", "STRATEGY_ALERTS_LIVE_STRATEGIES", "RS_GATE",
     "RS_LEADER_PERCENTILE", "RS_LAGGARD_PERCENTILE", "HTF_CONFLUENCE_ENABLED",
     "AVWAP_LEVELS_ENABLED", "LEVEL_LIFECYCLE_STOPS_ENABLED", "SCALE_OUT_ENABLED", "PLAN_ENGINE_V2",
+    "BEAR_REGIME_MODE",
 }
 LABELS = [
     "Market regime gate", "Adjacent-horizon alignment", "Relative strength, long arm",
@@ -160,6 +161,9 @@ def test_no_sensitive_setting_is_a_switch():
     ("PLAN_ENGINE_V2", "on", "`on`"),
     ("PLAN_ENGINE_V2", "shadow", "`shadow`"),
     ("PLAN_ENGINE_V2", "off", "`off`"),
+    ("BEAR_REGIME_MODE", "off", "`off`"),
+    ("BEAR_REGIME_MODE", "shadow", "`shadow`"),
+    ("BEAR_REGIME_MODE", "live", "`live`"),
 ])
 def test_single_flags_read_config_at_call_time(monkeypatch, name, value, text):
     monkeypatch.setattr(config, name, value)

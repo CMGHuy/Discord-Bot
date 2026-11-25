@@ -179,6 +179,21 @@ Every Alpaca and yfinance request in `swingbot/` (bot, spawned `_run_bounded` wo
   bypass it. Deliberately **not** a `market_context` CTX column: `market_context.get()`
   returns None whenever `REGIME_GATES_ENABLED` is off, which would let an
   unrelated flag silently disable this one.
+- **Bear-regime shadow (v239).** `core/market/bear_regime.py` (pure
+  `classify` -> `RegimeDay`, frozen `Final` constants, `shadow_action`) and
+  `core/market/regime_episodes.py` (two-session confirmed episodes) label the
+  coming NYSE session `D` from completed daily SPY and ^VIX bars dated `<= s`.
+  `scanning/regime_calendar.py` gives the half-day-aware `(s, D)` pair and
+  the completed-bar cut; `scanning/regime_scan.regime_for_pass` computes or
+  reads `D` once per pass, writes `market_regime_days` once
+  (`MarketRegimeRepository.insert_once`) and only the winning insert enqueues
+  the `bear_regime` notice (`scanning/regime_notices.py`).
+  `planning/params.regime_asof` + `stamp_entry_context` stamp `bear_regime` /
+  `regime_action`; `presentation/regime_text.py` is the one vocabulary for
+  the alert `Trend` line, the notice, `GET /api/v1/market/regime` and the SPA
+  banner/chip. Shadow only: nothing blocks, sizes, scores or cancels a plan.
+  `BEAR_REGIME_MODE=off` is byte-identical (no fetch, row, stamp, line,
+  notice or banner). Drift guard: `scripts/reports/regime_parity.py`.
 - Tests build OHLCV frames with `tests/conftest.py:make_ohlcv` /
   `make_trend_df` (columns `Open,High,Low,Close,Volume`, business-day
   DatetimeIndex) and `tests/helpers.py`. Read conftest before writing new

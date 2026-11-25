@@ -25,6 +25,15 @@ facades -- edit the module behind them: `alert_embeds.py` (`build_embed`,
 embeds), `plan_table.py` (plan rows, sizing snapshot), and `scan_run.py`
 (`_sync_run_scan`'s alert-building loop). The old `core/scan_embeds.py` /
 `core/scan_engine.py` shims are deleted; do not look for them.
+The v239 `Trend` line is one helper, `alert_embeds.regime_fields(plan)`,
+called once in `build_embed` (inside `sections["plan"]`), `build_simple_alert`
+(both branches), `build_strategy_alert_embed` (after Ledger) and
+`build_strategy_simple_embed` (in the description); the execution ticket
+(`build_ticket_embed`) carries none. It reads only the stamped
+`entry_context` keys `bear_regime` / `regime_action`; with
+`BEAR_REGIME_MODE=off` nothing is stamped and every embed is byte-identical
+(`tests/regime/test_regime_embeds.py`,
+`tests/regime/test_regime_off_byte_identical.py`).
 
 ## Step 2 — An empty table is an answer
 
@@ -61,6 +70,7 @@ suite that never renders the surface it claims to fix proves nothing here.
 | "The cache looked stale, so I cleared both" | The two caches serve different consumers at different freshness by design; clearing the wrong one degrades a working path to fix a broken one. |
 | "It's just a copy edit on the embed text" | Field order and grouping route through a shared accumulator, not raw field calls -- a hand-added field silently breaks that ordering. |
 | "I'll post to the simple channel from a new sender" | Only `commands/scanning/alerts.py::_mirror` and the feed branch of `lifecycle_embeds._send_instruction` post there, and each calls `record_feed_post` right after `log_posted`, inside the `try` (v227). A new simple-channel sender without it never reaches bomeo-capital.com's voice notifications; a call outside the `try` speaks posts Discord refused. `FEED_POSTS_ENABLED=false` silences the site without touching Discord. |
+| "The new builder needs the trend line, I'll fetch the regime there" | Builders never fetch: call `regime_fields(plan)`, which reads the stamped `entry_context` pair, and pin the `off` bytes in `tests/regime/test_regime_embeds.py`. A builder that reads `market_regime_days` itself breaks the `off` kill switch. |
 
 ## Trigger table
 

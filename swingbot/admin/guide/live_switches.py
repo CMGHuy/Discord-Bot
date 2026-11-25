@@ -128,4 +128,5 @@ SWITCH_PLACEHOLDERS: dict[str, Callable[[], str]] = {
     "LEVEL_LIFECYCLE_STOPS_ENABLED": _cfg("LEVEL_LIFECYCLE_STOPS_ENABLED", _flag),
     "SCALE_OUT_ENABLED": _cfg("SCALE_OUT_ENABLED", _flag),
     "PLAN_ENGINE_V2": _cfg("PLAN_ENGINE_V2", _backticked),
+    "BEAR_REGIME_MODE": _cfg("BEAR_REGIME_MODE", _backticked),
 }

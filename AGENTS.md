@@ -200,7 +200,7 @@ admin UI.
 
 Read the `docs/claude/` file:
 
-- `architecture.md`: changing `swingbot/core`, plan engine or scan pipeline.
+- `architecture.md`: changing `swingbot/core`, plan engine, scan pipeline or the bear-regime shadow (v239, `BEAR_REGIME_MODE`; never a gate).
 - `known-traps.md`: data caching (every provider call goes through `core/marketdata/shared/`), scan output, embeds, the 2% stop
   cap/clamp, the liquidity floor, production `.env` (never `sed -i`).
 - `backtest-methodology.md`: running or interpreting a backtest, grid or
@@ -347,6 +347,7 @@ python scripts/data/fetch_backtest_data.py            # populate the CSV cache (
 python scripts/backtest/run_backtest_range.py --train|--validation [--exit-model v2 --scale-out] [--strategy "RSI"] [--json out.json]
 python scripts/backtest/tune_strategy.py --strategy "RSI" --grid key=v1,v2 --exit-model v2 --scale-out   # TRAIN-only grid
 python scripts/reports/shadow_parity_report.py        # v2-vs-legacy comparison from data/shadow_plans.jsonl
+python scripts/reports/regime_parity.py               # v239: stored market_regime_days vs a cache replay (boundary days reported, not failed)
 make up / make logs / make restart                    # docker compose lifecycle
 ```
 

@@ -2,7 +2,7 @@
 title: The scan pipeline, end to end
 slug: pipeline
 order: 3
-reviewed_for: 2.19.2
+reviewed_for: 2.19.10
 sources:
   - swingbot/core/scanning/scan_run.py:run_scan
   - swingbot/core/scanning/analyze.py:_scan_one
@@ -100,7 +100,7 @@ So a plan ends this stage in one of three ways: **rejected** (logged as `plan re
 
 ## Alert
 
-The plan is posted with its chart, and a paper trade is opened from it. [Where alerts appear](/insights/guide/what-it-is#where-alerts-appear) lists the Discord channels and the admin pages.
+The plan is posted with its chart, and a paper trade is opened from it. Under the plan the alert carries a Trend line with the market's daily trend label; it records what the engine would do and never changes the plan ([chapter 7](/insights/guide/trade-plan#the-trend-line-on-the-alert-shadow)). [Where alerts appear](/insights/guide/what-it-is#where-alerts-appear) lists the Discord channels and the admin pages.
 
 ## Monitoring
 
