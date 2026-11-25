@@ -490,6 +490,7 @@ git commit -m "feat(v246): label R-distribution buckets by their lower edge with
 - Create: `frontend/src/app/ui/field.spec.ts`
 - Modify: `frontend/src/styles/tokens.css:311` (three tokens after `--control-h: 28px;`)
 - Modify: `frontend/src/app/ui/tokens.spec.ts:84` (`REQUIRED` list) and the `'design tokens'` describe (one added test)
+- Modify: `frontend/src/app/workspaces/gallery/gallery.ts` (one `sb-field` exhibit; the Gallery gate requires every `ui/` selector — Step 6b)
 
 **Interfaces:**
 - Consumes: `--control-h`, `--space-4` (`styles/tokens.css`); the global `.sb-label` caption style (`frontend/src/styles.css:118`); `resolveToken(name)` from `frontend/src/app/ui/testing/resolve-token.ts` (throws on an unknown token).
@@ -770,10 +771,25 @@ Expected: PASS, 0 failed.
 
 If the phone-block regex in `field.spec.ts` finds nothing, check that the `@media` block's closing brace sits on its own line indented four spaces (`\n    }`), the same shape `control-bar.spec.ts:77` reads.
 
+- [ ] **Step 6b: Show `sb-field` in the Gallery (controller amendment, 2026-11-25)**
+
+`workspaces/gallery/gallery.spec.ts` reads every `selector: 'sb-…'` under `ui/` off disk and fails for any the Gallery does not render, so a new `sb-field` without an exhibit turns that spec red. In `frontend/src/app/workspaces/gallery/gallery.ts`, import `Field` from `'../../ui/field'`, add it to the component's `imports` array, and add one exhibit directly after the existing `<sb-date-range [from]="'2026-01-01'" [to]="'2026-09-12'" />` line (the control-bar exhibit above it stays untouched):
+
+```html
+      <sb-field label="Strategy" size="m">
+        <sb-select ariaLabel="Strategy" placeholder="All" [options]="selectOptions" />
+      </sb-field>
+```
+
+(If `sb-select`'s accessible-name input is not `ariaLabel`, use the name `form-controls.ts` declares; V246-4 later drops the select's own label inside a field, so the exhibit needs no change there.)
+
+Run: `cd frontend && npx ng test --watch=false --include src/app/workspaces/gallery/gallery.spec.ts`
+Expected: PASS, 0 failed.
+
 - [ ] **Step 7: Commit**
 
 ```bash
-git add frontend/src/app/ui/field.ts frontend/src/app/ui/field.spec.ts frontend/src/styles/tokens.css frontend/src/app/ui/tokens.spec.ts
+git add frontend/src/app/ui/field.ts frontend/src/app/ui/field.spec.ts frontend/src/styles/tokens.css frontend/src/app/ui/tokens.spec.ts frontend/src/app/workspaces/gallery/gallery.ts
 git commit -m "feat(v246): sb-field wraps a bar control with a fixed-height label line; --field-s/m/l width tokens" -m "SB_FIELD hands the label to the wrapped control; the field sets --sb-control-w, 100% below 640px."
 ```
 
