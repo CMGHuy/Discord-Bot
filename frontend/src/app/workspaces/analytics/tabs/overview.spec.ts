@@ -533,6 +533,21 @@ describe('OverviewTab equity and drawdown on sb-time-series (v246 §A3)', () => 
     expect(paneFacts(el)).toBe(`Max drawdown ${money(-30, '$')} · Longest losing streak 4`);
   });
 
+  it.each([
+    { label: 'one close', cumulative: [-30] },
+    { label: 'two closes', cumulative: [-10, -30] },
+  ])('measures drawdown from the start of the range with $label', ({ cumulative }) => {
+    const points = cumulative.map((cum_pnl, i) => ({
+      date: `2026-08-0${i + 1}`, cum_r: cum_pnl / 30, drawdown_r: -cum_pnl / 30, cum_pnl, cum_pct: cum_pnl / 100,
+    }));
+    const { el, fixture } = render({ equityCurve: signal({
+      points, points_n: points.length, as_of: points.at(-1)!.date, scope: {}, n: points.length,
+    }) });
+    expect(paneFacts(el)).toContain(`Max drawdown ${money(-30, '$')}`);
+    const tile = fixture.componentInstance.kpiTiles().find((item) => item.label === ANALYTICS_DRAWDOWN_LABEL);
+    expect(tile?.money).toBe(money(-30, '$'));
+  });
+
   it('shows a dash for a streak the payload does not carry, and a plain zero drawdown', () => {
     const { el } = render({ equityCurve: signal({
       points: [{ date: '2026-08-01', cum_r: 1, drawdown_r: 0, cum_pnl: 70, cum_pct: 0.7 },

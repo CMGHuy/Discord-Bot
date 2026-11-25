@@ -113,7 +113,8 @@ export function winRateHint(
  *  (Max drawdown's money line), which has no server-side equivalent. */
 function maxDrawdown(values: readonly number[]): number | null {
   if (!values.length) return null;
-  let peak = values[0];
+  // Cumulative P&L starts at zero before the first close in the range.
+  let peak = 0;
   let worst = 0;
   for (const value of values) {
     if (value > peak) peak = value;
