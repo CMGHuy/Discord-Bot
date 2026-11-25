@@ -15,6 +15,7 @@ import { ConfidenceCell } from '../../ui/confidence-cell';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { ControlBar } from '../../ui/control-bar';
 import { DateRange } from '../../ui/date-range';
+import { Field } from '../../ui/field';
 import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, PageSpec, RowContext } from '../../ui/data-table/data-table.types';
 import { DirectionArrow } from '../../ui/direction-arrow';
@@ -146,6 +147,7 @@ interface ContractRow {
   imports: [
     Async,
     BarList,
+    Field,
     Button,
     ChartContainer,
     Checkbox,
@@ -647,6 +649,9 @@ interface ContractRow {
         <sb-select scope label="Range" placeholder="YTD" [options]="selectOptions" />
       </sb-control-bar>
       <sb-date-range [from]="'2026-01-01'" [to]="'2026-09-12'" />
+      <sb-field label="Strategy" size="m">
+        <sb-select ariaLabel="Strategy" placeholder="All" [options]="selectOptions" />
+      </sb-field>
     </sb-panel>
 
     <!-- -- charts -- one shared chrome (v54 D5) -------------------------------- -->
