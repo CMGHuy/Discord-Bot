@@ -8,7 +8,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { installMatchMediaPolyfill } from '../../testing/match-media-polyfill';
 import { resolveToken } from '../testing/resolve-token';
-import { THEME_STORAGE } from '../theme.service';
+import { resolveTokenIn } from '../testing/theme-tokens';
+import { THEME_STORAGE, ThemeService } from '../theme.service';
 import {
   TimeSeries, TimeSeriesCandle, TimeSeriesDatum, TimeSeriesFormat, TimeSeriesKind, TimeSeriesPoint, collapseByDay,
 } from './time-series';
@@ -147,5 +148,121 @@ describe('sb-time-series (v246 §A3)', () => {
     fixture.destroy();
     expect(remove).toHaveBeenCalledTimes(1);
     expect(inside(fixture).chart).toBeNull();
+  });
+});
+
+/** A ResizeObserver stand-in: `notify()` fires the last observer's callback. */
+function fakeResizeObserver() {
+  const state = { notify: () => {}, disconnect: vi.fn() };
+  class FakeObserver {
+    constructor(callback: () => void) { state.notify = callback; }
+    observe(): void {}
+    disconnect(): void { state.disconnect(); }
+  }
+  vi.stubGlobal('ResizeObserver', FakeObserver);
+  return state;
+}
+
+describe('sb-time-series edge states and lifecycle (v246 §A3)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('collapses same-day points and drops a non-finite value', () => {
+    const fixture = mount('area', [
+      { time: '2026-10-01T09:00:00Z', value: 1 }, { time: '2026-10-01T17:00:00Z', value: 2 },
+      { time: '2026-10-02', value: Number.NaN }, { time: '2026-10-03', value: 4 },
+    ]);
+    expect(values(fixture)).toEqual([2, 4]);
+  });
+
+  it('drops a candle with a non-finite price', () => {
+    const fixture = mount('candles', [
+      { time: '2026-10-01', open: 100, high: 120, low: 90, close: 110 },
+      { time: '2026-10-02', open: 110, high: Number.POSITIVE_INFINITY, low: 95, close: 98 },
+    ]);
+    expect(inside(fixture).series!.data()).toHaveLength(1);
+  });
+
+  it('keeps an empty series for no points, and fills it when points arrive', () => {
+    const fixture = mount('area', []);
+    expect(inside(fixture).series!.data()).toHaveLength(0);
+    set(fixture, 'points', EQUITY);
+    expect(values(fixture)).toEqual([0, 120.5, -40]);
+  });
+
+  it('draws one point as a marker without a line, and the line again from two', () => {
+    const fixture = mount('area', [{ time: '2026-10-01', value: 5 }]);
+    const options = () => inside(fixture).series!.options() as AreaSeriesOptions;
+    expect(options().lineVisible).toBe(false);
+    expect(options().pointMarkersVisible).toBe(true);
+    set(fixture, 'points', EQUITY);
+    expect(options().lineVisible).toBe(true);
+    expect(options().pointMarkersVisible).toBe(false);
+  });
+
+  it('marks a single drawdown point too', () => {
+    const fixture = mount('baseline', [{ time: '2026-10-01', value: -0.4 }], 'r');
+    const options = inside(fixture).series!.options() as BaselineSeriesOptions;
+    expect(options.lineVisible).toBe(false);
+    expect(options.pointMarkersVisible).toBe(true);
+  });
+
+  it('fits new data once the plot has a width', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(600);
+    const fixture = mount('area', []);
+    const fit = vi.spyOn(inside(fixture).chart!.timeScale(), 'fitContent');
+    set(fixture, 'points', EQUITY);
+    set(fixture, 'height', 180);
+    expect(fit).toHaveBeenCalledTimes(1);
+  });
+
+  it('resizes to the host width on an observer tick, and fits once a width arrives', () => {
+    const observer = fakeResizeObserver();
+    let width = 0;
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => width);
+    const fixture = mount('area', EQUITY);
+    const chart = inside(fixture).chart!;
+    const resize = vi.spyOn(chart, 'resize');
+    const fit = vi.spyOn(chart.timeScale(), 'fitContent');
+    width = 600;
+    observer.notify();
+    observer.notify();
+    expect(resize).toHaveBeenLastCalledWith(600, 220);
+    expect(fit).toHaveBeenCalledTimes(1);
+  });
+
+  it('repaints on a theme switch, without a reload', async () => {
+    const fixture = mount('area', EQUITY);
+    const names = ['--accent', '--accent-soft', '--surface', '--text-secondary'];
+    const style = document.createElement('style');
+    style.textContent = `:root[data-theme="navy"]{${names.map((n) => `${n}:${resolveTokenIn('navy', n)}`).join(';')}}`;
+    document.head.appendChild(style);
+    try {
+      TestBed.inject(ThemeService).set('navy');
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const { chart, series } = inside(fixture);
+      expect(resolveTokenIn('navy', '--accent')).not.toBe(resolveToken('--accent'));
+      expect((series!.options() as AreaSeriesOptions).lineColor).toBe(resolveTokenIn('navy', '--accent'));
+      expect((series!.options() as AreaSeriesOptions).topColor).toBe(resolveTokenIn('navy', '--accent-soft'));
+      expect(chart!.options().layout.textColor).toBe(resolveTokenIn('navy', '--text-secondary'));
+      expect((chart!.options().layout.background as { color: string }).color).toBe(resolveTokenIn('navy', '--surface'));
+    } finally {
+      style.remove();
+    }
+  });
+
+  it('releases its ResizeObserver, its chart and its theme subscription on destroy', async () => {
+    const observer = fakeResizeObserver();
+    const fixture = mount('area', EQUITY);
+    const chart = inside(fixture).chart!;
+    const remove = vi.spyOn(chart, 'remove');
+    const applied = vi.spyOn(chart, 'applyOptions');
+    fixture.destroy();
+    expect(observer.disconnect).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(inside(fixture).chart).toBeNull();
+    TestBed.inject(ThemeService).set('navy');
+    await fixture.whenStable();
+    expect(applied).not.toHaveBeenCalled();
   });
 });

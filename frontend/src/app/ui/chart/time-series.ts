@@ -7,6 +7,7 @@ import type {
   IChartApi, IPriceLine, ISeriesApi, SeriesType, SingleValueData, Time,
 } from 'lightweight-charts';
 
+import { ThemeService } from '../theme.service';
 import { ChartPalette, applyChartTheme, chartPalette, pctFormat, priceFormat, rFormat, themedToken } from './chart-theme';
 
 export type TimeSeriesKind = 'area' | 'baseline' | 'candles';
@@ -33,9 +34,10 @@ export function collapseByDay<T extends { time: string }>(points: readonly T[]):
 
 const isCandle = (datum: TimeSeriesDatum): datum is TimeSeriesCandle => 'open' in datum;
 
-/** The right shape for `kind`; a row of the other shape is dropped. */
+/** The right shape for `kind`, every value finite; anything else is dropped, never thrown on. */
 function plottable(kind: TimeSeriesKind, datum: TimeSeriesDatum): boolean {
-  return kind === 'candles' ? isCandle(datum) : !isCandle(datum);
+  if (kind === 'candles') return isCandle(datum) && [datum.open, datum.high, datum.low, datum.close].every(Number.isFinite);
+  return !isCandle(datum) && Number.isFinite(datum.value);
 }
 
 function rows(kind: TimeSeriesKind, points: readonly TimeSeriesDatum[]): Row[] {
@@ -44,27 +46,28 @@ function rows(kind: TimeSeriesKind, points: readonly TimeSeriesDatum[]): Row[] {
     : { time: datum.time as Time, value: datum.value });
 }
 
-function areaOptions(palette: ChartPalette): AreaSeriesPartialOptions {
-  return { lineWidth: 2, priceLineVisible: false,
+/** One point is a marker with no line (v246 edge states); two or more draw the line. */
+function areaOptions(palette: ChartPalette, single: boolean): AreaSeriesPartialOptions {
+  return { lineWidth: 2, lineVisible: !single, pointMarkersVisible: single, priceLineVisible: false,
     lineColor: palette.accent, topColor: themedToken('--accent-soft'), bottomColor: 'transparent' };
 }
 
-function baselineOptions(palette: ChartPalette): BaselineSeriesPartialOptions {
-  return { lineWidth: 2, priceLineVisible: false,
+function baselineOptions(palette: ChartPalette, single: boolean): BaselineSeriesPartialOptions {
+  return { lineWidth: 2, lineVisible: !single, pointMarkersVisible: single, priceLineVisible: false,
     baseValue: { type: 'price', price: 0 },
     topLineColor: palette.down, topFillColor1: 'transparent', topFillColor2: 'transparent',
     bottomLineColor: palette.down, bottomFillColor1: palette.negSoft, bottomFillColor2: palette.negSoft };
 }
 
+function seriesOptions(kind: TimeSeriesKind, palette: ChartPalette, single: boolean): KindOptions {
+  if (kind === 'area') return areaOptions(palette, single);
+  if (kind === 'baseline') return baselineOptions(palette, single);
+  return candleOptions(palette);
+}
+
 function candleOptions(palette: ChartPalette): CandlestickSeriesPartialOptions {
   return { priceLineVisible: false, borderVisible: false,
     upColor: palette.up, downColor: palette.down, wickUpColor: palette.up, wickDownColor: palette.down };
-}
-
-function seriesOptions(kind: TimeSeriesKind, palette: ChartPalette): KindOptions {
-  if (kind === 'area') return areaOptions(palette);
-  if (kind === 'baseline') return baselineOptions(palette);
-  return candleOptions(palette);
 }
 
 function addSeries(chart: IChartApi, kind: TimeSeriesKind): ISeriesApi<SeriesType> {
@@ -77,8 +80,8 @@ function addSeries(chart: IChartApi, kind: TimeSeriesKind): ISeriesApi<SeriesTyp
  * v246 §A3: a time series on lightweight-charts, themed by `chart-theme.ts`.
  * `area` is an equity curve, `baseline` (base 0) a drawdown shaded below
  * zero, `candles` OHLC by day. The chart is created once; a `kind` change
- * rebuilds only the series. Sized from the plot box (no `autoSize`, which
- * `applyChartTheme` leaves out), released in `teardown()`.
+ * rebuilds only the series. A ResizeObserver sizes the plot, the theme signal
+ * repaints it, and teardown releases the observer and chart.
  */
 @Component({
   selector: 'sb-time-series',
@@ -101,6 +104,10 @@ export class TimeSeries {
   private chart: IChartApi | null = null;
   private series: ISeriesApi<SeriesType> | null = null;
   private zeroLine: IPriceLine | null = null;
+  private readonly theme = inject(ThemeService);
+  private resizeObserver: ResizeObserver | null = null;
+  private count = 0;
+  private pendingFit = false;
 
   constructor() {
     effect(() => {
@@ -112,7 +119,9 @@ export class TimeSeries {
       const data = rows(this.kind(), this.points());
       untracked(() => this.render(data));
     });
+    // ThemeService is a signal: reading it here is the subscription, destroyed with the view.
     effect(() => {
+      this.theme.theme();
       this.valueFormat();
       untracked(() => this.restyle());
     });
@@ -126,18 +135,29 @@ export class TimeSeries {
   private build(element: HTMLElement, kind: TimeSeriesKind): void {
     if (!this.chart) {
       this.chart = createChart(element, { width: element.clientWidth, height: this.height() });
+      this.observe(element);
     }
     if (this.series) this.chart.removeSeries(this.series);
     this.series = addSeries(this.chart, kind);
     this.zeroLine = kind === 'candles' ? null : this.series.createPriceLine({
       price: 0, color: chartPalette().axis, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: false, title: '',
     });
+    this.count = 0;
+  }
+
+  /** jsdom has no ResizeObserver; without one the chart still sizes on data and height changes. */
+  private observe(element: HTMLElement): void {
+    if (typeof ResizeObserver === 'undefined') return;
+    this.resizeObserver = new ResizeObserver(() => this.resize(this.height()));
+    this.resizeObserver.observe(element);
   }
 
   private render(data: Row[]): void {
     if (!this.chart || !this.series) return;
     this.series.setData(data);
+    this.count = data.length;
     this.restyle();
+    this.pendingFit = true;
     this.resize(this.height());
   }
 
@@ -147,16 +167,26 @@ export class TimeSeries {
     if (!chart || !series) return;
     const palette = chartPalette();
     applyChartTheme(chart, palette);
-    series.applyOptions({ ...seriesOptions(this.kind(), palette), priceFormat: FORMATS[this.valueFormat()] });
+    series.applyOptions({ ...seriesOptions(this.kind(), palette, this.count === 1), priceFormat: FORMATS[this.valueFormat()] });
     this.zeroLine?.applyOptions({ color: palette.axis });
   }
 
-  /** Width from the plot box, height from the input. */
+  /** Width from the plot box, height from the input; the first non-zero width after new data fits it. */
   private resize(height: number): void {
-    this.chart?.resize(this.plot().nativeElement.clientWidth, height);
+    const chart = this.chart;
+    if (!chart) return;
+    const width = this.plot().nativeElement.clientWidth;
+    chart.resize(width, height);
+    if (this.pendingFit && width > 0) {
+      this.pendingFit = false;
+      chart.timeScale().fitContent();
+    }
   }
 
+  /** Observer first, chart last: nothing may call into a removed chart. */
   private teardown(): void {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.chart?.remove();
     this.chart = null;
     this.series = null;
