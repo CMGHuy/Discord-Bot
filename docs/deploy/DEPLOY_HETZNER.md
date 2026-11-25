@@ -706,6 +706,22 @@ Rollback order: (1) a flag off with `python3 scripts/ops/env_set.py <FLAG> off` 
 (3) `scripts/ops/rollback_to.sh` with `--dry-run` first, only for damaged data.
 The `v171_001` tables stay on every rollback.
 
+### v245 analysis cache rollout
+
+| Flag | Production value | Set |
+|---|---|---|
+| `ANALYSIS_CACHE` | `shadow` | 2026-11-25T16:15:54Z (V245-15; Phase B deployed 2026-11-25T15:15:52Z with `off`) |
+
+Soak: 5 trading days of `shadow` with zero diffs (`cache_diffs` in
+`data/scan_telemetry.jsonl`, one JSON line per diff in
+`logs/analysis_cache_shadow.jsonl`). The switch landed mid-session, so
+2026-11-25 does not count; the first full soak day is 2026-11-26's successor
+trading day (2026-11-26 is Thanksgiving, closed): 2026-11-27 is a half session,
+and the report counts only days with compared tickers. Read-only verdict:
+`bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python - --since-deploy" < scripts/perf/analysis_cache_soak_report.py`.
+Rollback: `python3 scripts/ops/env_set.py ANALYSIS_CACHE off` plus
+`docker compose kill -s HUP bot` (same alerts, slower scans).
+
 ## Not scheduled yet: the option-chain archive
 
 `scripts/data/record_option_snapshots.py` is built and tested but **nothing runs
