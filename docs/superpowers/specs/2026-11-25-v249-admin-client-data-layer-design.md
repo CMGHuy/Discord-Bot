@@ -166,9 +166,12 @@ holds, per entry, the resolver's result, its fetch time, and a `stale` flag.
   its header meta; on phone it wraps under the title, never truncates the
   title.
 
-Builder's call: whether the cache keeps whole store states or resolver
-outputs, as long as a page served from memory renders identically to a fresh
-one with the same data (golden test per workspace).
+The cache keeps **resolver outputs (the API bodies as received)**, never
+store state: the live-values overlay patches the store after the body lands,
+so a page from memory gets the same overlay pass as a fresh one and no
+patched price is ever remembered (panel, senior-engineer 9). A page served
+from memory renders identically to a fresh one with the same data (golden
+test per workspace, one of them with an overlay applied).
 
 ### 2. Analytics: one performance read, one breakdown read
 
@@ -228,6 +231,88 @@ Risk, and each Analytics tab in turn plus the return to Overview — request
 count, API bytes, time-to-content — and 60 s idle on Dashboard. Its before
 numbers are above; the after numbers are recorded at close-out.
 
+### 7. Rules added by the panel review
+
+**Cache wiring and lifecycle**
+- Each entry stores the `ResolverRouteData` of the route that produced it, so
+  stale-marking calls that route's `refreshOn` without re-matching the URL.
+  A test raises an event through `RouteRefreshService` against a non-current
+  cached entry and asserts the next visit misses.
+- Every write to the cache carries a generation number; a mutation clear,
+  logout, a 401, or a stream reconnect bumps it, and a background response
+  from an older generation is dropped. Overlapping refreshes of one key keep
+  the newest response. Test: a mutation clear during an in-flight background
+  refresh does not repopulate the cache.
+- The cache is emptied on **every** SSE reconnect (not only on entering
+  degraded), on logout and on any 401: events raised while the stream was
+  down, or lost to an admin restart resetting the broker's sequence
+  (`deploy/gunicorn.conf.py`), could otherwise leave an invalidated entry
+  looking fresh.
+- `/analytics/performance` shares this same cache and stale path; its key is
+  the request URL including the scope query parameters. There is no second
+  cache.
+
+**Server side**
+- The multi-dimension `by-dimension` form loads and scopes the closed trades
+  **once** and groups them per dimension; it must not loop over the
+  single-dimension handler, which would hold one of the admin worker's
+  request threads for ~4× as long. It answers HTTP 200 when at least one
+  dimension succeeded, each failing dimension as `{"error": ...}`; all
+  failing is a 500 like today's single form. Backend tests: all-succeed
+  equals four single calls block for block; one-fails; all-fail.
+- Risk balance: when `/risk` returns `account.balance` null, the KPI renders
+  the existing "— · 3.00%" fallback; zero/negative never reach it (`/risk`
+  drops them). Both cases tested.
+- Design 4 extends the existing pin in `tests/admin/test_api_v1_dashboard.py`
+  to assert the `today` body for `all`/`range`, rather than adding a new test.
+
+**Poller state**
+- The outage start is recorded when the stream degrades; recovery clears it,
+  and a second outage starts a fresh 2-minute 15 s window. A route change
+  does not reset the clock. Fake-timer tests cover recovery reset and a
+  second outage.
+- While degraded the existing connection indicator must say live updates are
+  paused; if it does not today, it gains that line (ux-designer 6).
+
+**The "as of" mark**
+- `aria-live="polite"`; the failed state carries text and an icon, not
+  colour alone.
+- Its line height is reserved (or it overlays the header meta) so the page
+  does not reflow when it appears or clears on phone.
+- "refresh failed" sits next to a Retry control (44 px touch target) that
+  runs the page refresh.
+- Time is formatted with the admin's existing timestamp helper, in the same
+  zone as other admin times; an entry is at most 60 s old, so no date is
+  ever needed.
+- A background swap preserves pager page, filters, expanded rows and scroll
+  position; one test per paged workspace.
+
+**Loading and checks**
+- Cold Analytics loads stay slow until project 2: the plan checks every
+  Analytics tab shows per-panel skeletons, not a blank page, while loading.
+- UI check: the mark at 390, 768 and 1440 widths with the longest workspace
+  title, plus `node frontend/scripts/layout-audit.mjs` (`ui-design.md`).
+- Every new or changed function stays under complexity 15
+  (`code-complexity.md`); new frontend specs and backend tests join an
+  existing suite in `tests/suites.toml` (`testing-cost.md` § Test suites).
+
+**Ops and ownership**
+- The measurement script is read-only and runs off-hours (after the US close
+  and outside the 22:40 UTC jobs), since cold Analytics passes compete for
+  the admin worker's request threads.
+- Because project 2 ships first, the "before" baseline is **re-measured
+  after project 2 deploys** and recorded here before this plan starts; the
+  numbers above then become history. Project 2's spec states how its
+  ETag/304 and ledger-keyed bodies sit under this cache, including the
+  `dims=` form's key. A background refresh here sends the browser's normal
+  conditional request, so a 304 refresh costs the server almost nothing.
+- Owner: the admin SPA. Removal condition: if, after project 2, return visits
+  measure within 300 ms of a memory hit without the cache, the 60 s layer is
+  removed in a follow-up rather than kept for its staleness logic.
+- Rollback: SPA and API ship in one image; `scripts/ops/rollback_to.sh`
+  reverts both together. Deleting `loadToday` is safe only because the
+  frontend never runs against an older backend.
+
 ## Testing
 
 - Frontend: cache hit under 60 s, miss at 60 s, `stale` forces a miss,
@@ -252,3 +337,32 @@ numbers are above; the after numbers are recorded at close-out.
 
 Project 2 (server cache) and project 3 (Dashboard/Trades content) each get
 their own brainstorm and spec; then v240's plan.
+
+## Panel review
+
+Spec review, 2026-11-25, on 5946d12e. No BLOCKING findings. All ADVISORY
+findings applied in Design § 7 unless noted.
+
+- ux-designer 1: mark has no a11y contract -- applied
+- ux-designer 2: mark reflows the phone page -- applied
+- ux-designer 3: "refresh failed" names no next step -- applied (Retry, 44 px)
+- ux-designer 4: background swap may reset pager/filter/scroll -- applied
+- ux-designer 5: "as of" time format/zone unstated -- applied
+- ux-designer 6: degraded mode invisible -- applied
+- ux-designer 7: cold Analytics loading state must be per-panel skeletons -- applied
+- ux-designer 8: UI check names no tooling -- applied
+- staff-engineer 1: baseline/goal text assumes v249 ships first; layering with project 2 -- applied (re-baseline after project 2; layering owed by project 2's spec)
+- staff-engineer 2: brief SSE drops and admin restarts leave stale entries -- applied (clear on every reconnect)
+- staff-engineer 3: multi-dim form must load trades once -- applied
+- staff-engineer 4: measurement load on the single admin worker -- applied (off-hours, read-only)
+- staff-engineer 5: no clear on logout/401, no owner or removal condition -- applied
+- staff-engineer 6: no rollback sentence -- applied
+- senior-engineer 1: URL key to refreshOn mapping unstated -- applied
+- senior-engineer 2: late responses can overwrite newer/cleared state -- applied (generation number)
+- senior-engineer 3: performance "store level" vs route-scoped stores; key undefined -- applied
+- senior-engineer 4: partial-failure status and all-fail case -- applied
+- senior-engineer 5: null balance render untested -- applied
+- senior-engineer 6: reuse existing `_TODAY_BLOCK_MODES` test -- applied
+- senior-engineer 7: poller state machine unspecified -- applied
+- senior-engineer 8: complexity and suites not mentioned -- applied
+- senior-engineer 9: caching store state could remember overlay prices -- applied (cache API bodies only)
