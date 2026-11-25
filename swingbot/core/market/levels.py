@@ -644,7 +644,17 @@ class Scenario:
         return all(self.constraints.values())
 
 
-def atr_floor_pct(df, current_price: float, h: dict) -> float:
+def atr14_last(df) -> float | None:
+    """The last ATR(14) value of `df`, or None when `atr` raises. v245 F1:
+    `_scan_one` computes it once per frame and passes it to every horizon's
+    `atr_floor_pct`, which would otherwise recompute the same float."""
+    try:
+        return float(atr(df, 14).iloc[-1])
+    except Exception:
+        return None
+
+
+def atr_floor_pct(df, current_price: float, h: dict, *, atr14: float | None = None) -> float:
     """
     The minimum stop distance (%) this horizon's own volatility would
     normally call for -- ATR(14) scaled by the horizon's atr_stop_multiple
@@ -652,9 +662,12 @@ def atr_floor_pct(df, current_price: float, h: dict) -> float:
     as a % of current price. A structural stop tighter than this is at
     real risk of getting clipped by ordinary daily noise rather than a
     genuine reversal.
+
+    `atr14` is `atr14_last(df)` computed once by the caller; None recomputes
+    it here (also when the caller's own computation raised).
     """
     try:
-        atr_value = float(atr(df, 14).iloc[-1])
+        atr_value = atr14 if atr14 is not None else float(atr(df, 14).iloc[-1])
         if not atr_value or current_price <= 0:
             return 0.0
         return atr_value * h.get("atr_stop_multiple", 1.5) / current_price * 100
