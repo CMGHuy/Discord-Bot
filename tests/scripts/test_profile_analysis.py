@@ -1,4 +1,6 @@
 """v245 V245-2/V245-2b: the analysis profiler (spec § Task 0 step 1)."""
+import json
+import pickle
 import sys
 from pathlib import Path
 
@@ -92,3 +94,58 @@ def test_load_frames_skips_missing_and_empty(monkeypatch):
     frames = {"A": _frame(), "B": None, "C": _frame().iloc[:0]}
     monkeypatch.setattr(training_data, "load_daily", lambda ticker: frames[ticker])
     assert list(pa.load_frames(["A", "B", "C"])) == ["A"]
+
+
+def test_object_bytes_is_the_pickled_size():
+    obj = ("support", 10, ((1, 2.0, 1.1),), ((None,),))
+    assert pa.object_bytes(obj) == len(pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL))
+
+
+def test_traced_build_returns_the_object_and_its_bytes():
+    obj, retained = pa.traced_build(lambda: [0.5 + i for i in range(10_000)])
+    assert len(obj) == 10_000 and retained >= 10_000 * 8
+
+
+def test_trendline_prefix_estimate_holds_every_pair():
+    df = _frame()
+    side, m, pivots, pairs = pa.trendline_prefix_estimate(df, "support")
+    assert side == "support" and m == len(df) - 1
+    assert len(pivots) >= 2
+    assert len(pairs) == len(pivots)
+    assert all(len(row) == len(pivots) - i - 1 for i, row in enumerate(pairs))
+    assert all(cell is None or len(cell) == 3 for row in pairs for cell in row)
+
+
+def test_trendline_prefix_estimate_trims_like_the_scanner():
+    long = _frame(n=1700)
+    _, m, _, _ = pa.trendline_prefix_estimate(long, "resistance")
+    assert m == 1500 - 1
+
+
+def test_main_writes_the_report(tmp_path, monkeypatch):
+    monkeypatch.setattr(pa, "load_frames", lambda tickers: {"T0": _frame()})
+    out = tmp_path / "p.json"
+    assert pa.main(["--tickers", "t0,MISSING", "--horizons", "4w", "--out", str(out)]) == 0
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["tickers"] == 1 and doc["missing"] == ["MISSING"]
+    assert doc["horizons"] == ["4w"] and doc["journal"] is False
+    assert set(doc["runs"]) == {"completed", "forming"}
+    assert doc["runs"]["forming"]["candidates"][0]["label"]
+    assert doc["memory"]["analysis_peak_mb"] > 0
+    assert doc["memory"]["trendline_bytes_per_ticker"]["pickled"]["max"] > 0
+    assert doc["memory"]["per_ticker"]["T0"]["pivots"]["support"] >= 2
+    assert (tmp_path / "p-completed.prof").exists() and (tmp_path / "p-forming.prof").exists()
+
+
+def test_main_trims_frames_to_max_bars(tmp_path, monkeypatch):
+    monkeypatch.setattr(pa, "load_frames", lambda tickers: {"T0": _frame(n=300)})
+    out = tmp_path / "p.json"
+    assert pa.main(["--tickers", "T0", "--horizons", "4w", "--max-bars", "200",
+                    "--out", str(out)]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))["bars"]["max"] == 200
+
+
+def test_main_fails_without_frames(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(pa, "load_frames", lambda tickers: {})
+    assert pa.main(["--tickers", "T0", "--out", str(tmp_path / "p.json")]) == 1
+    assert "no local frames" in capsys.readouterr().err
