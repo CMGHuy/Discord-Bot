@@ -1044,4 +1044,16 @@ describe('sb-equity-candles on the shared chart theme (v246 §A3)', () => {
     expect(chart.options().timeScale).toMatchObject({ tickMarkFormatter: wholeTickLabel });
     expect(chart.options().timeScale.timeVisible).toBe(true);
   });
+  it('keeps the leftmost tick label whole: the left edge is fixed, through render and a theme flip', async () => {
+    const { fixture, stub } = render(response(dailyCandles(40)));
+    const chart = inner(fixture).chart;
+    expect(chart.options().timeScale.fixLeftEdge).toBe(true);
+    stub.data.set(response(hourlyCandles(30), { tf: '1H' }));
+    fixture.detectChanges();
+    expect(chart.options().timeScale.fixLeftEdge).toBe(true);
+    TestBed.inject(ThemeService).set('navy');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(chart.options().timeScale.fixLeftEdge).toBe(true);
+  });
 });

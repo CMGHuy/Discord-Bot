@@ -83,9 +83,16 @@ export function wholeTickLabel(time: Time, type: TickMarkType): string | null {
 }
 
 /** Time on the axis for 1H/4H only, whole hours only; one place for create(),
- *  render() and a theme flip, because applyChartTheme() alone resets timeVisible. */
+ *  render() and a theme flip, because applyChartTheme() alone resets timeVisible.
+ *  v246 §A3: the left edge is fixed, so lightweight-charts keeps the leftmost
+ *  tick label inside the axis instead of cutting it in half (the stray ")"). */
 function timeScaleOptions(data: EquityCandlesResponse | null) {
-  return { timeVisible: data ? isIntraday(data.tf) : false, secondsVisible: false, tickMarkFormatter: wholeTickLabel };
+  return {
+    timeVisible: data ? isIntraday(data.tf) : false,
+    secondsVisible: false,
+    tickMarkFormatter: wholeTickLabel,
+    fixLeftEdge: true,
+  };
 }
 
 type ChartState = 'loading' | 'error' | 'empty' | 'chart';
