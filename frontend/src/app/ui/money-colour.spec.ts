@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { allSources } from './testing/all-sources';
-import { StyleRule, styleRules, withChartChrome } from './testing/style-rules';
+import { StyleRule, styleRules, withChartTokens } from './testing/style-rules';
 
 /**
  * Spec v240 §1 (corrected): mint never marks navigation. --pos and --neg
@@ -47,7 +47,7 @@ function isNavRule(name: string, rule: StyleRule): boolean {
 
 /** The selectors in one file that break (a) or (b). */
 function moneyOffenders(name: string, source: string): string[] {
-  return styleRules(name, withChartChrome(source))
+  return styleRules(name, withChartTokens(source))
     .filter((rule) => MONEY.test(rule.body))
     .filter((rule) => isNavRule(name, rule) || (STATE_SELECTOR.test(rule.selector) && !isStatus(name, rule)))
     .map((rule) => rule.selector);
