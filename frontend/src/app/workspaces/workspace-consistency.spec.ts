@@ -303,3 +303,145 @@ describe('destructive actions live in the header (v195 Phase 4, §5.2)', () => {
     expect(destructiveOutsideActions(rowBin)).toBe(0);
   });
 });
+
+/* -- v246 §A2 -- every control in a bar sits in an sb-field ----------------- */
+
+/** Workspace files whose bars still hold a control outside an sb-field,
+ *  relative to src/app/workspaces/. Plan B's B10 wraps them, empties this
+ *  list and deletes it. Every entry must still offend, so the list only shrinks.
+ *  Measured: Research holds a search text input and instrument segmented;
+ *  System logs/scan hold buttons and a link, Settings has no bar, and Tuning,
+ *  Partials, Attribution and Benchmark mount the wrapped shared sb-scope-bar. */
+const FIELD_GATE_ALLOWLIST: readonly string[] = ['research/research.ts'];
+
+/** The v246 consumers whose bars this plan wrapped (V246-7..V246-10). */
+const FIELD_GATE_CONSUMERS: readonly string[] = [
+  'analytics/scope-bar.ts', 'calendar/calendar.ts', 'trades/trades.ts', 'watchlist/watchlist.ts',
+];
+
+const BAR_BLOCK = /<(sb-control-bar|sb-toolbar|sb-filter-bar)\b(?![^>]*\/>)[^>]*>[\s\S]*?<\/\1>/g;
+const ROW_BLOCK = /<sb-control-row\b(?![^>]*\/>)([^>]*)>([\s\S]*?)<\/sb-control-row>/g;
+const FIELD_TOKEN = /<sb-field\b[^>]*>|<\/sb-field>|<sb-(?:select|text-input|date-range|segmented)\b/g;
+const ALIGN_END = /\balign="end"/;
+
+/** Comments quoting tags are not markup. */
+function withoutComments(source: string): string {
+  return source.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+/** Bar blocks, including control rows that opt into bottom-edge alignment. */
+function barBlocks(source: string): string[] {
+  const text = withoutComments(source);
+  const bars = [...text.matchAll(BAR_BLOCK)].map((m) => m[0]);
+  const rows = [...text.matchAll(ROW_BLOCK)].filter((m) => ALIGN_END.test(m[1])).map((m) => m[0]);
+  return [...bars, ...rows];
+}
+
+/** Controls that open while no sb-field is open. */
+function unwrappedControls(block: string): string[] {
+  let depth = 0;
+  const out: string[] = [];
+  for (const [token] of block.matchAll(FIELD_TOKEN)) {
+    if (token.startsWith('<sb-field')) {
+      if (!token.endsWith('/>')) depth += 1;
+    } else if (token === '</sb-field>') {
+      depth = Math.max(0, depth - 1);
+    } else if (depth === 0) {
+      out.push(token.slice(1));
+    }
+  }
+  return out;
+}
+
+/** Rows of fields that retain the baseline default. */
+function unalignedFieldRows(source: string): string[] {
+  return [...withoutComments(source).matchAll(ROW_BLOCK)]
+    .filter((m) => /<sb-field\b/.test(m[2]) && !ALIGN_END.test(m[1]))
+    .map((m) => `<sb-control-row${m[1]}>`);
+}
+
+const workspaceName = (name: string) => name.slice('app/workspaces/'.length);
+const offendersIn = (source: string) => barBlocks(source).flatMap(unwrappedControls);
+
+describe('the field gate reads templates the way Angular does (v246 §A2)', () => {
+  it('flags a control directly in a bar and passes one inside a field', () => {
+    expect(offendersIn('<sb-toolbar [controls]="c"><sb-select slot="a" /></sb-toolbar>')).toEqual(['sb-select']);
+    expect(offendersIn('<sb-toolbar [controls]="c"><sb-field slot="a" label="A"><sb-select /></sb-field></sb-toolbar>'))
+      .toEqual([]);
+  });
+
+  it('counts a control nested deeper inside a field as wrapped', () => {
+    expect(offendersIn('<sb-control-bar><ng-container filters><sb-field label="A"><div><sb-date-range /></div></sb-field></ng-container></sb-control-bar>'))
+      .toEqual([]);
+  });
+
+  it('does not let a self-closing field wrap the control after it', () => {
+    expect(offendersIn('<sb-control-bar><sb-field label="A" /><sb-segmented label="B" /></sb-control-bar>'))
+      .toEqual(['sb-segmented']);
+  });
+
+  it('catches the second control after a field closes', () => {
+    expect(offendersIn('<sb-toolbar><sb-field><sb-select /></sb-field><sb-text-input slot="b" /></sb-toolbar>'))
+      .toEqual(['sb-text-input']);
+  });
+
+  it('ignores commented-out controls and controls outside any bar', () => {
+    expect(offendersIn('<sb-toolbar><!-- <sb-select slot="old" /> --></sb-toolbar>')).toEqual([]);
+    expect(offendersIn('/** <sb-toolbar> <sb-select> </sb-toolbar> */ <sb-select label="A" />')).toEqual([]);
+    expect(offendersIn('<sb-control-row class="tag-form"><sb-select label="Symbol" /></sb-control-row>')).toEqual([]);
+  });
+
+  it('treats a control row that opts into align="end" as a bar', () => {
+    expect(offendersIn('<sb-control-row page-scope align="end"><sb-select label="A" /></sb-control-row>'))
+      .toEqual(['sb-select']);
+  });
+
+  it('reads no block out of a self-closing sb-filter-bar', () => {
+    expect(barBlocks('<sb-filter-bar [active]="a" (cleared)="b()" />')).toEqual([]);
+  });
+
+  it('does not consume a self-closing bar as the opening of a later real bar', () => {
+    for (const tag of ['sb-control-bar', 'sb-toolbar', 'sb-filter-bar', 'sb-control-row']) {
+      const later = `<${tag} align="end"><sb-select /></${tag}>`;
+      const source = `<${tag} align="end" /><sb-text-input />${later}`;
+      expect(barBlocks(source), tag).toEqual([later]);
+      expect(offendersIn(source), tag).toEqual(['sb-select']);
+    }
+  });
+
+  it('flags a control row of fields that keeps the baseline default', () => {
+    expect(unalignedFieldRows('<sb-control-row page-scope><sb-field label="A"><sb-select /></sb-field></sb-control-row>'))
+      .toEqual(['<sb-control-row page-scope>']);
+    expect(unalignedFieldRows('<sb-control-row page-scope align="end"><sb-field><sb-select /></sb-field></sb-control-row>'))
+      .toEqual([]);
+    expect(unalignedFieldRows('<sb-control-row class="add"><sb-text-input ariaLabel="x" /></sb-control-row>')).toEqual([]);
+  });
+});
+
+describe('every control in a bar sits in an sb-field (v246 §A2)', () => {
+  const GATED = WORKSPACE_TS.map(({ name, source }) => ({ name: workspaceName(name), source }));
+  const sourceOf = (name: string) => GATED.find((s) => s.name === name)?.source ?? '';
+
+  it('reads at least one bar in each v246 consumer and in each allowlisted file', () => {
+    for (const name of [...FIELD_GATE_CONSUMERS, ...FIELD_GATE_ALLOWLIST]) {
+      expect(barBlocks(sourceOf(name)).length, name).toBeGreaterThan(0);
+    }
+  });
+
+  it('puts every select, text input, date range and segmented in a bar inside an sb-field', () => {
+    const offenders = GATED
+      .filter(({ name }) => !FIELD_GATE_ALLOWLIST.includes(name))
+      .flatMap(({ name, source }) => offendersIn(source).map((tag) => `${name}: ${tag}`));
+    expect(offenders).toEqual([]);
+  });
+
+  it('lists only files whose bars still hold an unwrapped control (B10 empties the list)', () => {
+    const stale = FIELD_GATE_ALLOWLIST.filter((name) => offendersIn(sourceOf(name)).length === 0);
+    expect(stale).toEqual([]);
+  });
+
+  it('opts every control row of sb-fields into bottom-edge alignment', () => {
+    const offenders = GATED.flatMap(({ name, source }) => unalignedFieldRows(source).map((row) => `${name}: ${row}`));
+    expect(offenders).toEqual([]);
+  });
+});
