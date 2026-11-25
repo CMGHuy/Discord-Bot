@@ -185,13 +185,17 @@ def _fvg_candidates(df: pd.DataFrame, params) -> list:
     does, so a renamed field fails loudly instead of silently dropping this
     source forever. "off" emits nothing: the FVG family then loses both its
     confluence vote and its candidate prices. Charts draw gaps from
-    fvg.find_fair_value_gaps_detailed and never see this filter."""
+    fvg.find_fair_value_gaps_detailed and never see this filter.
+
+    v245 F4: inside a frame_memo scope the gaps are computed once per frame
+    and (mode, k), both still read here on every call; callers only extend
+    a list with the shared (price, label) tuples."""
     mode = params.fvg_levels_mode
     k = params.fvg_displacement_atr_k
     if mode == "off":
         return []
     try:
-        return find_fair_value_gaps(df, mode=mode, k=k)
+        return frame_memo.memo(df, ("fvg", mode, k), lambda: find_fair_value_gaps(df, mode=mode, k=k))
     except Exception:
         return []
 

@@ -6,6 +6,7 @@ candidates): each horizon of one `_scan_one` call recomputed them on the same
 count the shared call and compare the memoised candidates against the
 unshared path float for float (float.hex).
 """
+import dataclasses
 import threading
 
 import numpy as np
@@ -15,7 +16,9 @@ import pytest
 from swingbot.core.market import frame_memo, levels
 from swingbot.core.market.strategy_types import HORIZONS
 from swingbot.core.scanning import analyze
+from swingbot.scan_params import ScanParams
 from tests.helpers import make_ohlcv
+from tests.market.fvg_frames import witness_frame
 from tests.scanning.v245_golden_cases import CASE_BY_NAME, frozen_clock, run_case
 
 
@@ -171,3 +174,54 @@ def test_scan_one_computes_donchian_once(name, monkeypatch):
     donchian = _count(monkeypatch, levels, "_donchian_20")
     run_case(CASE_BY_NAME[name])
     assert donchian["n"] == 1
+
+
+# -- F4: FVG candidates ----------------------------------------------------
+
+def _params(**fields) -> ScanParams:
+    return dataclasses.replace(ScanParams.from_config(), **fields)
+
+
+def _fvg_hexed(df, params) -> list:
+    return _hexed(levels._fvg_candidates(df, params))
+
+
+@pytest.mark.parametrize("mode, k", [("all", 1.5), ("displacement", 0.5)])
+def test_fvg_is_shared_across_horizons_and_unchanged(mode, k, monkeypatch):
+    df = witness_frame()
+    params = _params(fvg_levels_mode=mode, fvg_displacement_atr_k=k)
+    plain = _fvg_hexed(df, params)
+    fvg = _count(monkeypatch, levels, "find_fair_value_gaps")
+    with frame_memo.ticker_memo():
+        memoed = [_fvg_hexed(df, params) for _ in HORIZONS]
+    assert plain and memoed == [plain] * len(HORIZONS)
+    assert fvg["n"] == 1
+
+
+def test_fvg_memo_keys_on_the_mode_and_k_read_per_call(monkeypatch):
+    df = witness_frame()
+    every = _params(fvg_levels_mode="all")
+    displaced = _params(fvg_levels_mode="displacement", fvg_displacement_atr_k=0.5)
+    tighter = _params(fvg_levels_mode="displacement", fvg_displacement_atr_k=1.0)
+    plain = [_fvg_hexed(df, p) for p in (every, displaced, tighter)]
+    assert plain[1] and plain[1] != plain[2]
+    fvg = _count(monkeypatch, levels, "find_fair_value_gaps")
+    with frame_memo.ticker_memo():
+        memoed = [_fvg_hexed(df, p) for p in (every, displaced, tighter, every)]
+    assert memoed == plain + plain[:1]
+    assert fvg["n"] == 3
+
+
+def test_fvg_off_computes_nothing(monkeypatch):
+    fvg = _count(monkeypatch, levels, "find_fair_value_gaps")
+    with frame_memo.ticker_memo():
+        assert levels._fvg_candidates(_frame(), _params(fvg_levels_mode="off")) == []
+    assert fvg["n"] == 0
+
+
+@pytest.mark.parametrize("name", ["wave_completed", "wave_forming"])
+def test_scan_one_computes_fvg_once(name, monkeypatch):
+    frozen_clock(monkeypatch)
+    fvg = _count(monkeypatch, levels, "find_fair_value_gaps")
+    run_case(CASE_BY_NAME[name])
+    assert fvg["n"] == 1
