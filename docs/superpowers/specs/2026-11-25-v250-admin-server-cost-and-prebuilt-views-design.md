@@ -350,6 +350,66 @@ These rules override B1–B5 where they differ.
   over complexity 15 the diff touches) get no worse against
   `complexity_baseline.json`.
 
+### B7. Corrections after the code brief
+
+The plan-briefer (2026-11-25) found spec assumptions the code contradicts.
+These override A1–B6 where they differ; all are author's calls within the
+approved design.
+
+1. **Trade statuses are `open|win|loss|closed`** (PENDING/ACTIVE/PARTIAL are
+   *plan* statuses, `core/planning/plan_types.py`). The trades fingerprint
+   hashes the whole `doc` of every trade whose status is not `open`.
+   Scale-out legs of still-open trades (the Dashboard's realized partials)
+   are **live overlay**, computed per request from an open-trades-only load,
+   never stored.
+2. **`variance_band` is already numpy-vectorised.** A3 touches only its
+   `_outer_p95s` loop and `week_cluster_bootstrap`.
+3. **`week_cluster_bootstrap` is not rewritten in place.** It has ~20
+   research/pre-registration callers whose closed results must stay
+   reproducible. A3 adds a new vectorised function beside it; only the admin
+   views (variance-band's `expr_block`, cancel-precision) switch to it. A
+   test pins the old function's output on a fixture so it can never drift.
+4. **`equity_samples` is not append-only** (`upsert_many`,
+   `replace_backfill`, `update_realized`, `update_open_notional`). The
+   candle memo keys on an SQL `md5` over the samples rows the timeframe
+   reads, and `basis=realized` also on the trades fingerprint.
+5. **The refresher's inner tick runs no steps** (`refresher/loop.py`
+   `_sleep_until_due`). The plan adds a hook there that runs the fingerprint
+   poll (cheap SQL plus the bar signature) and triggers rebuilds; cycles stay
+   as they are.
+6. **Snapshot keys are a closed regex** (`admin_refresh._SNAPSHOT_KEY`) and
+   `test_builders_order_with_every_route_snapshotted` pins the builder list;
+   both are extended deliberately, not bypassed.
+7. **Stored-view reads use `admin_snapshot_repo().read`**, never
+   `market_values.read_snapshot`, which enqueues a refresh as a side effect.
+8. **Cancel-precision's baseline reads still-ACTIVE filled plans**
+   (`filled_rows`). Its plans fingerprint covers terminal plans **and filled
+   plans**, over the fields `filled_rows` reads. The plan first checks that a
+   scan requote of a PENDING plan does not change it; if filled plans churn,
+   cancel-precision leaves the prebuilt set (Phase A only).
+9. **`/analytics/calibration` and `/analytics/strategies` read the file
+   analytics snapshot and registry badges**, outside B1: they leave the
+   prebuilt set (Phase A only). The Dashboard's `equity_30d` already reads a
+   stored row; it moves to the live overlay.
+10. The complexity baseline is `scripts/dev/complexity_baseline.json`.
+    `performance_body` (17) and `analytics_by_dimension` (33) get no worse;
+    `default_view_body` (4) stays under 15.
+11. **No goldens exist for `/analytics/*`, cancel-precision, variance-band or
+    candles.** Phase A's first task records characterization goldens for
+    every route it touches, on a frozen fixture book, **before** any change;
+    the eight existing frozen goldens stay byte-identical.
+12. A4's single-flight is built new (shared failure, semaphore, 503 on
+    timeout); `/risk`'s `_cached` is the starting shape, not reused as is.
+13. `test_conditional_routes.py` pins the ETag route set exactly; B4 extends
+    that set in the same commit.
+
+Prebuilt set after these corrections: `analytics.performance`,
+`analytics.equity_curve` (ledger × scope keys), `by-dimension`
+(strategy/horizon/direction/dow), `heat-grid`, `variance-band`,
+`exit-quality`, `cancel-precision` (subject to 8), and the Dashboard's
+ledger blocks (stats, extended stats, realized from closed trades,
+R multiples).
+
 ## Ops
 
 - Refresher builds run in the refresher container, never the admin
