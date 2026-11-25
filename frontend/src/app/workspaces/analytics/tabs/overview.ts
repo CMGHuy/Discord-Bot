@@ -2,10 +2,12 @@ import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { AnalyticsPerformance, HistogramBucket } from '../../../api/models';
+import { AnalyticsPerformance, AnalyticsUnit, HistogramBucket } from '../../../api/models';
 import { ConnectionStore } from '../../../stores/connection.store';
 import { AnalyticsStore, RELOCATED_METRICS, requestAsOfText } from '../../../stores/analytics.store';
 import { BarList } from '../../../ui/bar-list';
+import { TimeScaleSync } from '../../../ui/chart/time-scale-sync';
+import { TimeSeries, TimeSeriesFormat, TimeSeriesPoint } from '../../../ui/chart/time-series';
 import { ColumnDef } from '../../../ui/data-table/data-table.types';
 import { DataTable } from '../../../ui/data-table/data-table';
 import { EmptyStateComponent } from '../../../ui/empty-state';
@@ -16,7 +18,6 @@ import { MarketValue } from '../../../ui/market-value';
 import { PnlBasis } from '../../../ui/pnl-basis';
 import { Spinner } from '../../../ui/spinner';
 import { Panel } from '../../../ui/layout';
-import { LineChart, LineChartSeries } from '../../../ui/line-chart';
 import { PanelHeader } from '../../../ui/panel-header';
 import { PanelError } from '../../../ui/panel-error';
 import { ShareBar, ShareSegment } from '../../../ui/share-bar';
@@ -121,12 +122,18 @@ function maxDrawdown(values: readonly number[]): number | null {
   return worst;
 }
 
+/** v246 §A3: the equity axis reads in the unit the scope bar selects. */
+const EQUITY_FORMAT: Record<AnalyticsUnit, TimeSeriesFormat> = { r: 'r', pct: 'pct', money: 'price' };
+
+/** The drawdown canvas's name: its values are R whatever the unit toggle says. */
+export const DRAWDOWN_CHART_LABEL = 'Drawdown below the running high, in R';
+
 /** v94 Overview: one scoped read of the book, not another source of truth. */
 @Component({
   selector: 'sb-overview-tab',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    Panel, PanelHeader, PanelError, EmptyStateComponent, StatTile, StatStrip, LineChart,
+    Panel, PanelHeader, PanelError, EmptyStateComponent, StatTile, StatStrip, TimeSeries,
     ShareBar, Histogram, BarList, DataTable, RouterLink, VarianceBandPanel,
     IncompleteNote, MarketValue, NgTemplateOutlet, PnlBasis, Spinner,
   ],
@@ -161,9 +168,18 @@ function maxDrawdown(values: readonly number[]): number | null {
         } @else if (!points().length) {
           <sb-empty-state title="No closed trades in this scope" reason="measured-zero" />
         } @else {
-          <sb-line-chart [series]="equitySeries()" [referenceLine]="0" [valueFormat]="format" />
-          <h4 class="pane-label">Drawdown</h4>
-          <sb-line-chart [series]="drawdownSeries()" [valueFormat]="format" />
+          <sb-time-series kind="area" [points]="equityPoints()" [valueFormat]="equityFormat()" [height]="200"
+            [label]="equityLabel()" [sync]="timeSync" />
+          <div class="pane-head">
+            <h4 class="pane-label">Drawdown</h4>
+            <p class="pane-facts">
+              <span>Max drawdown <span class="num">{{ maxDrawdownText() }}</span></span>
+              <span class="sep" aria-hidden="true"> · </span>
+              <span>Longest losing streak <span class="num">{{ lossStreakText() }}</span></span>
+            </p>
+          </div>
+          <sb-time-series kind="baseline" [points]="drawdownPoints()" valueFormat="r" [height]="120"
+            [label]="drawdownLabel" [sync]="timeSync" />
 
         }
         <p class="benchmark-link-row">
@@ -223,7 +239,12 @@ function maxDrawdown(values: readonly number[]): number | null {
     .wide { grid-column: 1 / -1; }
     .as-of { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: baseline; font-size: var(--text-micro); color: var(--text-muted); min-width: 0; }
     .basis-line { margin: var(--space-4) 0 0; min-width: 0; }
-    .pane-label { font-size: var(--text-chip); color: var(--text-secondary); margin: var(--space-10) 0 var(--space-4); }
+    /* v246 §A3: the drawdown pane's own header -- its title, then the money
+       units a retail trader feels. The facts wrap under the title on a narrow card. */
+    .pane-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-4) var(--space-10); margin: var(--space-10) 0 var(--space-4); min-width: 0; }
+    .pane-label { font-size: var(--text-chip); color: var(--text-secondary); margin: 0; }
+    .pane-facts { margin: 0; font-size: var(--text-chip); color: var(--text-muted); min-width: 0; }
+    .pane-facts .num { color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
     .benchmark-link-row { font-size: var(--text-chip); margin: var(--space-6) 0 0; }
     .pairs { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-8); margin: var(--space-10) 0 0; }
     .pairs dt { font-size: var(--text-micro); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; }
@@ -238,15 +259,13 @@ export class OverviewTab {
 
   protected readonly requestAsOf = requestAsOfText;
 
-  readonly format = (value: number) =>
-    inUnit({ r: value, pct: value, money: value }, this.store.unit(), this.connection.currency());
-
   protected readonly unitLabelText = computed(() => unitLabel(this.store.unit(), this.connection.currency()));
 
   /* v194 A4: each hint states the basis of the figure it explains. */
   protected readonly equityHint = computed(() =>
-    `Cumulative ${this.unitLabelText()} per closed trade, ordered by close date. A day with no closes is `
-    + `not a flat day: the x-axis is the sequence of trades, dated. ${PERFORMANCE_CAVEAT}`);
+    `Cumulative ${this.unitLabelText()} per closed trade, ordered by close date: one point per closing day, `
+    + `at the day's last close. A day with no closes is not a flat day: the axis steps from one closing day `
+    + `to the next. ${PERFORMANCE_CAVEAT}`);
   /** The bar reads `relocated.wins/losses` = `get_stats(all_raw)`: the whole
    *  main-ledger book, legs expanded, scope ignored (A4 audit, partner call:
    *  say so rather than change the figure). */
@@ -272,18 +291,38 @@ export class OverviewTab {
     return last ? money(last.cum_pnl, this.connection.currency()) : null;
   });
 
-  readonly equitySeries = computed<LineChartSeries[]>(() => [{
-    name: 'Equity',
-    points: this.points().map((p) => ({
-      date: p.date,
-      value: this.store.unit() === 'money' ? p.cum_pnl : this.store.unit() === 'pct' ? (p.cum_pct ?? 0) : p.cum_r,
-    })),
-  }]);
-  readonly drawdownSeries = computed<LineChartSeries[]>(() => [{
-    name: 'Drawdown',
-    points: this.points().map((p) => ({ date: p.date, value: -p.drawdown_r })),
-  }]);
+  /** One linked pair per tab: scrolling either chart moves the other (V246-14). */
+  protected readonly timeSync = new TimeScaleSync();
+  protected readonly drawdownLabel = DRAWDOWN_CHART_LABEL;
 
+  readonly equityPoints = computed<TimeSeriesPoint[]>(() => {
+    const unit = this.store.unit();
+    return this.points().map((p) => ({
+      time: p.date,
+      value: unit === 'money' ? p.cum_pnl : unit === 'pct' ? (p.cum_pct ?? 0) : p.cum_r,
+    }));
+  });
+  readonly equityFormat = computed<TimeSeriesFormat>(() => EQUITY_FORMAT[this.store.unit()]);
+  protected readonly equityLabel = computed(() => `Equity curve, cumulative ${this.unitLabelText()} per closed trade`);
+
+  /** Below the running high, so never positive; a zero stays `0`, not `-0`. */
+  readonly drawdownPoints = computed<TimeSeriesPoint[]>(() =>
+    this.points().map((p) => ({ time: p.date, value: p.drawdown_r === 0 ? 0 : -p.drawdown_r })));
+
+  /** Largest fall of cumulative realised P&L in the scope: the Max drawdown
+   *  tile's money line and the drawdown pane's header read this one figure. */
+  private readonly maxDrawdownMoney = computed(() => {
+    const points = this.points();
+    return points.length ? maxDrawdown(points.map((p) => p.cum_pnl)) : null;
+  });
+  protected readonly maxDrawdownText = computed(() => {
+    const worst = this.maxDrawdownMoney();
+    return money(worst === null ? null : worst === 0 ? 0 : -worst, this.connection.currency());
+  });
+  protected readonly lossStreakText = computed(() => {
+    const streak = this.store.performance()?.streaks?.worst_loss_streak;
+    return typeof streak === 'number' ? String(streak) : ABSENT;
+  });
 
   /** Last 30 `cum_r` deltas, not cumulative values -- a sparkline of the
    *  running total would just look like the equity chart it sits beside. */
@@ -345,7 +384,7 @@ export class OverviewTab {
     const expectancyMoney = last && expectancyN ? last.cum_pnl / expectancyN : null;
 
     const drawdownR = points.length ? Math.max(...points.map((p) => p.drawdown_r)) : null;
-    const drawdownMoney = points.length ? maxDrawdown(points.map((p) => p.cum_pnl)) : null;
+    const drawdownMoney = this.maxDrawdownMoney();
 
     const profitFactor = derived?.profit_factor ?? null;
     const sharpe = derived?.sharpe_ann ?? null;
