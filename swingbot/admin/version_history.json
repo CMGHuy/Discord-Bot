@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-25 14:55:11 UTC",
+  "generated_at": "2026-11-25 19:17:06 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.49.0",
-    "bot": "2.19.10"
+    "ui": "1.50.0",
+    "bot": "2.20.0"
   },
   "releases": [
     {
@@ -2876,6 +2876,20 @@
         "bot": "2.19.10"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-25",
+      "last_seen": "2026-11-25",
+      "commit": "8f8602b1",
+      "subject": "release(bot): 2.20.0 -- v239 bear-regime engine (shadow): daily SPY/VIX regime label, stamp, alert line, notice; ui 1.50.0 Trend banner and chip",
+      "versions": {
+        "ui": "1.50.0",
+        "bot": "2.20.0"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }
