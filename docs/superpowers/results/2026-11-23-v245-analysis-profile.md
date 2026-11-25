@@ -155,10 +155,21 @@ Ranked by forming share saved; saving = measured cost x (1 - 1 / 9.85).
 |---|---|---|---|---|---|
 | F1 | `atr(df, 14)` inside `atr_floor_pct`, once per horizon | 9.85 -> 1 | 7.3 % (1.901 s measured) | every horizon's call reads the same `df` object with period 14 (levels.py:657); the horizon only scales the result afterwards (`* h["atr_stop_multiple"] / current_price`); the removed calls return the first call's series, the same float | `swingbot/core/market/levels.py`, `swingbot/core/scanning/analyze.py` (`_horizon_scenarios`, `_scan_one`, the `rescenario` caller at analyze.py:1317) |
 | F2 | `bollinger_bands(df, window=20, num_std=2.0)` in `collect_candidate_levels` | 9.85 -> 1 | 4.2 % (1.084 s measured) | constant window and width, same `df` on every horizon (levels.py:286); the hoisted upper/lower must be appended at the same list position so `_cluster_levels`' stable sort sees the same order | `swingbot/core/market/levels.py`, `swingbot/core/scanning/analyze.py` |
-| F3 | Donchian `High.rolling(20).max().shift(1)` / `Low.rolling(20).min().shift(1)` in `collect_candidate_levels` | 9.85 -> 1 | about 2.2 % (estimated: half of the 0.798 s rolling max/min plus 0.366 s shift/rolling set-up, shared with the per-horizon rolling S/R at the same call site) | fixed 20-bar window on the same `df` (levels.py:302-303); same list position as F2 | `swingbot/core/market/levels.py`, `swingbot/core/scanning/analyze.py` |
+| F3 | Donchian `High.rolling(20).max().shift(1)` / `Low.rolling(20).min().shift(1)` in `collect_candidate_levels` | 9.85 -> 1 | 1.4 % (0.373 s measured, see below) | fixed 20-bar window on the same `df` (levels.py:302-303); same list position as F2 | `swingbot/core/market/levels.py`, `swingbot/core/scanning/analyze.py` |
 | F4 | `_fvg_candidates(df, params)` in `collect_candidate_levels` | 9.85 -> 1 | 0.7 % (0.174 s measured) | inputs are `df` and the scan's `ScanParams` only, no horizon (levels.py:180-195, 349); `params` must be read once per `_scan_one` and passed in, so a SIGHUP landing between two horizons can no longer split one ticker across two configs (today each horizon reads `ScanParams.from_config()` itself, levels.py:227) | `swingbot/core/market/levels.py`, `swingbot/core/scanning/analyze.py` |
 | F5 | side-independent half of `_volume_confirmed_pivots` (`zigzag_pivots` at `PIVOT_THRESHOLD_PCT`, `Volume.replace`, the rolling volume mean) | 1.97 -> 0.98 | 0.4 % (about 0.10 s) | both sides pass the same `df.tail(1500)` (trendlines.py:287-291); only the `kind` filter differs (trendlines.py:179) | `swingbot/core/market/trendlines.py` |
 | F6 | `ema(close, 50)` twice per ticker (3m `ema_slow`, 6m `ema_fast`) | 2 -> 1 | 0.06 % | same series, same span | `swingbot/core/market/levels.py` |
+
+F3's cost cannot be read from the `chunk-*-forming.prof` files: the Donchian
+lines (levels.py:302-303) and the per-horizon rolling S/R lines (levels.py:263-264)
+sit in the same function and call the same pandas functions, so pstats pools
+them. It was measured instead by profiling exactly those two expressions, under
+cProfile, on the same 66 forming frames (2515 bars plus the synthetic forming
+bar, `synth_forming_bar`) for each horizon the frame's length allows: Donchian
+0.379 s over 660 calls, rolling S/R 0.376 s over the same 660. Scaled to the
+scan's 650 calls that is 0.373 s, 1.6 % of the 23.304 s forming run; saving
+0.373 x (1 - 1 / 9.85) = 0.335 s = 1.4 %. That is still twice F4's 0.7 %, so F3
+keeps its rank.
 
 F5 and F6 save less than 1 % of forming time and are ranked last on that
 ground (the plan's rule), whatever their prepared designs. F6 is not worth a
@@ -201,7 +212,7 @@ budget of 185 MB at p95 (184 x 1,007,155 bytes) or a cap of at least 184.
   value) and `swingbot/core/scanning/analyze.py` (`_scan_one` computes it once
   per frame and threads it through `_horizon_scenarios`, including the
   `rescenario` caller at analyze.py:1317).
-- **V245-5 takes F2, F3 and F4**, one commit each, in that order, each proved
+- **V245-5 takes F2 (4.2 %), F3 (1.4 %, measured) and F4 (0.7 %)**, one commit each, in that order, each proved
   against V245-1b's golden. F5 is optional (under 1 %); F6 is dropped.
 - `compute_volume_profile`'s `iterrows` (37.9 %) is the largest local cost and
   no fix in this plan reaches it; whether a vectorised, separately proven
