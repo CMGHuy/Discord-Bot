@@ -523,9 +523,9 @@ describe('sb-equity-candles', () => {
     expect(stub.calls.load).toBe(1);
   });
 
-  it('puts the controls and the readout on one baseline on desktop, now the caption row is gone', () => {
+  it('puts the readout on the toggle buttons\' text line on desktop (v246 §A2: last baseline, the fields\' first line is a caption)', () => {
     const source = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/panels/equity-candles.ts'), 'utf8');
-    expect(source).toMatch(/\.controls, \.readout \{ align-self: baseline; \}/);
+    expect(source).toMatch(/\.controls, \.readout \{ align-self: last baseline; \}/);
   });
 
   it('carries no "Paper account" caption under the readout (dropped 2026-10-23)', () => {
@@ -549,23 +549,23 @@ describe('sb-equity-candles', () => {
 
   it('offers the four timeframes with the stored one pressed', () => {
     const { el } = render(response(MIXED));
-    const chips = buttons(el, 'Candle timeframe');
+    const chips = buttons(el, 'Candle interval');
     expect(chips.map((b) => b.textContent!.trim())).toEqual(['1H', '4H', '1D', '1W']);
     expect(chips.find((b) => b.getAttribute('aria-pressed') === 'true')?.textContent?.trim()).toBe('1D');
   });
 
   it('switches timeframe through the store', () => {
     const { fixture, el, stub } = render(response(MIXED));
-    buttons(el, 'Candle timeframe').find((b) => b.textContent!.trim() === '1W')!.click();
+    buttons(el, 'Candle interval').find((b) => b.textContent!.trim() === '1W')!.click();
     fixture.detectChanges();
     expect(stub.calls.tf).toEqual(['1W']);
-    expect(buttons(el, 'Candle timeframe').find((b) => b.getAttribute('aria-pressed') === 'true')
+    expect(buttons(el, 'Candle interval').find((b) => b.getAttribute('aria-pressed') === 'true')
       ?.textContent?.trim()).toBe('1W');
   });
 
   it('offers the two bases by name and switches through the store', () => {
     const { fixture, el, stub } = render(response(MIXED));
-    const toggle = buttons(el, 'Equity basis');
+    const toggle = buttons(el, 'Trades counted');
     expect(toggle.map((b) => b.textContent!.trim())).toEqual(['Open + closed', 'Closed trades only']);
     toggle[1].click();
     fixture.detectChanges();
@@ -574,8 +574,8 @@ describe('sb-equity-candles', () => {
 
   it('keeps the controls when there is nothing to draw', () => {
     const { el } = render(response([], { tf: '1H' }));
-    expect(buttons(el, 'Candle timeframe').length).toBe(4);
-    expect(buttons(el, 'Equity basis').length).toBe(2);
+    expect(buttons(el, 'Candle interval').length).toBe(4);
+    expect(buttons(el, 'Trades counted').length).toBe(2);
   });
 
   it('fits the view once, only after the host has a width (first load)', () => {
@@ -920,5 +920,53 @@ describe('sb-equity-candles', () => {
       expect(graphiteFaint).not.toBe('#5f6f8a');
       expect(internals(fixture).seam!.current()!.color).toBe(graphiteFaint);
     });
+  });
+});
+
+/* -- v246 §A2 -- the Interval and Trades toggles in sb-field --------------- */
+
+describe('sb-equity-candles toggles in sb-field (v246 §A2)', () => {
+  const SOURCE = readFileSync(join(process.cwd(), 'src/app/workspaces/dashboard/panels/equity-candles.ts'), 'utf8');
+  const fields = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>('.controls > sb-field')];
+  const caption = (field: HTMLElement) => field.querySelector('.field-label')!.textContent!.trim();
+
+  it('puts Interval and Trades each in one captioned sb-field, a whole row each on a phone', () => {
+    const all = fields(render(response(MIXED)).el);
+    expect(all.map(caption)).toEqual(['Interval', 'Trades']);
+    for (const field of all) {
+      expect(field.getAttribute('data-size')).toBe('auto');
+      expect(field.classList).toContain('full-row');
+      expect(field.querySelectorAll('.sb-label')).toHaveLength(1);
+      expect(field.querySelectorAll('sb-segmented')).toHaveLength(1);
+    }
+  });
+
+  it('names each group with a phrase that holds its caption (WCAG 2.5.3)', () => {
+    const all = fields(render(response(MIXED)).el);
+    const names = all.map((f) => f.querySelector('[role="group"]')!.getAttribute('aria-label')!);
+    expect(names).toEqual(['Candle interval', 'Trades counted']);
+    all.forEach((f, i) => expect(names[i].toLowerCase()).toContain(caption(f).toLowerCase()));
+  });
+
+  it('splits the four intervals evenly on a phone; the two-option Trades keeps its width', () => {
+    const { el } = render(response(MIXED));
+    expect(el.querySelector('sb-segmented.timeframe')!.classList).toContain('many');
+    expect(el.querySelector('sb-segmented.basis')!.classList).not.toContain('many');
+  });
+
+  it('keeps both captioned toggles when there is nothing to draw', () => {
+    expect(fields(render(response([], { tf: '1H' })).el).map(caption)).toEqual(['Interval', 'Trades']);
+  });
+
+  it('lines the fields up on their bottom edge; the field, not a page rule, takes the phone row', () => {
+    expect(SOURCE).toMatch(/\.controls \{[^}]*align-items: flex-end;/);
+    expect(SOURCE).not.toMatch(/\.controls \{[^}]*align-items: center;/);
+    expect(SOURCE).not.toMatch(/\.controls sb-segmented/);
+  });
+
+  it('wraps both segmented groups of the toggle row in a field', () => {
+    const row = SOURCE.slice(SOURCE.indexOf('<div class="controls">'), SOURCE.indexOf('@if (readout().length)'));
+    expect(row.match(/<sb-segmented\b/g)).toHaveLength(2);
+    expect(row.match(/<sb-field\b/g)).toHaveLength(2);
   });
 });

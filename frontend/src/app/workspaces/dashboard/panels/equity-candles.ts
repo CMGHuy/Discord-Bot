@@ -33,6 +33,7 @@ import { VLinePrimitive } from '../../../ui/chart/primitives/vline-primitive';
 import { EQUITY_BASES, EQUITY_TIMEFRAMES } from '../../../ui/equity-chart-prefs';
 import { Hint } from '../../../ui/hint';
 import { SegmentOption, Segmented } from '../../../ui/segmented';
+import { Field } from '../../../ui/field';
 import {
   WallSpan,
   chartRangeFor,
@@ -128,23 +129,30 @@ export function targetNeedsOlder(
 @Component({
   selector: 'sb-equity-candles',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Async, Segmented, Button, Hint],
+  imports: [Async, Segmented, Button, Hint, Field],
   template: `
+    <!-- v246 §A2: each toggle sits in a captioned sb-field ("Interval",
+         "Trades"), the label line and bottom edge every control row shares;
+         each group's name holds its caption's word. -->
     <div class="controls">
-      <sb-segmented
-        class="timeframe"
-        label="Candle timeframe"
-        [options]="timeframeOptions"
-        [value]="store.tf()"
-        (valueChange)="onTimeframe($event)"
-      />
-      <sb-segmented
-        class="basis"
-        label="Equity basis"
-        [options]="basisOptions"
-        [value]="store.basis()"
-        (valueChange)="onBasis($event)"
-      />
+      <sb-field label="Interval" size="auto" [fullRow]="true">
+        <sb-segmented
+          class="timeframe"
+          label="Candle interval"
+          [options]="timeframeOptions"
+          [value]="store.tf()"
+          (valueChange)="onTimeframe($event)"
+        />
+      </sb-field>
+      <sb-field label="Trades" size="auto" [fullRow]="true">
+        <sb-segmented
+          class="basis"
+          label="Trades counted"
+          [options]="basisOptions"
+          [value]="store.basis()"
+          (valueChange)="onBasis($event)"
+        />
+      </sb-field>
     </div>
     @if (readout().length) {
       <p class="readout">
@@ -205,11 +213,13 @@ export function targetNeedsOlder(
       row-gap: var(--space-6);
       min-width: 0;
     }
+    /* v246 §A2: the bottom edge, not the centre: both toggles sit in
+       captioned sb-fields, so their field bottoms are the button bottoms. */
     .controls {
       grid-area: controls;
       display: flex;
       flex-wrap: wrap;
-      align-items: center;
+      align-items: flex-end;
       gap: var(--space-6) var(--space-10);
       min-width: 0;
     }
@@ -257,7 +267,6 @@ export function targetNeedsOlder(
 
     @media (max-width: 639px) {
       :host { grid-template-areas: "controls" "chart" "states" "readout" "caption"; }
-      .controls sb-segmented { flex: 1 1 100%; }
       .chart { height: 160px; }
     }
 
@@ -272,8 +281,9 @@ export function targetNeedsOlder(
         column-gap: var(--space-10);
       }
       /* One row now (the account caption that made it two is gone): the
-         timeframe buttons and the readout share a text baseline. */
-      .controls, .readout { align-self: baseline; }
+         toggle buttons and the readout share a text line. v246 §A2: last
+         baseline, because each toggle's field starts with its caption. */
+      .controls, .readout { align-self: last baseline; }
       .readout { justify-self: end; text-align: right; }
     }
   `,

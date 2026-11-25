@@ -532,7 +532,7 @@ describe('Dashboard portfolio value', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('sb-portfolio-value sb-equity-candles')).not.toBeNull();
     expect(el.querySelector('sb-portfolio-value sb-sparkline')).toBeNull();
-    const chips = [...el.querySelectorAll('sb-equity-candles [aria-label="Candle timeframe"] button')]
+    const chips = [...el.querySelectorAll('sb-equity-candles [aria-label="Candle interval"] button')]
       .map((b) => b.textContent!.trim());
     expect(chips).toEqual(['1H', '4H', '1D', '1W']);
   });
