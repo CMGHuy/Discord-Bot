@@ -1,4 +1,8 @@
 """Technical indicator helpers used by the swing trading strategy."""
+import hashlib
+from dataclasses import dataclass
+
+import numpy as np
 import pandas as pd
 
 
@@ -70,7 +74,7 @@ def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
 
-def zigzag_pivots(df: pd.DataFrame, threshold_pct: float) -> list:
+def zigzag_pivots(df: pd.DataFrame, threshold_pct: float, *, state: "ZigzagState | None" = None) -> list:
     """
     Simple zigzag pivot detector: walks closing prices and registers a
     pivot (a local high or low) each time price reverses by at least
@@ -81,20 +85,58 @@ def zigzag_pivots(df: pd.DataFrame, threshold_pct: float) -> list:
     Returns a list of (bar_index, price, kind) tuples in chronological
     order, where kind is "high" or "low" and bar_index is a positional
     index into df (0-based).
+
+    ``state`` (v245): a ZigzagState from zigzag_prefix_state over a prefix of
+    this frame's closes. The walk resumes after it when its threshold and its
+    closes[:m] digest match; otherwise it starts at bar 0. Same list either way.
     """
     closes = df["Close"].values
     n = len(closes)
-    pivots = []
     if n == 0:
-        return pivots
+        return []
+    return _zigzag_walk(closes, threshold_pct, _resume_carry(state, closes, threshold_pct), n)[1]
 
-    start_idx = 0
-    start_price = closes[0]
-    last_extreme_idx = 0
-    last_extreme_price = closes[0]
-    direction = None  # None until the first threshold-sized move establishes one
 
-    for i in range(1, n):
+ZIGZAG_PREFIX_UNIT = "zigzag:horizons"   # v245 U2: structure.PREFIX_UNITS name of the horizon walks
+
+
+@dataclass(frozen=True)
+class ZigzagState:
+    """zigzag_pivots' walk after closes[:m] (v245 U2). ``digest`` identifies
+    closes[:m] exactly; ``walk`` = (start_idx, start_price, last_extreme_idx,
+    last_extreme_price, direction)."""
+    threshold_pct: float
+    m: int
+    digest: bytes
+    pivots: tuple
+    walk: tuple
+
+
+def _closes_digest(closes, m: int) -> bytes:
+    head = np.ascontiguousarray(closes[:m])
+    return hashlib.blake2b(head.tobytes() + str(head.dtype).encode(), digest_size=16).digest()
+
+
+def _fresh_carry(closes) -> tuple:
+    """The walk before bar 1: (next index, pivots, *ZigzagState.walk).
+    direction is None until the first threshold-sized move establishes one."""
+    return (1, [], 0, closes[0], 0, closes[0], None)
+
+
+def _resume_carry(state, closes, threshold_pct) -> tuple:
+    """``state``'s walk when it was built on these closes at this threshold, else a fresh walk."""
+    if state is None or state.threshold_pct != threshold_pct or not 1 <= state.m <= len(closes):
+        return _fresh_carry(closes)
+    if _closes_digest(closes, state.m) != state.digest:
+        return _fresh_carry(closes)
+    return (state.m, list(state.pivots), *state.walk)
+
+
+def _zigzag_walk(closes, threshold_pct: float, carry: tuple, stop: int) -> tuple:
+    """zigzag_pivots' loop from carry's next index up to ``stop`` (exclusive).
+    ``pivots`` is always a fresh list, so no caller can mutate a cached state."""
+    next_i, pivots, start_idx, start_price, last_extreme_idx, last_extreme_price, direction = carry
+    for i in range(next_i, stop):
         price = closes[i]
         if last_extreme_price == 0:
             continue
@@ -125,8 +167,24 @@ def zigzag_pivots(df: pd.DataFrame, threshold_pct: float) -> list:
                 pivots.append((last_extreme_idx, last_extreme_price, "low"))
                 direction = "up"
                 last_extreme_price, last_extreme_idx = price, i
+    return (max(next_i, stop), pivots, start_idx, start_price, last_extreme_idx, last_extreme_price, direction)
 
-    return pivots
+
+def zigzag_prefix_state(df: pd.DataFrame, threshold_pct: float, m: int) -> "ZigzagState | None":
+    """The walk over df's first ``m`` closes, frozen; None for an empty prefix."""
+    closes = df["Close"].values
+    m = min(int(m), len(closes))
+    if m < 1:
+        return None
+    _, pivots, *walk = _zigzag_walk(closes, threshold_pct, _fresh_carry(closes), m)
+    return ZigzagState(threshold_pct, m, _closes_digest(closes, m), tuple(pivots), tuple(walk))
+
+
+def zigzag_prefix_states(df: pd.DataFrame, thresholds, m: int) -> tuple | None:
+    """((threshold, ZigzagState), ...) over df's first ``m`` closes; None for an empty prefix."""
+    if min(int(m), len(df)) < 1:
+        return None
+    return tuple((t, zigzag_prefix_state(df, t, m)) for t in thresholds)
 
 
 def macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> dict:
