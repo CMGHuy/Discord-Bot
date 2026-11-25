@@ -37,7 +37,7 @@ _VIEWER_GET = [
     "/calendar/pnl", "/calendar/pnl/day", "/calendar/pnl/day/sparklines",
     "/cancel-precision", "/dashboard", "/equity/candles", "/events", "/feed-posts",
     "/feed-posts/kinds", "/guide", "/guide/<slug>", "/health", "/live",
-    "/market/chart/<ticker>", "/market/tape", "/market/updates",
+    "/market/chart/<ticker>", "/market/regime", "/market/tape", "/market/updates",
     "/reports/expectancy-attribution", "/reports/gate-counterfactual", "/research/ledger",
     "/risk", "/risk/killswitch", "/system/preferences", "/system/scan",
     "/trades", "/trades/<trade_id>", "/trades/<trade_id>/journal", "/trades/export.csv",
