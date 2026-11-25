@@ -17,6 +17,7 @@ from typing import Callable
 
 from swingbot import config
 from swingbot.core.infra import store_generation
+from swingbot.core.infra.swallowed import swallowed
 from swingbot.core.market import trendlines
 
 log = logging.getLogger(__name__)
@@ -79,8 +80,9 @@ class StructureCache:
         try:
             value = build()
         except Exception as exc:
-            log.warning("analysis cache: building %s failed for %s; computing uncached this scan: %s",
-                        key[1] if len(key) > 1 else key, ticker, exc)
+            swallowed(log, "scan.structure.build", exc,
+                      "analysis cache: building %s failed for %s; computing uncached this scan: %s",
+                      key[1] if len(key) > 1 else key, ticker, exc)
             return None
         finally:
             self._add_build_time(time.perf_counter() - started)
@@ -180,8 +182,9 @@ def _unit_value(cache: StructureCache, ticker: str, unit: PrefixUnit, df):
     try:
         fingerprint, builder = unit.build(df)
     except Exception as exc:
-        log.warning("analysis cache: keying %s failed for %s; computing uncached this scan: %s",
-                    unit.name, ticker, exc)
+        swallowed(log, "scan.structure.key", exc,
+                  "analysis cache: keying %s failed for %s; computing uncached this scan: %s",
+                  unit.name, ticker, exc)
         return None
     return cache.get_or_build((ticker, unit.name, fingerprint), builder, ticker=ticker)
 
