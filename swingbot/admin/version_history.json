@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-25 12:21:55 UTC",
+  "generated_at": "2026-11-25 14:55:11 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.49.0",
-    "bot": "2.19.9"
+    "bot": "2.19.10"
   },
   "releases": [
     {
@@ -2861,6 +2861,19 @@
       "versions": {
         "ui": "1.49.0",
         "bot": "2.19.9"
+      },
+      "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-25",
+      "last_seen": "2026-11-25",
+      "commit": "49bed000",
+      "subject": "release(bot): 2.19.10 -- v245 Phase B: exact analysis cache (off), shadow check, soak report",
+      "versions": {
+        "ui": "1.49.0",
+        "bot": "2.19.10"
       },
       "changed": [
         "bot"
