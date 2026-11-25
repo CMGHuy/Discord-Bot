@@ -225,3 +225,16 @@ def test_scan_one_computes_fvg_once(name, monkeypatch):
     fvg = _count(monkeypatch, levels, "find_fair_value_gaps")
     run_case(CASE_BY_NAME[name])
     assert fvg["n"] == 1
+
+
+# -- F6: EMA spans ---------------------------------------------------------
+
+def test_ema_last_is_shared_per_span_and_unchanged(monkeypatch):
+    df = _frame()
+    plain = float(levels.ema(df["Close"], 50).iloc[-1]).hex()
+    calls = _count(monkeypatch, levels, "ema")
+    with frame_memo.ticker_memo():
+        got = [float(levels._ema_last(df, df["Close"], 50)).hex() for _ in range(3)]
+        other = levels._ema_last(df, df["Close"], 20)
+    assert got == [plain] * 3 and other != float.fromhex(plain)
+    assert calls["n"] == 2

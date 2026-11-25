@@ -178,6 +178,12 @@ def volume_profile_nodes(df: pd.DataFrame, lookback_days: int = 180,
     return {"hvn": hvn, "lvn": lvn}
 
 
+def _ema_last(df, close, span):
+    """Last EMA value; shared per frame and span inside a frame_memo scope
+    (v245 F6: the 3m slow and 6m fast spans are both 50)."""
+    return frame_memo.memo(df, ("ema_last", span), lambda: ema(close, span).iloc[-1])
+
+
 def _fvg_candidates(df: pd.DataFrame, params) -> list:
     """Fair Value Gap candidates under v128's FVG_LEVELS_MODE.
 
@@ -240,14 +246,14 @@ def collect_candidate_levels(df: pd.DataFrame, h: dict, current_price: float,
     close = df["Close"]
 
     try:
-        fast = float(ema(close, h["ema_fast"]).iloc[-1])
+        fast = float(_ema_last(df, close, h["ema_fast"]))
         if pd.notna(fast):
             candidates.append((fast, f"EMA{h['ema_fast']}"))
     except Exception:
         pass
 
     try:
-        slow = float(ema(close, h["ema_slow"]).iloc[-1])
+        slow = float(_ema_last(df, close, h["ema_slow"]))
         if pd.notna(slow):
             candidates.append((slow, f"EMA{h['ema_slow']}"))
     except Exception:
