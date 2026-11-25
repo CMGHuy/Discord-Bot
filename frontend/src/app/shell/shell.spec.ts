@@ -39,6 +39,7 @@ import { NAV_ENTRIES } from './nav';
 import { Shell } from './shell';
 import { TAB_BAR_STORAGE, TabBarStorage } from './tab-bar-prefs';
 import { SessionStore } from '../stores/session.store';
+import { RegimeBanner, RegimeStore } from '../stores/regime.store';
 
 /** Same fake as `chart.store.spec.ts`/`connection.store.spec.ts` -- a counter
  *  per event name, bumped by name rather than replayed as an object, matching
@@ -167,9 +168,9 @@ describe('shell navigation', () => {
 
     const main = el.querySelector('.main') as HTMLElement;
     expect(Array.from(main.children).map((c) => c.tagName.toLowerCase()))
-      .toEqual(['header', 'div', 'sb-refresher-banner', 'div']);
+      .toEqual(['header', 'div', 'sb-regime-banner', 'sb-refresher-banner', 'div']);
     // v203 Moved: the workspace now sits in .workspace-row beside the Live column.
-    expect(main.children[3].classList).toContain('workspace-row');
+    expect(main.children[4].classList).toContain('workspace-row');
     expect(main.querySelector(':scope > .workspace-row > main.workspace')).not.toBeNull();
     expect(main.children[1].classList).toContain('tape-strip');
     expect(main.querySelector(':scope > .tape-strip > sb-tape')).not.toBeNull();
@@ -202,7 +203,9 @@ describe('shell navigation', () => {
     expect(strip.getAttribute('role')).toBe('alert');
     expect(strip.textContent).toContain('KILLSWITCH ENGAGED');
     expect(strip.parentElement?.classList.contains('main')).toBe(true);
-    expect(strip.previousElementSibling?.classList.contains('tape-strip')).toBe(true);
+    // v239: the regime banner (empty here) sits between the tape and the alarm.
+    expect(strip.previousElementSibling?.tagName.toLowerCase()).toBe('sb-regime-banner');
+    expect(strip.previousElementSibling?.previousElementSibling?.classList.contains('tape-strip')).toBe(true);
   });
 
   it('shows unknown shell state after a fresh failed read, with a stale observation', () => {
@@ -1636,7 +1639,7 @@ describe('shell live dock (v203)', () => {
   it('shows the strip under the tape below 1024 px, and opens the dock from the right on a tablet', async () => {
     narrow.set(true);
     const { fixture, el } = await mount('/trades');
-    const strip = el.querySelector<HTMLButtonElement>('.main > .tape-strip + sb-live-strip button.live-strip')!;
+    const strip = el.querySelector<HTMLButtonElement>('.main > .tape-strip + sb-regime-banner + sb-live-strip button.live-strip')!;
     expect(strip).not.toBeNull();
     expect(strip.classList).toContain('warn');                 // heat at 85 % of the cap
     expect(el.querySelector('aside.live-column')).toBeNull();
@@ -1903,5 +1906,34 @@ describe('shell tab-bar editor (v240 §6)', () => {
     await settle(fixture);
     expect(editorOpen(el)).toBe(false);
     expect(sheet(el)).toBeNull();
+  });
+});
+
+const REGIME_READING: RegimeBanner = {
+  kind: 'reading', tone: 'correction', label: 'Correction', since: 3, numbers: null,
+  words: 'Dip in an uptrend.', pullback: false, accessibleName: 'Regime Correction, 3 sessions',
+};
+
+describe('shell regime banner (v239)', () => {
+  function mount(phone: boolean): HTMLElement {
+    TestBed.configureTestingModule({ providers: shellProviders() });
+    TestBed.overrideProvider(RegimeStore, {
+      useValue: { banner: signal(REGIME_READING), status: signal('ready'), refresh: vi.fn() },
+    });
+    TestBed.overrideProvider(ViewportService, {
+      useValue: { isPhone: signal(phone), isNarrow: signal(phone), viewport: signal(phone ? 'xs' : 'md') },
+    });
+    const fixture = createShell();
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it.each([true, false])('sits directly after the tape strip, outside the top bar (phone=%s)', (phone) => {
+    const main = mount(phone).querySelector('.main')!;
+    const tags = [...main.children].map((c) => c.tagName.toLowerCase());
+    expect(tags.indexOf('sb-regime-banner')).toBe(tags.indexOf('header') + 2);
+    expect(main.children[1].classList).toContain('tape-strip');
+    expect(main.querySelector('header.topbar sb-regime-banner')).toBeNull();
+    expect(main.querySelector('sb-regime-banner .lead')?.textContent?.trim()).toBe('Trend: Correction');
   });
 });

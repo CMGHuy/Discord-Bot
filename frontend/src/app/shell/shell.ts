@@ -42,6 +42,7 @@ import { TabBarEditor } from './tab-bar-editor';
 import { CommandPalette, isPaletteShortcut, shortcutLabel } from './palette/command-palette';
 import { PhoneTabBar } from './phone-tab-bar';
 import { RefresherBanner } from './refresher-banner';
+import { RegimeBannerComponent } from './regime-banner';
 import { AlarmChip } from './alarm-chip';
 import { ShockPill } from './shock-pill';
 import { navEntriesFor, navEntryFor } from './nav';
@@ -92,7 +93,7 @@ const ZOOM_DEFAULT = 100;
   imports: [
     RouterOutlet, RouterLink, AlarmChip, ToastHost,
     ScanProgressStrip, Icon, Hint, LongPress, Breadcrumb, KillswitchChip, VoiceChip, ProfileMenu, Tape,
-    Button, PhoneTabBar, MoreSheet, TabBarEditor, CommandPalette, RefresherBanner, SectionTabs,
+    Button, PhoneTabBar, MoreSheet, TabBarEditor, CommandPalette, RefresherBanner, RegimeBannerComponent, SectionTabs,
     LiveDock, LiveEdgeTab, LiveStrip, LiveSheet, ReadOnlyBadge, ShockPill,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,

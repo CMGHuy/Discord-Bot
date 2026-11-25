@@ -145,6 +145,11 @@
     <div class="tape-strip">
       <sb-tape />
     </div>
+    <!-- v239: the daily trend (bear regime, shadow). Below 640px the tape
+         strip is hidden, so this sits directly under the top bar and its
+         shock pill ("intraday: Shock" / "Trend: Correction"); wider, it is a
+         full-width strip under the tape. Renders nothing on NORMAL / off. -->
+    <sb-regime-banner />
 
     <!-- v203 (spec v202 §3, §4): below 1024px the dock never docks. This
          40px line under the tape carries its state and opens it as a sheet. -->
