@@ -181,15 +181,22 @@ def named_rows(spells: list[dict]) -> list[dict]:
     return rows
 
 
-def forward_returns(spy: pd.DataFrame, dates, horizons=HORIZONS) -> dict[int, list[float]]:
-    """Percent return from s (the close the label for D read, the bar before D) to s + h."""
+PULLBACK = "PULLBACK"
+
+
+def forward_returns(spy: pd.DataFrame, dates, horizons=HORIZONS, lag: int = 1) -> dict[int, list[float]]:
+    """Percent return from the close ``lag`` bars before D to ``h`` bars after it.
+
+    lag=1 anchors at s, the bar before D (pullback days: the trigger reads bars <= s).
+    lag=0 anchors at D itself (episode first days: D is known only once D+1's label,
+    which reads close D, confirms the episode)."""
     closes = spy["Close"].to_numpy(dtype=float)
     position = {ts.date(): i for i, ts in enumerate(spy.index)}
     out: dict[int, list[float]] = {h: [] for h in horizons}
     for day in dates:
-        if day not in position or position[day] < 1:
+        if day not in position or position[day] < lag:
             continue
-        s = position[day] - 1
+        s = position[day] - lag
         for h in horizons:
             if s + h < len(closes):
                 out[h].append(100.0 * (closes[s + h] / closes[s] - 1.0))
@@ -206,7 +213,7 @@ def _stats(vals: list[float]) -> list[str]:
 def forward_rows(spy: pd.DataFrame, groups: dict) -> list[list[str]]:
     rows = []
     for name, dates in groups.items():
-        fwd = forward_returns(spy, dates)
+        fwd = forward_returns(spy, dates, lag=1 if name.startswith(PULLBACK) else 0)
         rows.extend([name, str(h), str(len(fwd[h])), *_stats(fwd[h])] for h in HORIZONS)
     return rows
 
@@ -215,12 +222,12 @@ def _groups(days: list[br.RegimeDay], eps: list[ep.Episode]) -> tuple[dict, dict
     by_date = {d.session_date: d for d in days}
     pullbacks = [d.session_date for d in days if d.pullback_trigger]
     plain = {key: [e.start for e in eps if e.key == key] for key in ep.EPISODE_KEYS}
-    plain["PULLBACK"] = pullbacks
+    plain[PULLBACK] = pullbacks
     split: dict[str, list] = {}
     for e in eps:
         split.setdefault(f"{e.key} / stress {by_date[e.start].stress}", []).append(e.start)
     for day in pullbacks:
-        split.setdefault(f"PULLBACK / stress {by_date[day].stress}", []).append(day)
+        split.setdefault(f"{PULLBACK} / stress {by_date[day].stress}", []).append(day)
     return plain, dict(sorted(split.items()))
 
 
@@ -243,8 +250,11 @@ def _head(days, hashes: dict, command: str) -> list[str]:
             + " · ".join(f"{s} sha256 `{h}`" for s, h in sorted(hashes.items())),
             "**Rules:** `swingbot/core/market/bear_regime.py` (frozen, v239); episodes confirmed after "
             f"{ep.CONFIRM_SESSIONS} sessions (`regime_episodes`).",
-            "**Forward return:** percent change of SPY's adjusted close from `s` (the close the "
-            "label read) to `s + h` sessions.", ""]
+            "**Forward return:** percent change of SPY's adjusted close over `h` sessions. Episode "
+            "rows run from the close of D (the episode's first day) to D + h: D is selected only "
+            "once D+1 confirms it, and D+1's label reads close D. Pullback rows run from `s` (the "
+            "bar before D, the close the label read) to `s + h`: the trigger reads only bars <= s. "
+            "A day whose `h` runs past the last bar is dropped for that `h` only.", ""]
 
 
 _FORWARD_HEADER = ["Group", "h", "N", "Mean %", "Median %", "Up %"]

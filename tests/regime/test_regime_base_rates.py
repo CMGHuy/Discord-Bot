@@ -1,5 +1,7 @@
 """v244 V244-1/V244-2: the SPY base-rate study (spec v239 § Evidence) on
 synthetic series: hash refusal, windowed labels, per-year checkpoint, reports."""
+import dataclasses
+import datetime as dt
 import json
 
 import numpy as np
@@ -233,16 +235,78 @@ def test_render_keeps_stress_none_apart():
     assert "CORRECTION / stress None" in text and "CORRECTION / stress False" not in text
 
 
+def _jump_spy():
+    """Close 100 on bars 0..9, 200 from bar 10 on: the only move is the s -> D bar for D = idx[10]."""
+    idx = pd.bdate_range("2024-01-01", periods=80)
+    return idx, pd.DataFrame({"Close": [100.0] * 10 + [200.0] * 70}, index=idx)
+
+
+def test_episode_rows_start_at_close_d_and_pullback_rows_at_close_s():
+    idx, spy = _jump_spy()
+    d = idx[10].date()
+    assert rbr.forward_returns(spy, [d], lag=0) == {5: [0.0], 20: [0.0], 60: [0.0]}
+    assert rbr.forward_returns(spy, [d]) == {5: [100.0], 20: [100.0], 60: [100.0]}
+    rows = rbr.forward_rows(spy, {"BEAR": [d], "BEAR / stress True": [d],
+                                  "PULLBACK": [d], "PULLBACK / stress None": [d]})
+    by_group = {(r[0], r[1]): r[3] for r in rows}
+    assert by_group[("BEAR", "5")] == by_group[("BEAR / stress True", "60")] == "+0.00"
+    assert by_group[("PULLBACK", "5")] == by_group[("PULLBACK / stress None", "60")] == "+100.00"
+
+
+def test_episode_returns_keep_day_zero_and_drop_only_the_horizon_past_the_end():
+    idx, spy = _jump_spy()
+    assert rbr.forward_returns(spy, [idx[0].date()], lag=0) == {5: [0.0], 20: [100.0], 60: [100.0]}
+    assert rbr.forward_returns(spy, [idx[74].date()], lag=0) == {5: [0.0], 20: [], 60: []}
+    assert rbr.forward_returns(spy, [idx[75].date()], lag=0) == {5: [], 20: [], 60: []}
+
+
+def test_named_rows_count_a_cross_year_spell_only_when_it_converts():
+    converts = {"start": dt.date(2007, 11, 1), "end": dt.date(2008, 1, 14), "sessions": 50,
+                "stress": True, "outcome": "bear", "switch": dt.date(2008, 1, 15)}
+    recovers = {"start": dt.date(2007, 12, 3), "end": dt.date(2008, 1, 9), "sessions": 25,
+                "stress": False, "outcome": "normal", "switch": dt.date(2008, 1, 10)}
+    rows = [r for r in rbr.named_rows([converts, recovers]) if r["year"] == 2008]
+    assert [(r["start"], r["outcome"], r["switch"]) for r in rows] == [
+        (dt.date(2007, 11, 1), "bear", dt.date(2008, 1, 15))]
+
+
+def test_forward_rows_format_known_returns():
+    closes = [100.0] * 20
+    closes[6], closes[7] = 110.0, 150.0          # lag 0: D = bars 0, 1, 2 -> 0%, +10%, +50% at h=5
+    spy = pd.DataFrame({"Close": closes}, index=pd.bdate_range("2024-01-01", periods=20))
+    dates = [ts.date() for ts in spy.index[:3]]
+    assert rbr.forward_rows(spy, {"NORMAL": dates}) == [
+        ["NORMAL", "5", "3", "+20.00", "+10.00", "66.7"],
+        ["NORMAL", "20", "0", "n/a", "n/a", "n/a"],
+        ["NORMAL", "60", "0", "n/a", "n/a", "n/a"]]
+
+
+def test_render_counts_a_pullback_day():
+    days = _days("NNNNN")
+    days[2] = dataclasses.replace(days[2], pullback_trigger=True)
+    spy = pd.DataFrame({"Close": np.arange(100.0, 100.0 + len(days) + 70)},
+                       index=pd.bdate_range("2008-01-01", periods=len(days) + 70))
+    eps = rbr.episodes(days)
+    text = rbr.render(days, eps, rbr.correction_spells(eps), spy, {"SPY": "a" * 64}, "cmd")
+    assert "| PULLBACK | 5 | 1 |" in text and "| PULLBACK | 60 | 1 |" in text
+    assert "| PULLBACK / stress False | 20 | 1 |" in text
+
+
+def _assert_header(text, cache):
+    assert "v244" in text and "DESCRIPTION" in text and "moves no gate" in text and rbr.END in text
+    assert "never a lift" in text and "only its N and coverage columns" in text
+    assert "v244-regime-base-rates" in text
+    assert "from the close of D" in text and "from `s`" in text
+    for symbol in (br.SPY, br.VIX):
+        assert rbr.frd.sha256_file(rbr.frd.csv_path(cache, symbol)) in text
+
+
 def test_main_writes_the_doc_and_a_rerun_rewrites_the_same_bytes(tmp_path, monkeypatch):
     cache, work, out = _cache(tmp_path), tmp_path / "work", tmp_path / "doc.md"
     argv = ["--cache-dir", str(cache), "--work-dir", str(work), "--out", str(out)]
     assert rbr.main(argv) == 0
     text = out.read_text(encoding="utf-8")
-    assert "v244" in text and "DESCRIPTION" in text and "moves no gate" in text and rbr.END in text
-    assert "never a lift" in text and "only its N and coverage columns" in text
-    assert "v244-regime-base-rates" in text
-    assert rbr.frd.sha256_file(rbr.frd.csv_path(cache, br.SPY)) in text
-    assert rbr.frd.sha256_file(rbr.frd.csv_path(cache, br.VIX)) in text
+    _assert_header(text, cache)
     assert b"\r\n" not in out.read_bytes()
     calls = []
     monkeypatch.setattr(rbr, "label_year", lambda *a: calls.append(a) or [])
