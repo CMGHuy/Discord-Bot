@@ -2,6 +2,8 @@
 scan path, read disk only, never fabricate a value."""
 import datetime as dt
 import json
+import logging
+import threading
 
 import pytest
 
@@ -68,11 +70,13 @@ def test_refresh_writes_the_cache_and_keeps_old_entries_on_failure():
             raise RuntimeError("yahoo 429")
         return _parsed(ticker)
 
-    assert si.refresh_short_interest(["gme", "BAD"], now=NOW, fetch=fetch) == {"updated": 1, "failed": ["BAD"]}
+    assert si.refresh_short_interest(["gme", "BAD"], now=NOW, fetch=fetch) == {
+        "updated": 1, "failed": ["BAD"], "retried": 1, "recovered": 0}
     assert si.cached_short_interest("GME")["short_pct_float"] == 18.2
     assert si.cached_short_interest("BAD") is None
 
-    assert si.refresh_short_interest(["GME"], now=NOW, fetch=lambda t: 1 / 0) == {"updated": 0, "failed": ["GME"]}
+    assert si.refresh_short_interest(["GME"], now=NOW, fetch=lambda t: 1 / 0) == {
+        "updated": 0, "failed": ["GME"], "retried": 1, "recovered": 0}
     assert si.cached_short_interest("gme")["short_pct_float"] == 18.2        # kept, case-insensitive
 
 
@@ -187,4 +191,77 @@ def test_fetch_with_no_layer_answer_is_a_failure_not_an_empty_entry(_data_dir, m
     monkeypatch.setattr(data, "get_info_fields", lambda t, keys, *, variant: None)
     with pytest.raises(si.ShortInterestUnavailable):
         si.fetch_short_interest("GME")
-    assert si.refresh_short_interest(["GME"], now=NOW) == {"updated": 0, "failed": ["GME"]}
+    assert si.refresh_short_interest(["GME"], now=NOW) == {
+        "updated": 0, "failed": ["GME"], "retried": 1, "recovered": 0}
+
+
+# --- v248 § 6: the job fits its pool -----------------------------------------------
+
+@pytest.mark.parametrize("limits, workers", [((1, 1), 2), ((1, 0), 1), ((0, 0), 1)])
+def test_workers_equal_the_side_pool_capacity(monkeypatch, limits, workers):
+    from swingbot.core.db import side_engine
+    monkeypatch.setattr(side_engine, "pool_limits", lambda: limits)
+    assert si._worker_count() == workers
+
+
+def test_the_parallel_pass_uses_the_pool_capacity(monkeypatch):
+    from swingbot.core.db import side_engine
+    monkeypatch.setattr(side_engine, "pool_limits", lambda: (1, 1))
+    seen = []
+    real = si.ThreadPoolExecutor
+
+    def recording(max_workers=None, **kw):
+        seen.append(max_workers)
+        return real(max_workers=max_workers, **kw)
+
+    monkeypatch.setattr(si, "ThreadPoolExecutor", recording)
+    si.refresh_short_interest(["GME", "TSLA"], now=NOW, fetch=_parsed)
+    assert seen == [2]
+
+
+def test_a_failed_first_pass_is_retried_once_serially(monkeypatch):
+    main = threading.get_ident()
+    calls, retry_threads = [], []
+
+    def flaky(ticker):
+        calls.append(ticker)
+        if ticker == "FLAKY" and calls.count("FLAKY") == 1:
+            raise RuntimeError("QueuePool limit of size 1 overflow 1 reached")
+        if ticker == "DEAD":
+            if calls.count("DEAD") == 2:
+                retry_threads.append(threading.get_ident())
+            raise RuntimeError("no .info")
+        if calls.count(ticker) == 2:
+            retry_threads.append(threading.get_ident())
+        return _parsed(ticker)
+
+    result = si.refresh_short_interest(["GME", "FLAKY", "DEAD"], now=NOW, fetch=flaky)
+    assert result == {"updated": 2, "failed": ["DEAD"], "retried": 2, "recovered": 1}
+    assert sorted(calls) == ["DEAD", "DEAD", "FLAKY", "FLAKY", "GME"]    # each failure retried once
+    assert calls[-2:] in (["FLAKY", "DEAD"], ["DEAD", "FLAKY"])           # the retry pass runs last
+    assert retry_threads == [main, main]                                  # ... on the calling thread
+    assert si.cached_short_interest("FLAKY") is not None
+
+
+def test_nothing_is_retried_when_the_first_pass_succeeds():
+    calls = []
+    result = si.refresh_short_interest(["GME", "TSLA"], now=NOW,
+                                       fetch=lambda t: calls.append(t) or _parsed(t))
+    assert result == {"updated": 2, "failed": [], "retried": 0, "recovered": 0}
+    assert sorted(calls) == ["GME", "TSLA"]
+
+
+@pytest.mark.parametrize("result, total, level, text", [
+    ({"updated": 65, "failed": ["X"] * 27, "retried": 30, "recovered": 3}, 92, logging.WARNING,
+     "65 updated, 27 failed of 92 symbols, retried 30, recovered 3"),
+    ({"updated": 83, "failed": ["X"] * 9, "retried": 12, "recovered": 3}, 92, logging.INFO,
+     "83 updated, 9 failed of 92 symbols, retried 12, recovered 3"),       # 9.8 %: not above 10 %
+    ({"updated": 9, "failed": ["X"], "retried": 1, "recovered": 0}, 10, logging.INFO,
+     "9 updated, 1 failed of 10 symbols, retried 1, recovered 0"),         # exactly 10 %: not above
+    ({"updated": 0, "failed": [], "retried": 0, "recovered": 0}, 0, logging.INFO,
+     "0 updated, 0 failed of 0 symbols, retried 0, recovered 0"),          # no symbols: no division
+    ({"updated": 2, "failed": []}, 2, logging.INFO,
+     "2 updated, 0 failed of 2 symbols, retried 0, recovered 0"),          # an older result shape
+])
+def test_summary_line(result, total, level, text):
+    assert si.summary_line(result, total) == (level, text)

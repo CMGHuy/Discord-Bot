@@ -1076,8 +1076,8 @@ async def daily_short_interest_refresh():
         from swingbot.core.market import short_interest
         symbols = await asyncio.to_thread(short_interest.refresh_symbols)
         result = await asyncio.to_thread(short_interest.refresh_short_interest, symbols)
-        log.info("daily_short_interest_refresh: %d updated, %d failed of %d symbols",
-                 result["updated"], len(result["failed"]), len(symbols))
+        level, text = short_interest.summary_line(result, len(symbols))
+        log.log(level, "daily_short_interest_refresh: %s", text)
     except Exception as exc:
         swallowed(log, "ops.daily_short_interest_refresh", exc,
                   "daily_short_interest_refresh: refresh failed",
