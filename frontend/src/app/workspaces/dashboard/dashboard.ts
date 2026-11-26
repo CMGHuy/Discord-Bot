@@ -46,7 +46,6 @@ import {
   baselineColumns,
   PINNED_COLUMNS,
   openedAt,
-  tradeColumns,
 } from '../trades/trades.columns';
 import { amount, dateTime, money, pct, signed } from '../../ui/format';
 import { Page } from '../../ui/page';
@@ -59,6 +58,7 @@ import { RowLink } from '../../ui/row-link';
 import { Icon } from '../../ui/icon';
 import { PlanLifecycleDiagram } from '../../ui/plan-lifecycle-diagram';
 import {
+  dashboardColumns,
   expectedPnlPct,
   expectedR,
   expectedSlPct,
@@ -147,8 +147,8 @@ export const DASHBOARD_PANEL_ORDER: Partial<Record<Viewport, string[]>> = {
 /**
  * Open Positions' columns — v95 C4, exported for E1's parity gate.
  *
- * Not a separate definition: this table renders the exact same
- * `tradeColumns()` set Trades does (same `COMPACT_COLUMNS`/`FULL_COLUMNS`
+ * Not a separate definition: this table renders the same `tradeColumns()`
+ * set Trades does, minus the strategy badge (`dashboardColumns`; same `COMPACT_COLUMNS`/`FULL_COLUMNS`
  * baseline, same `DASHBOARD_TABLE_ID` preference key for the ORDER only), so
  * it already carries the floors v95 C2 declared there. A second, hand-tuned
  * floor list for the same ten-to-sixteen columns would drift from C2's the
@@ -159,9 +159,8 @@ export const DASHBOARD_PANEL_ORDER: Partial<Record<Viewport, string[]>> = {
  *
  * v195 correction 8: the same function carries NEVER_COLLAPSED_COLUMNS
  * (trades.columns.ts), so Open positions keeps ticker, side, plan, stop,
- * P&L, R, tier and the strategy badge inline on a tablet with no list of
- * its own. */
-export const DASHBOARD_COLUMNS = tradeColumns();
+ * P&L, R and tier inline on a tablet with no list of its own. */
+export const DASHBOARD_COLUMNS = dashboardColumns();
 
 /** The trade drawer's query parameter (v179 §3.2). dashboard.routes.ts's
  *  rerun rule names the same string. */
@@ -966,7 +965,7 @@ export class Dashboard {
       closed_at: this.closedCell(),
       actions: this.actionsCell(),
     };
-    return tradeColumns(this.now)
+    return dashboardColumns(this.now)
       .filter((column) => column.key !== 'actions' || this.session.isAdmin())
       .map((column) => (cells[column.key] ? { ...column, cell: cells[column.key] } : column));
   });

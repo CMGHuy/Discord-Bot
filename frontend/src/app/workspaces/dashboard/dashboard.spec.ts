@@ -701,10 +701,14 @@ describe('DASHBOARD_COLUMNS', () => {
     expect(DASHBOARD_COLUMNS.filter((c) => c.inlineFrom === undefined)).toEqual([]);
   });
 
-  it('keeps the never-collapsed columns, the badge among them, inline on a tablet (v195 correction 8)', () => {
+  it('offers no Badge column, so no row, card or expansion can show it', () => {
+    expect(DASHBOARD_COLUMNS.map((c) => c.key)).not.toContain('badge');
+  });
+
+  it('keeps the never-collapsed columns, bar the removed badge, inline on a tablet (v195 correction 8)', () => {
     // Open positions is where a stop is checked before acting: it must not sit
     // one tap away in the row expansion at 640-1023px.
-    for (const key of NEVER_COLLAPSED_COLUMNS) {
+    for (const key of NEVER_COLLAPSED_COLUMNS.filter((k) => k !== 'badge')) {
       const column = DASHBOARD_COLUMNS.find((c) => c.key === key);
       expect(column, `missing column: ${key}`).toBeDefined();
       expect(isInline(column!.inlineFrom, 'sm'), `${key} collapses at sm`).toBe(true);
@@ -753,6 +757,15 @@ describe('Dashboard price age (v201)', () => {
   it('the open-positions panel has a Refresh control for the open tickers', async () => {
     const el = await withActiveRow({});
     expect(el.querySelector('.positions-panel sb-market-refresh')).not.toBeNull();
+  });
+
+  it('the rendered positions table shows no Badge header or value', async () => {
+    const el = await withActiveRow({ badge: 'WEAK' });
+    const table = el.querySelector('sb-positions-table')!;
+    expect(table.querySelector('tbody')).not.toBeNull();
+    expect(table.querySelector('[data-col="badge"]')).toBeNull();
+    expect(table.textContent).not.toContain('Badge');
+    expect(table.textContent).not.toContain('WEAK');
   });
 });
 
