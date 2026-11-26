@@ -18,4 +18,4 @@ Rules for every script in this folder:
 
 | Script | Plan | Cache | Results |
 |---|---|---|---|
-| `regime_base_rates.py` (added by the v239 follow-on evidence plan; not in v239) | follow-on | `data/backtest_cache_regime/` (`scripts/data/fetch_regime_data.py`) | written by that plan |
+| `regime_base_rates.py` (SPY base rates under the v239 bear-regime rules, 1993 → 2026-11-20; DESCRIPTION, moves no gate) | v244 | `data/backtest_cache_regime/` (`scripts/data/fetch_regime_data.py`) | `docs/superpowers/results/2026-11-23-v244-regime-base-rates.md` |

@@ -194,6 +194,13 @@ Every Alpaca and yfinance request in `swingbot/` (bot, spawned `_run_bounded` wo
   banner/chip. Shadow only: nothing blocks, sizes, scores or cancels a plan.
   `BEAR_REGIME_MODE=off` is byte-identical (no fetch, row, stamp, line,
   notice or banner). Drift guard: `scripts/reports/regime_parity.py`.
+  Evidence (v244): `scripts/research/regime_base_rates.py` labels SPY
+  1993 → 2026-11-20 on a hash-pinned cache and reports episode durations,
+  CORRECTION → BEAR conversion and forward returns (a DESCRIPTION, results in
+  `docs/superpowers/results/2026-11-23-v244-regime-base-rates.md`);
+  `scripts/reports/regime_shadow_report.py` prints N/WR/ExpR per stamped
+  `regime_action` on closed main-ledger trades, `too few` under 30. Both are
+  monitoring and description: neither is a screen or licenses B7–B9.
 - Tests build OHLCV frames with `tests/conftest.py:make_ohlcv` /
   `make_trend_df` (columns `Open,High,Low,Close,Volume`, business-day
   DatetimeIndex) and `tests/helpers.py`. Read conftest before writing new

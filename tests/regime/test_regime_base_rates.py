@@ -330,3 +330,16 @@ def test_main_refuses_a_cache_too_short_to_label(tmp_path, capsys):
     argv = ["--cache-dir", str(cache), "--work-dir", str(tmp_path / "work"), "--out", str(out)]
     assert rbr.main(argv) == 2
     assert not out.exists() and "no session to label" in capsys.readouterr().err
+
+
+def test_the_ledger_carries_the_study_as_a_description():
+    from swingbot.core.backtesting.instrument import stats
+    rows = [r for r in stats.load_ledger(stats.LEDGER_PATH) if r["id"] == "v244-regime-base-rates"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert (row["verdict"], row["instrument"], row["p"], row["exp_r"]) == ("DESCRIPTION", "v1", None, None)
+    assert row["record"] == rbr.OUT.relative_to(rbr.ROOT).as_posix()
+    assert isinstance(row["n"], int) and row["n"] > 8000
+    assert "never a lift" in row["hypothesis"] and "selects nothing" in row["hypothesis"]
+    assert "only its N and coverage columns" in row["hypothesis"]
+    assert stats.ledger_data_source(row) == "yfinance"
