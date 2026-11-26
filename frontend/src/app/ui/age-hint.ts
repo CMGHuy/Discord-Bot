@@ -14,7 +14,8 @@ export function ageText(ageS: number | null): string | null {
   if (ageS === null || Number.isNaN(ageS) || ageS < 0) return null;
   if (ageS < 60) return `${Math.round(ageS)} s ago`;
   if (ageS < 3600) return `${Math.floor(ageS / 60)} min ago`;
-  return `${Math.floor(ageS / 3600)} h ago`;
+  if (ageS < 86_400) return `${Math.floor(ageS / 3600)} h ago`;
+  return `${Math.floor(ageS / 86_400)} d ago`;
 }
 
 export type MarketTone = 'fresh' | 'stale' | 'closed' | 'stalled';
@@ -29,7 +30,7 @@ interface MarketAgeOptions {
 const ET_FORMAT = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
 });
-const HOUR_MS = 3_600_000;
+const ET_HOUR = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hourCycle: 'h23' });
 
 /** "Fri 16:00" in New York time, read through formatToParts so no locale
  *  punctuation leaks in. */
@@ -39,17 +40,24 @@ function etStamp(iso: string): string {
   return part('weekday') + ' ' + part('hour') + ':' + part('minute');
 }
 
-function closedLabel(asOf: string, status: MarketStatus): string {
-  const closeAt = status.last_close_at;
-  const atClose = closeAt !== null && Date.parse(asOf) >= Date.parse(closeAt) - HOUR_MS;
-  return atClose ? 'last close · ' + etStamp(closeAt) + ' ET' : 'as of ' + etStamp(asOf) + ' ET';
+function etHour(ms: number): number {
+  const part = ET_HOUR.formatToParts(new Date(ms)).find((p) => p.type === 'hour');
+  return Number(part?.value ?? '0');
+}
+
+function offHoursText(session: 'extended' | 'closed', age: string | null, nowMs: number): string | null {
+  if (age === null) return null;
+  const prefix = session === 'closed' ? 'market closed' : etHour(nowMs) < 12 ? 'pre-market' : 'after hours';
+  return `${prefix} · last trade ${age}`;
 }
 
 /**
  * v201: what a priced cell says about its age. A stalled refresher wins (the
- * age is then the honest part), a closed market reads its last close rather
- * than a scary "stale", and otherwise the age is fresh or stale against the
- * server's limit.
+ * age is then the honest part), and otherwise the age is fresh or stale
+ * against the server's limit.
+ * v248: outside the regular session the age says which part of the day it is
+ * (`pre-market` / `after hours` / `market closed · last trade ...`) in grey;
+ * the session is the server's, never this clock's.
  */
 export function marketAgeLabel(
   asOf: string | null, nowMs: number, status: MarketStatus | null, opts?: MarketAgeOptions,
@@ -57,8 +65,8 @@ export function marketAgeLabel(
   if (opts?.kind === 'snapshot') return snapshotLabel(opts.computedAt ?? null, nowMs, status, opts.staleInputs ?? false);
   const age = asOf === null ? null : (nowMs - Date.parse(asOf)) / 1000;
   if (status?.heartbeat.stalled) return { text: ageText(age), tone: 'stalled' };
-  if (status?.session === 'closed') {
-    return { text: asOf === null ? null : closedLabel(asOf, status), tone: 'closed' };
+  if (status && status.session !== 'regular') {
+    return { text: offHoursText(status.session, ageText(age), nowMs), tone: 'closed' };
   }
   const limit = status?.stale_price_s ?? null;
   const stale = limit !== null && age !== null && age > limit;

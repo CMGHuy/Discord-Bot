@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { MarketStatus } from '../api/models';
 import { LiveValuesStore } from '../stores/live-values.store';
 import { CLOCK } from './clock';
-import { MarketValue } from './market-value';
+import { MarketValue, errorIsCurrent } from './market-value';
 
 const NOW = Date.parse('2026-10-30T15:00:00Z'); // a Friday, regular hours
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString();
@@ -16,12 +16,13 @@ const regular: MarketStatus = {
 
 @Component({
   imports: [MarketValue],
-  template: `<sb-market-value [asOf]="a" [refreshing]="r" [error]="e" [kind]="kind" [computedAt]="computedAt" [staleInputs]="staleInputs">187.42</sb-market-value>`,
+  template: `<sb-market-value [asOf]="a" [refreshing]="r" [error]="e" [errorAt]="errAt" [kind]="kind" [computedAt]="computedAt" [staleInputs]="staleInputs">187.42</sb-market-value>`,
 })
 class Host {
   a: string | null = ago(12);
   r = false;
   e: string | null = null;
+  errAt: string | null = null;
   kind: 'price' | 'snapshot' = 'price';
   computedAt: string | null = null;
   staleInputs = false;
@@ -29,14 +30,16 @@ class Host {
 
 describe('sb-market-value (v201)', () => {
   let clock: WritableSignal<number>;
+  let status: WritableSignal<MarketStatus>;
 
   beforeEach(() => {
     clock = signal(NOW);
+    status = signal(regular);
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         { provide: CLOCK, useValue: clock },
-        { provide: LiveValuesStore, useValue: { status: signal(regular) } },
+        { provide: LiveValuesStore, useValue: { status } },
       ],
     });
   });
@@ -80,7 +83,7 @@ describe('sb-market-value (v201)', () => {
       expect(getComputedStyle(host).display).not.toBe('none');
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(),
-        { provide: CLOCK, useValue: clock }, { provide: LiveValuesStore, useValue: { status: signal(regular) } }] });
+        { provide: CLOCK, useValue: clock }, { provide: LiveValuesStore, useValue: { status } }] });
     }
   });
 
@@ -101,11 +104,65 @@ describe('sb-market-value (v201)', () => {
     expect((el.querySelector('.mv-value') as HTMLElement).hidden).toBe(true);
   });
 
-  it('error stops the spinner', () => {
-    const el = render({ r: true, e: 'no quote' });
+  const err = (el: HTMLElement) => el.querySelector('.mv-err');
+  const tone = (el: HTMLElement) => el.querySelector('.mv')?.getAttribute('data-tone');
+
+  it('a fresh price hides an error: the spinner keeps running (v248)', () => {
+    const el = render({ r: true, e: 'no quote', errAt: ago(5) });
+    expect(err(el)).toBeNull();
+    expect(el.querySelector('sb-spinner')).not.toBeNull();
+    expect(tone(el)).toBe('fresh');
+  });
+
+  it('a stale price shows a current error in red, with its text (v248)', () => {
+    const el = render({ a: ago(840), r: true, e: 'no quote', errAt: ago(30) });
+    expect(err(el)?.textContent?.trim()).toBe('· refresh failed: no quote');
+    expect(err(el)?.getAttribute('title')).toBe('no quote');
+    expect(el.querySelector('.mv-age')?.textContent?.trim()).toBe('14 min ago');
+    expect(tone(el)).toBe('failed');
     expect(el.querySelector('sb-spinner')).toBeNull();
-    expect(el.querySelector('.mv-err')?.textContent?.trim()).toBe('refresh failed');
-    expect(el.querySelector('.mv-age')?.textContent?.trim()).toBe('12 s ago');
+  });
+
+  it('an error older than the price stays hidden; the age stays merely stale (v248)', () => {
+    const el = render({ a: ago(840), e: 'no quote', errAt: ago(900) });
+    expect(err(el)).toBeNull();
+    expect(tone(el)).toBe('stale');
+  });
+
+  it('an error recorded at the price time still shows (v248)', () => {
+    const at = ago(840);
+    expect(err(render({ a: at, e: 'no quote', errAt: at }))).not.toBeNull();
+  });
+
+  it('no price at all shows the error without a separator (v248)', () => {
+    const el = render({ a: null, e: 'timeout' });
+    expect(err(el)?.textContent?.trim()).toBe('refresh failed: timeout');
+    expect((el.querySelector('sb-market-value') as HTMLElement).classList).not.toContain('mv-empty');
+  });
+
+  it('a consumer that passes no errorAt (watchlist, tape) shows a current error on a stale price (v248)', () =>
+    expect(err(render({ a: ago(840), e: 'no quote' }))).not.toBeNull());
+
+  it('outside the regular session the error never shows and the age is grey (v248)', () => {
+    status.set({ ...regular, session: 'extended' });
+    const el = render({ a: ago(840), e: 'no quote', errAt: ago(30) });
+    expect(err(el)).toBeNull();
+    expect(tone(el)).toBe('closed');
+    expect(el.querySelector('.mv-age')?.textContent?.trim()).toBe('pre-market · last trade 14 min ago');
+  });
+
+  it('cuts a long error to 60 characters, the full text in its title (v248)', () => {
+    const long = 'x'.repeat(80);
+    const shown = err(render({ a: null, e: long }))!;
+    const text = shown.textContent!.trim().replace('refresh failed: ', '');
+    expect(text.length).toBe(60);
+    expect(text.endsWith('…')).toBe(true);
+    expect(shown.getAttribute('title')).toBe(long);
+  });
+
+  it('a snapshot error shows as before (v248 leaves snapshots alone)', () => {
+    const el = render({ kind: 'snapshot', a: '2026-10-28', computedAt: ago(180), e: 'build failed' });
+    expect(err(el)?.textContent?.trim()).toBe('refresh failed');
   });
 
   it('a stale price takes the stale tone', () => {
@@ -138,4 +195,17 @@ describe('sb-market-value (v201)', () => {
     f.detectChanges();
     expect((f.nativeElement as HTMLElement).querySelector('.mv-age')?.textContent?.trim()).toBe('1 min ago');
   });
+});
+
+describe('errorIsCurrent (v248)', () => {
+  const A = '2026-10-30T14:00:00Z';
+  const B = '2026-10-30T14:05:00Z';
+  it('is current with no error time, no price time, or an error at or after the price', () => {
+    expect(errorIsCurrent(null, A)).toBe(true);
+    expect(errorIsCurrent(B, null)).toBe(true);
+    expect(errorIsCurrent(B, A)).toBe(true);
+    expect(errorIsCurrent(A, A)).toBe(true);
+  });
+  it('is not current when the price is newer than the error', () =>
+    expect(errorIsCurrent(A, B)).toBe(false));
 });

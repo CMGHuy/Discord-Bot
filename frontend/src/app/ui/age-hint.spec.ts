@@ -25,6 +25,11 @@ describe('ageText (v171 D2)', () => {
     expect(ageText(180)).toBe('3 min ago');
   });
   it('reads hours past an hour', () => expect(ageText(7300)).toBe('2 h ago'));
+  it('reads whole days from 24 h on (v248)', () => {
+    expect(ageText(86_399)).toBe('23 h ago');
+    expect(ageText(86_400)).toBe('1 d ago');
+    expect(ageText(2 * 86_400 + 7_200)).toBe('2 d ago');
+  });
   it('is null for no age, NaN or a negative age', () => {
     expect(ageText(null)).toBeNull();
     expect(ageText(Number.NaN)).toBeNull();
@@ -80,10 +85,29 @@ describe('marketAgeLabel (v201)', () => {
     expect(marketAgeLabel(new Date(NOW - 12_000).toISOString(), NOW, st('regular'))).toEqual({ text: '12 s ago', tone: 'fresh' }));
   it('price older than the regular limit is stale', () =>
     expect(marketAgeLabel(new Date(NOW - 180_000).toISOString(), NOW, st('regular')).tone).toBe('stale'));
-  it('closed market reads last close, not stale', () =>
-    expect(marketAgeLabel('2026-10-30T19:59:58Z', NOW, st('closed'))).toEqual({ text: 'last close · Fri 16:00 ET', tone: 'closed' }));
-  it('closed market with a price older than the close shows its own time', () =>
-    expect(marketAgeLabel('2026-10-28T19:40:00Z', NOW, st('closed'))).toEqual({ text: 'as of Wed 15:40 ET', tone: 'closed' }));
+  it('closed market reads "market closed · last trade <age>", grey (v248)', () =>
+    expect(marketAgeLabel('2026-10-30T19:59:58Z', NOW, st('closed')))
+      .toEqual({ text: 'market closed · last trade 19 h ago', tone: 'closed' }));
+  it('closed market counts days for an older price (v248)', () =>
+    expect(marketAgeLabel('2026-10-28T19:40:00Z', NOW, st('closed')))
+      .toEqual({ text: 'market closed · last trade 2 d ago', tone: 'closed' }));
+  it('pre-market reads its last trade in grey, never stale (v248)', () =>
+    expect(marketAgeLabel('2026-10-29T20:00:00Z', Date.parse('2026-10-30T12:00:00Z'), st('extended')))
+      .toEqual({ text: 'pre-market · last trade 16 h ago', tone: 'closed' }));
+  it('after hours reads its last trade in grey (v248)', () =>
+    expect(marketAgeLabel('2026-10-30T20:00:00Z', Date.parse('2026-10-30T21:30:00Z'), st('extended')))
+      .toEqual({ text: 'after hours · last trade 1 h ago', tone: 'closed' }));
+  it('a holiday is whatever the server calls it: closed on a weekday morning (v248)', () =>
+    expect(marketAgeLabel('2026-11-25T21:00:00Z', Date.parse('2026-11-26T16:00:00Z'), st('closed')))
+      .toEqual({ text: 'market closed · last trade 19 h ago', tone: 'closed' }));
+  it('a half-day afternoon follows the server: extended reads after hours, not stale (v248)', () =>
+    expect(marketAgeLabel('2026-11-27T18:00:00Z', Date.parse('2026-11-27T19:00:00Z'), st('extended')))
+      .toEqual({ text: 'after hours · last trade 1 h ago', tone: 'closed' }));
+  it('stalled feed wins over extended (v248)', () =>
+    expect(marketAgeLabel('2026-10-29T20:00:00Z', Date.parse('2026-10-30T12:00:00Z'), st('extended', true)).tone)
+      .toBe('stalled'));
+  it('no as-of outside the session gives no text (v248)', () =>
+    expect(marketAgeLabel(null, NOW, st('extended'))).toEqual({ text: null, tone: 'closed' }));
   it('stalled feed wins over closed', () =>
     expect(marketAgeLabel('2026-10-30T19:59:58Z', NOW, st('closed', true)).tone).toBe('stalled'));
   it('no as-of gives no text', () => expect(marketAgeLabel(null, NOW, st('regular')).text).toBeNull());
