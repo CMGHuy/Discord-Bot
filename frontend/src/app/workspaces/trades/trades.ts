@@ -44,7 +44,9 @@ import { DataTable } from '../../ui/data-table/data-table';
 import { ColumnDef, DetailLink, SortSpec } from '../../ui/data-table/data-table.types';
 import { FilterBar, FilterChips } from '../../ui/filter-bar';
 import { Flash } from '../../ui/flash';
-import { dateTime, money, pct, signed, text } from '../../ui/format';
+import { dateTime, money, text } from '../../ui/format';
+import { figureTone } from '../../ui/position-format';
+import { PositionFigure, PositionPrice } from '../../ui/position-price';
 import { Magnitude } from '../../ui/magnitude';
 import { Select, TextInput } from '../../ui/form-controls';
 import { RowLink } from '../../ui/row-link';
@@ -190,6 +192,8 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
     RowLink,
     Icon,
     MarketValue,
+    PositionPrice,
+    PositionFigure,
     MarketRefresh,
     IncompleteNote,
     IfAdminDirective,
@@ -449,18 +453,10 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
 
       <!-- cells ---------------------------------------------------------- -->
 
-      <!-- v201: price, age and refresh spinner through sb-market-value. -->
+      <!-- v201: price, age and refresh spinner. v248 § 1f: the NOW cell is the
+           shared sb-position-price, the same on every screen. -->
       <ng-template #nowCell let-row>
-        @if (row.current_price !== null && row.current_price !== undefined) {
-          <sb-market-value [asOf]="row.price_as_of ?? null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null">{{ fmtNum(row.current_price) }}</sb-market-value>
-        } @else {
-          @if (row.last_close !== null && row.last_close !== undefined) {
-            <!-- No live quote: the last cached daily close, greyed and dated so
-                 it is never read as a live price. Nothing is derived from it. -->
-            <span class="last-close" [title]="'No live quote -- last close, ' + (row.last_close_date ?? 'date unknown')"><span class="last-close-value">{{ fmtNum(row.last_close) }}</span> <span class="last-close-tag">close {{ row.last_close_date ? row.last_close_date.slice(5) : '' }}</span></span>
-          }
-          <sb-market-value [asOf]="null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null" />
-        }
+        <sb-position-price [row]="row" />
       </ng-template>
 
       <ng-template #numCell let-row>
@@ -525,18 +521,24 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
            two figures in two different units, and on a phone the header sits
            in a <dt> beside them rather than above a column -- see
            dashboard.ts's fmtPct note for the full reversal of v54 Task 28. -->
+      <!-- v248: on a phone the drawer holds NOW, so the current refresh error
+           (sb-market-value's own errorIsCurrent / session / stale rule) rides
+           in this cell, wrapping under the figure. -->
       <ng-template #pnlCell let-row>
-        <span [sbFlash]="row.pnl_pct" [class]="pnlClass(row.pnl_pct)">
-          {{ fmtPct(row.pnl_pct) }}
+        <span [sbFlash]="row.pnl_pct" [class]="tone(row.pnl_pct, row.price_kind)">
+          <sb-position-figure [value]="row.pnl_pct" unit="pct" [kind]="row.price_kind ?? null" />
           <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
         </span>
+        @if (isPhone()) {
+          <sb-market-value [asOf]="row.price_as_of ?? null" [error]="row.price_error ?? null" [errorAt]="row.price_error_at ?? null" />
+        }
       </ng-template>
 
       <!-- v54 Task 28: sb-magnitude beneath the R figure -- the header ('R')
            already names the unit, so the cell drops it (signed(), not
            rMultiple()). -->
       <ng-template #rMultipleCell let-row>
-        <span [sbFlash]="row.r_multiple" [class]="pnlClass(row.r_multiple)">{{ fmtSigned(row.r_multiple) }}</span>
+        <span [sbFlash]="row.r_multiple" [class]="tone(row.r_multiple, row.price_kind)"><sb-position-figure [value]="row.r_multiple" unit="r" [kind]="row.price_kind ?? null" /></span>
         <sb-magnitude [value]="row.r_multiple" [max]="maxRMultiple()" />
       </ng-template>
 
@@ -689,10 +691,7 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
        so the two read as one family, not a mismatched addition. */
     .count { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
     .fx-caveat { color: var(--text-secondary); font-size: var(--text-table); margin: 0; }
-    /* Last close shown while there is no live quote: muted, never the live colour. */
-    .last-close { color: var(--text-muted); display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-4); }
-    .last-close-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-    .last-close-tag { font-size: var(--text-micro); }
+    .muted { color: var(--text-muted); }
     .leg { display: flex; align-items: center; gap: var(--space-4); color: var(--text-muted); font-size: var(--text-chip); white-space: nowrap; }
 
     sb-row-link { color: var(--accent); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -702,8 +701,8 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
 
     /* No size or colour of its own -- it used to render smaller and muted,
        which read as a footnote rather than the dollar side of the same
-       figure the % (pnlClass, above) already names. Both are the headline
-       number now, just in different units, so it inherits pnlClass()'s
+       figure the % (tone(), above) already names. Both are the headline
+       number now, just in different units, so it inherits tone()'s
        colour from the span it sits inside instead of its own muted tone. */
 
     .actions { display: inline-flex; gap: var(--space-4); }
@@ -1096,8 +1095,8 @@ export class Trades {
   // <dt> label beside the value rather than a column head above it, so
   // '+2.34 (+118.20 USD)' loses which unit belongs to which figure. The
   // percentage units itself; R does not. See dashboard.ts's matching note.
-  protected fmtSigned = signed;
-  protected fmtPct = pct;
+  protected readonly tone = figureTone;
+  protected readonly isPhone = this.viewport.isPhone;
   protected fmtText = text;
   protected fmtDate = dateTime;
   protected openedAt = openedAt;
@@ -1119,13 +1118,6 @@ export class Trades {
   protected readonly maxRMultiple = computed(() =>
     Math.max(1, ...this.store.rows().map((r) => Math.abs(r.r_multiple ?? 0))),
   );
-
-  protected pnlClass(value: number | null): string {
-    if (value === null) return '';
-    if (value > 0) return 'pos';
-    if (value < 0) return 'neg';
-    return '';
-  }
 
   /** Plan ids are long; the column is 3rem wide and the full id is on the
    *  detail page it links to. */

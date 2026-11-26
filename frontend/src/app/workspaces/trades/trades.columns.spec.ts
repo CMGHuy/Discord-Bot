@@ -320,3 +320,21 @@ describe('Trades compact row -- v179 §3.1', () => {
     expect([...reached].sort()).toEqual([...shown].sort());
   });
 });
+
+describe('tradeColumns text renderers (v248)', () => {
+  const cols = tradeColumns();
+  const val = (key: string, row: Partial<TradeRow>) => cols.find((c) => c.key === key)!.value!(row as TradeRow);
+  const held = { status: 'ACTIVE', current_price: null, last_close: null } as Partial<TradeRow>;
+
+  it('NOW says prev close or no price yet instead of a live-looking number', () => {
+    expect(val('now', { ...held, current_price: 1234.56, price_kind: 'prev_close', last_close: 1234.56 })).toBe('1,234.56 prev close');
+    expect(val('now', held)).toBe('no price yet');
+    expect(val('now', { ...held, current_price: 131.07, price_kind: 'live' })).toBe('131.07');
+  });
+  it('P&L % and R carry the suffix on a prev-close row only', () => {
+    expect(val('pnl_pct', { pnl_pct: -11.82, price_kind: 'prev_close' })).toBe('−11.82% at prev close');
+    expect(val('r_multiple', { r_multiple: -1.65, price_kind: 'prev_close' })).toBe('−1.65 at prev close');
+    expect(val('r_multiple', { r_multiple: 2, status: 'CLOSED' })).toBe('+2.00');
+    expect(val('pnl_pct', { pnl_pct: null })).toBe('—');
+  });
+});

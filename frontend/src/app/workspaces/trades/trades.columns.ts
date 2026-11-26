@@ -1,7 +1,8 @@
 import { Signal, signal } from '@angular/core';
 import { TradeRow } from '../../api/models';
 import { ColumnDef } from '../../ui/data-table/data-table.types';
-import { age, elapsedHours, held, num, shareCount, signed, text } from '../../ui/format';
+import { figureText, positionPriceText } from '../../ui/position-format';
+import { age, elapsedHours, held, num, shareCount, text } from '../../ui/format';
 import { legLabel } from './leg-label';
 
 /** What the `#` cell says as text -- the short plan id, then "Leg N of M"
@@ -177,8 +178,8 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
     { key: 'num', header: '#', value: (row) => numText(row), inlineFrom: 'sm' },
     { key: 'status', header: 'Status', sortable: true, inlineFrom: 'md', compact: { line: 2, order: 2 } },
     { key: 'ticker', header: 'Ticker', value: (row) => row.ticker, sortable: true, inlineFrom: 'xs', compact: { line: 1, order: 1 } },
-    { key: 'now', header: 'Now', value: (row) => num(row.current_price), numeric: true, inlineFrom: 'sm' },
-    { key: 'pnl_pct', header: 'P&L %', numeric: true, sortable: true, inlineFrom: 'xs', compact: { line: 1, order: 3 } },
+    { key: 'now', header: 'Now', value: (row) => positionPriceText(row), numeric: true, inlineFrom: 'sm' },
+    { key: 'pnl_pct', header: 'P&L %', value: (row) => figureText(row.pnl_pct, 'pct', row.price_kind), numeric: true, sortable: true, inlineFrom: 'xs', compact: { line: 1, order: 3 } },
     { key: 'held', header: 'Held', value: (row) => held(row.closed_at ? row.held_hours : elapsedHours(row.opened_at, now())), numeric: true, sortable: true, inlineFrom: 'sm' },
     { key: 'actions', header: '', width: '1px', inlineFrom: 'lg' },
 
@@ -191,8 +192,8 @@ export function tradeColumns(now: Signal<number> = signal(Date.now())): ColumnDe
     // Rich cell (trades.ts's rMultipleCell) adds sb-magnitude beneath; value
     // is the fallback used wherever cell isn't wired up. v54 Task 28: signed()
     // not rMultiple() -- the header already names the unit ('R'), so the cell
-    // does not repeat it down every row.
-    { key: 'r_multiple', header: 'R', value: (row) => signed(row.r_multiple), numeric: true, sortable: true, inlineFrom: 'sm' },
+    // does not repeat it down every row. v248 § 1f: a prev-close figure says so in text too.
+    { key: 'r_multiple', header: 'R', value: (row) => figureText(row.r_multiple, 'r', row.price_kind), numeric: true, sortable: true, inlineFrom: 'sm' },
     { key: 'strategy', header: 'Strategy', value: (row) => text(row.strategy), inlineFrom: 'lg' },
     { key: 'horizon', header: 'Horizon', value: (row) => text(row.horizon), inlineFrom: 'lg' },
     { key: 'direction', header: 'Direction', width: '3.5rem', inlineFrom: 'sm', compact: { line: 1, order: 2 } },
