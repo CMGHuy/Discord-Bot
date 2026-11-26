@@ -10,10 +10,13 @@ signals.py (spec v251, Exactness rules).
 """
 from __future__ import annotations
 
+import inspect
+
 import numpy as np
 import pandas as pd
 import pytest
 
+from swingbot.core.market import signals
 from swingbot.core.market.signals import compute_volume_profile
 
 
@@ -301,3 +304,23 @@ def test_one_bucket_accumulates_in_row_order():
     result = compute_volume_profile(df, lookback, n_bins=4, price_min=90.0, price_max=110.0)
     assert float.hex(result["bin_volumes"][2]) == float.hex(sequential)
     _assert_matches_oracle(df, lookback, n_bins=4, price_min=90.0, price_max=110.0)
+
+
+def test_the_loop_no_longer_uses_iterrows():
+    assert "iterrows" not in inspect.getsource(signals.compute_volume_profile)
+    assert "iterrows" not in inspect.getsource(signals._profile_bins_rowwise)
+
+
+@pytest.mark.parametrize("value, error", [(float("nan"), ValueError), (float("inf"), OverflowError)])
+def test_non_finite_quotient_raises_what_int_raises(value, error):
+    with pytest.raises(error):
+        signals._raise_like_int(np.array([0.5, value, 1.5]))
+    signals._raise_like_int(np.array([0.0, 3.25]))   # all finite: no raise
+
+
+def test_plain_numeric_dispatch():
+    df, _ = _framed(*_edge_bars())
+    assert signals._is_plain_numeric(df["Volume"])
+    assert signals._is_plain_numeric(df["High"].astype(np.float32))
+    assert not signals._is_plain_numeric(pd.Series([1, None], dtype="Int64"))
+    assert not signals._is_plain_numeric(df["Volume"].astype(object))
