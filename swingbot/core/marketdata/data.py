@@ -15,7 +15,7 @@ from swingbot import config
 from swingbot.core.infra.jsonio import atomic_write_json, read_json
 from swingbot.core.infra.retry import with_retry
 from swingbot.core.infra.swallowed import swallowed
-from swingbot.core.marketdata import spot_metals, yf_safe
+from swingbot.core.marketdata import spot_metals, yf_backoff, yf_safe
 from swingbot.core.marketdata.providers import router
 from swingbot.core.marketdata.providers.base import SOURCE_YF, is_alpaca_eligible
 from swingbot.core.marketdata.shared import counters, layer
@@ -398,7 +398,22 @@ def _last_minute_quote(raw, ticker):
 
 def _yf_quote_details(tickers: list) -> dict:
     """v171: _yf_batch_prices with each price's own bar timestamp (D5: a
-    delayed yfinance value counts only if its own timestamp passes 60 s)."""
+    delayed yfinance value counts only if its own timestamp passes 60 s).
+    v248 § 4: a ticker in yfinance backoff is not asked; an answered ticker
+    resets its backoff, an unanswered one counts a miss; a failed download
+    records nothing."""
+    batch = yf_backoff.partition(list(tickers))
+    if not batch.fetch:
+        return {}
+    got = _yf_download_quotes(batch.fetch)
+    if got is None:
+        return {}
+    yf_backoff.record(batch, got)
+    return got
+
+
+def _yf_download_quotes(tickers: list) -> dict | None:
+    """The yfinance download itself; None = it raised, {} = an empty frame."""
     try:
         raw = yf_safe.download(" ".join(tickers), period="1d", interval="1m",
                                group_by="ticker", prepost=True, progress=False)
@@ -406,12 +421,12 @@ def _yf_quote_details(tickers: list) -> dict:
         raise
     except yf_safe.DownloadBusy as exc:
         log.info("yfinance busy, skipped %d ticker(s): %s", len(tickers), exc)
-        return {}
+        return None
     except Exception as exc:
         swallowed(log, "marketdata.yf_quote_details", exc,
                   "_yf_quote_details failed for %d ticker(s): %s", len(tickers), exc,
                   level=logging.ERROR, exc_info=True)
-        return {}
+        return None
     if raw is None or raw.empty:
         return {}
     return {t: q for t in tickers if (q := _last_minute_quote(raw, t)) is not None}
