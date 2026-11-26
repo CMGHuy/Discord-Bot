@@ -32,6 +32,7 @@ class MarketQuote:
     refreshing: bool
     error: Optional[str]
     source: Optional[str] = None
+    error_at: Optional[str] = None
 
 
 def _upper_unique(symbols: Iterable[str]) -> list[str]:
@@ -56,25 +57,27 @@ def _doc_as_of(entry: Entry) -> datetime:
 
 
 def _quote(symbol: str, entry: Optional[Entry], in_flight: set[str],
-           error: Optional[str], now: datetime) -> MarketQuote:
+           mark: Optional[tuple[str, Optional[datetime]]], now: datetime) -> MarketQuote:
     refreshing = admin_refresh.quote_mark_key(symbol) in in_flight
+    error, error_at = mark or (None, None)
+    error_at = error_at.isoformat() if error_at else None
     if entry is None:
-        return MarketQuote(symbol, None, None, None, True, error)
+        return MarketQuote(symbol, None, None, None, True, error, error_at=error_at)
     doc = entry.value if isinstance(entry.value, dict) else {}
     price = doc.get("price")
     price = float(price) if price is not None and float(price) > 0 else None
     as_of = _doc_as_of(entry)
     return MarketQuote(symbol, price, as_of.isoformat(),
                        max(0.0, (now - as_of).total_seconds()),
-                       refreshing, error, entry.source)
+                       refreshing, error, entry.source, error_at=error_at)
 
 
-def _marks(keys: list[str]) -> tuple[set[str], dict[str, str]]:
+def _marks(keys: list[str]) -> tuple[set[str], dict[str, tuple[str, Optional[datetime]]]]:
     if not keys:
         return set(), {}
     try:
         repo = market_refresh.refresh_mark_repo()
-        return set(repo.active(keys, now=datetime.now(timezone.utc))), dict(repo.errors(keys))
+        return set(repo.active(keys, now=datetime.now(timezone.utc))), dict(repo.error_marks(keys))
     except Exception as exc:  # noqa: BLE001 - fail open: the page renders without marks
         swallowed(log, "ops.admin.market_values.marks", exc, "refresh marks unreadable: %s", exc)
         return set(), {}
@@ -111,9 +114,9 @@ def read_quotes(symbols: Iterable[str], *, kind: DataKind = DataKind.QUOTE,
     now = now or datetime.now(timezone.utc)
     wanted = _upper_unique(symbols)
     entries = _cached(kind, wanted)
-    in_flight, errors = _marks([admin_refresh.quote_mark_key(s) for s in wanted])
+    in_flight, marks = _marks([admin_refresh.quote_mark_key(s) for s in wanted])
     quotes = {s: _quote(s, entries.get(s), in_flight,
-                        errors.get(admin_refresh.quote_mark_key(s)), now)
+                        marks.get(admin_refresh.quote_mark_key(s)), now)
               for s in wanted}
     if enqueue:
         due, priority = _due(wanted, entries, quotes, now)
@@ -124,20 +127,23 @@ def read_quotes(symbols: Iterable[str], *, kind: DataKind = DataKind.QUOTE,
 def quote_fields(quote: Optional[MarketQuote]) -> dict:
     if quote is None:
         return {"current_price": None, "current_price_stale": False, "price_as_of": None,
-                "price_age_s": None, "price_refreshing": False, "price_error": None}
+                "price_age_s": None, "price_refreshing": False, "price_error": None,
+                "price_error_at": None}
     limit = admin_refresh.stale_after_s("price", session.session_state())
     stale = bool(limit is not None and quote.age_s is not None and quote.age_s > limit)
     return {"current_price": quote.price, "current_price_stale": stale,
             "price_as_of": quote.as_of,
             "price_age_s": round(quote.age_s, 1) if quote.age_s is not None else None,
-            "price_refreshing": quote.refreshing, "price_error": quote.error}
+            "price_refreshing": quote.refreshing, "price_error": quote.error,
+            "price_error_at": quote.error_at}
 
 
 def last_close_fields(symbols: Iterable[str]) -> dict[str, dict]:
     """{SYMBOL: {"last_close", "last_close_date"}} from the cached daily bars, for
     rows with no live quote. A greyed last-known price beats an empty cell, but it
-    is shown as a close with its date, never as a live price, and nothing derived
-    (P&L, status bar) is computed from it. Reads the file cache only; a symbol with
+    is shown as a close with its date, never as a live price; v248 prices held
+    trade rows from it as `price_kind = prev_close` with a neutral status bar
+    (`api_v1/trades._price_held_rows`, V248-3). Reads the file cache only; a symbol with
     no bars, or a cache that is not mounted, is simply absent."""
     wanted = _upper_unique(symbols)
     if not wanted:
@@ -217,7 +223,7 @@ def read_snapshot(key: str, *, now: Optional[datetime] = None) -> dict:
     now = now or datetime.now(timezone.utc)
     mark = admin_refresh.snapshot_mark_key(key)
     row, read_error = _snapshot_row(key)
-    active, errors = _marks([mark])
+    active, marks = _marks([mark])
     in_flight = mark in active
     priority = _snapshot_priority(row, in_flight, now)
     if priority is not None:
@@ -228,7 +234,7 @@ def read_snapshot(key: str, *, now: Optional[datetime] = None) -> dict:
             "computed_at": computed_at.isoformat() if computed_at else None,
             "stale_inputs": bool(row["stale_inputs"]) if row else False,
             "refreshing": row is None or in_flight,
-            "error": errors.get(mark) or read_error}
+            "error": (marks.get(mark) or (None, None))[0] or read_error}
 
 
 def _as_utc(value: str) -> datetime:

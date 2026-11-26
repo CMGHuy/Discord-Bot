@@ -47,8 +47,16 @@ class FakeMarks:
     def active(self, keys, now=None):
         return {k for k in keys if k in self.in_flight}
 
+    def error_marks(self, keys):
+        out = {}
+        for k in keys:
+            if k in self.errors_by_key:
+                v = self.errors_by_key[k]
+                out[k] = v if isinstance(v, tuple) else (v, None)
+        return out
+
     def errors(self, keys):
-        return {k: self.errors_by_key[k] for k in keys if k in self.errors_by_key}
+        return {k: text for k, (text, _at) in self.error_marks(keys).items()}
 
     def changed_since(self, since):
         return list(self.changed)
