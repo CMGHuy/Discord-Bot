@@ -39,7 +39,7 @@ function priceErrorVisible(
   selector: 'sb-market-value',
   imports: [Spinner],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.mv-empty]': 'empty()' },
+  host: { '[class.mv-empty]': 'empty()', '[class.mv-err-only]': 'errorOnly()', '[class.mv-has-err]': 'showError()' },
   template: `<span class="mv" [attr.data-tone]="tone()"><span class="mv-value" [hidden]="valueHidden()"><ng-content /></span><span class="mv-meta">@if (spinning()) {<sb-spinner label="Refreshing" />} @if (label().text; as t) {<span class="mv-age">{{ t }}</span>} @if (showError()) {<span class="mv-err" [attr.title]="error()">{{ errorText() }}</span>}</span></span>`,
   styles: `
     :host { display: inline-block; max-width: 100%; }
@@ -59,6 +59,10 @@ function priceErrorVisible(
     @media (max-width: ${BREAKPOINTS.sm - 1}px) {
       .mv { flex-direction: column; align-items: flex-start; }
       .mv-meta { white-space: normal; overflow-wrap: anywhere; }
+      /* The error-only host sits in a nowrap compact line beside a figure: a full-width
+         basis puts it on its own line, where the error wraps instead of running off-screen. */
+      :host(.mv-err-only), :host(.mv-has-err) { display: block; flex: 1 1 100%; min-width: 0; white-space: normal; }
+      :host(.mv-err-only) .mv, :host(.mv-has-err) .mv { white-space: normal; }
     }
   `,
 })

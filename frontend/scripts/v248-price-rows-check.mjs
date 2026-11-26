@@ -63,7 +63,7 @@ function measureClips(scope) {
     }
     return null;
   };
-  const els = root ? [...root.querySelectorAll('.pp-value, .pp-none, .fig, .last-close-value')] : [];
+  const els = root ? [...root.querySelectorAll('.pp-value, .pp-none, .fig, .last-close-value, .pp-tag, .mv-err')] : [];
   return els.filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
     .map((el) => ({ name: `${el.className} ${el.textContent.trim()}`, clippedBy: clipperOf(el) }));
 }

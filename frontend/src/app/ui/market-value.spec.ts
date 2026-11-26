@@ -58,6 +58,19 @@ describe('sb-market-value (v201)', () => {
     expect(err(el)?.textContent?.trim()).toBe('refresh failed: no quote');
   });
 
+  it('errorOnly marks its host so a phone cell gives the error its own full-width line (v248 1g)', () => {
+    const el = render({ eo: true, a: ago(840), e: 'no quote', errAt: ago(30) });
+    expect((el.querySelector('sb-market-value') as HTMLElement).classList).toContain('mv-err-only');
+    expect((render({ eo: false, a: ago(12) }).querySelector('sb-market-value') as HTMLElement).classList).not.toContain('mv-err-only');
+  });
+
+  it('a host showing the error marks itself too, so the Dashboard NOW cell wraps it (v248 1g)', () => {
+    const el = render({ a: null, e: 'no quote', errAt: ago(30) });
+    expect(err(el)).not.toBeNull();
+    expect((el.querySelector('sb-market-value') as HTMLElement).classList).toContain('mv-has-err');
+    expect((render({ a: ago(12) }).querySelector('sb-market-value') as HTMLElement).classList).not.toContain('mv-has-err');
+  });
+
   it('errorOnly with no current error renders nothing (v248)', () => {
     const el = render({ eo: true, a: ago(12), e: 'no quote', errAt: ago(5) });
     expect(el.querySelector('.mv-age')).toBeNull();
