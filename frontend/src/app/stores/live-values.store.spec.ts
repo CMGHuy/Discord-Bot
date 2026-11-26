@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { Signal, WritableSignal, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Observable, Subject, of, throwError } from 'rxjs';
@@ -6,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from '../api/api-client';
 import { EventStream, MARKET_DATA_MIN_INTERVAL_MS } from '../api/event-stream';
 import { MarketStatus, MarketUpdates, QuoteUpdate, RowQuoteFields, SnapshotUpdate } from '../api/models';
+import { PREV_CLOSE_LABEL, PriceKind, ProgressFields, ProgressInput, positionProgress } from '../ui/position-progress';
 import { LOCAL_REFRESH_TIMEOUT_MS, LiveValuesStore, STATUS_POLL_MS, overlayQuote } from './live-values.store';
 
 interface FakeThrottle {
@@ -404,5 +408,110 @@ describe('overlayQuote (v201)', () => {
   });
   it('returns the same object when nothing changed', () => {
     expect(overlayQuote(row, q('X', 90, A))).toBe(row);
+  });
+});
+
+describe('overlayQuote on position rows (v248)', () => {
+  type Held = RowQuoteFields & ProgressInput & ProgressFields & { r_multiple: number | null; pnl_pct: number | null };
+  const BAR = { progress_pct: null, entry_pct: null, progress_band: null, blink_seconds: null } as const;
+  const held: Held = {
+    status: 'ACTIVE', direction: 'bullish', entry: 100, stop_loss: 90, target: 120, risk_stop: 90,
+    bar_kind: 'none', banked_fraction: null, banked_r: null,
+    current_price: null, price_as_of: null, price_age_s: null, price_refreshing: false,
+    price_error: null, price_error_at: null, price_kind: 'live',
+    ...BAR, status_label: 'No live price', r_multiple: null, pnl_pct: null,
+  };
+  const prevClose: Held = {
+    ...held, current_price: 92, price_kind: 'prev_close', price_as_of: null,
+    progress_pct: 6.7, entry_pct: 33.3, progress_band: 'neutral', blink_seconds: null,
+    status_label: PREV_CLOSE_LABEL, r_multiple: -0.8, pnl_pct: -8,
+  };
+  const withError = (u: QuoteUpdate, error_at: string | null): QuoteUpdate => ({ ...u, error_at });
+
+  it('a price arriving for a no-price row draws the bar, R and P&L %', () => {
+    const out = overlayQuote(held, q('X', 110, A));
+    expect(out).toMatchObject({
+      current_price: 110, progress_pct: 66.7, entry_pct: 33.3, progress_band: 'toward_target',
+      blink_seconds: 1.4, status_label: 'Trending toward target', r_multiple: 1, pnl_pct: 10, price_kind: 'live',
+    });
+  });
+
+  it('a price crossing the stop turns the bar and the label', () => {
+    const priced = overlayQuote(held, q('X', 110, A));
+    expect(overlayQuote(priced, q('X', 89, B))).toMatchObject({
+      progress_pct: 0, progress_band: 'toward_stop', status_label: 'Near stop-loss', r_multiple: -1.1, pnl_pct: -11,
+    });
+  });
+
+  it('a row without a stop keeps "No live price" and no R', () => {
+    const out = overlayQuote({ ...held, stop_loss: null, risk_stop: null }, q('X', 110, A));
+    expect(out).toMatchObject({ current_price: 110, ...BAR, status_label: 'No live price', r_multiple: null });
+  });
+
+  it('a prev-close row upgrades to live on any priced update, even one older than its bid/ask', () => {
+    const out = overlayQuote(prevClose, q('X', 95, '2026-10-29T20:00:00Z'));
+    expect(out).toMatchObject({
+      current_price: 95, price_kind: 'live', progress_band: 'toward_stop',
+      status_label: 'Trending toward stop', blink_seconds: 1.4, r_multiple: -0.5, pnl_pct: -5,
+    });
+  });
+
+  it('a priceless update never downgrades a prev-close row', () => {
+    expect(overlayQuote(prevClose, q('X', null, null))).toBe(prevClose);
+    const marked = overlayQuote(prevClose, q('X', null, null, true, 'no quote'));
+    expect(marked).toMatchObject({ current_price: 92, price_kind: 'prev_close', status_label: PREV_CLOSE_LABEL,
+      price_refreshing: true, price_error: 'no quote' });
+  });
+
+  it('a PENDING row keeps its chip; R, P&L % and price_kind stay untouched', () => {
+    const pending: Partial<Held> = { ...held, status: 'PENDING', status_label: 'PENDING' };
+    delete pending.price_kind;
+    const out = overlayQuote(pending as Held, q('X', 110, A));
+    expect(out).toMatchObject({ current_price: 110, ...BAR, status_label: 'PENDING', r_multiple: null, pnl_pct: null });
+    expect('price_kind' in out).toBe(false);
+  });
+
+  it('a row that has no price_kind never gains one', () => {
+    const legacy: Partial<Held> = { ...held };
+    delete legacy.price_kind;
+    expect('price_kind' in overlayQuote(legacy as Held, q('X', 110, A))).toBe(false);
+  });
+
+  it('an update that is not newer returns the row itself', () => {
+    const priced = overlayQuote(held, q('X', 110, A));
+    expect(overlayQuote(priced, q('X', 110, A))).toBe(priced);
+  });
+
+  it('patches price_error_at from the update, on every kind of row', () => {
+    expect(overlayQuote(held, withError(q('X', null, null, false, 'no quote'), B)).price_error_at).toBe(B);
+    const watch: RowQuoteFields = { current_price: 100, price_as_of: A };
+    expect(overlayQuote(watch, withError(q('X', null, null, false, 'no quote'), B)).price_error_at).toBe(B);
+  });
+
+  it('a watchlist row gains no progress, R or price_kind key', () => {
+    const watch: RowQuoteFields = { current_price: 100, price_as_of: A };
+    expect(Object.keys(overlayQuote(watch, q('X', 105, B))).sort()).toEqual(['current_price', 'price_as_of']);
+  });
+
+  it('an update from an older server without error_at changes nothing', () => {
+    const watch: RowQuoteFields = { current_price: 100, price_as_of: B };
+    const old = { symbol: 'X', price: null, as_of: null, refreshing: false, error: null } as unknown as QuoteUpdate;
+    expect(overlayQuote(watch, old)).toBe(watch);
+  });
+
+  describe('agrees with the shared fixture for every live case', () => {
+    const cases: { name: string; row: ProgressInput; price: number | null; price_kind: PriceKind;
+      expected: ProgressFields & { r_multiple: number | null } }[] = JSON.parse(readFileSync(
+      join(process.cwd(), '..', 'tests', 'fixtures', 'v248', 'progress_cases.json'), 'utf8'));
+    for (const c of cases.filter((x) => x.price_kind === 'live' && x.price !== null)) {
+      it(c.name, () => {
+        const row = { ...c.row, current_price: null, price_as_of: null, ...BAR, status_label: '', r_multiple: null, pnl_pct: null };
+        const out = overlayQuote(row, q('X', c.price, A));
+        expect(positionProgress(c.row, c.price)).toEqual({
+          progress_pct: out.progress_pct, entry_pct: out.entry_pct, progress_band: out.progress_band,
+          blink_seconds: out.blink_seconds, status_label: out.status_label });
+        expect(out.r_multiple).toEqual(c.expected.r_multiple);
+      });
+    }
   });
 });
