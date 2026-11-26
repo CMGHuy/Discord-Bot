@@ -135,7 +135,8 @@ export const DASHBOARD_TABLE_ID = 'dashboard';
  * set): this fixes where they sit once picked. `badge` is a default column
  * and the one that also holds on a phone (`xs` floor, card line 2). TradeRow
  * has no risk amount, so no risk-$ column exists to protect here (Risk's own
- * table declares no floors at all).
+ * table declares no floors at all). The Dashboard offers no badge column at
+ * all (dashboard.helpers.ts's `dashboardColumns`).
  */
 export const NEVER_COLLAPSED_COLUMNS = ['ticker', 'direction', 'plan', 'stop_loss', 'pnl_pct', 'r_multiple', 'tier', 'badge'] as const;
 
