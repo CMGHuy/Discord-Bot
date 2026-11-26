@@ -162,6 +162,11 @@ describe('status cell on one baseline (v179 layout audit)', () => {
     expect(src.match(/\.cell \{[^}]*\}/)![0]).toMatch(/align-items:\s*baseline/);
     expect(src).toMatch(/\.track \{[^}]*align-self:\s*center/);
   });
+
+  it('wraps only the no-bar cell (hint + reason): the bar cell keeps dot, track and percentage on one line', () => {
+    expect(src.match(/\.cell \{[^}]*\}/)![0]).not.toMatch(/flex-wrap/);
+    expect(src).toMatch(/\.cell\.no-bar \{[^}]*flex-wrap:\s*wrap/);
+  });
 });
 
 describe('STATUS_ENDS_HINT copy (A4 audit)', () => {

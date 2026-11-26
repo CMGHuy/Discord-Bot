@@ -136,7 +136,7 @@ export const STATUS_STALE_HINT = "This position's price could not be freshly fet
         }
       </span>
     } @else {
-      <span class="cell">
+      <span class="cell no-bar">
         <sb-status-indicator [status]="row().status" />
         @if (hint(); as h) {
           <span class="hint">{{ h.text }}</span>
@@ -148,7 +148,9 @@ export const STATUS_STALE_HINT = "This position's price could not be freshly fet
     }
   `,
   styles: `
-    .cell { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-6); }
+    .cell { display: inline-flex; align-items: baseline; gap: var(--space-6); }
+    /* The hint + reason cell wraps; the bar cell (dot, track, percentage) never does. */
+    .cell.no-bar { flex-wrap: wrap; }
 
     .track {
       position: relative;
