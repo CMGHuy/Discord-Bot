@@ -59,6 +59,7 @@ from .conditional import conditional
 from .read_scope import read_scope
 from .closed_window import ClosedWindow, closed_in_window, parse_closed_window
 from .money import convert_amount, missing_count, to_account_currency
+from . import trade_progress
 
 # Legacy v1 trades carry their own status vocabulary. They have no PENDING,
 # PARTIAL or CANCELLED equivalent and none is synthesised for them.
@@ -1259,88 +1260,20 @@ def _page_market_meta(rows: list[dict]) -> dict:
 
 
 def _status_fields(row: dict, price: float | None) -> dict:
-    """The status-bar numbers, from the two functions that already own them.
-
-    `trade_proximity` (core/performance.py) owns urgency and the label -- it
-    is the same computation the bot's own near-close alerts use, so a second
-    implementation here could make the UI and the alerts disagree about how
-    close a trade is to its stop. The 0..100 position is the dashboard's
-    (`admin/dashboard.py`, `pos_pct`), restated here rather than imported
-    because that module builds a whole Jinja view model to produce it -- and
-    that module is deleted at NG57.
-
-    No colour is returned. The band names which pair of tokens the client
-    interpolates between; the palette lives in tokens.css, so a repaint is a
-    CSS change and never an API change. See spec v18 Decision 5.
-    """
-    from swingbot.core.tracking.performance import trade_proximity
-
-    entry, sl, tp = row.get("entry"), row.get("stop_loss"), row.get("target")
-    direction = row.get("direction") or "bullish"
-    label_only = {"progress_pct": None, "entry_pct": None, "progress_band": None,
-                  "blink_seconds": None, "status_label": "No live price"}
-
-    if price is None or not all(isinstance(v, (int, float)) for v in (entry, sl, tp)):
-        return label_only
-
-    prox = trade_proximity(direction, entry, sl, tp, price)
-    is_bull = direction == "bullish"
-    span = (tp - sl) if is_bull else (sl - tp)
-    if span <= 0:
-        # Malformed record -- stop on the wrong side of the target. Degrade to
-        # a label rather than render a bar that is confidently backwards.
-        return label_only
-
-    pos = ((price - sl) if is_bull else (sl - price)) / span * 100
-    ent = ((entry - sl) if is_bull else (sl - entry)) / span * 100
-    band = ("toward_target" if prox["proximity"] > 0.15
-            else "toward_stop" if prox["proximity"] < -0.15
-            else "neutral")
-    return {
-        # Clamped: price runs past the stop or target all the time, and a bar
-        # is 0..100 by definition. The band and label still carry "past it".
-        "progress_pct": max(0.0, min(100.0, round(pos, 1))),
-        "entry_pct": max(0.0, min(100.0, round(ent, 1))),
-        "progress_band": band,
-        "blink_seconds": prox["blink_seconds"],
-        "status_label": prox["label"],
-    }
+    """The status-bar numbers; the arithmetic lives in `trade_progress`."""
+    return trade_progress.status_fields(row, price)
 
 
-def _trailing_status_fields(row: dict, price: float | None) -> dict:
-    """The status bar for a PARTIAL runner that has no TP2.
-
-    There is no target to measure toward, so the bar runs from the trailing
-    stop (0% -- one more tick against the runner and it is stopped out) to the
-    best price since TP1 (100% -- a new extreme). Without a live price or a
-    recorded best price there is nothing honest to draw, and the cell falls
-    back to its chip.
-    """
-    chip = {"progress_pct": None, "entry_pct": None, "progress_band": None,
-            "blink_seconds": None, "status_label": row["status"]}
-    stop, best = row.get("stop_loss"), row.get("runner_best")
-    if price is None or not all(isinstance(v, (int, float)) for v in (stop, best)):
-        return chip
-    is_bull = row.get("direction") != "bearish"
-    span = (best - stop) if is_bull else (stop - best)
-    if span <= 0:
-        return chip
-    pos = max(0.0, min(100.0, ((price - stop) if is_bull else (stop - price)) / span * 100))
-    leg = row.get("banked_exit_price")
-    ent = ((leg - stop) if is_bull else (stop - leg)) / span * 100 if isinstance(leg, (int, float)) else 0.0
-    band = "toward_target" if pos >= 66 else "toward_stop" if pos <= 33 else "neutral"
-    label = ("Near trailing stop" if band == "toward_stop"
-             else "Near best price" if band == "toward_target" else "Trailing")
-    # Pulse faster the nearer the stop, same urgency scale as trade_proximity.
-    urgency = max(0.0, 1.0 - pos / 50.0)
-    out = {"progress_pct": round(pos, 1),
-           "entry_pct": max(0.0, min(100.0, round(ent, 1))),
-           "progress_band": band, "blink_seconds": round(2.2 - 1.6 * urgency, 2),
-           "status_label": label}
-    # Same entry point as the Plan cell (`_row_from_plan` already wrote these
-    # keys; on this priced path `runner_best` is a number, so the value is
-    # identical and a second attach pass stays idempotent).
-    out.update(_runner_pnl_fields(row))
+def _trailing_status_fields(row: dict, price: float | None, *,
+                            price_kind: str = trade_progress.PRICE_LIVE) -> dict:
+    """The status bar for a PARTIAL runner that has no TP2 (see
+    `trade_progress.trailing_bar_fields`), plus the runner P&L ends."""
+    out = trade_progress.trailing_bar_fields(row, price, price_kind=price_kind)
+    if out["progress_pct"] is not None:
+        # Same entry point as the Plan cell (`_row_from_plan` already wrote these
+        # keys; on this priced path `runner_best` is a number, so the value is
+        # identical and a second attach pass stays idempotent).
+        out.update(_runner_pnl_fields(row))
     return out
 
 
@@ -1363,17 +1296,11 @@ def _attach_status_fields(rows: list[dict]) -> None:
     second one only runs on data nobody tests with.
     """
     for row in rows:
-        if row.get("bar_kind") == "trailing" and row["status"] not in _TERMINAL:
-            row.update(_trailing_status_fields(row, row.get("current_price")))
-        elif row["status"] in _TERMINAL or row["status"] == "PENDING":
-            # Nothing has opened, or it is already over: there is no position
-            # to place on a bar. The label is the status itself, which is what
-            # the cell shows in place of the bar.
-            row.update({"progress_pct": None, "entry_pct": None,
-                        "progress_band": None, "blink_seconds": None,
-                        "status_label": row["status"]})
+        price = row.get("current_price")
+        if trade_progress.uses_trailing_bar(row):
+            row.update(_trailing_status_fields(row, price))
         else:
-            row.update(_status_fields(row, row.get("current_price")))
+            row.update(trade_progress.row_progress(row, price))
 
 
 def _attach_unrealized_pnl(rows: list[dict]) -> None:

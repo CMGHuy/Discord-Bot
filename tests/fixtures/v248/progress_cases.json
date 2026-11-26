@@ -1,0 +1,370 @@
+[
+  {
+    "name": "bull_live_toward_target",
+    "row": {
+      "status": "ACTIVE",
+      "direction": "bullish",
+      "entry": 100.0,
+      "stop_loss": 90.0,
+      "target": 120.0,
+      "risk_stop": 90.0,
+      "bar_kind": "none"
+    },
+    "price": 110.0,
+    "price_kind": "live",
+    "expected": {
+      "progress_pct": 66.7,
+      "entry_pct": 33.3,
+      "progress_band": "toward_target",
+      "blink_seconds": 1.4,
+      "status_label": "Trending toward target",
+      "r_multiple": 1.0
+    }
+  },
+  {
+    "name": "bull_live_near_stop",
+    "row": {
+      "status": "ACTIVE",
+      "direction": "bullish",
+      "entry": 100.0,
+      "stop_loss": 90.0,
+      "target": 120.0,
+      "risk_stop": 90.0,
+      "bar_kind": "none"
+    },
+    "price": 92.0,
+    "price_kind": "live",
+    "expected": {
+      "progress_pct": 6.7,
+      "entry_pct": 33.3,
+      "progress_band": "toward_stop",
+      "blink_seconds": 0.92,
+      "status_label": "Near stop-loss",
+      "r_multiple": -0.8
+    }
+  },
+  {
+    "name": "bull_live_past_target_clamps",
+    "row": {
+      "status": "ACTIVE",
+      "direction": "bullish",
+      "entry": 100.0,
+      "stop_loss": 90.0,
+      "target": 120.0,
+      "risk_stop": 90.0,
+      "bar_kind": "none"
+    },
+    "price": 125.0,
+    "price_kind": "live",
+    "expected": {
+      "progress_pct": 100.0,
+      "entry_pct": 33.3,
+      "progress_band": "toward_target",
+      "blink_seconds": 0.6,
+      "status_label": "Near target",
+      "r_multiple": 2.5
+    }
+  },
+  {
+    "name": "bear_live_toward_target",
+    "row": {
+      "status": "ACTIVE",
+      "direction": "bearish",
+      "entry": 50.0,
+      "stop_loss": 55.0,
+      "target": 40.0,
+      "risk_stop": 55.0,
+      "bar_kind": "none"
+    },
+    "price": 45.0,
+    "price_kind": "live",
+    "expected": {
+      "progress_pct": 66.7,
+      "entry_pct": 33.3,
+      "progress_band": "toward_target",
+      "blink_seconds": 1.4,
+      "status_label": "Trending toward target",
+      "r_multiple": 1.0
+    }
+  },
+  {
+    "name": "bull_no_price",
+    "row": {
+      "status": "ACTIVE",
+      "direction": "bullish",
+      "entry": 100.0,
+      "stop_loss": 90.0,
+      "target": 120.0,
+      "risk_stop": 90.0,
+      "bar_kind": "none"
+    },
+    "price": null,
+    "price_kind": "live",
+    "expected": {
+      "progress_pct": null,
+      "entry_pct": null,
+      "progress_band": null,
+      "blink_seconds": null,
+      "status_label": "No live price",
+      "r_multiple": null
+    }
+  },
+  {
+    "name": "bull_prev_close_without_a_price",
+    "row": {
+      "status": "ACTIVE",
+      "direction": "bullish",
+      "entry": 100.0,
+      "stop_loss": 90.0,
+      "target": 120.0,
+      "risk_stop": 90.0,
+      "bar_kind": "none"
+    },
+    "price": null,
+    "price_kind": "prev_close",
+    "expected": {
+      "progress_pct": null,
+      "entry_pct": null,
+      "progress_band": null,
+      "blink_seconds": null,
+      "status_label": "No live price",
+      "r_multiple": null
+    }
+  },
+  {
+    "name": "bull_missing_stop_degrades",
+    "row": {
+      "status": "ACTIVE",
+      "direction": "bullish",
+      "entry": 100.0,
+      "stop_loss": null,
+      "target": 120.0,
+      "risk_stop": null,
+      "bar_kind": "none"
+    },
+    "price": 110.0,
+    "price_kind": "live",
+    "expected": {
+      "progress_pct": null,
+      "entry_pct": null,
+      "progress_band": null,
+      "blink_seconds": null,
+      "status_label": "No live price",
+      "r_multiple": null
+    }
+  },
+  {
+    "name": "bull_malformed_span_degrades",
+    "row": {
+      "status": "ACTIVE",
+      "direction": "bullish",
+      "entry": 100.0,
+      "stop_loss": 120.0,
+      "target": 90.0,
+      "risk_stop": 120.0,
+      "bar_kind": "none"
+    },
+    "price": 110.0,
+    "price_kind": "live",
+    "expected": {
+      "progress_pct": null,
+      "entry_pct": null,
+      "progress_band": null,
+      "blink_seconds": null,
+      "status_label": "No live price",
+      "r_multiple": 0.5
+    }
+  },
+  {
+    "name": "bull_prev_close_near_stop_is_neutral",
+    "row": {
+      "status": "ACTIVE",
+      "direction": "bullish",
+      "entry": 100.0,
+      "stop_loss": 90.0,
+      "target": 120.0,
+      "risk_stop": 90.0,
+      "bar_kind": "none"
+    },
+    "price": 92.0,
+    "price_kind": "prev_close",
+    "expected": {
+      "progress_pct": 6.7,
+      "entry_pct": 33.3,
+      "progress_band": "neutral",
+      "blink_seconds": null,
+      "status_label": "At prev close (not live)",
+      "r_multiple": -0.8
+    }
+  },
+  {
+    "name": "bull_prev_close_past_target_is_neutral",
+    "row": {
+      "status": "ACTIVE",
+      "direction": "bullish",
+      "entry": 100.0,
+      "stop_loss": 90.0,
+      "target": 120.0,
+      "risk_stop": 90.0,
+      "bar_kind": "none"
+    },
+    "price": 125.0,
+    "price_kind": "prev_close",
+    "expected": {
+      "progress_pct": 100.0,
+      "entry_pct": 33.3,
+      "progress_band": "neutral",
+      "blink_seconds": null,
+      "status_label": "At prev close (not live)",
+      "r_multiple": 2.5
+    }
+  },
+  {
+    "name": "pending_has_no_bar",
+    "row": {
+      "status": "PENDING",
+      "direction": "bullish",
+      "entry": 100.0,
+      "stop_loss": 90.0,
+      "target": 120.0,
+      "risk_stop": 90.0,
+      "bar_kind": "none"
+    },
+    "price": 110.0,
+    "price_kind": "live",
+    "expected": {
+      "progress_pct": null,
+      "entry_pct": null,
+      "progress_band": null,
+      "blink_seconds": null,
+      "status_label": "PENDING",
+      "r_multiple": null
+    }
+  },
+  {
+    "name": "closed_has_no_bar",
+    "row": {
+      "status": "CLOSED",
+      "direction": "bullish",
+      "entry": 100.0,
+      "stop_loss": 90.0,
+      "target": 120.0,
+      "risk_stop": 90.0,
+      "bar_kind": "none"
+    },
+    "price": 110.0,
+    "price_kind": "live",
+    "expected": {
+      "progress_pct": null,
+      "entry_pct": null,
+      "progress_band": null,
+      "blink_seconds": null,
+      "status_label": "CLOSED",
+      "r_multiple": null
+    }
+  },
+  {
+    "name": "trailing_short_live",
+    "row": {
+      "status": "PARTIAL",
+      "direction": "bearish",
+      "entry": 52.0,
+      "stop_loss": 55.0,
+      "target": null,
+      "risk_stop": 57.0,
+      "bar_kind": "trailing",
+      "runner_best": 45.0,
+      "banked_exit_price": 50.0,
+      "banked_fraction": 0.5,
+      "banked_r": 2.0
+    },
+    "price": 50.0,
+    "price_kind": "live",
+    "expected": {
+      "progress_pct": 50.0,
+      "entry_pct": 50.0,
+      "progress_band": "neutral",
+      "blink_seconds": 2.2,
+      "status_label": "Trailing",
+      "r_multiple": 1.2
+    }
+  },
+  {
+    "name": "trailing_short_live_near_stop",
+    "row": {
+      "status": "PARTIAL",
+      "direction": "bearish",
+      "entry": 52.0,
+      "stop_loss": 55.0,
+      "target": null,
+      "risk_stop": 57.0,
+      "bar_kind": "trailing",
+      "runner_best": 45.0,
+      "banked_exit_price": 50.0,
+      "banked_fraction": 0.5,
+      "banked_r": 2.0
+    },
+    "price": 54.0,
+    "price_kind": "live",
+    "expected": {
+      "progress_pct": 10.0,
+      "entry_pct": 50.0,
+      "progress_band": "toward_stop",
+      "blink_seconds": 0.92,
+      "status_label": "Near trailing stop",
+      "r_multiple": 0.8
+    }
+  },
+  {
+    "name": "trailing_short_prev_close_is_neutral",
+    "row": {
+      "status": "PARTIAL",
+      "direction": "bearish",
+      "entry": 52.0,
+      "stop_loss": 55.0,
+      "target": null,
+      "risk_stop": 57.0,
+      "bar_kind": "trailing",
+      "runner_best": 45.0,
+      "banked_exit_price": 50.0,
+      "banked_fraction": 0.5,
+      "banked_r": 2.0
+    },
+    "price": 54.0,
+    "price_kind": "prev_close",
+    "expected": {
+      "progress_pct": 10.0,
+      "entry_pct": 50.0,
+      "progress_band": "neutral",
+      "blink_seconds": null,
+      "status_label": "At prev close (not live)",
+      "r_multiple": 0.8
+    }
+  },
+  {
+    "name": "trailing_without_best_keeps_the_chip",
+    "row": {
+      "status": "PARTIAL",
+      "direction": "bearish",
+      "entry": 52.0,
+      "stop_loss": 55.0,
+      "target": null,
+      "risk_stop": 57.0,
+      "bar_kind": "trailing",
+      "runner_best": null,
+      "banked_exit_price": 50.0,
+      "banked_fraction": 0.5,
+      "banked_r": 2.0
+    },
+    "price": 50.0,
+    "price_kind": "live",
+    "expected": {
+      "progress_pct": null,
+      "entry_pct": null,
+      "progress_band": null,
+      "blink_seconds": null,
+      "status_label": "PARTIAL",
+      "r_multiple": 1.2
+    }
+  }
+]
