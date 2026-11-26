@@ -403,3 +403,116 @@ def test_the_provider_recovery_shows_the_old_print_rate():
 ])
 def test_a_row_without_the_old_print_rate_reads_as_a_dash(build):
     assert "• Old IEX prints: — of live-price asks" in build(ROW_BAD).description
+
+
+# --- v248 § 5: held-price verdict, lines and embed ---------------------------------
+
+def _held(**kw):
+    base = dict(session="regular", age_s=11 * 60, has_last_close=True, uptime_s=3600,
+                threshold_min=10, notified=False, recovered=False, pre_open=False)
+    return ops_watch.held_price_verdict(**{**base, **kw})
+
+
+@pytest.mark.parametrize("kwargs, expected", [
+    ({}, "alert"),                                                    # live trade 11 min old
+    ({"age_s": 600}, None),                                           # exactly 10 min: not older
+    ({"age_s": 30}, None),
+    ({"age_s": None}, "alert"),                                       # prev close in the session
+    ({"session": "extended"}, None),
+    ({"session": "closed"}, None),
+    ({"session": "extended", "age_s": None}, None),                   # prev close pre-market is normal
+    ({"session": "extended", "age_s": None, "pre_open": True}, None), # ... even at 09:00 ET
+    ({"session": "extended", "pre_open": True}, None),                # a stale trade pre-open: not paged
+    ({"uptime_s": 599}, None),                                        # boot grace
+    ({"uptime_s": 600}, "alert"),                                     # up exactly the threshold
+    ({"age_s": None, "uptime_s": 599}, None),                         # prev close keeps the grace
+    ({"age_s": None, "has_last_close": False, "uptime_s": 5}, "alert"),   # no price at all: first sight
+    ({"age_s": None, "has_last_close": False, "session": "extended"}, None),
+    ({"age_s": None, "has_last_close": False, "session": "extended", "pre_open": True}, "alert"),
+    ({"age_s": None, "has_last_close": False, "session": "closed", "pre_open": True}, "alert"),
+    ({"notified": True}, None),                                       # once per ticker per day
+    ({"notified": True, "age_s": None}, None),                        # still blind
+    ({"notified": True, "age_s": 30}, "recover"),
+    ({"notified": True, "age_s": 600}, "recover"),                    # at the line counts as fresh
+    ({"notified": True, "age_s": 30, "session": "extended"}, "recover"),
+    ({"notified": True, "recovered": True, "age_s": 30}, None),       # one recovery only
+    ({"notified": True, "recovered": True, "age_s": 3600}, None),     # no second alert that day
+    ({"threshold_min": 30}, None),                                    # hot-reloaded threshold
+    ({"threshold_min": 30, "age_s": 31 * 60}, "alert"),
+])
+def test_held_price_verdict(kwargs, expected):
+    assert _held(**kwargs) == expected
+
+
+@pytest.mark.parametrize("utc, expected", [
+    (dt.datetime(2026, 11, 25, 14, 0, tzinfo=dt.timezone.utc), True),    # Wed 09:00 ET (EST)
+    (dt.datetime(2026, 11, 25, 13, 59, tzinfo=dt.timezone.utc), False),  # 08:59 ET
+    (dt.datetime(2026, 11, 25, 14, 29, tzinfo=dt.timezone.utc), True),   # 09:29 ET
+    (dt.datetime(2026, 11, 25, 14, 30, tzinfo=dt.timezone.utc), False),  # 09:30: the open
+    (dt.datetime(2026, 10, 12, 13, 5, tzinfo=dt.timezone.utc), True),    # Mon 09:05 ET (EDT)
+    (dt.datetime(2026, 11, 27, 14, 5, tzinfo=dt.timezone.utc), True),    # half-day still opens 09:30
+    (dt.datetime(2026, 11, 26, 14, 5, tzinfo=dt.timezone.utc), False),   # Thanksgiving
+    (dt.datetime(2026, 11, 28, 14, 5, tzinfo=dt.timezone.utc), False),   # Saturday
+])
+def test_in_pre_open_window(utc, expected):
+    assert ops_watch.in_pre_open_window(utc) is expected
+
+
+def _item(sym, age_s=None, error=None, prev_close=False, no_price=False):
+    return ops_watch.HeldPriceItem(sym, age_s, error, prev_close, no_price)
+
+
+def test_held_price_lines_read_one_ticker_per_line():
+    assert ops_watch.held_price_lines([
+        _item("AAPL", age_s=14 * 60 + 5, error="no quote"),
+        _item("DOCU", prev_close=True, error="no quote"),
+        _item("NEWCO", no_price=True),
+        _item("SNDK", age_s=12),
+    ]) == [
+        "• AAPL · last trade 14 min ago · no quote",
+        "• DOCU · no live trade · prev close · no quote",
+        "• NEWCO · no live trade · no price at all",
+        "• SNDK · last trade 12 s ago",
+    ]
+
+
+@pytest.mark.parametrize("age_s, text", [
+    (59, "59 s ago"), (60, "1 min ago"), (119 * 60 + 59, "119 min ago"),
+    (120 * 60, "2 h ago"), (47 * 3600 + 59 * 60, "47 h ago"), (48 * 3600, "2 d ago"),
+])
+def test_held_price_line_ages(age_s, text):
+    assert ops_watch.held_price_lines([_item("AAPL", age_s=age_s)]) == [f"• AAPL · last trade {text}"]
+
+
+def test_a_long_error_is_cut_to_sixty_characters_on_one_line():
+    error = "YFPricesMissingError('possibly delisted;\n  no price data found (period=1d)') and more"
+    (line,) = ops_watch.held_price_lines([_item("DOCU", prev_close=True, error=error)])
+    tail = line.split(" · ", 3)[3]
+    assert len(tail) == 60 and tail.endswith("…") and "\n" not in line
+    assert tail.startswith("YFPricesMissingError('possibly delisted; no price data")
+
+
+def test_an_error_of_exactly_sixty_characters_is_kept_whole():
+    (line,) = ops_watch.held_price_lines([_item("DOCU", prev_close=True, error="e" * 60)])
+    assert line.endswith(" · " + "e" * 60)
+
+
+def test_more_than_ten_tickers_end_with_a_count():
+    lines = ops_watch.held_price_lines([_item(f"T{i:02d}", no_price=True) for i in range(13)])
+    assert len(lines) == 11 and lines[9].startswith("• T09 ") and lines[10] == "+3 more"
+    assert len(ops_watch.held_price_lines([_item(f"T{i}", no_price=True) for i in range(10)])) == 10
+    assert ops_watch.held_price_lines([]) == []
+
+
+def test_the_held_price_alert_and_recovery_embeds():
+    alert = notices.held_price_embed(["• DOCU · no live trade · prev close"], recovery=False)
+    assert alert.push_text.startswith(f"{kinds.badge(Kind.HEALTH_ALERT)} SYSTEM · {Kind.HEALTH_ALERT.label}")
+    assert alert.color.value == kinds.HEALTH_RED
+    assert "held position price stale" in alert.title
+    assert alert.description.startswith("• DOCU · no live trade · prev close\n")
+    assert "No trade is changed" in alert.description
+
+    rec = notices.held_price_embed(["• DOCU · last trade 12 s ago"], recovery=True)
+    assert rec.color.value == kinds.HEALTH_GREEN
+    assert "held position price live again" in rec.title
+    assert rec.description == "• DOCU · last trade 12 s ago"

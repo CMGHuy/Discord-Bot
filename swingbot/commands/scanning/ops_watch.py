@@ -15,6 +15,8 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+from dataclasses import dataclass
+from typing import Sequence
 
 from discord.ext import tasks
 
@@ -22,6 +24,7 @@ from swingbot import config
 from swingbot.bot_core import SESSION_TZ, in_session
 from swingbot.core import presentation as ui
 from swingbot.core.infra.swallowed import swallowed
+from swingbot.core.market import session
 from swingbot.core.scanning import telemetry
 
 from . import loop_guard, notices, runstate
@@ -93,6 +96,93 @@ def provider_verdict(row: dict | None, *, fallback_pct: float, empty_pct: float,
     if breach == alert_active:
         return None
     return "alert" if breach else "recover"
+
+
+# --- v248 § 5: held-price verdict and lines -----------------------------------
+
+#: 30 min before the open, when resting orders are placed (spec § 5).
+PRE_OPEN_AT = dt.time(9, 0)
+ERROR_CHARS = 60
+
+_REGULAR = session.SESSION_REGULAR
+
+
+@dataclass(frozen=True)
+class HeldPriceItem:
+    """One held ticker as the notice shows it. ``age_s`` is the live trade's
+    age, ``None`` when there is no live trade."""
+    symbol: str
+    age_s: float | None
+    error: str | None
+    prev_close: bool
+    no_price: bool
+
+
+def held_price_verdict(*, session: str, age_s: float | None, has_last_close: bool,
+                       uptime_s: float, threshold_min: int, notified: bool,
+                       recovered: bool, pre_open: bool) -> str | None:
+    """"alert", "recover" or None for one held ticker (spec § 5).
+
+    Three readings: a stale live trade, a ticker sitting on its previous close
+    in the regular session, and no price at all (paged on first sight; before
+    the open only in the pre-open window). ``session`` is
+    ``session.session_state(now)``. Once per ticker per day, plus one recovery.
+    """
+    threshold_s = threshold_min * 60
+    fresh = age_s is not None and age_s <= threshold_s
+    if notified:
+        return "recover" if fresh and not recovered else None
+    if age_s is None and not has_last_close:
+        return "alert" if session == _REGULAR or pre_open else None
+    if session != _REGULAR or uptime_s < threshold_s:
+        return None
+    return None if fresh else "alert"
+
+
+def in_pre_open_window(now: dt.datetime) -> bool:
+    """True from 09:00 ET up to the 09:30 open on an NYSE trading day."""
+    et = session.now_et(now)
+    if et.weekday() >= 5 or et.date() in session.NYSE_HOLIDAYS:
+        return False
+    return PRE_OPEN_AT <= et.time() < session.RTH_OPEN
+
+
+def _age_words(age_s: float) -> str:
+    seconds = int(age_s)
+    if seconds < 60:
+        return f"{seconds} s ago"
+    if seconds < 120 * 60:
+        return f"{seconds // 60} min ago"
+    if seconds < 48 * 3600:
+        return f"{seconds // 3600} h ago"
+    return f"{seconds // 86400} d ago"
+
+
+def _short_error(error: str) -> str:
+    text = " ".join(error.split())
+    return text if len(text) <= ERROR_CHARS else text[:ERROR_CHARS - 1] + "…"
+
+
+def _held_price_line(item: HeldPriceItem) -> str:
+    if item.age_s is not None:
+        parts = [f"• {item.symbol}", f"last trade {_age_words(item.age_s)}"]
+    else:
+        parts = [f"• {item.symbol}", "no live trade"]
+    if item.prev_close:
+        parts.append("prev close")
+    elif item.no_price:
+        parts.append("no price at all")
+    if item.error:
+        parts.append(_short_error(item.error))
+    return " · ".join(parts)
+
+
+def held_price_lines(items: Sequence[HeldPriceItem], *, limit: int = 10) -> list[str]:
+    """One phone-readable line per ticker, the rest folded into ``+N more``."""
+    lines = [_held_price_line(item) for item in items[:limit]]
+    if len(items) > limit:
+        lines.append(f"+{len(items) - limit} more")
+    return lines
 
 
 # --- v148 OH18: the sends, the watchdog loop and the provider check -----------
