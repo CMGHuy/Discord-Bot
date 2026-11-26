@@ -29,6 +29,8 @@ import { Button } from '../../ui/button';
 import { ColumnDef, Density, RowContext } from '../../ui/data-table/data-table.types';
 import { ConfidenceCell } from '../../ui/confidence-cell';
 import { Flash } from '../../ui/flash';
+import { PositionFigure, PositionPrice } from '../../ui/position-price';
+import { figureTone } from '../../ui/position-format';
 import { PlanCell, bankedLegAmount, bankedLegPct } from '../../ui/plan-cell';
 import { runnerCellInputs } from '../../ui/runner-cell';
 import { StatusCell, partialOpenTitle } from '../../ui/status-cell';
@@ -175,6 +177,8 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
 @Component({
   selector: 'sb-dashboard',
   imports: [
+    PositionPrice,
+    PositionFigure,
     Magnitude, Panel, PositionsTable, RowActions, IfAdminDirective, ConfirmDialog,
     StatusCell, PlanCell, ConfidenceCell, Async, Button, Flash,
     Hint, MarketValue, MarketRefresh, PlanLifecycleDiagram, RowLink, Icon, TradingPerformance,
@@ -385,6 +389,11 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     }
     </sb-page>
 
+    <!-- v248 § 1f: NOW reads as on Trades -- the shared sb-position-price. -->
+    <ng-template #nowCell let-row>
+      <sb-position-price [row]="row" />
+    </ng-template>
+
     <ng-template #statusCell let-row>
       <sb-status-cell [row]="row" />
     </ng-template>
@@ -479,23 +488,32 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
              with no as-of). v201: price, age and refresh spinner through
              sb-market-value. -->
         @if (row.price_as_of || row.price_refreshing) {
-          <sb-market-value [asOf]="row.price_as_of ?? null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null">
-            <span [sbFlash]="row.pnl_pct" [class]="pnlClass(row.pnl_pct)">
-              {{ fmtPct(row.pnl_pct) }}
+          <sb-market-value [asOf]="row.price_as_of ?? null" [refreshing]="row.price_refreshing ?? false"
+            [error]="row.price_error ?? null" [errorAt]="row.price_error_at ?? null">
+            <span [sbFlash]="row.pnl_pct" [class]="tone(row.pnl_pct, row.price_kind)">
+              <sb-position-figure [value]="row.pnl_pct" unit="pct" [kind]="row.price_kind ?? null" />
               <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
             </span>
           </sb-market-value>
         } @else {
-          <span [sbFlash]="row.pnl_pct" [class]="pnlClass(row.pnl_pct)">
-            {{ fmtPct(row.pnl_pct) }}
+          <span [sbFlash]="row.pnl_pct" [class]="tone(row.pnl_pct, row.price_kind)">
+            <sb-position-figure [value]="row.pnl_pct" unit="pct" [kind]="row.price_kind ?? null" />
             <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
           </span>
+          @if (row.price_kind === 'prev_close') {
+            <!-- A prev close has no as-of, so the figure cannot sit inside sb-market-value (it hides a
+                 value with no as-of); this empty one carries the spinner and the current error, so a
+                 phone row, where NOW is not inline, still shows a real failure (spec v248 § 1g). -->
+            <sb-market-value [asOf]="null" [refreshing]="row.price_refreshing ?? false"
+              [error]="row.price_error ?? null" [errorAt]="row.price_error_at ?? null" />
+          }
         }
       } @else {
         <span class="pnl-plan">
-          <sb-market-value [asOf]="row.price_as_of ?? null" [refreshing]="row.price_refreshing ?? false" [error]="row.price_error ?? null">
-          <span [sbFlash]="livePnlPct(row)" [class]="pnlClass(livePnlPct(row))">
-            {{ fmtPct(livePnlPct(row)) }}
+          <sb-market-value [asOf]="row.price_as_of ?? null" [refreshing]="row.price_refreshing ?? false"
+            [error]="row.price_error ?? null" [errorAt]="row.price_error_at ?? null">
+          <span [sbFlash]="livePnlPct(row)" [class]="tone(livePnlPct(row), null)">
+            <sb-position-figure [value]="livePnlPct(row)" unit="pct" />
             <!-- Only once shares exist to have a dollar value at all -- a
                  PENDING row still projects a live PERCENTAGE off its
                  trigger, but has bought nothing yet. !== null, not a plain
@@ -518,7 +536,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
     </ng-template>
 
     <!-- See pnlCell above -- same real-vs-projected split, same reasoning.
-         The real branch colours by sign too (pnlClass), same as the
+         The real branch colours by sign too (tone), same as the
          projected branch already did -- a closed loss's R used to render
          in the same plain colour as a win's, which read as "no P&L info"
          at a glance where the pnl_pct column right next to it was
@@ -529,14 +547,14 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
          scale, not an observed max, here specifically). -->
     <ng-template #rMultipleCell let-row>
       @if (row.r_multiple !== null) {
-        <span [sbFlash]="row.r_multiple" [class]="pnlClass(row.r_multiple)">{{ fmtSigned(row.r_multiple) }}</span>
+        <span [sbFlash]="row.r_multiple" [class]="tone(row.r_multiple, row.price_kind)"><sb-position-figure [value]="row.r_multiple" unit="r" [kind]="row.price_kind ?? null" /></span>
         <sb-magnitude [value]="row.r_multiple" [max]="R_MAGNITUDE_MAX" />
       } @else {
         <span
           class="expected"
           [sbFlash]="expectedR(row)"
-          [class]="pnlClass(expectedR(row))"
-        >{{ fmtSigned(expectedR(row)) }}</span>
+          [class]="tone(expectedR(row), null)"
+        ><sb-position-figure [value]="expectedR(row)" unit="r" /></span>
         <sb-magnitude [value]="expectedR(row)" [max]="R_MAGNITUDE_MAX" />
       }
     </ng-template>
@@ -622,7 +640,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
        it rides beside, which read as a footnote rather than the dollar side
        of the same figure. Both are the headline number now, just in
        different units. No colour of its own either, so it inherits
-       pnlClass() from the span it sits inside (row.pnl_pct on the Closed
+       tone() from the span it sits inside (row.pnl_pct on the Closed
        table, livePnlPct(row) on the other three) -- it is the same gain or
        loss, not a separate number. */
     /* Same "not real yet" language as PlanCell's own .entry.pending -- a
@@ -640,6 +658,7 @@ function findTrade(rows: readonly TradeRow[], id: string): TradeRow | null {
        Below md the column demotes into the row expansion instead (v95 C4),
        which is what keeps it off a phone rather than a wrap rule.
        (v80 D4 removed card mode; the wrap hook it fed died with it.) */
+    .muted { color: var(--text-muted); }
     .pnl-plan {
       font-family: var(--font-mono);
       font-variant-numeric: tabular-nums;
@@ -870,6 +889,8 @@ export class Dashboard {
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('pnlCell');
   private readonly rMultipleCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('rMultipleCell');
+  private readonly nowCell =
+    viewChild.required<TemplateRef<RowContext<TradeRow>>>('nowCell');
   private readonly statusCell =
     viewChild.required<TemplateRef<RowContext<TradeRow>>>('statusCell');
   private readonly planCell =
@@ -959,6 +980,7 @@ export class Dashboard {
       ticker: this.tickerCell(),
       pnl_pct: this.pnlCell(),
       r_multiple: this.rMultipleCell(),
+      now: this.nowCell(),
       status: this.statusCell(),
       plan: this.planCell(),
       confidence_level: this.confidenceCell(),
@@ -1056,12 +1078,7 @@ export class Dashboard {
     return money(value, this.connection.currency());
   }
 
-  protected pnlClass(value: number | null): string {
-    if (value === null) return '';
-    if (value > 0) return 'pos';
-    if (value < 0) return 'neg';
-    return '';
-  }
+  protected readonly tone = figureTone;
 
   /** See dashboard.helpers.ts's own comments for what each of these means
    *  and why it is null when it is. */
