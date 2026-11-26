@@ -101,6 +101,23 @@ def test_a_cache_that_differs_from_its_manifest_is_refused(tmp_path):
     assert not (tmp_path / "work" / rbr.HASHES).exists()
 
 
+def test_without_a_manifest_the_first_run_record_still_guards(tmp_path):
+    cache, work = _cache(tmp_path), tmp_path / "work"
+    (cache / rbr.frd.MANIFEST).unlink()
+    assert rbr.check_hashes(cache, work) is None
+    assert (work / rbr.HASHES).exists()
+    with open(rbr.frd.csv_path(cache, br.SPY), "a", encoding="utf-8", newline="\n") as fh:
+        fh.write("2025-12-31,1,1,1,1,0\n")
+    assert "recorded at its first run" in rbr.check_hashes(cache, work)
+
+
+def test_label_series_without_vix_labels_every_session_with_no_stress():
+    spy, _ = _frames(300)
+    days = rbr.label_series(spy, None)
+    assert [d.session_date for d in days] == [ts.date() for ts in spy.index[br.MIN_BARS:]]
+    assert all(d.stress is None and d.vix_close is None for d in days)
+
+
 def test_a_missing_cache_file_is_refused(tmp_path):
     assert "fetch_regime_data.py" in rbr.check_hashes(tmp_path / "none", tmp_path / "work")
 
