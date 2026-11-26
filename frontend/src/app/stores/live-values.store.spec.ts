@@ -72,7 +72,7 @@ const status = (stalled = false): MarketStatus => ({
 const reply = (cursor: string, quotes: QuoteUpdate[] = [], stalled = false): MarketUpdates =>
   ({ cursor, quotes, status: status(stalled) });
 const q = (symbol: string, price: number | null, as_of: string | null, refreshing = false, error: string | null = null): QuoteUpdate =>
-  ({ symbol, price, as_of, refreshing, error });
+  ({ symbol, price, as_of, refreshing, error, error_at: null });
 
 describe('LiveValuesStore (v201)', () => {
   let events: FakeEventStream;
@@ -167,7 +167,7 @@ describe('LiveValuesStore (v201)', () => {
   it('requestRefresh marks the keys refreshing at once and posts them', () => {
     const store = make([of(reply('c0'))]);
     store.requestRefresh(['NVDA']);
-    expect(store.quote('NVDA')()).toEqual({ symbol: 'NVDA', price: null, as_of: null, refreshing: true, error: null });
+    expect(store.quote('NVDA')()).toEqual({ symbol: 'NVDA', price: null, as_of: null, refreshing: true, error: null, error_at: null });
     expect(api.refreshMarket).toHaveBeenCalledWith({ symbols: ['NVDA'] });
   });
 

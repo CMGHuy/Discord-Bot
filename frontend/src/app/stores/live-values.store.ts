@@ -122,7 +122,7 @@ export class LiveValuesStore {
   private resolve(sym: string): QuoteUpdate | null {
     const stored = this.quotes()[sym] ?? null;
     if (this.local()[localKey(sym)] === undefined) return stored;
-    return { ...(stored ?? { symbol: sym, price: null, as_of: null, error: null }), refreshing: true };
+    return { ...(stored ?? { symbol: sym, price: null, as_of: null, error: null, error_at: null }), refreshing: true };
   }
 
   private resolveSnapshot(key: string): SnapshotUpdate | null {
