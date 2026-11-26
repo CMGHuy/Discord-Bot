@@ -345,6 +345,8 @@ python scripts/backtest/run_backtest_range.py --train|--validation [--exit-model
 python scripts/backtest/tune_strategy.py --strategy "RSI" --grid key=v1,v2 --exit-model v2 --scale-out   # TRAIN-only grid
 python scripts/reports/shadow_parity_report.py        # v2-vs-legacy comparison from data/shadow_plans.jsonl
 python scripts/reports/regime_parity.py               # v239: stored market_regime_days vs a cache replay (boundary days reported, not failed)
+python scripts/research/regime_base_rates.py          # v244: SPY base rates under the bear-regime rules (DESCRIPTION; refuses a changed cache, checkpointed per year)
+python scripts/reports/regime_shadow_report.py        # v244: N/WR/ExpR per stamped regime_action, closed main ledger (monitoring, never a screen)
 make up / make logs / make restart                    # docker compose lifecycle
 ```
 
