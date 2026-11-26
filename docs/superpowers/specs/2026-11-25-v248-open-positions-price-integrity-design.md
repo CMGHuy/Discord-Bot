@@ -321,8 +321,17 @@ Ships through the normal CI deploy. After deploy:
    fires, look for it the next time a held ticker goes stale; do not induce
    one on production.
 
-Rollback is image-only (`scripts/ops/rollback_to.sh`): the spec adds no
-table and no Alembic revision (§ 4, § 5).
+Rollback is image-only: the spec adds no table and no Alembic revision
+(§ 4, § 5), so the database needs nothing. Use the image path of
+`docs/deploy/DEPLOY_HETZNER.md` § Rolling back
+(`SWING_BOT_IMAGE=ghcr.io/<owner>/<repo>:sha-<good-sha> ./deploy/deploy.sh`),
+or `/rollback` (`scripts/ops/rollback_code.sh`), which keeps all trading data.
+`/rollback` refuses by default because `swingbot/refresher/quotes.py` is in
+`MARKET_DATA_WRITER_PATHS` (`scripts/ops/rollback_checks.py`): pass
+`--allow-writer-drift`, and note that the refresher then stays stopped, so the
+admin panel gets no quote refreshes until the hold is released. Do not use
+`scripts/ops/rollback_to.sh`: it is a point-in-time restore of Postgres,
+`market_data/` and `.env`, which would rewind trading data for no benefit here.
 
 ## Left to the builder
 
@@ -359,3 +368,24 @@ veteran-trader. One BLOCKING, the rest ADVISORY; all applied.
 - ux-designer: contrast, accessible names, no focus steal -- applied: § 1g.
 - ux-designer: grouped ops message must read on a phone -- applied: § 5 one line per ticker, 60-char error, `+N more` after 10.
 - ux-designer: one position must read the same on all three screens -- applied: § 1f shared formatter.
+
+## Panel review (pre-close-out, 2026-11-26)
+
+Seats: ux-designer, staff-engineer, veteran-trader, run on `main...2026-11-25-v248-open-positions-price-integrity`.
+
+- staff-engineer: BLOCKING, Rollout called `rollback_to.sh` image-only though it is a PITR restore; `/rollback` needs `--allow-writer-drift` and leaves the refresher stopped -- applied (Rollout rewritten above).
+- staff-engineer: refresher and bot command layer now import `swingbot/admin/market_values` (package seam, not in architecture.md) -- rejected for now: ADVISORY, `market_values` is pure and the seam predates v248 for `read_quotes`; carry to a follow-up that moves it under `core/marketdata/shared/`.
+- staff-engineer: `yf_backoff` reads the trading store from the marketdata seam (60 s cache, fail open) -- rejected: ADVISORY, as specified.
+- staff-engineer: a whole-batch empty frame counts a miss for every ticker, so a yfinance outage can back off the non-held fallback set for hours -- rejected: ADVISORY, carried as a follow-up (held names are capped at 10 min; Alpaca untouched).
+- staff-engineer: no off switch for the backoff or `held_price_watch` -- rejected: ADVISORY, carried.
+- staff-engineer: dedupe mark written after the post, per-tick WARNING with no ops channel -- rejected: ADVISORY, carried.
+- staff-engineer: no owner or prune for the `yf_backoff` / `ops_held_price` market_cache kinds -- rejected: ADVISORY, growth is bounded by incidents x universe; carried.
+- ux-designer: `aria-label` on plain spans (`prevAria`, `.fig-suffix`) may not be announced -- rejected: ADVISORY, carried.
+- ux-designer: full refresh error only in `title`, cut to 60 chars -- rejected: ADVISORY, diagnostic string.
+- ux-designer: prev-close bar's aria-label replaces `status_label` -- rejected: ADVISORY, neutral by spec.
+- ux-designer: `NO_PRICE_REASON` should carry a next step -- rejected: ADVISORY, carried.
+- veteran-trader: prev-close bar hides that yesterday's close is already beyond stop/target -- rejected: ADVISORY, the spec says never claim a stop/target is near; the `at prev close` R figure carries it. Partner's call.
+- veteran-trader: a thin pre-market print counts as live and drives Near-stop/target labels -- rejected: ADVISORY, per spec; carried as a partner call.
+- veteran-trader: pre-market / after-hours split uses `etHour < 12` on the client clock -- rejected: ADVISORY, cosmetic.
+- veteran-trader: confirm the ops notice says the position is unmonitored and re-fires or clears -- rejected: ADVISORY, recovery line exists (V248-7/8).
+
