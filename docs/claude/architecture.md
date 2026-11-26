@@ -194,6 +194,14 @@ Every Alpaca and yfinance request in `swingbot/` (bot, spawned `_run_bounded` wo
   banner/chip. Shadow only: nothing blocks, sizes, scores or cancels a plan.
   `BEAR_REGIME_MODE=off` is byte-identical (no fetch, row, stamp, line,
   notice or banner). Drift guard: `scripts/reports/regime_parity.py`.
+  The alert `Trend` line is one helper, `alert_embeds.regime_fields(plan)`,
+  called once in `build_embed` (inside `sections["plan"]`), `build_simple_alert`
+  (both branches), `build_strategy_alert_embed` (after Ledger) and
+  `build_strategy_simple_embed` (in the description); the execution ticket
+  (`build_ticket_embed`) carries none. It reads only the stamped
+  `entry_context` keys `bear_regime` / `regime_action`; with the mode off every
+  embed is byte-identical (`tests/regime/test_regime_embeds.py`,
+  `tests/regime/test_regime_off_byte_identical.py`).
   Evidence (v244): `scripts/research/regime_base_rates.py` labels SPY
   1993 → 2026-11-20 on a hash-pinned cache and reports episode durations,
   CORRECTION → BEAR conversion and forward returns (a DESCRIPTION, results in

@@ -62,6 +62,19 @@ describe('deriveOpenVisible', () => {
   });
 });
 
+describe('the Badge column on the Dashboard', () => {
+  // A saved layout from before the column was removed still lists it.
+  const base = ['ticker', 'badge', 'plan'];
+
+  it.each(['ACTIVE', 'PENDING', 'PARTIAL', 'CLOSED', 'CANCELLED'])('is never shown on the %s tab', (tab) => {
+    expect(visibleForTab(tab, base)).toEqual(['ticker', 'plan']);
+  });
+
+  it('is not restored to the saved layout by a reorder', () => {
+    expect(reconcileReorder(['plan', 'ticker'], base)).toEqual(['plan', 'ticker']);
+  });
+});
+
 describe('reconcileReorder', () => {
   it('restores "now" when the Closed group omits it', () => {
     const order = ['num', 'opened_at'];
