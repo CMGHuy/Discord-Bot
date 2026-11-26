@@ -89,9 +89,12 @@ and never counts an unstamped trade as `none`.
 - **Named episode `Y`:** every spell that starts in `Y`, or converts to BEAR
   in `Y`. A year with none prints `no confirmed CORRECTION`. The `expected`
   column is the spec's label, never an assertion.
-- **Forward return** from a day `D`: the percent change of SPY's adjusted
-  close from `s` (the close the label read) to `s + h`. A horizon past the
-  last bar drops that day for that `h` only.
+- **Forward return** (amended by the partner, 2026-11-26, after the V244-2
+  review; this overrides the task text below): episode-first-day rows measure
+  SPY's adjusted close from `D` to `D + h`, because `D` is confirmed only once
+  `D+1`'s label has read close `D`. `PULLBACK` rows measure from `s` (the close
+  the label read) to `s + h`. A horizon past the last bar drops that day for
+  that `h` only.
 - **Stress split:** the forward table grouped by `(episode key, stress on its
   first day)` and `(PULLBACK, stress that day)`; `stress` None is its own
   group (`stress None`), never folded into calm.
@@ -115,7 +118,8 @@ and never counts an unstamped trade as `none`.
   gitignored (`data/reports/`). Never delete `hashes.json` to get past a
   refusal.
 - **No lookahead:** the label for `D` reads only bars dated `≤ s`; forward
-  returns start at the close of `s` (the close the label read). One test pins
+  returns start at the first close at which the row's membership is known
+  (episode rows `D`, pullback rows `s`). One test pins
   the windowed labels to full-frame `classify`; another appends bars and
   asserts no earlier label changes.
 - **No closed pre-registration is re-run, no validation budget is spent.**
@@ -193,6 +197,9 @@ merged first, because V244-1 and V244-2 import them.
   for this plan (`v244`), following the v239 index's What follows
   (`<date>-<vN>-regime-base-rates.md`); the spec's literal
   `2026-11-23-v239-regime-base-rates.md` predates the cut.
+- 2026-11-26: V244-1 and V244-2 done. Partner moved episode-row forward returns
+  to start at close `D` (Definitions). The study's cache and `hashes.json` are
+  gitignored: copy them to the main tree before removing the worktree.
 
 # Phase 1 — Base-rate study
 
