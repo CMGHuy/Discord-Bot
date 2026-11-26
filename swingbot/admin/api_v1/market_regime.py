@@ -65,7 +65,8 @@ def regime_payload(now: datetime | None = None, repo=None) -> dict:
         rows = list((repo or regime_repo.market_regime_repo()).recent(EPISODE_ROWS))
         _, target = regime_calendar.session_pair(now or datetime.now(timezone.utc))
     except Exception as exc:
-        swallowed(log, "admin.market_regime.read", exc, "regime: store or calendar unreadable: %s", exc)
+        swallowed(log, "ops.admin.market_regime.read", exc,
+                  "regime: store or calendar unreadable: %s", exc)
         return _empty(mode)
     history = [_wire(row) for row in rows[-HISTORY_LIMIT:]]
     today = next((day for day in history if day["session_date"] == target.isoformat()), None)

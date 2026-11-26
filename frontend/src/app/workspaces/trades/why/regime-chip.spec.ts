@@ -9,10 +9,10 @@ import { RegimeChip, regimeChip } from './regime-chip';
 
 describe('regimeChip', () => {
   it.each([
-    ['would_veto', { label: 'would skip', tone: 'bad', prefix: '×' }],
-    ['caution', { label: 'caution', tone: 'warn', prefix: '!' }],
-    ['pullback_watch', { label: 'pullback watch', tone: 'info', prefix: '↺' }],
-    ['aligned', { label: 'aligned', tone: 'neutral', prefix: '' }],
+    ['would_veto', { label: 'would skip', tone: 'bad', text: '× would skip' }],
+    ['caution', { label: 'caution', tone: 'warn', text: '! caution' }],
+    ['pullback_watch', { label: 'pullback watch', tone: 'info', text: '↺ pullback watch' }],
+    ['aligned', { label: 'aligned', tone: 'neutral', text: 'aligned' }],
   ])('maps %s to its words, colour and text prefix', (action, chip) => {
     expect(regimeChip({ bear_regime: 'CORRECTION', regime_action: action })).toEqual(chip);
   });
@@ -58,15 +58,20 @@ describe('sb-regime-chip', () => {
     expect(render({ regime_action: 'aligned' }).querySelector('sb-chip')?.textContent?.trim()).toBe('aligned');
   });
 
-  it('names itself for hover and for assistive tech', () => {
+  it('explains itself through a hint reachable by tap and keyboard, never a title', () => {
     const el = render({ regime_action: 'caution' });
-    expect(el.querySelector('.regime-chip')?.getAttribute('title'))
-      .toBe('Regime when issued: caution (shadow, no effect on this plan)');
+    const trigger = el.querySelector('sb-hint button') as HTMLButtonElement;
+    expect(trigger.getAttribute('aria-label')).toBe('About the regime chip');
+    const tip = el.querySelector(`#${trigger.getAttribute('aria-describedby')}`);
+    expect(tip?.textContent?.trim()).toBe('Regime when issued: caution (shadow, no effect on this plan)');
+    expect(el.querySelector('.regime-chip')?.hasAttribute('title')).toBe(false);
     expect(el.querySelector('.sr')?.textContent?.trim()).toBe('Regime when issued:');
   });
 
-  it('renders nothing for a legacy plan', () => {
-    expect(render({ rs_pctile: 62 }).querySelector('.regime-chip')).toBeNull();
+  it('renders nothing for a legacy plan, no stray hint either', () => {
+    const el = render({ rs_pctile: 62 });
+    expect(el.querySelector('.regime-chip')).toBeNull();
+    expect(el.querySelector('sb-hint')).toBeNull();
   });
 
   it('takes its own line on a phone and is never truncated', () => {
