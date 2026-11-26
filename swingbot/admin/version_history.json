@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-25 19:17:06 UTC",
+  "generated_at": "2026-11-26 09:48:21 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
@@ -7,7 +7,7 @@
   ],
   "current": {
     "ui": "1.50.0",
-    "bot": "2.20.0"
+    "bot": "2.20.1"
   },
   "releases": [
     {
@@ -2890,6 +2890,19 @@
       },
       "changed": [
         "ui",
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-26",
+      "last_seen": "2026-11-26",
+      "commit": "e0349ddd",
+      "subject": "release(bot): 2.20.1 -- v251 volume profile without iterrows, byte-identical (faster analysis per ticker)",
+      "versions": {
+        "ui": "1.50.0",
+        "bot": "2.20.1"
+      },
+      "changed": [
         "bot"
       ]
     }
