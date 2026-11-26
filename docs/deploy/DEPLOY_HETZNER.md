@@ -474,6 +474,10 @@ session. The table raises no SSE events.
 |---|---|---|
 | `BEAR_REGIME_MODE` | `shadow` (label, record, stamp, show; **no trade changes**) | explicitly in `.env` right after the v239 deploy |
 
+Set on production 2026-11-26 (deploy `26e1090e`, bot 2.20.1) with
+`python3 scripts/ops/env_set.py BEAR_REGIME_MODE shadow` plus
+`docker compose kill -s HUP bot`; the value equals the code default.
+
 **Read-back:**
 
     bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T db psql -U swingbot -d swingbot -c \"SELECT session_date, last_bar_date, state, stress, pullback_trigger, spy_provider, vix_provider, computed_at FROM market_regime_days ORDER BY session_date DESC LIMIT 10\""
