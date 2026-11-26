@@ -1242,7 +1242,9 @@ def _position_rows(rows: list[dict]) -> list[dict]:
 def _row_quote(row: dict):
     """The door's `MarketQuote`, rebuilt from the row's quote fields."""
     from swingbot.admin.market_values import MarketQuote
-    return MarketQuote(str(row["ticker"]).upper(), row.get("current_price"),
+    price = (None if row.get("price_kind") == trade_progress.PRICE_PREV_CLOSE
+             else row.get("current_price"))
+    return MarketQuote(str(row["ticker"]).upper(), price,
                        row.get("price_as_of"), row.get("price_age_s"),
                        bool(row.get("price_refreshing")), row.get("price_error"))
 
@@ -1297,10 +1299,11 @@ def _attach_status_fields(rows: list[dict]) -> None:
     """
     for row in rows:
         price = row.get("current_price")
+        kind = row.get("price_kind", trade_progress.PRICE_LIVE)
         if trade_progress.uses_trailing_bar(row):
-            row.update(_trailing_status_fields(row, price))
+            row.update(_trailing_status_fields(row, price, price_kind=kind))
         else:
-            row.update(trade_progress.row_progress(row, price))
+            row.update(trade_progress.row_progress(row, price, price_kind=kind))
 
 
 def _attach_unrealized_pnl(rows: list[dict]) -> None:
@@ -1379,7 +1382,9 @@ def _attach_layer_prices(live: list[dict]) -> None:
 
 
 def _attach_door_prices(live: list[dict]) -> None:
-    """v201: price the live rows from the never-fetch door -- one cache read."""
+    """v201: price the live rows from the never-fetch door -- one cache read.
+
+    v248: held rows then always carry a price and its `price_kind`."""
     from swingbot.admin import market_values
     quotes = market_values.read_quotes([r["ticker"] for r in live])
     for r in live:
@@ -1389,6 +1394,32 @@ def _attach_door_prices(live: list[dict]) -> None:
     for r in live:
         if r.get("current_price") is None:
             r.update(closes.get(str(r["ticker"]).upper(), {}))
+    _price_held_rows(live)
+
+
+def _held_price_fields(row: dict) -> dict:
+    """The price a held row shows (v248 spec § 2): the live trade, else the
+    cached daily close tagged `prev_close`, never the bid/ask midpoint."""
+    if row.get("current_price") is not None:
+        return {"price_kind": trade_progress.PRICE_LIVE}
+    close = row.get("last_close")
+    if close is None:
+        return {}
+    return {"current_price": close, "price_kind": trade_progress.PRICE_PREV_CLOSE,
+            "price_as_of": None, "price_age_s": None, "current_price_stale": False}
+
+
+def _price_held_rows(live: list[dict]) -> None:
+    """Give every held (ACTIVE/PARTIAL) door row a price and its `price_kind`.
+
+    `price_as_of = None` on a prev-close row lets the client overlay upgrade it
+    on any priced update. Idempotent: `list_trades` may price the same dicts
+    twice, and the door's `quote_fields` resets `current_price` before this
+    runs again, so a live price is never replaced by a close."""
+    for row in live:
+        if row.get("status") in _OPEN_STATUSES:
+            row.pop("price_kind", None)
+            row.update(_held_price_fields(row))
 
 
 def _attach_current_prices(rows: list[dict]) -> None:
