@@ -1022,8 +1022,8 @@ describe('Trades on a phone - refresh error in the P&L cell (v248)', () => {
   };
   const phoneRow = (o: Partial<TradeRow>) => row({ id: 'p1', status: 'ACTIVE', current_price: 100, pnl_pct: 3,
     price_as_of: '2026-10-29T14:00:00Z', price_error: 'no quote', ...o });
-  const pnlCellText = (fixture: ComponentFixture<Trades>): string => {
-    (TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues).status.set(regular);
+  const pnlCellText = (fixture: ComponentFixture<Trades>, status: typeof regular | { session: 'closed' } & Omit<typeof regular, 'session'> = regular): string => {
+    (TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues).status.set(status as never);
     fixture.detectChanges();
     const cell = tradesTable(fixture).querySelector('li.compact-row [data-col="pnl_pct"]')!;
     return cellText(cell);
@@ -1036,6 +1036,19 @@ describe('Trades on a phone - refresh error in the P&L cell (v248)', () => {
 
   it('an error older than the price shows none', () => {
     const fixture = renderPhone([phoneRow({ price_error_at: '2026-10-29T13:00:00Z' })]);
+    const text = pnlCellText(fixture);
+    expect(text).not.toContain('refresh failed');
+    expect(text).not.toMatch(/ago|last trade/);
+  });
+
+  it('a fresh price with a current error shows none', () => {
+    const fixture = renderPhone([phoneRow({ price_as_of: new Date().toISOString(),
+      price_error_at: new Date(Date.now() + 1000).toISOString() })]);
     expect(pnlCellText(fixture)).not.toContain('refresh failed');
+  });
+
+  it('a closed session with a current error shows none', () => {
+    const fixture = renderPhone([phoneRow({ price_error_at: '2026-10-29T14:05:00Z' })]);
+    expect(pnlCellText(fixture, { ...regular, session: 'closed' })).not.toContain('refresh failed');
   });
 });

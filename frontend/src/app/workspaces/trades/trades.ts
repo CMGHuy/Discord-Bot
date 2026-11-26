@@ -517,10 +517,10 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
 
       <!-- See dashboard.ts's own pnlCell -- same pairing, same reasoning:
            the % alone doesn't say how much money that was. The percentage
-           carries its unit (fmtPct, not fmtSigned) because this cell holds
+           carries its unit (sb-position-figure unit="pct") because this cell holds
            two figures in two different units, and on a phone the header sits
            in a <dt> beside them rather than above a column -- see
-           dashboard.ts's fmtPct note for the full reversal of v54 Task 28. -->
+           dashboard.ts's pnlCell note for the full reversal of v54 Task 28. -->
       <!-- v248: on a phone the drawer holds NOW, so the current refresh error
            (sb-market-value's own errorIsCurrent / session / stale rule) rides
            in this cell, wrapping under the figure. -->
@@ -530,12 +530,12 @@ export const ROW_COUNT_NOTE = 'Counts rows, not plans: a plan closed in parts li
           <span class="pnl-amount"> ({{ fmtMoney(row.realized_pnl_amount) }})</span>
         </span>
         @if (isPhone()) {
-          <sb-market-value [asOf]="row.price_as_of ?? null" [error]="row.price_error ?? null" [errorAt]="row.price_error_at ?? null" />
+          <sb-market-value [errorOnly]="true" [asOf]="row.price_as_of ?? null" [error]="row.price_error ?? null" [errorAt]="row.price_error_at ?? null" />
         }
       </ng-template>
 
       <!-- v54 Task 28: sb-magnitude beneath the R figure -- the header ('R')
-           already names the unit, so the cell drops it (signed(), not
+           already names the unit, so the cell drops it (unit="r" figure, not
            rMultiple()). -->
       <ng-template #rMultipleCell let-row>
         <span [sbFlash]="row.r_multiple" [class]="tone(row.r_multiple, row.price_kind)"><sb-position-figure [value]="row.r_multiple" unit="r" [kind]="row.price_kind ?? null" /></span>
@@ -1094,7 +1094,8 @@ export class Trades {
   // with a money amount, and in card mode (below 640px) the header is a
   // <dt> label beside the value rather than a column head above it, so
   // '+2.34 (+118.20 USD)' loses which unit belongs to which figure. The
-  // percentage units itself; R does not. See dashboard.ts's matching note.
+  // percentage units itself (sb-position-figure unit="pct", via figureText);
+  // R does not. See dashboard.ts's matching note.
   protected readonly tone = figureTone;
   protected readonly isPhone = this.viewport.isPhone;
   protected fmtText = text;

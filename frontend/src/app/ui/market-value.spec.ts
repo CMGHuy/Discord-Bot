@@ -16,13 +16,14 @@ const regular: MarketStatus = {
 
 @Component({
   imports: [MarketValue],
-  template: `<sb-market-value [asOf]="a" [refreshing]="r" [error]="e" [errorAt]="errAt" [kind]="kind" [computedAt]="computedAt" [staleInputs]="staleInputs">187.42</sb-market-value>`,
+  template: `<sb-market-value [errorOnly]="eo" [asOf]="a" [refreshing]="r" [error]="e" [errorAt]="errAt" [kind]="kind" [computedAt]="computedAt" [staleInputs]="staleInputs">187.42</sb-market-value>`,
 })
 class Host {
   a: string | null = ago(12);
   r = false;
   e: string | null = null;
   errAt: string | null = null;
+  eo = false;
   kind: 'price' | 'snapshot' = 'price';
   computedAt: string | null = null;
   staleInputs = false;
@@ -50,6 +51,19 @@ describe('sb-market-value (v201)', () => {
     f.detectChanges();
     return f.nativeElement as HTMLElement;
   }
+
+  it('errorOnly shows a current error without the age or a separator (v248)', () => {
+    const el = render({ eo: true, a: ago(840), e: 'no quote', errAt: ago(30) });
+    expect(el.querySelector('.mv-age')).toBeNull();
+    expect(err(el)?.textContent?.trim()).toBe('refresh failed: no quote');
+  });
+
+  it('errorOnly with no current error renders nothing (v248)', () => {
+    const el = render({ eo: true, a: ago(12), e: 'no quote', errAt: ago(5) });
+    expect(el.querySelector('.mv-age')).toBeNull();
+    expect(err(el)).toBeNull();
+    expect((el.querySelector('sb-market-value') as HTMLElement).classList).toContain('mv-empty');
+  });
 
   it('shows the value and its age', () => {
     const el = render();

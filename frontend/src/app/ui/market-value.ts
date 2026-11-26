@@ -70,14 +70,16 @@ export class MarketValue {
   readonly refreshing = input(false);
   readonly error = input<string | null>(null);
   readonly errorAt = input<string | null>(null);
+  /** v248: show only a current refresh error, never the age line (a phone P&L cell). */
+  readonly errorOnly = input(false);
 
   private readonly clock = inject(CLOCK);
   private readonly live = inject(LiveValuesStore);
 
-  protected readonly label = computed(() => marketAgeLabel(this.asOf(), this.clock(), this.live.status(), {
+  protected readonly label = computed(() => this.errorOnly() ? { text: null, tone: 'fresh' as const } : marketAgeLabel(this.asOf(), this.clock(), this.live.status(), {
     kind: this.kind(), staleInputs: this.staleInputs(), computedAt: this.computedAt(),
   }));
-  protected readonly valueHidden = computed(() => (this.kind() === 'snapshot' ? this.computedAt() : this.asOf()) === null);
+  protected readonly valueHidden = computed(() => this.errorOnly() || (this.kind() === 'snapshot' ? this.computedAt() : this.asOf()) === null);
   protected readonly showError = computed(() => this.error() !== null
     && (this.kind() === 'snapshot' || priceErrorVisible(this.asOf(), this.errorAt(), this.clock(), this.live.status())));
   protected readonly errorText = computed(() => {
