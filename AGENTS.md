@@ -123,14 +123,13 @@ lens's critique, the expert role skills apply one seat at a time through
 
 ## Decision standards
 
-No question budget. One question per message, via your runtime's
-structured-choice mechanism if it has one (selectable options, recommended
-first), otherwise one concise question with the recommended default first, never
-an open A/B/C essay. When a request is ambiguous, a premise looks wrong, or a
-call is the partner's, ask instead of assuming. Never ask which option to take *after* a finding is established;
-record it. This is about ambiguity and decisions, not check-ins: once a plan
-task's scope is clear, run it straight through (edits, tests, commits per the
-plan) without pausing for permission to continue.
+No question budget. When a request is ambiguous, a premise looks wrong, or a
+call is the partner's, ask instead of assuming: one question per message, via
+your runtime's structured-choice mechanism if it has one, else one concise
+question; recommended option first, never an open A/B/C essay. Never ask which
+option to take *after* a finding is established; record it. Once a plan task's
+scope is clear, run it straight through (edits, tests, commits per the plan)
+without pausing for permission to continue.
 
 **A wrong premise gets recorded, not menu-ed.** State the correction with
 evidence, write it into its durable home (`CLAUDE.md` for standing rules,
@@ -247,26 +246,24 @@ before you act.** If it did not trigger on its own, invoke it (`$<name>`):
 
 `task-brief` (trap preflight for a plan task's handoff) is not explicit-only: run it right after `task_handoff.py` writes one.
 
-Explicit-only rituals, never implicitly triggered, which you run as `$<name>`
-whenever Claude would run `/<name>`: `gate` (pre-push checks), `deploy` (Hetzner deploy; refuses while held), `stable-snapshot` (pin a known-good point),
+Explicit-only rituals, which you run as `$<name>` whenever Claude would run
+`/<name>`: `gate` (pre-push checks), `deploy` (Hetzner deploy; refuses while held), `stable-snapshot` (pin a known-good point),
 `rollback` (code-only, keeps trades; holds deploys until `--release`), `backup-pull` (off-VM pull), `result-digest` (compare two backtest `--json` files),
 `handoff` (write the plan's `## Handoff` block before a session stops),
 `screen` (one real idea-screen run per idea, after the definition, ledger and
 results-doc checks), `prereg` (commit a pre-registration stub before the
 measurement, append the ledger row after it) and `data-check` (run
-`validate_data.py` and report each cache's verdict from its output). `new-doc`
-(new spec or plan), `close-out` (plan close-out) and `replicate-prod-db`
-(read-only copy of the production database to a local replica) may
-also be run implicitly: `new-doc` right before creating a numbered spec or plan,
+`validate_data.py` and report each cache's verdict from its output). Four may
+also run implicitly: `new-doc` right before creating a numbered spec or plan,
 `close-out` once a plan's final full-suite task is green, `replicate-prod-db`
-before a task's first test run against the database. `panel` (dispatch
-expert role reviewers one at a time through `expert-reviewer` and merge their
-findings) may also run implicitly: right after committing a spec with a
-`**Panel:**` line, and before `close-out` of a plan built from one. Skill text
-names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use your equivalent.
+(read-only copy of the production database to a local replica) before a task's
+first test run against the database, and `panel` (expert role reviewers one at a
+time through `expert-reviewer`, findings merged) right after committing a spec
+with a `**Panel:**` line and before `close-out` of a plan built from one. Skill
+text names Claude tools (`AskUserQuestion`, `Agent`, `Grep`); use your equivalent.
 
-Expert role skills (v145) each hold one reviewer's lens and load when you
-review from that seat: `quant-researcher`, `risk-manager`, `financial-advisor`
+Expert role skills (v145), one reviewer lens each, load when you review from
+that seat: `quant-researcher`, `risk-manager`, `financial-advisor`
 (educational, not personal advice), `veteran-trader`, `technical-analyst`,
 `fundamental-analyst`, `staff-engineer`, `quant-engineer`, `senior-engineer`
 and `ux-designer` (screens and embeds at three widths). A role raises cited
