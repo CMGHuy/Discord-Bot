@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 
 import { RegimeStore } from '../stores/regime.store';
+import { Button } from '../ui/button';
 import { Chip } from '../ui/chip';
 
 /** v239: the daily trend (bear regime, shadow) as a strip under the tape.
@@ -10,14 +11,14 @@ import { Chip } from '../ui/chip';
 @Component({
   selector: 'sb-regime-banner',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Chip],
+  imports: [Button, Chip],
   template: `
     @if (banner(); as b) {
       @if (b.kind === 'none') {
         <div class="regime-strip" data-tone="muted" role="status">Regime: no reading</div>
       } @else {
         <div class="regime-strip" [attr.data-tone]="b.tone">
-          <button type="button" class="regime-toggle" aria-controls="regime-detail"
+          <button sb-button variant="ghost" type="button" class="regime-toggle" aria-controls="regime-detail"
                   [attr.aria-expanded]="open()" [attr.aria-label]="b.accessibleName" (click)="open.set(!open())">
             <span class="lead">Trend: {{ b.label }}</span>
             @if (b.since !== null) {
@@ -41,9 +42,14 @@ import { Chip } from '../ui/chip';
     .regime-strip[data-tone='muted'] { display: flex; align-items: center; min-height: 44px;
       padding: 0 var(--space-14); border-color: var(--border); background: transparent;
       color: var(--text-muted); font-size: var(--text-chip); }
-    .regime-toggle { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-6) var(--space-10);
-      width: 100%; min-height: 44px; padding: var(--space-6) var(--space-14); border: 0; background: none;
-      color: inherit; font: inherit; font-size: var(--text-chip); text-align: left; cursor: pointer; }
+    /* The full-width strip is an sb-button repainted: two classes, so these
+       outrank the variant's own :host rules whatever order the styles load. */
+    .regime-strip .regime-toggle { display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: baseline;
+      gap: var(--space-6) var(--space-10); width: 100%; min-height: 44px; padding: var(--space-6) var(--space-14);
+      border: 0; border-radius: 0; background: none; color: inherit; font: inherit; font-size: var(--text-chip);
+      letter-spacing: normal; text-transform: none; text-align: left; }
+    /* The tone's own ink stays on hover; ghost would repaint it neutral. */
+    .regime-strip .regime-toggle:hover { color: inherit; background: none; }
     .lead { font-weight: 650; }
     .since, .numbers { color: var(--text-secondary); }
     .regime-detail { padding: 0 var(--space-14) var(--space-8); font-size: var(--text-chip); color: var(--text-secondary); }

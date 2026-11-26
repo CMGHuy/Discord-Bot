@@ -24,15 +24,9 @@ facades -- edit the module behind them: `alert_embeds.py` (`build_embed`,
 embeds), `plan_table.py` (plan rows, sizing snapshot), and `scan_run.py`
 (`_sync_run_scan`'s alert-building loop). The old `core/scan_embeds.py` /
 `core/scan_engine.py` shims are deleted; do not look for them.
-The v239 `Trend` line is one helper, `alert_embeds.regime_fields(plan)`,
-called once in `build_embed` (inside `sections["plan"]`), `build_simple_alert`
-(both branches), `build_strategy_alert_embed` (after Ledger) and
-`build_strategy_simple_embed` (in the description); the execution ticket
-(`build_ticket_embed`) carries none. It reads only the stamped
-`entry_context` keys `bear_regime` / `regime_action`; with
-`BEAR_REGIME_MODE=off` nothing is stamped and every embed is byte-identical
-(`tests/regime/test_regime_embeds.py`,
-`tests/regime/test_regime_off_byte_identical.py`).
+The v239 `Trend` line comes only from `alert_embeds.regime_fields(plan)`. Its
+call sites and the `off` byte pins: `docs/claude/architecture.md`, the
+bear-regime shadow bullet -- read it before touching that line.
 
 ## Step 2 — An empty table is an answer
 

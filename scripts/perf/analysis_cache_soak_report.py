@@ -1,7 +1,7 @@
 """Shadow soak verdict from scan telemetry (v245, spec § Switch criteria).
 
 Usage:
-    python scripts/perf/analysis_cache_soak_report.py [--since ISO | --since-deploy] [--need 5] [--path FILE]
+    python scripts/perf/analysis_cache_soak_report.py [--since ISO | --since-deploy] [--first-full-day YYYY-MM-DD] [--need 5] [--path FILE]
 
 On production, read-only, piped to the bot container (working directory /app):
     bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python - --since-deploy" < scripts/perf/analysis_cache_soak_report.py
@@ -10,7 +10,9 @@ Reads only rows written in ANALYSIS_CACHE=shadow (cache_mode "shadow" with
 integer cache_compared / cache_diffs), groups them by New York date and prints
 one JSON object. Verdict: FAIL on any diff; PASS once `need` trading days
 (weekday, not an NYSE holiday, session over, at least one compared ticker)
-have zero diffs; WAIT otherwise.
+have zero diffs; WAIT otherwise. If shadow started during a session, set
+--first-full-day to the first eligible New York trading date. Earlier rows
+within the telemetry window still fail the soak if they contain a diff.
 """
 from __future__ import annotations
 
@@ -67,16 +69,27 @@ def open_day(now: datetime) -> str | None:
     return today if trading_day(today) and local.time() < SESSION_CLOSE else None
 
 
-def counted_days(days: list[dict], session_open: str | None = None) -> list[str]:
-    """Dates that count toward the soak; `session_open` (today, unfinished) never does."""
-    return [d["date"] for d in days
-            if d["compared"] > 0 and trading_day(d["date"]) and d["date"] != session_open]
+def counted_days(
+    days: list[dict], session_open: str | None = None, *, first_full_day: str | None = None,
+) -> list[str]:
+    """Eligible New York trading dates with comparisons and a completed session."""
+    return [
+        day["date"] for day in days
+        if day["compared"] > 0
+        and trading_day(day["date"])
+        and day["date"] != session_open
+        and (first_full_day is None or day["date"] >= first_full_day)
+    ]
 
 
-def verdict(days: list[dict], need: int = NEED_DAYS, *, open_day: str | None = None) -> str:
-    if any(d["diffs"] for d in days):
+def verdict(
+    days: list[dict], need: int = NEED_DAYS, *,
+    open_day: str | None = None, first_full_day: str | None = None,
+) -> str:
+    if any(day["diffs"] for day in days):
         return "FAIL"
-    return "PASS" if len(counted_days(days, open_day)) >= need else "WAIT"
+    counted = counted_days(days, open_day, first_full_day=first_full_day)
+    return "PASS" if len(counted) >= need else "WAIT"
 
 
 def _after(rows: list[dict], since: str | None) -> list[dict]:
@@ -91,6 +104,8 @@ def _parse(argv) -> argparse.Namespace:
     parser.add_argument("--path", default=DEFAULT_PATH)
     parser.add_argument("--since", default=None, help="ISO timestamp or date (UTC)")
     parser.add_argument("--since-deploy", action="store_true", help="from the last bot deploy marker")
+    parser.add_argument("--first-full-day", type=date.fromisoformat, metavar="YYYY-MM-DD",
+                        help="first full New York shadow session eligible to count")
     parser.add_argument("--need", type=int, default=NEED_DAYS)
     parser.add_argument("--now", default=None, help="ISO 'now' (tests and replays); default: the clock")
     return parser.parse_args(argv)
@@ -106,9 +121,12 @@ def main(argv=None) -> int:
     days = soak_days(_after(rows, since))
     now = _when(args.now) if args.now else datetime.now(timezone.utc)
     current = open_day(now)
-    print(json.dumps({"days": days, "counted": counted_days(days, current), "need": args.need,
+    first_full_day = args.first_full_day.isoformat() if args.first_full_day else None
+    counted = counted_days(days, current, first_full_day=first_full_day)
+    result = verdict(days, args.need, open_day=current, first_full_day=first_full_day)
+    print(json.dumps({"days": days, "counted": counted, "need": args.need,
                       "open_day": current, "since": since, "bad_lines": bad,
-                      "verdict": verdict(days, args.need, open_day=current)}, indent=1))
+                      "verdict": result}, indent=1))
     return 0
 
 

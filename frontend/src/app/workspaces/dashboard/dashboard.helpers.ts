@@ -1,4 +1,7 @@
+import { Signal } from '@angular/core';
 import { TradeRow } from '../../api/models';
+import { ColumnDef } from '../../ui/data-table/data-table.types';
+import { tradeColumns } from '../trades/trades.columns';
 
 /**
  * Pure logic behind the Dashboard's per-group column lists and the
@@ -8,10 +11,22 @@ import { TradeRow } from '../../api/models';
  * rather than living inline in trades.ts.
  */
 
-/** Dropped from every Dashboard group's own column order: Direction folds
+/** The strategy badge is a Trades column only: the Dashboard has no such
+ *  column at any width. */
+const NOT_ON_DASHBOARD = 'badge';
+
+/** The shared trade columns the Dashboard offers. Dropping the definition, not
+ *  only the visible key, keeps it off the row, the phone card and the row
+ *  expansion, even for a saved layout that still lists it. */
+export function dashboardColumns(now?: Signal<number>): ColumnDef<TradeRow>[] {
+  return tradeColumns(now).filter((column) => column.key !== NOT_ON_DASHBOARD);
+}
+
+/** Dropped from every Dashboard group's own column order. Direction folds
  *  into the Confidence cell instead (ConfidenceCell's own `direction` input)
  *  so the two do not both spend a full column on one glyph plus a level. */
-const DASHBOARD_OMITS_DIRECTION = (key: string) => key !== 'direction';
+const DASHBOARD_OMITS = new Set(['direction', NOT_ON_DASHBOARD]);
+const onDashboard = (key: string) => !DASHBOARD_OMITS.has(key);
 
 /** Columns the Closed group drops from the shared picker list.
  *
@@ -36,13 +51,13 @@ const CLOSED_DROPS = new Set(['now', 'status']);
 export function deriveClosedVisible(base: readonly string[]): string[] {
   return base
     .filter((key) => !CLOSED_DROPS.has(key))
-    .filter(DASHBOARD_OMITS_DIRECTION);
+    .filter(onDashboard);
 }
 
 /** The Active/Pending/Partial groups' own column order: 'closed_at' is
  *  dropped, since none of the three has closed. */
 export function deriveOpenVisible(base: readonly string[]): string[] {
-  return base.filter((key) => key !== 'closed_at').filter(DASHBOARD_OMITS_DIRECTION);
+  return base.filter((key) => key !== 'closed_at').filter(onDashboard);
 }
 
 /** Columns a CANCELLED plan can actually fill.
@@ -55,7 +70,7 @@ export function deriveOpenVisible(base: readonly string[]): string[] {
  *  Direction folds into the Confidence cell here too, as in every other tab. */
 export function deriveCancelledVisible(visible: string[]): string[] {
   const dead = new Set(['now', 'pnl_pct', 'r_multiple', 'hold']);
-  return visible.filter((column) => !dead.has(column)).filter(DASHBOARD_OMITS_DIRECTION);
+  return visible.filter((column) => !dead.has(column)).filter(onDashboard);
 }
 
 /** The column set for one lifecycle tab — v85 D11/D12. Order comes from the

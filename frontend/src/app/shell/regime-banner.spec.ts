@@ -48,6 +48,8 @@ describe('sb-regime-banner', () => {
   it('shows the Trend: prefix, the label, the count and the numbers on a collapsed native button', () => {
     const button = render(READING).querySelector('button')!;
     expect(button.getAttribute('type')).toBe('button');
+    expect(button.hasAttribute('sb-button')).toBe(true);
+    expect([...button.classList]).toEqual(expect.arrayContaining(['regime-toggle', 'ghost']));
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(button.getAttribute('aria-label')).toBe(READING.accessibleName);
     expect(button.querySelector('.lead')?.textContent?.trim()).toBe('Trend: Correction · Stress');

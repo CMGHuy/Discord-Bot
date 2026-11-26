@@ -5,6 +5,8 @@
 **Edge:** none (integrity)
 **Screen:** exempt (integrity)
 **Panel:** quant-engineer, veteran-trader, staff-engineer
+**Status:** plan at the 20-task cap; partner-approved task V245-5b split out.
+**Split:** V245-5b (byte-identical vectorised `compute_volume_profile`) in v251
 
 `Edge: none (integrity)`: this spec adds no strategy, filter or exit and
 changes no alert. It makes analysis cheaper per ticker, which is one of the

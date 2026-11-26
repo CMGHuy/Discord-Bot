@@ -14,8 +14,8 @@ import { SCAN_CONTROLS } from '../workspaces/system/scan-tab';
  * The plan's own sketch imported a `TRADE_COLUMNS` static export from
  * trades.columns -- there is no such export. trades.ts and dashboard.ts both
  * build their columns from the one shared `tradeColumns()` function
- * (dashboard.ts's own DASHBOARD_COLUMNS is `tradeColumns()` called with the
- * default clock), so 'trades columns' below calls it directly instead. */
+ * (dashboard.ts's own DASHBOARD_COLUMNS is `tradeColumns()` minus the
+ * strategy badge), so 'trades columns' below calls it directly instead. */
 
 const SURFACES = {
   'trades controls': TRADES_CONTROLS.map((c) => ({ ...c, demotesTo: 'sheet' as const })),

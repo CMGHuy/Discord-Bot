@@ -474,6 +474,10 @@ session. The table raises no SSE events.
 |---|---|---|
 | `BEAR_REGIME_MODE` | `shadow` (label, record, stamp, show; **no trade changes**) | explicitly in `.env` right after the v239 deploy |
 
+Set on production 2026-11-26 (deploy `26e1090e`, bot 2.20.1) with
+`python3 scripts/ops/env_set.py BEAR_REGIME_MODE shadow` plus
+`docker compose kill -s HUP bot`; the value equals the code default.
+
 **Read-back:**
 
     bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T db psql -U swingbot -d swingbot -c \"SELECT session_date, last_bar_date, state, stress, pullback_trigger, spy_provider, vix_provider, computed_at FROM market_regime_days ORDER BY session_date DESC LIMIT 10\""
@@ -749,7 +753,12 @@ Soak: 5 trading days of `shadow` with zero diffs (`cache_diffs` in
 2026-11-25 is a partial day; 2026-11-26 is Thanksgiving (closed) and 2026-11-27
 a half session. The report counts a day only with compared tickers and only
 after its 16:00 New York close. Read-only verdict:
-`bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python - --since-deploy" < scripts/perf/analysis_cache_soak_report.py`.
+`bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python - --since 2026-11-25T16:15:54Z --first-full-day 2026-11-27" < scripts/perf/analysis_cache_soak_report.py`.
+Pinned to the shadow switch, not `--since-deploy`: later deploys (v251's
+volume-profile rewrite among them) land inside the soak and must not restart
+it. The soak is no parity evidence for v251, because the shadow runs the new
+function on both sides; v251's parity rests on its oracle test and the v245
+golden.
 Rollback: `python3 scripts/ops/env_set.py ANALYSIS_CACHE off` plus
 `docker compose kill -s HUP bot` (same alerts, slower scans).
 

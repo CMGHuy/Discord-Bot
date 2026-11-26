@@ -5,7 +5,7 @@ read back, or SPY and ^VIX are fetched here (truthful providers), cut to bars
 <= s, classified and inserted once -- the notice only from the winning insert.
 A stale-SPY UNKNOWN is stamped but never stored, so the next pass retries.
 
-Spec: docs/superpowers/specs/2026-11-23-v239-bear-regime-engine-shadow-design.md
+Spec: docs/superpowers/specs/implemented/2026-11-23-v239-bear-regime-engine-shadow-design.md
 """
 from __future__ import annotations
 

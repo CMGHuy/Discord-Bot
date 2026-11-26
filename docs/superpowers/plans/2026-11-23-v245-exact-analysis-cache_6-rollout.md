@@ -39,6 +39,22 @@ data (`TZ=... date` prints UTC). Compute New York time from `date -u`
 (UTC−5 in winter, UTC−4 from the second Sunday of March); the NYSE regular
 session is 09:30–16:00 New York.
 
+
+## Production shadow soak window
+
+Set `SHADOW_AT` to the UTC shadow switch timestamp and `FIRST_FULL_DAY`
+to the first eligible New York trading date. For the November 25 launch,
+use `2026-11-25T16:15:54Z` and `2026-11-27`, respectively. Launch-day
+comparisons still contribute mismatches to the verdict. Keep this window
+across routine deploys. After a parity fix, use the new shadow switch
+timestamp and first eligible session date.
+
+Run from the existing v245 worktree so the report accepts both boundaries.
+
+```bash
+bash ../../../scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python - --since ${SHADOW_AT} --first-full-day ${FIRST_FULL_DAY}" < scripts/perf/analysis_cache_soak_report.py > logs/v245-soak-report.json
+```
+
 ---
 
 # Phase C — rollout
@@ -424,7 +440,7 @@ code deploy`, after the v171 subsection's rollback paragraph (ends "The
 Soak: 5 trading days of `shadow` with zero diffs (`cache_diffs` in
 `data/scan_telemetry.jsonl`, one JSON line per diff in
 `logs/analysis_cache_shadow.jsonl`). Read-only verdict:
-`bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python - --since-deploy" < scripts/perf/analysis_cache_soak_report.py`.
+use the production shadow soak window in rollout Part 6.
 Rollback: `python3 scripts/ops/env_set.py ANALYSIS_CACHE off` plus
 `docker compose kill -s HUP bot` (same alerts, slower scans).
 ```
@@ -438,10 +454,10 @@ The `mirror-prod` gate is this commit in `git log`.
 
 - [ ] **Step 9: Daily soak check (read-only, after each session close)**
 
-After 16:00 New York on each trading day:
+After 16:00 New York on each trading day, generate the report using
+the soak window above, then inspect it and the comparison logs.
 
 ```bash
-bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python - --since-deploy" < scripts/perf/analysis_cache_soak_report.py > logs/v245-soak-report.json
 cat logs/v245-soak-report.json
 bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && ls -l logs/analysis_cache_shadow.jsonl* 2>/dev/null; grep -c 'analysis cache shadow: comparison failed' logs/bot.log"
 ```
@@ -461,7 +477,7 @@ Read the result:
   regression test that reproduces the diff from the logged ticker's frame
   (in `tests/scanning/test_analysis_cache_property.py`; the V245-1 golden is
   never regenerated), deploys, switches back to `shadow`, and the count
-  restarts: `--since-deploy` starts from the fix's deploy marker.
+  restarts from the new shadow switch timestamp and first full session.
 - **`PASS`**: go to Step 10.
 
 The rotated jsonl (20 MB × 3) is never deleted during the soak; it is the
@@ -514,8 +530,9 @@ Constraints).
 
 - [ ] **Step 1: Confirm the soak still passes (read-only)**
 
+Regenerate the report using the same soak window as V245-15 Step 9.
+
 ```bash
-bash scripts/ops/ssh-hetzner.sh "cd /opt/swing-bot && docker compose exec -T bot python - --since-deploy" < scripts/perf/analysis_cache_soak_report.py > logs/v245-soak-report.json
 python -c "import json; r = json.load(open('logs/v245-soak-report.json')); print(r['verdict'], len(r['counted']))"
 ```
 
