@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from swingbot.admin import market_values as mv
@@ -8,7 +10,7 @@ from swingbot.core.marketdata.shared.admin_refresh import (
 from swingbot.core.marketdata.shared.kinds import DataKind
 
 ROW_QUOTE_FIELDS = {"current_price", "current_price_stale", "price_as_of", "price_age_s",
-                    "price_refreshing", "price_error"}
+                    "price_refreshing", "price_error", "price_error_at"}
 META_KEYS = {"as_of", "refreshing", "stale_count", "missing_count", "incomplete",
              "computed_at", "stale_inputs", "source", "error"}
 
@@ -153,3 +155,73 @@ def test_last_close_fields_is_empty_when_the_cache_is_not_mounted(monkeypatch):
     monkeypatch.setattr(daily_readonly, "read_cached_daily", down)
     assert mv.last_close_fields(["ASTS"]) == {}
     assert mv.last_close_fields([]) == {}
+
+
+ERR_AT = datetime(2026, 11, 25, 13, 0, tzinfo=timezone.utc)
+
+
+def test_mark_error_carries_its_time_as_iso(market, session_is):
+    market.quote("BAD", 7.0, age_s=30)
+    market.marks.errors_by_key["quote:BAD"] = ("no quote", ERR_AT)
+    q = mv.read_quotes(["BAD"])["BAD"]
+    assert q.error == "no quote" and q.error_at == "2026-11-25T13:00:00+00:00"
+    assert mv.quote_fields(q)["price_error_at"] == "2026-11-25T13:00:00+00:00"
+
+
+def test_error_without_a_time_and_no_error_read_null(market, session_is):
+    market.quote("OLD", 7.0, age_s=30)
+    market.quote("OK", 9.0, age_s=30)
+    market.marks.errors_by_key["quote:OLD"] = "provider 503"      # a fake row without a time
+    quotes = mv.read_quotes(["OLD", "OK"])
+    assert quotes["OLD"].error == "provider 503" and quotes["OLD"].error_at is None
+    assert quotes["OK"].error is None and quotes["OK"].error_at is None
+    assert mv.quote_fields(None)["price_error_at"] is None
+
+
+def test_never_cached_symbol_still_carries_its_error_time(market, session_is):
+    market.marks.errors_by_key["quote:NEWX"] = ("no quote", ERR_AT)
+    q = mv.read_quotes(["NEWX"], enqueue=False)["NEWX"]
+    assert q.price is None and q.error_at == "2026-11-25T13:00:00+00:00"
+
+
+def test_mark_read_failure_fails_open_without_error_times(market, session_is, monkeypatch):
+    def broken(*a, **k):
+        raise RuntimeError("db down")
+    monkeypatch.setattr(market.marks, "error_marks", broken)
+    market.quote("MSFT", 110.0, age_s=5)
+    q = mv.read_quotes(["MSFT"], enqueue=False)["MSFT"]
+    assert q.price == 110.0 and q.error is None and q.error_at is None
+
+
+# -- v248 § 3: a live price this session ---------------------------------------------
+
+UTC = timezone.utc
+TUE_1000_ET = datetime(2026, 11, 24, 15, 0, tzinfo=UTC)
+
+
+def _mq(price, as_of):
+    return mv.MarketQuote(symbol="DOCU", price=price, as_of=as_of.isoformat() if as_of else None,
+                          age_s=None, refreshing=False, error=None)
+
+
+@pytest.mark.parametrize("now, price, as_of, expected", [
+    (TUE_1000_ET, 71.2, datetime(2026, 11, 24, 14, 45, tzinfo=UTC), True),    # today 09:45 ET
+    (TUE_1000_ET, 71.2, datetime(2026, 11, 24, 10, 0, tzinfo=UTC), True),     # today 05:00 ET pre-market
+    (TUE_1000_ET, 71.2, datetime(2026, 11, 24, 0, 0, tzinfo=UTC), False),     # Mon 19:00 ET after hours
+    (TUE_1000_ET, None, datetime(2026, 11, 24, 14, 59, tzinfo=UTC), False),   # bid/ask only, no trade
+    (TUE_1000_ET, 71.2, None, False),
+    (datetime(2026, 11, 24, 7, 0, tzinfo=UTC), 71.2,                          # Tue 02:00 ET: tape shut,
+     datetime(2026, 11, 24, 0, 0, tzinfo=UTC), True),                         # Monday is the session
+    (datetime(2026, 11, 28, 15, 0, tzinfo=UTC), 71.2,                         # Saturday: Friday's
+     datetime(2026, 11, 27, 17, 30, tzinfo=UTC), True),                       # half-day trade counts
+    (datetime(2026, 11, 26, 15, 0, tzinfo=UTC), 71.2,                         # Thanksgiving: Wednesday
+     datetime(2026, 11, 26, 0, 0, tzinfo=UTC), True),                         # 19:00 ET counts
+    (datetime(2026, 11, 26, 15, 0, tzinfo=UTC), 71.2,
+     datetime(2026, 11, 24, 20, 0, tzinfo=UTC), False),                       # ...Tuesday does not
+])
+def test_session_priced(now, price, as_of, expected):
+    assert mv.session_priced(_mq(price, as_of), now) is expected
+
+
+def test_no_quote_is_never_session_priced():
+    assert mv.session_priced(None, TUE_1000_ET) is False

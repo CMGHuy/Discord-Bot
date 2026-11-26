@@ -48,7 +48,7 @@ export class FakeLiveValues {
 
   set(symbol: string, update: Partial<QuoteUpdate>): void {
     this.slot(symbol).set({
-      symbol, price: null, as_of: null, refreshing: false, error: null, ...update,
+      symbol, price: null, as_of: null, refreshing: false, error: null, error_at: null, ...update,
     } as QuoteUpdate);
   }
 

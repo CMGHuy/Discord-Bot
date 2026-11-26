@@ -136,16 +136,41 @@ def _existing_entries() -> dict:
     return dict(entries) if isinstance(entries, dict) else {}
 
 
-def _fetch_all(symbols: list[str], fetch) -> list[tuple[str, dict | None]]:
-    def one(sym):
-        try:
-            return sym, fetch(sym)
-        except Exception as exc:  # one bad ticker never stops the batch
-            swallowed(log, "marketdata.short_interest.fetch", exc, level=logging.DEBUG)
-            return sym, None
+FAILED_WARN_PCT = 10
 
-    with ThreadPoolExecutor(max_workers=4) as pool:   # Yahoo rate-limits .info
-        return list(pool.map(one, symbols))
+
+def _fetch_one(sym: str, fetch) -> tuple[str, dict | None]:
+    try:
+        return sym, fetch(sym)
+    except Exception as exc:  # one bad ticker never stops the batch
+        swallowed(log, "marketdata.short_interest.fetch", exc, level=logging.DEBUG)
+        return sym, None
+
+
+def _worker_count() -> int:
+    """One worker per side-pool connection; contention with other bot threads
+    remains, which the serial retry pass absorbs (v248 § 6)."""
+    from swingbot.core.db import side_engine
+    return max(1, sum(side_engine.pool_limits()))
+
+
+def _fetch_all(symbols: list[str], fetch) -> list[tuple[str, dict | None]]:
+    with ThreadPoolExecutor(max_workers=_worker_count()) as pool:
+        return list(pool.map(lambda s: _fetch_one(s, fetch), symbols))
+
+
+def _retry_serially(symbols: list[str], fetch) -> list[tuple[str, dict | None]]:
+    return [_fetch_one(s, fetch) for s in symbols]
+
+
+def summary_line(result: dict, total: int) -> tuple[int, str]:
+    """v248 § 6: the nightly summary and its level -- WARNING while more than
+    FAILED_WARN_PCT % of the symbols still failed after the retry pass."""
+    failed = len(result.get("failed", []))
+    text = (f"{result.get('updated', 0)} updated, {failed} failed of {total} symbols, "
+            f"retried {result.get('retried', 0)}, recovered {result.get('recovered', 0)}")
+    warn = total > 0 and failed * 100 > FAILED_WARN_PCT * total
+    return (logging.WARNING if warn else logging.INFO), text
 
 
 def _drop_from_queue(done: list[str]) -> None:
@@ -160,8 +185,13 @@ def refresh_short_interest(symbols, *, now=None, fetch=None) -> dict:
     fetch = fetch or fetch_short_interest
     now = now or dt.datetime.now(dt.timezone.utc)
     entries = _existing_entries()
+    first = _fetch_all(_clean(symbols), fetch)
+    retry = [s for s, r in first if r is None]
+    second = _retry_serially(retry, fetch)
+    results = dict(first)
+    results.update(second)
     updated, failed = [], []
-    for sym, result in _fetch_all(_clean(symbols), fetch):
+    for sym, result in results.items():
         if result is None:
             failed.append(sym)
         else:
@@ -169,7 +199,8 @@ def refresh_short_interest(symbols, *, now=None, fetch=None) -> dict:
             updated.append(sym)
     atomic_write_json(_path(CACHE_NAME), {"updated_at": now.isoformat(), "symbols": entries})
     _drop_from_queue(updated)
-    return {"updated": len(updated), "failed": sorted(failed)}
+    return {"updated": len(updated), "failed": sorted(failed), "retried": len(retry),
+            "recovered": sum(r is not None for _, r in second)}
 
 
 def cached_short_interest(ticker) -> dict | None:

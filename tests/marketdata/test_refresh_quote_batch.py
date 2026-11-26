@@ -1,12 +1,14 @@
 """v201: the refresher's batched quote call -- tier 5, always fetches, capped yfinance."""
 from datetime import datetime, timezone
 
+import pandas as pd
 import pytest
 import sqlalchemy as sa
 
 from swingbot import config
 from swingbot.core.db import side_engine
 from swingbot.core.marketdata import data
+from swingbot.core.marketdata import yf_backoff
 from swingbot.core.marketdata.shared import layer
 from swingbot.core.marketdata.shared.kinds import Asker, DataKind, QuoteDetail
 
@@ -69,3 +71,53 @@ def test_stop_monitor_still_fetches_past_its_window_after_a_refresher_write(shar
     shared.commit()
     data.get_quote_batch(["AAPL"], asker=Asker.STOP_MONITOR)      # window 15 s
     assert len(provider["latest"]) == 2
+
+
+# -- v248 § 4: both callers honour one shared backoff -------------------------------
+
+@pytest.fixture
+def yahoo(monkeypatch):
+    """Alpaca answers only ALP; every other symbol reaches the real _yf_quote_details,
+    whose download comes back empty (DOCU before the open). Returns the calls."""
+    calls = {"latest": [], "download": []}
+
+    def latest(tickers, yf_fetch):
+        tickers = list(tickers)
+        calls["latest"].append(tickers)
+        out = {t: _q(t) for t in tickers if t == "ALP"}
+        out.update(yf_fetch([t for t in tickers if t != "ALP"]) or {})
+        return out
+
+    def download(symbols, *a, **k):
+        calls["download"].append(symbols)
+        return pd.DataFrame()
+    monkeypatch.setattr(data.router, "latest_quotes", latest)
+    monkeypatch.setattr(data.yf_safe, "download", download)
+    monkeypatch.setattr(yf_backoff, "held_symbols", lambda now=None: frozenset())
+    yf_backoff._reset_for_tests()
+    return calls
+
+
+def test_refresher_batch_stops_asking_yahoo_after_three_misses(shared, yahoo):
+    for _ in range(3):
+        assert data.refresh_quote_batch(["DOCU"], yf_limit=5) == {}
+    assert yahoo["download"] == ["DOCU"] * 3
+    assert data.refresh_quote_batch(["DOCU"], yf_limit=5) == {}
+    assert yahoo["download"] == ["DOCU"] * 3                      # 4th cycle: skipped
+
+
+def test_bot_quote_read_honours_the_refresher_backoff(shared, yahoo):
+    for _ in range(3):
+        data.refresh_quote_batch(["DOCU"], yf_limit=5)
+    side_engine.reset()                                           # the bot is another client
+    got = data.get_quote_batch(["DOCU"], asker=Asker.STOP_MONITOR, max_age_s=0)
+    assert ["DOCU"] in yahoo["latest"][3:]                        # the bot path did ask
+    assert got == {} and yahoo["download"] == ["DOCU"] * 3        # ...but never reached Yahoo
+
+
+def test_alpaca_is_never_skipped_by_the_yahoo_backoff(shared, yahoo):
+    for _ in range(3):
+        yf_backoff.record(yf_backoff.partition(["ALP"]), [])
+    assert yf_backoff.partition(["ALP"]).skipped == ["ALP"]
+    got = data.refresh_quote_batch(["ALP"], yf_limit=5)
+    assert got["ALP"].price == 10.0 and yahoo["download"] == []

@@ -1035,6 +1035,16 @@ FIELDS: list[Field] = [
           min=1, max=100, step=1,
           help="v148. A scheduled scan in which more than this share of tickers came back "
                "with no price frame, or an empty one, posts the same provider-degraded notice."),
+    # v248: held-position price watch (spec § 4, § 5).
+    Field("HELD_PRICE_STALE_ALERT_MIN", "HELD_PRICE_STALE_ALERT_MIN", "Data Sources",
+          "Ops alert: held price stale after (min)", type="number", default="10",
+          min=1, max=120, step=1,
+          help="v248. During the regular session, an open trade whose last trade price is "
+               "older than this, or that has no price at all, posts one ops-channel notice "
+               "per ticker per session day, plus one recovery line. It also caps the "
+               "yfinance per-ticker backoff for a held ticker in the regular session. "
+               "Deliberately longer than ADMIN_STALE_PRICE_REGULAR_S (the panel's stale "
+               "colour): the panel turns red first, Discord is paged only if it stays stale."),
     Field("OPS_ALERT_WEBHOOK_URL", "OPS_ALERT_WEBHOOK_URL", "Data Sources",
           "Ops alert webhook URL (heartbeat cron)", type="password", default="",
           sensitive=True, hot_reloadable=False,

@@ -83,7 +83,8 @@ def _quote_updates(since: datetime, marks: list[dict]) -> list[dict]:
     quotes.update(market_values.read_quotes(tape_syms, kind=DataKind.INDEX_QUOTE,
                                             enqueue=False))
     return [{"symbol": s, "price": quotes[s].price, "as_of": quotes[s].as_of,
-             "refreshing": quotes[s].refreshing, "error": quotes[s].error}
+             "refreshing": quotes[s].refreshing, "error": quotes[s].error,
+             "error_at": quotes[s].error_at}
             for s in symbols if s in quotes]
 
 

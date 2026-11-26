@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import { pct, share } from './format';
 import { Hint } from './hint';
+import { HELD_STATUSES, NO_PRICE_REASON, NO_PRICE_TEXT } from './position-format';
+import { PREV_CLOSE_LABEL, type PriceKind } from './position-progress';
 import { PERFORMANCE_CAVEAT } from './stat-tile';
 import { StatusIndicator } from './status-indicator';
 
@@ -44,6 +46,18 @@ export interface StatusCellRow {
    *  and at the best price since TP1 (its 100%), both vs the original fill. */
   stop_pnl_pct?: number | null;
   best_pnl_pct?: number | null;
+  /** Spec v248 § 1d: 'prev_close' forces the bar neutral and the dot still. */
+  price_kind?: PriceKind;
+  /** Spec v248 § 1e: null (not absent) with no last_close means "no price yet". */
+  current_price?: number | null;
+  /** Spec v248 § 1e: the cached daily close; read only to tell "no price yet" apart. */
+  last_close?: number | null;
+}
+
+/** Spec v248 § 1e: a held row with neither a current price nor a cached close.
+ *  Strict `=== null` on current_price: a row without the field keeps "no price". */
+function noPriceYet(r: StatusCellRow): boolean {
+  return HELD_STATUSES.has(r.status) && r.current_price === null && (r.last_close ?? null) === null;
 }
 
 /**
@@ -54,7 +68,9 @@ export interface StatusCellRow {
  * **It computes nothing.** Every number arrives on the row from SR7, which
  * gets them from `trade_proximity` — the same function behind the bot's
  * near-close alerts. Doing the arithmetic here as well is how the UI and the
- * alerts end up disagreeing about how close a trade is to its stop.
+ * alerts end up disagreeing about how close a trade is to its stop. On a
+ * prev-close row it only forces the band neutral and the dot still (spec v248
+ * § 1d); the arithmetic still arrives on the row.
  *
  * The colour comes from `progress_band` naming a pair of tokens, never from a
  * hex on the wire, so a repaint is a change to tokens.css and not to the API.
@@ -86,6 +102,7 @@ export const STATUS_STALE_HINT = "This position's price could not be freshly fet
         <span
           class="dot"
           [class]="b.band"
+          [attr.data-still]="b.still ? '' : null"
           [style.--blink]="b.blink"
           [style.animation-duration]="b.blink"
           aria-hidden="true"
@@ -96,11 +113,11 @@ export const STATUS_STALE_HINT = "This position's price could not be freshly fet
         <span
           class="track"
           role="progressbar"
-          [attr.aria-label]="row().status_label"
+          [attr.aria-label]="b.title"
           [attr.aria-valuenow]="b.pct"
           aria-valuemin="0"
           aria-valuemax="100"
-          [title]="row().status_label"
+          [title]="b.title"
         >
           <span class="fill" [class]="b.band" [style.width.%]="b.pct"></span>
           <!-- Where entry sits on the same scale, so "in profit" is a
@@ -119,16 +136,21 @@ export const STATUS_STALE_HINT = "This position's price could not be freshly fet
         }
       </span>
     } @else {
-      <span class="cell">
+      <span class="cell no-bar">
         <sb-status-indicator [status]="row().status" />
         @if (hint(); as h) {
-          <span class="hint">{{ h }}</span>
+          <span class="hint">{{ h.text }}</span>
+          @if (h.reason) {
+            <span class="reason">{{ h.reason }}</span>
+          }
         }
       </span>
     }
   `,
   styles: `
     .cell { display: inline-flex; align-items: baseline; gap: var(--space-6); }
+    /* The hint + reason cell wraps; the bar cell (dot, track, percentage) never does. */
+    .cell.no-bar { flex-wrap: wrap; }
 
     .track {
       position: relative;
@@ -173,6 +195,7 @@ export const STATUS_STALE_HINT = "This position's price could not be freshly fet
     .dot.toward_target { color: var(--pos); }
     .dot.toward_stop   { color: var(--neg); }
     .dot.neutral       { color: var(--text-muted); }
+    .dot[data-still] { animation: none; }
 
 
     /* Motion = Off steadies the dot and the fill: styles/motion.css. */
@@ -182,6 +205,7 @@ export const STATUS_STALE_HINT = "This position's price could not be freshly fet
     .end.pos { color: var(--pos); }
     .pct { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-table); color: var(--text-secondary); }
     .hint { font-size: var(--text-chip); color: var(--text-muted); }
+    .reason { font-size: var(--text-micro); color: var(--text-muted); }
     /* --warn is the design system's designated token for stale data (see
        tokens.css's own legend) -- distinct from the plain --text-faint
        "no price" hint, because this bar DID get a number, just not
@@ -198,10 +222,13 @@ export class StatusCell {
   protected readonly bar = computed(() => {
     const r = this.row();
     if (r.progress_pct === null || r.progress_band === null) return null;
+    const prev = r.price_kind === 'prev_close';
     return {
       pct: Math.max(0, Math.min(100, Math.round(r.progress_pct))),
       entry: Math.max(0, Math.min(100, r.entry_pct ?? 0)),
-      band: r.progress_band,
+      band: prev ? 'neutral' : r.progress_band,
+      still: prev,
+      title: prev ? PREV_CLOSE_LABEL : r.status_label,
       // Seconds, with a floor: a period of 0 would freeze the animation on
       // whichever frame it happened to stop at.
       blink: `${r.blink_seconds ?? 1.4}s`,
@@ -216,13 +243,13 @@ export class StatusCell {
    * still has no bar means the price lookup failed, and that is worth
    * distinguishing from a quiet trade.
    */
-  protected readonly hint = computed(() => {
+  protected readonly hint = computed((): { text: string; reason: string | null } | null => {
     const r = this.row();
     if (NO_POSITION_YET.has(r.status)) return null;
+    if (noPriceYet(r)) return { text: NO_PRICE_TEXT, reason: NO_PRICE_REASON };
     // A trailing runner has a price and a stop but no target, so the bar is
     // withheld by design -- saying "no price" there would be false.
-    if (r.bar_kind !== 'trailing') return 'no price';
-    return 'trailing';
+    return { text: r.bar_kind !== 'trailing' ? 'no price' : 'trailing', reason: null };
   });
 
   /** Signed P&L % at both ends of a trailing runner's bar, or null. */

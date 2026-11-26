@@ -1,0 +1,46 @@
+{
+  "now": "2026-11-25T15:00:00Z",
+  "base": {
+    "id": "v248wc", "origin": "plan", "status": "ACTIVE", "ticker": "DOCU", "direction": "bullish",
+    "strategy": "Support-Resistance", "horizon": "swing", "tier": "A", "badge": "VALIDATED",
+    "confidence_level": 3, "confidence_score": 0.71, "quality_score": 82,
+    "entry": 1400, "stop_loss": 1300, "target": 1600, "target2": null,
+    "banked_fraction": null, "banked_exit_price": null, "banked_r": null, "risk_reward": 2,
+    "shares": 12, "open_shares": 12, "position_value": 16800,
+    "current_price": null, "current_price_stale": false, "exit_price": null, "realized_pnl_amount": null,
+    "pnl_pct": null, "r_multiple": null, "held_hours": 23.8,
+    "opened_at": "2026-11-24T15:10:00Z", "closed_at": null, "has_note": false, "today": false,
+    "created_at": "2026-11-24T14:30:00Z", "trigger_price": null, "follow_score": null,
+    "progress_pct": null, "entry_pct": null, "progress_band": null, "blink_seconds": null,
+    "status_label": "No live price", "target_is_banked_tp1": false, "stop_kind": "risk", "bar_kind": "progress",
+    "floor_r": null, "price_r": null, "headroom_r": null, "distance_to_trigger_r": null, "bars_to_expiry": null,
+    "leg_index": 0, "leg_total": 1,
+    "price_as_of": null, "price_age_s": null, "price_refreshing": false, "price_error": null, "price_error_at": null,
+    "last_close": null, "last_close_date": null
+  },
+  "rows": {
+    "worst_case": {
+      "current_price": 1234.56, "price_kind": "prev_close", "last_close": 1234.56, "last_close_date": "2026-11-24",
+      "price_error": "YFPricesMissingError('possibly delisted; no price data found (period=1d)')",
+      "price_error_at": "2026-11-25T14:59:00Z",
+      "pnl_pct": -11.82, "r_multiple": -1.65,
+      "progress_pct": 0.0, "entry_pct": 33.3, "progress_band": "neutral", "blink_seconds": null,
+      "status_label": "At prev close (not live)"
+    },
+    "stale_live": {
+      "id": "v248sl", "ticker": "HOOD", "entry": 120, "stop_loss": 112, "target": 136, "position_value": 1440,
+      "current_price": 131.07, "price_kind": "live", "current_price_stale": true,
+      "price_as_of": "2026-11-25T14:46:00Z", "price_age_s": 840,
+      "price_error": "no quote", "price_error_at": "2026-11-25T14:59:00Z",
+      "last_close": 129.4, "last_close_date": "2026-11-24",
+      "pnl_pct": 9.23, "r_multiple": 1.38,
+      "progress_pct": 79.5, "entry_pct": 33.3, "progress_band": "toward_target", "blink_seconds": 0.9,
+      "status_label": "Trending toward target"
+    },
+    "no_price": {
+      "id": "v248np", "ticker": "CRWV", "status": "PARTIAL", "entry": 42, "stop_loss": 39, "target": 48,
+      "position_value": 504, "banked_fraction": 0.5,
+      "price_error": "no quote", "price_error_at": "2026-11-25T14:58:00Z"
+    }
+  }
+}

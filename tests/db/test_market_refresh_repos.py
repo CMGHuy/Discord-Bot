@@ -67,6 +67,23 @@ def test_clear_keeps_the_row_with_its_error_until_the_next_mark(db_conn):
     assert row["in_flight"] is True
 
 
+def test_error_marks_carry_the_error_time_and_errors_delegates(db_conn, monkeypatch):
+    m = mr.RefreshMarkRepository()
+    m.mark(["quote:AAPL", "quote:MSFT"], timeout_s=120, now=T0, conn=db_conn)
+    m.clear(["quote:AAPL"], error="no quote", now=T0 + timedelta(seconds=5), conn=db_conn)
+    m.clear(["quote:MSFT"], now=T0 + timedelta(seconds=5), conn=db_conn)
+    marks = m.error_marks(["quote:AAPL", "quote:MSFT", "quote:X"], conn=db_conn)
+    assert marks == {"quote:AAPL": ("no quote", T0 + timedelta(seconds=5))}
+    calls = []
+    real = m.error_marks
+    monkeypatch.setattr(m, "error_marks",
+                        lambda keys, *, conn=None: calls.append(list(keys)) or real(keys, conn=conn))
+    assert m.errors(["quote:AAPL"], conn=db_conn) == {"quote:AAPL": "no quote"}
+    assert calls == [["quote:AAPL"]]                        # one read, not a second query
+    m.mark(["quote:AAPL"], timeout_s=120, now=T0 + timedelta(seconds=10), conn=db_conn)
+    assert real(["quote:AAPL"], conn=db_conn) == {}
+
+
 def test_heartbeat_is_one_upserted_row(db_conn):
     h = mr.RefresherHeartbeatRepository()
     assert h.read(conn=db_conn) is None

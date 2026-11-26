@@ -967,3 +967,88 @@ describe('Trades for a viewer (v207)', () => {
     expect(viewer.labels).not.toContain('Delete');
   });
 });
+
+const FIX = JSON.parse(readFileSync(join(process.cwd(), 'src/app/testing/fixtures/v248-worst-case-row.json'), 'utf8'));
+const wc = (name: string, o: Partial<TradeRow> = {}) => ({ ...FIX.base, ...FIX.rows[name], ...o }) as TradeRow;
+
+describe('Trades - shared position cells (v248)', () => {
+  it('the NOW cell of a prev-close row is sb-position-price with a dated prev close tag', () => {
+    const el = renderPriced([wc('worst_case')]);
+    const now = el.querySelector('tbody sb-position-price')!;
+    expect(now.querySelector('.pp-value')!.textContent!.trim()).toBe('1,234.56');
+    expect(cellText(now.querySelector('.pp-tag')!)).toBe('prev close 11-24');
+  });
+
+  it('P&L % and R carry "at prev close" and read grey, not red', () => {
+    const el = renderPriced([wc('worst_case')]);
+    const figs = [...el.querySelectorAll('tbody sb-position-figure')];
+    const texts = figs.map((f) => f.querySelector('.fig')!.textContent!.trim());
+    expect(texts).toContain('−11.82%');
+    expect(texts).toContain('−1.65');
+    for (const f of figs) {
+      expect(f.querySelector('.fig-suffix')!.textContent!.trim()).toBe('at prev close');
+      expect(f.parentElement!.classList).toContain('muted');
+      expect(f.parentElement!.classList).not.toContain('neg');
+    }
+  });
+
+  it('a live row keeps its sign colour and no suffix', () => {
+    const el = renderPriced([wc('stale_live')]);
+    const figs = [...el.querySelectorAll('tbody sb-position-figure')];
+    expect(figs.map((f) => f.querySelector('.fig')!.textContent!.trim())).toEqual(expect.arrayContaining(['+9.23%', '+1.38']));
+    for (const f of figs) {
+      expect(f.querySelector('.fig-suffix')).toBeNull();
+      expect(f.parentElement!.classList).toContain('pos');
+    }
+  });
+
+  it('a held row with no price at all says "no price yet" in NOW, never a bare dash', () => {
+    const el = renderPriced([wc('no_price')]);
+    const now = el.querySelector('tbody sb-position-price')!;
+    expect(cellText(now)).toContain('no price yet');
+    expect(cellText(now)).not.toBe('—');
+  });
+
+  it('the P&L amount stays beside the figure', () => {
+    const el = renderPriced([wc('stale_live', { realized_pnl_amount: 132.84 })]);
+    expect(el.querySelector('tbody .pnl-amount')).not.toBeNull();
+  });
+});
+
+describe('Trades on a phone - refresh error in the P&L cell (v248)', () => {
+  const regular = {
+    session: 'regular' as const, last_close_at: '2026-10-29T20:00:00Z', stale_price_s: 120, stale_snapshot_s: 600,
+    heartbeat: { beat_at: null, cadence_s: 30, stalled: false },
+  };
+  const phoneRow = (o: Partial<TradeRow>) => row({ id: 'p1', status: 'ACTIVE', current_price: 100, pnl_pct: 3,
+    price_as_of: '2026-10-29T14:00:00Z', price_error: 'no quote', ...o });
+  const pnlCellText = (fixture: ComponentFixture<Trades>, status: typeof regular | { session: 'closed' } & Omit<typeof regular, 'session'> = regular): string => {
+    (TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues).status.set(status as never);
+    fixture.detectChanges();
+    const cell = tradesTable(fixture).querySelector('li.compact-row [data-col="pnl_pct"]')!;
+    return cellText(cell);
+  };
+
+  it('a current error shows "refresh failed" in the collapsed row P&L cell', () => {
+    const fixture = renderPhone([phoneRow({ price_error_at: '2026-10-29T14:05:00Z' })]);
+    expect(pnlCellText(fixture)).toContain('refresh failed: no quote');
+  });
+
+  it('an error older than the price shows none', () => {
+    const fixture = renderPhone([phoneRow({ price_error_at: '2026-10-29T13:00:00Z' })]);
+    const text = pnlCellText(fixture);
+    expect(text).not.toContain('refresh failed');
+    expect(text).not.toMatch(/ago|last trade/);
+  });
+
+  it('a fresh price with a current error shows none', () => {
+    const fixture = renderPhone([phoneRow({ price_as_of: new Date().toISOString(),
+      price_error_at: new Date(Date.now() + 1000).toISOString() })]);
+    expect(pnlCellText(fixture)).not.toContain('refresh failed');
+  });
+
+  it('a closed session with a current error shows none', () => {
+    const fixture = renderPhone([phoneRow({ price_error_at: '2026-10-29T14:05:00Z' })]);
+    expect(pnlCellText(fixture, { ...regular, session: 'closed' })).not.toContain('refresh failed');
+  });
+});

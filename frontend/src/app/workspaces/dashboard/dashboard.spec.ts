@@ -35,6 +35,7 @@ import { partialOpenTitle } from '../../ui/status-cell';
 import { DashboardStore } from '../../stores/dashboard.store';
 import { LiveValuesStore } from '../../stores/live-values.store';
 import { FakeLiveValues } from '../../testing/fake-live-values';
+import { NO_PRICE_REASON } from '../../ui/position-format';
 import { ToastService } from '../../shell/toast.service';
 import { EquityCandlesStore } from '../../stores/equity-candles.store';
 import { equityCandlesStoreStub } from '../../testing/equity-candles-store.stub';
@@ -736,7 +737,8 @@ describe('Dashboard price age (v201)', () => {
   it('the open P&L cell renders through sb-market-value with its age', async () => {
     const asOf = new Date(Date.now() - 75_000).toISOString();
     const el = await withActiveRow({ price_as_of: asOf });
-    const cell = el.querySelector('sb-positions-table tbody sb-market-value');
+    // v248: NOW is now sb-position-price (its own sb-market-value), so find the P&L cell's.
+    const cell = el.querySelector('sb-positions-table tbody sb-position-figure')!.closest('sb-market-value');
     expect(cell).not.toBeNull();
     expect(cell!.querySelector('.mv-age')?.textContent?.trim()).toBe('1 min ago');
     expect(el.querySelector('sb-age-hint')).toBeNull();
@@ -744,7 +746,7 @@ describe('Dashboard price age (v201)', () => {
 
   it('a closed row\'s final P&L carries no age or refresh mark', async () => {
     const el = await withActiveRow({ status: 'CLOSED', pnl_pct: 2.5, price_as_of: null, price_refreshing: false });
-    expect(el.querySelector('sb-positions-table tbody sb-market-value')).toBeNull();
+    expect(el.querySelector('sb-positions-table tbody sb-position-figure')!.closest('sb-market-value')).toBeNull();
     expect(el.querySelector('sb-positions-table tbody .mv-age')).toBeNull();
   });
 
@@ -1356,5 +1358,79 @@ describe('Dashboard boot /trades calls (v217 V217-1)', () => {
     expect(recent).toHaveLength(20);
     expect(recent.some((r) => r.id === 'old-active')).toBe(false);
     expect(el.querySelector('sb-recent-activity')?.textContent ?? '').not.toContain('OLDPOS');
+  });
+});
+
+describe('Dashboard - shared position cells (v248)', () => {
+  const FIX = JSON.parse(readFileSync(join(process.cwd(), 'src/app/testing/fixtures/v248-worst-case-row.json'), 'utf8'));
+  const wc = (name: string, o: Partial<TradeRow> = {}) => ({ ...FIX.base, ...FIX.rows[name], status: 'ACTIVE', ...o }) as TradeRow;
+  const regular = { session: 'regular', last_close_at: '2026-11-24T21:00:00Z', stale_price_s: 120, stale_snapshot_s: 600,
+    heartbeat: { beat_at: null, cadence_s: 30, stalled: false } } as const;
+
+  async function withActive(rows: TradeRow[]) {
+    const { fixture, backend } = seed();
+    (TestBed.inject(LiveValuesStore) as unknown as FakeLiveValues).status.set({ ...regular });
+    fixture.detectChanges();
+    for (const req of backend.match((r) => r.url === '/api/v1/trades')) {
+      const active = req.request.params.get('status') === 'ACTIVE';
+      req.flush({ items: active ? rows : [], total: active ? rows.length : 0, page: 1, per_page: 20 });
+    }
+    backend.expectOne('/api/v1/dashboard?mode=today').flush(payload({ lifecycle: { ACTIVE: rows.length } as never }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+  const cellOf = (el: Element) => el.closest('td, [role="cell"]')!;
+  const figs = (el: HTMLElement) => [...el.querySelectorAll('sb-positions-table tbody sb-position-figure')];
+
+  it('the NOW column is sb-position-price with the dated prev close tag', async () => {
+    const el = await withActive([wc('worst_case')]);
+    const now = el.querySelector('sb-positions-table tbody sb-position-price')!;
+    expect(now.querySelector('.pp-tag')!.textContent!.trim()).toBe('prev close 11-24');
+  });
+
+  it('P&L % and R read "at prev close" in grey on a prev-close row', async () => {
+    const el = await withActive([wc('worst_case')]);
+    expect(figs(el).map((f) => f.querySelector('.fig')!.textContent!.trim())).toEqual(expect.arrayContaining(['−11.82%', '−1.65']));
+    for (const f of figs(el)) {
+      expect(f.querySelector('.fig-suffix')!.textContent!.trim()).toBe('at prev close');
+      expect(f.parentElement!.classList).toContain('muted');
+    }
+  });
+
+  it("a prev-close row's current error shows in its P&L cell, so the phone row carries it", async () => {
+    const el = await withActive([wc('worst_case')]);
+    const pnl = figs(el).find((f) => f.querySelector('.fig')!.textContent!.includes('%'))!;
+    expect(cellOf(pnl).querySelector('.mv-err')?.textContent).toContain('refresh failed');
+  });
+
+  it("a stale live row's P&L sits in sb-market-value and shows the newer error", async () => {
+    const el = await withActive([wc('stale_live')]);
+    const pnl = figs(el).find((f) => f.querySelector('.fig')!.textContent!.includes('%'))!;
+    expect(pnl.closest('sb-market-value')).not.toBeNull();
+    expect(cellOf(pnl).querySelector('.mv-err')).not.toBeNull();
+    expect(pnl.parentElement!.classList).toContain('pos');
+  });
+
+  it('an error older than the price is not shown', async () => {
+    const asOf = new Date(Date.now() - 30_000).toISOString();
+    const el = await withActive([wc('stale_live', { price_as_of: asOf, price_age_s: 30, current_price_stale: false,
+      price_error_at: new Date(Date.now() - 600_000).toISOString() })]);
+    expect(el.querySelector('sb-positions-table tbody .mv-err')).toBeNull();
+  });
+
+  it('a held row with no price at all says "no price yet" in NOW and in STATUS, with the reason', async () => {
+    const el = await withActive([wc('no_price')]);
+    expect(el.querySelector('sb-positions-table tbody sb-position-price .pp-none')!.textContent!.trim()).toBe('no price yet');
+    const status = el.querySelector('sb-positions-table tbody sb-status-cell')!;
+    expect(status.querySelector('.hint')!.textContent!.trim()).toBe('no price yet');
+    expect(status.querySelector('.reason')!.textContent!.trim()).toBe(NO_PRICE_REASON);
+  });
+
+  it('a PENDING row keeps its projected P&L and R, with no suffix', async () => {
+    const el = await withActive([wc('stale_live', { status: 'PENDING', pnl_pct: null, r_multiple: null, price_kind: undefined })]);
+    expect(el.querySelector('sb-positions-table tbody .pnl-plan sb-market-value')).not.toBeNull();
+    expect(el.querySelector('sb-positions-table tbody .fig-suffix')).toBeNull();
+    expect(el.querySelector('sb-positions-table tbody .expected')).not.toBeNull();
   });
 });

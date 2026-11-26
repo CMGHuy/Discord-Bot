@@ -9,6 +9,8 @@ SPA's spinners always stop. The first marks of a cycle raise one ``market``
 NOTIFY (the partner wants the spinner for refreshes the refresher started on
 its own); ``loop.run_cycle`` raises the second once values have landed.
 
+v248: held tickers go first in a batch of their own with the full yfinance cap whatever a scan says -- all of them on the first cycle after start, later only those without a live price this session (`market_values.session_priced`); the rest keeps the split below with what is left of the cap.
+
 ``fx_step`` resolves quote-currency codes for every symbol it sees (and, on a
 full cycle, every ticker ever traded) and refreshes the pair frames.
 ``fx_snap_step`` (v205) writes the day's FX rate rows from 08:00 Berlin.
@@ -21,6 +23,7 @@ from typing import TYPE_CHECKING
 import sqlalchemy as sa
 
 from swingbot import config
+from swingbot.admin import market_values
 from swingbot.core.db import engine, notify
 from swingbot.core.db.repositories.market_refresh import quote_currency_repo, refresh_mark_repo
 from swingbot.core.infra.swallowed import swallowed
@@ -35,6 +38,8 @@ log = logging.getLogger(__name__)
 
 NO_QUOTE = "no quote"
 NO_QUOTE_DURING_SCAN = "no quote (yfinance fallback skipped during a scan)"
+#: v248 § 3: False until the first held-first fetch of this process returned.
+_held_primed = False
 
 
 def _describe(exc: BaseException) -> str:
@@ -84,11 +89,37 @@ def quote_step(ctx: "CycleContext") -> None:
         _refresh_index(ctx, list(ctx.symbols.index))
 
 
+def _priority(ctx: "CycleContext", wanted: list[str]) -> list[str]:
+    held_set = set(ctx.symbols.held)
+    held = [s for s in wanted if s in held_set]
+    if not held or not _held_primed:
+        return held
+    try:
+        door = market_values.read_quotes(held, enqueue=False, now=ctx.now)
+    except Exception as exc:  # noqa: BLE001 - unreadable: every held ticker goes first
+        swallowed(log, "ops.refresher.held_quotes", exc, level=logging.DEBUG)
+        return held
+    return [s for s in held if not market_values.session_priced(door.get(s), ctx.now)]
+
+
 def _fetch_batches(ctx: "CycleContext", wanted: list[str]) -> dict:
+    """v248: the held-first batch with the whole yfinance budget, then the rest in
+    today's order with what is left of it."""
+    global _held_primed
+    cap = int(config.ADMIN_REFRESH_YF_FALLBACK_CAP)
+    first = _priority(ctx, wanted)
+    got = data.refresh_quote_batch(first, yf_limit=cap) if first else {}
+    _held_primed = True
+    rest = [s for s in wanted if s not in set(first)]
+    if rest:
+        got.update(_ordered_batches(ctx, rest, max(0, cap - len(first))))
+    return got
+
+
+def _ordered_batches(ctx: "CycleContext", wanted: list[str], cap: int) -> dict:
     """Outside a scan: one batch with the whole yfinance budget. During a scan the
     watchlist gets no yfinance, but symbols with an open trade or plan keep the
     budget -- an ACTIVE position must not sit unpriced until the scan ends."""
-    cap = int(config.ADMIN_REFRESH_YF_FALLBACK_CAP)
     if not ctx.scan_running:
         return data.refresh_quote_batch(wanted, yf_limit=cap)
     held_set = set(ctx.symbols.held)

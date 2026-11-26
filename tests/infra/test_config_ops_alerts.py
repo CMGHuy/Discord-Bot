@@ -4,7 +4,8 @@ from pathlib import Path
 
 from swingbot import config
 
-_KEYS = ("PROVIDER_FALLBACK_ALERT_PCT", "EMPTY_SYMBOLS_ALERT_PCT", "OPS_ALERT_WEBHOOK_URL")
+_KEYS = ("PROVIDER_FALLBACK_ALERT_PCT", "EMPTY_SYMBOLS_ALERT_PCT", "OPS_ALERT_WEBHOOK_URL",
+         "HELD_PRICE_STALE_ALERT_MIN")
 
 
 def _fields() -> dict:
@@ -43,3 +44,17 @@ def test_listed_in_env_example():
     text = (Path(__file__).resolve().parents[2] / ".env.example").read_text(encoding="utf-8")
     for key in _KEYS:
         assert re.search(rf"^{key}=", text, re.MULTILINE), key
+
+
+def test_held_price_threshold_is_hot_whole_minutes():
+    f = _fields()["HELD_PRICE_STALE_ALERT_MIN"]
+    assert (f.type, f.default, f.min, f.max) == ("number", "10", 1, 120)
+    assert f.hot_reloadable is True and f.sensitive is False
+    assert config._cast(f, "15") == 15
+    assert config.HELD_PRICE_STALE_ALERT_MIN == 10
+
+
+def test_held_price_help_names_both_stale_thresholds():
+    # spec 1c: the panel's red (ADMIN_STALE_PRICE_REGULAR_S) comes first, Discord after this one.
+    text = _fields()["HELD_PRICE_STALE_ALERT_MIN"].help
+    assert "ADMIN_STALE_PRICE_REGULAR_S" in text and "backoff" in text

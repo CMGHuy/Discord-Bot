@@ -187,12 +187,16 @@ class RefreshMarkRepository(Repository):
         with self._tx(conn) as c:
             return {r.key for r in c.execute(stmt)}
 
-    def errors(self, keys, *, conn=None) -> dict[str, str]:
+    def error_marks(self, keys, *, conn=None) -> dict[str, tuple[str, datetime | None]]:
+        """{key: (error text, error_at)} for keys whose last refresh failed (v248)."""
         t = self.table
-        stmt = sa.select(t.c.key, t.c.error).where(t.c.key.in_(list(keys)),
-                                                   t.c.error.is_not(None))
+        stmt = sa.select(t.c.key, t.c.error, t.c.error_at).where(
+            t.c.key.in_(list(keys)), t.c.error.is_not(None))
         with self._tx(conn) as c:
-            return {r.key: r.error for r in c.execute(stmt)}
+            return {r.key: (r.error, r.error_at) for r in c.execute(stmt)}
+
+    def errors(self, keys, *, conn=None) -> dict[str, str]:
+        return {key: text for key, (text, _at) in self.error_marks(keys, conn=conn).items()}
 
     def changed_since(self, since: datetime, *, now: datetime | None = None,
                       conn=None) -> list[dict]:

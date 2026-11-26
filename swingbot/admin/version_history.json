@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-26 09:48:21 UTC",
+  "generated_at": "2026-11-26 13:36:02 UTC",
   "basis": "Versions observed together in VERSION.json. Both containers build from one image, so a pair here shipped as a unit. This is a record of what was released together, not a statement that the pair was tested.",
   "components": [
     "ui",
     "bot"
   ],
   "current": {
-    "ui": "1.50.0",
-    "bot": "2.20.1"
+    "ui": "1.51.0",
+    "bot": "2.20.2"
   },
   "releases": [
     {
@@ -2903,6 +2903,20 @@
         "bot": "2.20.1"
       },
       "changed": [
+        "bot"
+      ]
+    },
+    {
+      "date": "2026-11-26",
+      "last_seen": "2026-11-26",
+      "commit": "fffd1802",
+      "subject": "release(bot): 2.20.2 -- v248 open-positions price integrity: held rows always priced (prev close), session-aware ages, yfinance backoff, held-price ops notice, short-interest pool fix; ui 1.51.0 shared price cells",
+      "versions": {
+        "ui": "1.51.0",
+        "bot": "2.20.2"
+      },
+      "changed": [
+        "ui",
         "bot"
       ]
     }

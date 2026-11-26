@@ -4,6 +4,7 @@ import pytest
 
 from swingbot.core.marketdata import data as data_mod
 from swingbot.core.marketdata.data import FETCH_RETRY_ATTEMPTS
+from swingbot.core.marketdata.yf_backoff import BackoffBatch
 from tests.conftest import make_ohlcv
 
 
@@ -355,3 +356,74 @@ def test_fresh_only_single_price_uses_a_fresh_display_cache(monkeypatch):
 
     monkeypatch.setattr(data_mod.yf, "Ticker", Ticker)
     assert data_mod.get_current_price("FRESH-ONLY", allow_stale=False) == 99.0
+
+
+# -- v248 § 4: the yfinance backoff at the shared quote seam ------------------------
+
+
+@pytest.fixture
+def backoff(monkeypatch):
+    """A fake yf_backoff: `skip` holds the backed-off tickers; calls are recorded."""
+    seen = {"partition": [], "record": [], "skip": set()}
+
+    def partition(tickers, now=None):
+        tickers = list(tickers)
+        seen["partition"].append(tickers)
+        return BackoffBatch([t for t in tickers if t not in seen["skip"]],
+                            [t for t in tickers if t in seen["skip"]], {})
+
+    def record(batch, got, now=None):
+        seen["record"].append((list(batch.fetch), sorted(got)))
+    monkeypatch.setattr(data_mod.yf_backoff, "partition", partition)
+    monkeypatch.setattr(data_mod.yf_backoff, "record", record)
+    return seen
+
+
+def _minute_frame(prices: dict) -> pd.DataFrame:
+    idx = pd.DatetimeIndex(["2026-11-24 10:59"]).tz_localize("America/New_York")
+    cols = pd.MultiIndex.from_product([list(prices), ["Close"]])
+    return pd.DataFrame([list(prices.values())], index=idx, columns=cols)
+
+
+def test_yf_quote_details_never_downloads_a_backed_off_ticker(monkeypatch, backoff):
+    backoff["skip"].add("DOCU")
+    asked = []
+    monkeypatch.setattr(data_mod.yf_safe, "download",
+                        lambda symbols, **kw: asked.append(symbols) or _minute_frame({"AAPL": 190.5}))
+    got = data_mod._yf_quote_details(["AAPL", "DOCU", "MSFT"])
+    assert asked == ["AAPL MSFT"] and set(got) == {"AAPL"}
+    assert backoff["record"] == [(["AAPL", "MSFT"], ["AAPL"])]          # MSFT absent: a miss
+
+
+def test_yf_quote_details_with_every_ticker_backed_off_makes_no_call(monkeypatch, backoff):
+    backoff["skip"].add("DOCU")
+    asked = []
+    monkeypatch.setattr(data_mod.yf_safe, "download", lambda symbols, **kw: asked.append(symbols))
+    assert data_mod._yf_quote_details(["DOCU"]) == {}
+    assert asked == [] and backoff["record"] == []
+
+
+def test_an_empty_frame_is_a_miss_for_every_asked_ticker(monkeypatch, backoff):
+    monkeypatch.setattr(data_mod.yf_safe, "download", lambda *a, **k: pd.DataFrame())
+    assert data_mod._yf_quote_details(["DOCU", "MSFT"]) == {}
+    assert backoff["record"] == [(["DOCU", "MSFT"], [])]
+
+
+@pytest.mark.parametrize("exc", [RuntimeError("yahoo 500"), "busy"])
+def test_a_failed_download_records_nothing(monkeypatch, backoff, exc):
+    err = data_mod.yf_safe.DownloadBusy("lock") if exc == "busy" else exc
+
+    def boom(*a, **k):
+        raise err
+    monkeypatch.setattr(data_mod.yf_safe, "download", boom)
+    assert data_mod._yf_quote_details(["DOCU"]) == {}
+    assert backoff["record"] == []
+
+
+def test_budget_deferred_still_propagates_and_records_nothing(monkeypatch, backoff):
+    def deferred(*a, **k):
+        raise data_mod.yf_safe.BudgetDeferred("tier 5")
+    monkeypatch.setattr(data_mod.yf_safe, "download", deferred)
+    with pytest.raises(data_mod.yf_safe.BudgetDeferred):
+        data_mod._yf_quote_details(["DOCU"])
+    assert backoff["record"] == []

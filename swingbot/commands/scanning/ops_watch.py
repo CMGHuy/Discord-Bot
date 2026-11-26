@@ -15,13 +15,21 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+from dataclasses import dataclass
+from typing import Sequence
 
+import sqlalchemy as sa
 from discord.ext import tasks
 
 from swingbot import config
 from swingbot.bot_core import SESSION_TZ, in_session
 from swingbot.core import presentation as ui
+from swingbot.core.db.engine import DatabaseUnavailable
+from swingbot.core.db.repositories.market_shared import market_shared_repo
+from swingbot.core.db.side_engine import side_connection
 from swingbot.core.infra.swallowed import swallowed
+from swingbot.core.marketdata.shared import admin_refresh
+from swingbot.core.market import session
 from swingbot.core.scanning import telemetry
 
 from . import loop_guard, notices, runstate
@@ -93,6 +101,93 @@ def provider_verdict(row: dict | None, *, fallback_pct: float, empty_pct: float,
     if breach == alert_active:
         return None
     return "alert" if breach else "recover"
+
+
+# --- v248 § 5: held-price verdict and lines -----------------------------------
+
+#: 30 min before the open, when resting orders are placed (spec § 5).
+PRE_OPEN_AT = dt.time(9, 0)
+ERROR_CHARS = 60
+
+_REGULAR = session.SESSION_REGULAR
+
+
+@dataclass(frozen=True)
+class HeldPriceItem:
+    """One held ticker as the notice shows it. ``age_s`` is the live trade's
+    age, ``None`` when there is no live trade."""
+    symbol: str
+    age_s: float | None
+    error: str | None
+    prev_close: bool
+    no_price: bool
+
+
+def held_price_verdict(*, session: str, age_s: float | None, has_last_close: bool,
+                       uptime_s: float, threshold_min: int, notified: bool,
+                       recovered: bool, pre_open: bool) -> str | None:
+    """"alert", "recover" or None for one held ticker (spec § 5).
+
+    Three readings: a stale live trade, a ticker sitting on its previous close
+    in the regular session, and no price at all (paged on first sight; before
+    the open only in the pre-open window). ``session`` is
+    ``session.session_state(now)``. Once per ticker per day, plus one recovery.
+    """
+    threshold_s = threshold_min * 60
+    fresh = age_s is not None and age_s <= threshold_s
+    if notified:
+        return "recover" if fresh and not recovered else None
+    if age_s is None and not has_last_close:
+        return "alert" if session == _REGULAR or pre_open else None
+    if session != _REGULAR or uptime_s < threshold_s:
+        return None
+    return None if fresh else "alert"
+
+
+def in_pre_open_window(now: dt.datetime) -> bool:
+    """True from 09:00 ET up to the 09:30 open on an NYSE trading day."""
+    et = session.now_et(now)
+    if et.weekday() >= 5 or et.date() in session.NYSE_HOLIDAYS:
+        return False
+    return PRE_OPEN_AT <= et.time() < session.RTH_OPEN
+
+
+def _age_words(age_s: float) -> str:
+    seconds = int(age_s)
+    if seconds < 60:
+        return f"{seconds} s ago"
+    if seconds < 120 * 60:
+        return f"{seconds // 60} min ago"
+    if seconds < 48 * 3600:
+        return f"{seconds // 3600} h ago"
+    return f"{seconds // 86400} d ago"
+
+
+def _short_error(error: str) -> str:
+    text = " ".join(error.split())
+    return text if len(text) <= ERROR_CHARS else text[:ERROR_CHARS - 1] + "…"
+
+
+def _held_price_line(item: HeldPriceItem) -> str:
+    if item.age_s is not None:
+        parts = [f"• {item.symbol}", f"last trade {_age_words(item.age_s)}"]
+    else:
+        parts = [f"• {item.symbol}", "no live trade"]
+    if item.prev_close:
+        parts.append("prev close")
+    elif item.no_price:
+        parts.append("no price at all")
+    if item.error:
+        parts.append(_short_error(item.error))
+    return " · ".join(parts)
+
+
+def held_price_lines(items: Sequence[HeldPriceItem], *, limit: int = 10) -> list[str]:
+    """One phone-readable line per ticker, the rest folded into ``+N more``."""
+    lines = [_held_price_line(item) for item in items[:limit]]
+    if len(items) > limit:
+        lines.append(f"+{len(items) - limit} more")
+    return lines
 
 
 # --- v148 OH18: the sends, the watchdog loop and the provider check -----------
@@ -228,4 +323,142 @@ async def check_provider_health(row: dict | None = None) -> str | None:
         return None
 
 
+# --- v248 § 5: the held-price watch loop -----------------------------------------------
+
+HELD_PRICE_KIND = "ops_held_price"
+_STORE_BUSY = (DatabaseUnavailable, sa.exc.TimeoutError)
+
+
+def held_notice_key(symbol: str, day: str) -> str:
+    return f"{HELD_PRICE_KIND}:{symbol}:{day}"
+
+
+def _held_tickers() -> list[str]:
+    from swingbot.core.db.repositories import trades as trades_mod
+    trades = trades_mod.trades_repo().open_trades()
+    return sorted({str(t["ticker"]).upper() for t in trades if t.get("ticker")})
+
+
+@dataclass(frozen=True)
+class _HeldView:
+    quotes: dict
+    closes: dict
+    marks: dict
+
+
+def _read_held_view(symbols: list[str], now: dt.datetime) -> _HeldView | None:
+    from swingbot.admin import market_values
+    day = session.session_date(now)
+    try:
+        quotes = market_values.read_quotes(symbols, enqueue=False, now=now)
+        blind = [s for s in symbols if s not in quotes or quotes[s].price is None]
+        closes = market_values.last_close_fields(blind)
+        with side_connection() as conn:
+            marks = market_shared_repo().read_entries(
+                [held_notice_key(s, day) for s in symbols], conn=conn)
+    except _STORE_BUSY as exc:
+        swallowed(log, "ops.held_price_watch.busy", exc,
+                  "held price watch: store busy, tick skipped", level=logging.INFO)
+        return None
+    return _HeldView(quotes, closes, marks)
+
+
+def _held_item(symbol: str, view: _HeldView) -> HeldPriceItem:
+    quote = view.quotes.get(symbol)
+    live = quote is not None and quote.price is not None
+    return HeldPriceItem(symbol, age_s=quote.age_s if live else None,
+                         error=quote.error if quote else None,
+                         prev_close=not live and symbol in view.closes,
+                         no_price=not live and symbol not in view.closes)
+
+
+def _judge(symbols, view: _HeldView, now, state, pre_open) -> dict[str, list[HeldPriceItem]]:
+    day = session.session_date(now)
+    uptime_s = (now - BOOTED_AT).total_seconds()
+    out: dict[str, list[HeldPriceItem]] = {"alert": [], "recover": []}
+    for symbol in symbols:
+        item = _held_item(symbol, view)
+        key = held_notice_key(symbol, day)
+        value = (view.marks.get(key) or {}).get("value") or {}
+        verdict = held_price_verdict(
+            session=state, age_s=item.age_s, has_last_close=symbol in view.closes,
+            uptime_s=uptime_s, threshold_min=int(config.HELD_PRICE_STALE_ALERT_MIN),
+            notified=key in view.marks, recovered=bool(value.get("recovered_at")),
+            pre_open=pre_open)
+        if verdict in out:
+            out[verdict].append(item)
+    return out
+
+
+def _mark_value(verdict: str, stored: dict, now: dt.datetime) -> dict:
+    if verdict == "alert":
+        return {"notified_at": now.isoformat(), "recovered_at": None}
+    return {"notified_at": stored.get("notified_at") or now.isoformat(),
+            "recovered_at": now.isoformat()}
+
+
+def _mark_held(items, verdict: str, view: _HeldView, now: dt.datetime) -> None:
+    day = session.session_date(now)
+    rows = []
+    for item in items:
+        key = held_notice_key(item.symbol, day)
+        stored = (view.marks.get(key) or {}).get("value") or {}
+        rows.append({"key": key, "kind": HELD_PRICE_KIND, "symbol": item.symbol,
+                     "fetched_at": now, "source": "ops_watch",
+                     "value": _mark_value(verdict, stored, now)})
+    try:
+        with side_connection() as conn:
+            market_shared_repo().write_entries(rows, conn=conn)
+    except Exception as exc:
+        swallowed(log, "ops.held_price_watch.write", exc,
+                  "held price watch: dedupe write failed; the next tick may repeat the notice",
+                  level=logging.WARNING)
+
+
+async def _post_verdict(verdict: str, items, view: _HeldView, now: dt.datetime) -> list[str]:
+    embed = notices.held_price_embed(held_price_lines(items), recovery=verdict == "recover")
+    if not await _post(embed):
+        log.warning("held price watch: %s verdict but no ops channel configured; not posted",
+                    verdict)
+        return []
+    await asyncio.to_thread(_mark_held, items, verdict, view, now)
+    symbols = [i.symbol for i in items]
+    log.log(logging.WARNING if verdict == "alert" else logging.INFO,
+            "held price watch: %s %s", verdict, ", ".join(symbols))
+    return symbols
+
+
+async def held_price_tick(now: dt.datetime | None = None) -> dict[str, list[str]]:
+    """v248 § 5: one pass over the held tickers' cached quotes. Read-only: never
+    enqueues a fetch. Returns the symbols actually posted, per verdict."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    out: dict[str, list[str]] = {"alert": [], "recover": []}
+    pre_open = in_pre_open_window(now)
+    state = session.session_state(now)
+    if not admin_refresh.refresher_on() or (state != _REGULAR and not pre_open):
+        return out
+    symbols = await asyncio.to_thread(_held_tickers)
+    if not symbols:
+        return out
+    view = await asyncio.to_thread(_read_held_view, symbols, now)
+    if view is None:
+        return out
+    for verdict, items in _judge(symbols, view, now, state, pre_open).items():
+        if items:
+            out[verdict] = await _post_verdict(verdict, items, view, now)
+    return out
+
+
+@tasks.loop(minutes=2)
+async def held_price_watch():
+    """v248 § 5: a held position's live price stale or missing in the regular
+    session, paged once per ticker per session day. Never raises."""
+    try:
+        await held_price_tick()
+    except Exception as exc:
+        swallowed(log, "ops.held_price_watch", exc, "held price watch tick failed",
+                  level=logging.ERROR, exc_info=True)
+
+
 loop_guard.restart_on_error(scan_watchdog, "scan_watchdog")
+loop_guard.restart_on_error(held_price_watch, "held_price_watch")

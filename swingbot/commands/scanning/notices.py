@@ -260,3 +260,17 @@ def provider_recovered_embed(row: dict):
     return system_embed(Kind.HEALTH_RECOVERED, "market-data provider healthy again",
                         f"{fallback}\n{empty}\n{_old_print_line(row)}\n"
                         f"• Scan at: {_value(row.get('at'))}")
+
+
+_HELD_PRICE_FOOTNOTE = ("No trade is changed: the panel shows the last trade or the previous "
+                        "close. Check the refresher and the Alpaca feed.")
+
+
+def held_price_embed(lines: list[str], *, recovery: bool):
+    """v248 § 5: held tickers whose live price is stale or missing in the session,
+    or their one recovery. `lines` come from ops_watch.held_price_lines."""
+    body = "\n".join(lines)
+    if recovery:
+        return system_embed(Kind.HEALTH_RECOVERED, "held position price live again", body)
+    return system_embed(Kind.HEALTH_ALERT, "held position price stale",
+                        f"{body}\n{_HELD_PRICE_FOOTNOTE}")

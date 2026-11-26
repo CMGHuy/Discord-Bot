@@ -48,7 +48,7 @@ def test_since_lists_changed_quotes_and_in_flight_marks(on_client, market, chang
     by_symbol = {q["symbol"]: q for q in body["quotes"]}
     assert by_symbol["MSFT"]["price"] == 110.0 and by_symbol["MSFT"]["refreshing"] is False
     assert by_symbol["NVDA"]["price"] is None and by_symbol["NVDA"]["refreshing"] is True
-    assert set(by_symbol["MSFT"]) == {"symbol", "price", "as_of", "refreshing", "error"}
+    assert set(by_symbol["MSFT"]) == {"symbol", "price", "as_of", "refreshing", "error", "error_at"}
     assert market.queue.pending == {}                       # the updates read never enqueues
     assert network_forbidden == []
 
@@ -101,3 +101,14 @@ def test_health_reports_off_when_the_flag_is_off(on_client, market, monkeypatch)
 
 def test_no_heartbeat_row_reads_stalled(on_client, market):
     assert on_client.get("/api/v1/system/health").get_json()["refresher"]["status"] == "stalled"
+
+
+def test_quote_item_carries_the_error_time(on_client, market, changes):
+    market.quote("DOCU", 80.0, age_s=50_000)
+    market.marks.errors_by_key["quote:DOCU"] = ("no quote", NOW)
+    changes.append({"key": "quote:DOCU:", "symbol": "DOCU", "fetched_at": NOW,
+                    "doc": {}, "updated_at": NOW})
+    since = (NOW - timedelta(minutes=1)).isoformat()
+    body = on_client.get("/api/v1/market/updates", query_string={"since": since}).get_json()
+    [item] = [q for q in body["quotes"] if q["symbol"] == "DOCU"]
+    assert item["error"] == "no quote" and item["error_at"] == NOW.isoformat()

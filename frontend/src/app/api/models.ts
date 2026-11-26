@@ -50,6 +50,8 @@ export interface QuoteUpdate {
   as_of: string | null;
   refreshing: boolean;
   error: string | null;
+  /** v248: when the error was recorded (ISO UTC), null when none; compared with the price's as_of. */
+  error_at: string | null;
 }
 
 export interface SnapshotUpdate {
@@ -75,6 +77,9 @@ export interface MarketUpdates {
   status: MarketStatus;
 }
 
+/** v248: prev_close = a held row priced from the last daily close (no live trade yet); absent means live. */
+export type PriceKind = 'live' | 'prev_close';
+
 /** The price fields a row carries. All optional so an older server and every
  *  existing literal still type-check. */
 export interface RowQuoteFields {
@@ -83,6 +88,10 @@ export interface RowQuoteFields {
   price_age_s?: number | null;
   price_refreshing?: boolean;
   price_error?: string | null;
+  /** v248: when `price_error` was recorded. */
+  price_error_at?: string | null;
+  /** v248: sent on held door rows only. */
+  price_kind?: PriceKind;
   /** Sent only while `current_price` is null: the last cached daily close and its
    *  bar date (YYYY-MM-DD). Shown greyed as a close, never as a live price. */
   last_close?: number | null;

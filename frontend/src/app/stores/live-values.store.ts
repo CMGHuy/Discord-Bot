@@ -3,6 +3,7 @@ import { DestroyRef, Injectable, Signal, computed, effect, inject, signal, untra
 import { ApiClient } from '../api/api-client';
 import { EventStream, MARKET_DATA_MIN_INTERVAL_MS } from '../api/event-stream';
 import { MarketStatus, MarketUpdates, QuoteUpdate, RowQuoteFields, SnapshotUpdate } from '../api/models';
+import { ProgressFields, ProgressInput, hasPosition, liveR, livePnl, positionProgress } from '../ui/position-progress';
 
 /** How often status is re-read when no read went out in that time: the only
  *  thing that notices a dead refresher, which raises no events. A tab that
@@ -21,16 +22,47 @@ function isNewer(row: RowQuoteFields, update: QuoteUpdate): boolean {
   return !row.price_as_of || Date.parse(update.as_of) > Date.parse(row.price_as_of);
 }
 
-/** The fields an update would change on a row, empty when it changes none. */
-function quotePatch(row: RowQuoteFields, update: QuoteUpdate): RowQuoteFields {
-  const patch: RowQuoteFields = {};
-  if (isNewer(row, update)) {
-    if (row.current_price !== update.price) patch.current_price = update.price;
-    if (row.price_as_of !== update.as_of) patch.price_as_of = update.as_of;
-    if (row.price_age_s !== null && row.price_age_s !== undefined) patch.price_age_s = null;
+type PositionRow = RowQuoteFields & ProgressInput & ProgressFields & { r_multiple?: number | null; pnl_pct?: number | null };
+
+/** A row that carries the server's status bar: a trade row. Watchlist, tape and ticker rows never do. */
+function isPositionRow(row: RowQuoteFields): row is PositionRow {
+  return 'progress_pct' in row && 'status' in row;
+}
+
+/**
+ * v248 § 1a: what a trade row shows, recomputed from the live price that just
+ * replaced its own -- the bar, and R and P&L % where `_attach_unrealized_pnl`
+ * would set them. A prev-close row becomes live. Only changed keys come back.
+ */
+function positionPatch(row: PositionRow, price: number): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...positionProgress(row, price, 'live') };
+  if (hasPosition(row.status) && row.entry != null) {
+    next['r_multiple'] = liveR(row, price);
+    next['pnl_pct'] = livePnl(row, price);
   }
+  if (row.price_kind === 'prev_close') next['price_kind'] = 'live';
+  const current = row as unknown as Record<string, unknown>;
+  return Object.fromEntries(Object.entries(next).filter(([key, value]) => current[key] !== value));
+}
+
+/** The price half of a patch: only a strictly newer price, plus a trade row's recompute. */
+function pricePatch(row: RowQuoteFields, update: QuoteUpdate): RowQuoteFields & Record<string, unknown> {
+  const patch: RowQuoteFields & Record<string, unknown> = {};
+  if (!isNewer(row, update)) return patch;
+  if (row.current_price !== update.price) patch.current_price = update.price;
+  if (row.price_as_of !== update.as_of) patch.price_as_of = update.as_of;
+  if (row.price_age_s !== null && row.price_age_s !== undefined) patch.price_age_s = null;
+  if (isPositionRow(row)) Object.assign(patch, positionPatch(row, update.price as number));
+  return patch;
+}
+
+/** The fields an update would change on a row, empty when it changes none. */
+function quotePatch(row: RowQuoteFields, update: QuoteUpdate): RowQuoteFields & Record<string, unknown> {
+  const patch = pricePatch(row, update);
   if ((row.price_refreshing ?? false) !== update.refreshing) patch.price_refreshing = update.refreshing;
   if ((row.price_error ?? null) !== update.error) patch.price_error = update.error;
+  const errorAt = update.error_at ?? null;
+  if ((row.price_error_at ?? null) !== errorAt) patch.price_error_at = errorAt;
   return patch;
 }
 
@@ -38,12 +70,14 @@ function quotePatch(row: RowQuoteFields, update: QuoteUpdate): RowQuoteFields {
  * Lay a live quote over a row. Pure: the row itself comes back when nothing
  * would change, so a computed that maps many rows keeps the unchanged ones
  * referentially equal. An older update never replaces a newer price; the
- * refreshing and error marks are always the update's.
+ * refreshing and error marks are always the update's. v248: on a trade row a
+ * newer price also recomputes the status bar, R and P&L % (`ui/position-progress.ts`)
+ * and turns a prev-close row live; a priceless update never touches them.
  */
 export function overlayQuote<T extends RowQuoteFields>(row: T, update: QuoteUpdate | null): T {
   if (update === null) return row;
   const patch = quotePatch(row, update);
-  return Object.keys(patch).length === 0 ? row : { ...row, ...patch };
+  return (Object.keys(patch).length === 0 ? row : { ...row, ...patch }) as T;
 }
 
 /**
@@ -122,7 +156,7 @@ export class LiveValuesStore {
   private resolve(sym: string): QuoteUpdate | null {
     const stored = this.quotes()[sym] ?? null;
     if (this.local()[localKey(sym)] === undefined) return stored;
-    return { ...(stored ?? { symbol: sym, price: null, as_of: null, error: null }), refreshing: true };
+    return { ...(stored ?? { symbol: sym, price: null, as_of: null, error: null, error_at: null }), refreshing: true };
   }
 
   private resolveSnapshot(key: string): SnapshotUpdate | null {
