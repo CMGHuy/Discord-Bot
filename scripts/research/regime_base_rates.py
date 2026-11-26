@@ -12,11 +12,13 @@ Checkpointed per year of D; a restart skips finished years.
 """
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -121,3 +123,199 @@ def labelled(spy: pd.DataFrame, vix: pd.DataFrame | None, work_dir: Path) -> lis
         print(f"labelled {year} ({n}/{len(years)}, {100 * n // len(years)}%)", flush=True)
     days = [br.RegimeDay.from_row(day) for row in checkpoint.rows() for day in row["days"]]
     return sorted(days, key=lambda d: d.session_date)
+
+
+def episodes(days: list[br.RegimeDay]) -> list[ep.Episode]:
+    return ep.confirmed_episodes([(d.session_date, ep.episode_key(d.state, d.stress)) for d in days])
+
+
+def episode_table(eps: list[ep.Episode]) -> list[dict]:
+    rows = []
+    for key in ep.EPISODE_KEYS:
+        lengths = [e.sessions for e in eps if e.key == key]
+        q1, median, q3 = (float(v) for v in np.percentile(lengths, [25, 50, 75])) if lengths else (None,) * 3
+        rows.append({"key": key, "count": len(lengths), "median": median, "q1": q1, "q3": q3})
+    return rows
+
+
+_OUTCOME = {ep.BEAR_KEY: "bear", ep.NORMAL_KEY: "normal"}
+
+
+def _spell(run: list[ep.Episode], after: ep.Episode | None) -> dict:
+    return {"start": run[0].start, "end": run[-1].end, "sessions": sum(e.sessions for e in run),
+            "stress": any(e.key == ep.CORRECTION_STRESS_KEY for e in run),
+            "outcome": "open" if after is None else _OUTCOME.get(after.key, "unknown"),
+            "switch": None if after is None else after.start}
+
+
+def correction_spells(eps: list[ep.Episode]) -> list[dict]:
+    spells, run = [], []
+    for episode in [*eps, None]:
+        if episode is not None and episode.key in CORRECTION_KEYS:
+            run.append(episode)
+            continue
+        if run:
+            spells.append(_spell(run, episode))
+        run = []
+    return spells
+
+
+def conversion(spells: list[dict]) -> dict:
+    resolved = [s for s in spells if s["outcome"] in ("bear", "normal")]
+    converted = [s["sessions"] for s in resolved if s["outcome"] == "bear"]
+    return {"spells": len(spells), "resolved": len(resolved), "converted": len(converted),
+            "rate": round(len(converted) / len(resolved), 3) if resolved else None,
+            "median_sessions": float(np.median(converted)) if converted else None}
+
+
+def _in_year(spell: dict, year: int) -> bool:
+    return spell["start"].year == year or (spell["outcome"] == "bear" and spell["switch"].year == year)
+
+
+def named_rows(spells: list[dict]) -> list[dict]:
+    rows = []
+    for year, expected in NAMED.items():
+        hits = [{"year": year, "expected": expected, **s} for s in spells if _in_year(s, year)]
+        rows.extend(hits or [{"year": year, "expected": expected, "start": None, "sessions": None,
+                              "outcome": "no confirmed CORRECTION", "switch": None}])
+    return rows
+
+
+def forward_returns(spy: pd.DataFrame, dates, horizons=HORIZONS) -> dict[int, list[float]]:
+    """Percent return from s (the close the label for D read, the bar before D) to s + h."""
+    closes = spy["Close"].to_numpy(dtype=float)
+    position = {ts.date(): i for i, ts in enumerate(spy.index)}
+    out: dict[int, list[float]] = {h: [] for h in horizons}
+    for day in dates:
+        if day not in position or position[day] < 1:
+            continue
+        s = position[day] - 1
+        for h in horizons:
+            if s + h < len(closes):
+                out[h].append(100.0 * (closes[s + h] / closes[s] - 1.0))
+    return out
+
+
+def _stats(vals: list[float]) -> list[str]:
+    if not vals:
+        return ["n/a"] * 3
+    up = 100.0 * sum(1 for v in vals if v > 0) / len(vals)
+    return [f"{float(np.mean(vals)):+.2f}", f"{float(np.median(vals)):+.2f}", f"{up:.1f}"]
+
+
+def forward_rows(spy: pd.DataFrame, groups: dict) -> list[list[str]]:
+    rows = []
+    for name, dates in groups.items():
+        fwd = forward_returns(spy, dates)
+        rows.extend([name, str(h), str(len(fwd[h])), *_stats(fwd[h])] for h in HORIZONS)
+    return rows
+
+
+def _groups(days: list[br.RegimeDay], eps: list[ep.Episode]) -> tuple[dict, dict]:
+    by_date = {d.session_date: d for d in days}
+    pullbacks = [d.session_date for d in days if d.pullback_trigger]
+    plain = {key: [e.start for e in eps if e.key == key] for key in ep.EPISODE_KEYS}
+    plain["PULLBACK"] = pullbacks
+    split: dict[str, list] = {}
+    for e in eps:
+        split.setdefault(f"{e.key} / stress {by_date[e.start].stress}", []).append(e.start)
+    for day in pullbacks:
+        split.setdefault(f"PULLBACK / stress {by_date[day].stress}", []).append(day)
+    return plain, dict(sorted(split.items()))
+
+
+def _table(header: list[str], rows: list[list]) -> list[str]:
+    cells = [header, ["---"] * len(header)] + [["n/a" if c is None else str(c) for c in r] for r in rows]
+    return ["| " + " | ".join(r) + " |" for r in cells] + [""]
+
+
+def _head(days, hashes: dict, command: str) -> list[str]:
+    first, last = days[0].session_date, days[-1].session_date
+    return [f"# v244 — SPY base rates under the v239 bear-regime rules (to {END})", "",
+            "**Kind:** DESCRIPTION (ledger row `v244-regime-base-rates`). Describes SPY base rates, "
+            "not a strategy: never a lift, selects nothing, moves no gate and spends no validation "
+            "budget. The window spans TRAIN and VALIDATION; no figure here licenses B7–B9 (their "
+            "screens decide). A later spec may cite only its N and coverage columns, never as "
+            "evidence for a gate.",
+            f"**Command:** `{command}`",
+            f"**End:** {END} (fixed) · **Labelled sessions:** {first} → {last} ({len(days)})",
+            "**Inputs:** `data/backtest_cache_regime/` · "
+            + " · ".join(f"{s} sha256 `{h}`" for s, h in sorted(hashes.items())),
+            "**Rules:** `swingbot/core/market/bear_regime.py` (frozen, v239); episodes confirmed after "
+            f"{ep.CONFIRM_SESSIONS} sessions (`regime_episodes`).",
+            "**Forward return:** percent change of SPY's adjusted close from `s` (the close the "
+            "label read) to `s + h` sessions.", ""]
+
+
+_FORWARD_HEADER = ["Group", "h", "N", "Mean %", "Median %", "Up %"]
+
+
+def _episode_section(eps: list[ep.Episode]) -> list[str]:
+    rows = [[r["key"], r["count"], r["median"], r["q1"], r["q3"]] for r in episode_table(eps)]
+    return ["## Episodes per state", "",
+            *_table(["Episode", "Count", "Median sessions", "Q1", "Q3"], rows)]
+
+
+def _conversion_section(spells: list[dict]) -> list[str]:
+    c = conversion(spells)
+    rows = [[s["start"], s["end"], s["sessions"], s["stress"], s["outcome"], s["switch"]] for s in spells]
+    return ["## CORRECTION → BEAR conversion", "",
+            f"Spells {c['spells']} · resolved {c['resolved']} · converted {c['converted']} · "
+            f"rate {c['rate']} · median sessions to switch {c['median_sessions']}", "",
+            *_table(["Start", "End", "Sessions", "Stress", "Outcome", "Next episode"], rows)]
+
+
+def _named_section(spells: list[dict]) -> list[str]:
+    rows = [[r["year"], r["expected"], r["start"], r["sessions"], r["outcome"], r["switch"]]
+            for r in named_rows(spells)]
+    return ["## Named episodes", "",
+            *_table(["Year", "Expected", "Spell start", "Sessions", "Outcome", "Next episode"], rows)]
+
+
+def render(days, eps, spells, spy, hashes: dict, command: str) -> str:
+    plain, split = _groups(days, eps)
+    return "\n".join([
+        *_head(days, hashes, command),
+        *_episode_section(eps),
+        *_conversion_section(spells),
+        *_named_section(spells),
+        "## SPY forward returns from episode first days and pullback days", "",
+        *_table(_FORWARD_HEADER, forward_rows(spy, plain)),
+        "## The same, split by stress", "",
+        *_table(_FORWARD_HEADER, forward_rows(spy, split)),
+    ])
+
+
+def _parse(argv: list[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--cache-dir", type=Path, default=frd.CACHE_DIR)
+    parser.add_argument("--work-dir", type=Path, default=WORK_DIR)
+    parser.add_argument("--out", type=Path, default=OUT)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse(argv)
+    problem = check_hashes(args.cache_dir, args.work_dir)
+    if problem:
+        print(f"error: {problem}", file=sys.stderr)
+        return 2
+    spy, vix = load_cache(args.cache_dir)
+    days = labelled(spy, vix, args.work_dir)
+    if not days:
+        print(f"error: no session to label: the cache holds fewer than {br.MIN_BARS + 1} SPY bars",
+              file=sys.stderr)
+        return 2
+    eps = episodes(days)
+    hashes = json.loads((args.work_dir / HASHES).read_text(encoding="utf-8"))
+    command = " ".join(["python scripts/research/regime_base_rates.py",
+                        *(sys.argv[1:] if argv is None else argv)])
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(render(days, eps, correction_spells(eps), spy, hashes, command),
+                        encoding="utf-8", newline="\n")
+    print(f"wrote {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

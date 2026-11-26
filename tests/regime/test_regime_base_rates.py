@@ -145,3 +145,124 @@ def test_labelled_survives_a_torn_last_line(tmp_path):
     assert rbr.labelled(spy, vix, work) == first
     assert [json.loads(line)["key"] for line in path.read_text(encoding="utf-8").splitlines()] == [
         "2024", "2025"]
+
+
+CODES = {"N": (br.NORMAL, False), "C": (br.CORRECTION, False), "S": (br.CORRECTION, True),
+         "c": (br.CORRECTION, None), "B": (br.BEAR, True), "U": (br.UNKNOWN, None)}
+# NORMAL x5, one-day CORRECTION flicker, NORMAL x3 -> one NORMAL episode of 9; then
+# CORRECTION 4 + CORRECTION_STRESS 3 (one spell of 7) -> BEAR 5; NORMAL 2; CORRECTION 3 -> NORMAL 3.
+SEQ = "NNNNN" "C" "NNN" "CCCC" "SSS" "BBBBB" "NN" "CCC" "NNN"
+
+
+def _days(codes, start="2008-01-02"):
+    dates = pd.bdate_range(start, periods=len(codes))
+    return [br.RegimeDay(session_date=d.date(), last_bar_date=None, state=CODES[c][0],
+                         stress=CODES[c][1]) for d, c in zip(dates, codes)]
+
+
+def test_episodes_merge_flicker():
+    eps = rbr.episodes(_days(SEQ))
+    assert [(e.key, e.sessions) for e in eps] == [
+        ("NORMAL", 9), ("CORRECTION", 4), ("CORRECTION_STRESS", 3), ("BEAR", 5),
+        ("NORMAL", 2), ("CORRECTION", 3), ("NORMAL", 3)]
+
+
+def test_episode_table():
+    table = {row["key"]: row for row in rbr.episode_table(rbr.episodes(_days(SEQ)))}
+    assert list(table) == ["BEAR", "CORRECTION_STRESS", "CORRECTION", "NORMAL", "UNKNOWN"]
+    assert (table["NORMAL"]["count"], table["NORMAL"]["median"],
+            table["NORMAL"]["q1"], table["NORMAL"]["q3"]) == (3, 3.0, 2.5, 6.0)
+    assert (table["CORRECTION"]["count"], table["CORRECTION"]["median"]) == (2, 3.5)
+    assert table["UNKNOWN"] == {"key": "UNKNOWN", "count": 0, "median": None, "q1": None, "q3": None}
+
+
+def test_correction_spells_and_conversion():
+    spells = rbr.correction_spells(rbr.episodes(_days(SEQ)))
+    assert [(s["sessions"], s["stress"], s["outcome"]) for s in spells] == [
+        (7, True, "bear"), (3, False, "normal")]
+    assert rbr.conversion(spells) == {"spells": 2, "resolved": 2, "converted": 1,
+                                      "rate": 0.5, "median_sessions": 7.0}
+
+
+def test_open_and_unknown_spells_are_not_resolved():
+    open_spell = rbr.correction_spells(rbr.episodes(_days("NNN" "CCC")))
+    unknown = rbr.correction_spells(rbr.episodes(_days("NNN" "CCC" "UUU")))
+    assert [s["outcome"] for s in open_spell + unknown] == ["open", "unknown"]
+    assert rbr.conversion(open_spell + unknown) == {"spells": 2, "resolved": 0, "converted": 0,
+                                                    "rate": None, "median_sessions": None}
+    assert rbr.conversion([]) == {"spells": 0, "resolved": 0, "converted": 0,
+                                  "rate": None, "median_sessions": None}
+
+
+def test_named_rows_cover_every_spec_year():
+    rows = rbr.named_rows(rbr.correction_spells(rbr.episodes(_days(SEQ))))
+    assert [r["year"] for r in rows if r["start"] is None] == [2000, 2022, 2010, 2011, 2018, 2020]
+    assert {r["outcome"] for r in rows if r["start"] is None} == {"no confirmed CORRECTION"}
+    assert [(r["outcome"], r["expected"]) for r in rows if r["year"] == 2008] == [
+        ("bear", "convert"), ("normal", "convert")]
+
+
+def test_forward_returns_start_at_the_close_the_label_read():
+    idx = pd.bdate_range("2024-01-01", periods=80)
+    spy = pd.DataFrame({"Close": np.arange(100.0, 180.0)}, index=idx)
+    fwd = rbr.forward_returns(spy, [idx[10].date(), idx[70].date()])
+    assert fwd[5] == pytest.approx([100 * (114 / 109 - 1), 100 * (174 / 169 - 1)])
+    assert fwd[20] == pytest.approx([100 * (129 / 109 - 1)])      # s+20 past the end for D = idx[70]
+    assert fwd[60] == pytest.approx([100 * (169 / 109 - 1)])
+
+
+def test_forward_returns_skip_a_day_with_no_prior_bar_or_off_the_index():
+    idx = pd.bdate_range("2024-01-01", periods=80)
+    spy = pd.DataFrame({"Close": np.arange(100.0, 180.0)}, index=idx)
+    assert rbr.forward_returns(spy, [idx[0].date(), pd.Timestamp("2023-06-01").date()]) == {
+        5: [], 20: [], 60: []}
+
+
+def test_forward_rows_print_na_for_an_empty_group():
+    spy, _ = _frames()
+    assert rbr.forward_rows(spy, {"PULLBACK": []}) == [
+        ["PULLBACK", str(h), "0", "n/a", "n/a", "n/a"] for h in rbr.HORIZONS]
+
+
+def test_render_keeps_stress_none_apart():
+    days = _days("NNN" "cc" "NNN")
+    spy = pd.DataFrame({"Close": np.arange(100.0, 100.0 + len(days) + 70)},
+                       index=pd.bdate_range("2008-01-01", periods=len(days) + 70))
+    eps = rbr.episodes(days)
+    text = rbr.render(days, eps, rbr.correction_spells(eps), spy, {"SPY": "a" * 64}, "cmd")
+    assert "CORRECTION / stress None" in text and "CORRECTION / stress False" not in text
+
+
+def test_main_writes_the_doc_and_a_rerun_rewrites_the_same_bytes(tmp_path, monkeypatch):
+    cache, work, out = _cache(tmp_path), tmp_path / "work", tmp_path / "doc.md"
+    argv = ["--cache-dir", str(cache), "--work-dir", str(work), "--out", str(out)]
+    assert rbr.main(argv) == 0
+    text = out.read_text(encoding="utf-8")
+    assert "v244" in text and "DESCRIPTION" in text and "moves no gate" in text and rbr.END in text
+    assert "never a lift" in text and "only its N and coverage columns" in text
+    assert "v244-regime-base-rates" in text
+    assert rbr.frd.sha256_file(rbr.frd.csv_path(cache, br.SPY)) in text
+    assert rbr.frd.sha256_file(rbr.frd.csv_path(cache, br.VIX)) in text
+    assert b"\r\n" not in out.read_bytes()
+    calls = []
+    monkeypatch.setattr(rbr, "label_year", lambda *a: calls.append(a) or [])
+    assert rbr.main(argv) == 0
+    assert calls == [] and out.read_text(encoding="utf-8") == text
+
+
+def test_main_refuses_a_refetched_cache_and_writes_nothing(tmp_path, capsys):
+    cache, work, out = _cache(tmp_path), tmp_path / "work", tmp_path / "doc.md"
+    assert rbr.check_hashes(cache, work) is None
+    with open(rbr.frd.csv_path(cache, br.SPY), "a", encoding="utf-8", newline="\n") as fh:
+        fh.write("2025-12-31,1,1,1,1,0\n")
+    spy, vix = _frames()
+    rbr.frd.write_manifest(cache, {br.SPY: spy, br.VIX: vix}, "refetch")
+    assert rbr.main(["--cache-dir", str(cache), "--work-dir", str(work), "--out", str(out)]) == 2
+    assert not out.exists() and "refusing" in capsys.readouterr().err
+
+
+def test_main_refuses_a_cache_too_short_to_label(tmp_path, capsys):
+    cache, out = _cache(tmp_path, n=200), tmp_path / "doc.md"
+    argv = ["--cache-dir", str(cache), "--work-dir", str(tmp_path / "work"), "--out", str(out)]
+    assert rbr.main(argv) == 2
+    assert not out.exists() and "no session to label" in capsys.readouterr().err
