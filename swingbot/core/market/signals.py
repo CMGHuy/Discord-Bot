@@ -16,6 +16,7 @@ reused well beyond just that one signal (trade_chart.py's volume-profile
 panel, levels.py's confluence engine), so they're kept as their own
 top-level functions rather than folded into volume_profile_signal.
 """
+import numpy as np
 import pandas as pd
 
 from swingbot.core.market.entry_filters import entries_for, RIBBON_PERIODS_BY_HORIZON
@@ -582,6 +583,77 @@ def rsi_divergence_signal(ticker: str, df: pd.DataFrame, horizon_key: str) -> Si
 # volume — and triggers when price consolidates just above it (bullish
 # floor) or just below it (bearish ceiling).
 # ---------------------------------------------------------------------------
+def _is_plain_numeric(column: pd.Series) -> bool:
+    """A numpy int/uint/float column: converting it whole with
+    to_numpy(float64) gives the same values float() gives per element, and
+    can never raise, so converting skipped bars too changes nothing."""
+    return isinstance(column.dtype, np.dtype) and column.dtype.kind in "fiu"
+
+
+def _raise_like_int(quotients: np.ndarray) -> None:
+    """Raise what `int(q)` raises on the first non-finite bucket quotient
+    (ValueError for NaN, OverflowError for +/-inf), in window row order --
+    numpy would cast it to an arbitrary index instead."""
+    bad = np.flatnonzero(~np.isfinite(quotients))
+    if bad.size:
+        int(quotients[bad[0]])
+
+
+def _profile_bins_vectorised(
+    window: pd.DataFrame, price_min, price_max, bin_size, n_bins: int,
+) -> list[float]:
+    """Array form of the per-bar loop for plain numeric columns. Same
+    midpoint, same strict range test (a NaN midpoint is kept, as before),
+    same truncate-then-clamp index (clipping first is equivalent for every
+    finite quotient), and np.add.at adds each bucket's volumes one at a time
+    in row order starting from 0.0, exactly as `bins[idx] += v` did."""
+    high = window["High"].to_numpy(dtype=np.float64)
+    low = window["Low"].to_numpy(dtype=np.float64)
+    with np.errstate(invalid="ignore", over="ignore"):
+        mid = (high + low) / 2
+        keep = ~((mid < price_min) | (mid > price_max))
+        quotients = (mid[keep] - price_min) / bin_size
+    _raise_like_int(quotients)
+    idx = np.clip(quotients, 0, n_bins - 1).astype(np.int64)
+    volume = window["Volume"].to_numpy(dtype=np.float64)[keep]
+    bins = np.zeros(n_bins, dtype=np.float64)
+    np.add.at(bins, idx, volume)
+    return bins.tolist()
+
+
+def _profile_bins_rowwise(
+    window: pd.DataFrame, price_min, price_max, bin_size, n_bins: int,
+) -> list[float]:
+    """Object or nullable columns: the old per-bar loop over plain column
+    lists, with no Series built per row. Volume is converted only for
+    in-range bars, so a None/pd.NA volume raises TypeError there and is
+    never touched on a skipped bar, and the first offending row raises
+    first."""
+    bins = [0.0] * n_bins
+    rows = zip(window["High"].tolist(), window["Low"].tolist(), window["Volume"].tolist())
+    for high, low, volume in rows:
+        mid = (float(high) + float(low)) / 2
+        # A bar's midpoint can fall outside an explicitly widened range
+        # only if it's narrower than the window's own extremes; skip
+        # rather than clamp so volume never gets misattributed to an
+        # edge bucket it didn't actually trade in.
+        if mid < price_min or mid > price_max:
+            continue
+        idx = min(max(int((mid - price_min) / bin_size), 0), n_bins - 1)
+        bins[idx] += float(volume)
+    return bins
+
+
+def _profile_bins(window: pd.DataFrame, price_min, price_max, bin_size, n_bins: int) -> list[float]:
+    """Summed volume per bucket, a list of Python floats, identical (by
+    float.hex, in type and in raised exception) to the pre-v251 per-bar
+    loop (spec v251, Exactness rules)."""
+    columns = (window["High"], window["Low"], window["Volume"])
+    if all(_is_plain_numeric(column) for column in columns):
+        return _profile_bins_vectorised(window, price_min, price_max, bin_size, n_bins)
+    return _profile_bins_rowwise(window, price_min, price_max, bin_size, n_bins)
+
+
 def compute_volume_profile(
     df: pd.DataFrame, lookback: int, n_bins: int = 20,
     price_min: float = None, price_max: float = None,
@@ -630,18 +702,7 @@ def compute_volume_profile(
         return None
 
     bin_size = price_range / n_bins
-    bins = [0.0] * n_bins
-    for _, row in window.iterrows():
-        mid = (float(row["High"]) + float(row["Low"])) / 2
-        # A bar's midpoint can fall outside an explicitly widened range
-        # only if it's narrower than the window's own extremes (not the
-        # normal case here, since the panel only ever widens); skip
-        # rather than clamp so volume never gets misattributed to an
-        # edge bucket it didn't actually trade in.
-        if mid < price_min or mid > price_max:
-            continue
-        idx = min(max(int((mid - price_min) / bin_size), 0), n_bins - 1)
-        bins[idx] += float(row["Volume"])
+    bins = _profile_bins(window, price_min, price_max, bin_size, n_bins)
 
     total_vol = sum(bins)
     poc_idx = bins.index(max(bins)) if total_vol > 0 else n_bins // 2
