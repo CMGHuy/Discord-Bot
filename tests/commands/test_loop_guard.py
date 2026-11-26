@@ -98,7 +98,8 @@ def test_restart_delay_defaults_to_the_loop_interval_within_bounds():
 def test_every_background_loop_has_the_guard():
     found = {name: obj for mod in (loops, ops_watch) for name, obj in vars(mod).items()
              if isinstance(obj, tasks.Loop)}
-    assert len(found) >= 17
+    assert len(found) >= 18
+    assert "held_price_watch" in found
     unguarded = sorted(name for name, obj in found.items()
                        if getattr(obj._error, "__loop_guard__", False) is not True)
     assert unguarded == []

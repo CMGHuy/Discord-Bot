@@ -1374,7 +1374,8 @@ def _always_on_loops() -> tuple:
     return (session_scan, heartbeat, config_watcher, trade_monitor, daily_recap,
             weekend_deep_scan_task, weekly_earnings_refresh, daily_short_interest_refresh,
             gate_counterfactual_resolve,
-            pitr_watch_loop, ops_watch.scan_watchdog, next_session_scan,
+            pitr_watch_loop, ops_watch.scan_watchdog, ops_watch.held_price_watch,
+            next_session_scan,
             next_session_wrapup, override_verdict_check, daily_reanchor, tape_feed)
 
 

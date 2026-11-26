@@ -1,10 +1,13 @@
 """v148 O3/O4: ops_watch -- the stale-scan and provider verdicts, the ops
 notices, and (OH18) the watchdog loop and provider check on a fake channel."""
+import contextlib
 import datetime as dt
 
 import pytest
+import sqlalchemy as sa
 
 from swingbot.commands.scanning import notices, ops_watch
+from swingbot.core.db.engine import DatabaseUnavailable
 from swingbot.core.presentation import kinds
 from swingbot.core.presentation.kinds import Kind
 
@@ -516,3 +519,194 @@ def test_the_held_price_alert_and_recovery_embeds():
     assert rec.color.value == kinds.HEALTH_GREEN
     assert "held position price live again" in rec.title
     assert rec.description == "• DOCU · last trade 12 s ago"
+
+
+# --- v248 § 5: held_price_watch -------------------------------------------------------
+
+class _FakeShared:
+    def __init__(self):
+        self.rows = {}
+
+    def read_entries(self, keys, *, conn):
+        return {k: dict(self.rows[k]) for k in keys if k in self.rows}
+
+    def write_entries(self, rows, *, conn):
+        for row in rows:
+            self.rows[row["key"]] = dict(row)
+
+
+def _q(sym, price, age_s, error=None):
+    from swingbot.admin.market_values import MarketQuote
+    as_of = None if age_s is None else (NOW - dt.timedelta(seconds=age_s)).isoformat()
+    return MarketQuote(symbol=sym, price=price, as_of=as_of, age_s=age_s, refreshing=False,
+                       error=error)
+
+
+@pytest.fixture
+def held(monkeypatch):
+    """AAPL's live trade is 14 min old; DOCU has bid/ask only (no trade) and a daily
+    close; NEWCO has nothing at all. NOW is Mon 2026-10-12 11:00 ET, regular session."""
+    from swingbot.admin import market_values as mv
+    state = {"tickers": ["AAPL", "DOCU", "NEWCO"], "enqueue": [], "shared": _FakeShared(),
+             "quotes": {"AAPL": _q("AAPL", 101.0, 14 * 60, "no quote"),
+                        "DOCU": _q("DOCU", None, 15 * 3600, "no quote")},
+             "closes": {"DOCU": {"last_close": 80.0, "last_close_date": "2026-10-09"}}}
+
+    def read_quotes(symbols, *, kind=None, enqueue=True, now=None):
+        state["enqueue"].append(enqueue)
+        return {s: state["quotes"][s] for s in symbols if s in state["quotes"]}
+
+    monkeypatch.setattr(mv, "read_quotes", read_quotes)
+    monkeypatch.setattr(mv, "last_close_fields",
+                        lambda symbols: {s: state["closes"][s] for s in symbols if s in state["closes"]})
+    monkeypatch.setattr(ops_watch, "_held_tickers", lambda: list(state["tickers"]))
+    monkeypatch.setattr(ops_watch, "market_shared_repo", lambda: state["shared"])
+    monkeypatch.setattr(ops_watch, "side_connection", contextlib.nullcontext)
+    monkeypatch.setattr(ops_watch, "BOOTED_AT", NOW - dt.timedelta(hours=2))
+    monkeypatch.setattr(config, "HELD_PRICE_STALE_ALERT_MIN", 10)
+    monkeypatch.setattr(config, "ADMIN_REFRESHER", "on")
+    monkeypatch.setattr(config, "MARKETDATA_LAYER", "on")
+    return state
+
+
+def _held_tick(now=NOW):
+    return asyncio.run(ops_watch.held_price_tick(now))
+
+
+QUIET = {"alert": [], "recover": []}
+
+
+def test_stale_and_blind_held_prices_alert_once_in_one_message(held, channel):
+    assert _held_tick() == {"alert": ["AAPL", "DOCU", "NEWCO"], "recover": []}
+    assert len(channel.sent) == 1
+    embed = channel.sent[0]["embed"]
+    assert "held position price stale" in embed.title
+    assert embed.description.splitlines()[:3] == [
+        "• AAPL · last trade 14 min ago · no quote",
+        "• DOCU · no live trade · prev close · no quote",      # never a bid/ask midpoint
+        "• NEWCO · no live trade · no price at all"]
+    assert _held_tick() == QUIET and len(channel.sent) == 1
+    row = held["shared"].rows["ops_held_price:AAPL:2026-10-12"]
+    assert row["kind"] == "ops_held_price" and row["symbol"] == "AAPL" and row["source"] == "ops_watch"
+    assert row["value"] == {"notified_at": NOW.isoformat(), "recovered_at": None}
+
+
+def test_a_fresh_price_recovers_once_and_the_day_stays_quiet(held, channel):
+    _held_tick()
+    held["quotes"]["AAPL"] = _q("AAPL", 102.0, 12)
+    assert _held_tick() == {"alert": [], "recover": ["AAPL"]}
+    assert "held position price live again" in channel.sent[1]["embed"].title
+    assert channel.sent[1]["embed"].description == "• AAPL · last trade 12 s ago"
+    assert held["shared"].rows["ops_held_price:AAPL:2026-10-12"]["value"] == {
+        "notified_at": NOW.isoformat(), "recovered_at": NOW.isoformat()}
+    held["quotes"]["AAPL"] = _q("AAPL", 102.0, 40 * 60)       # stale again the same day
+    assert _held_tick() == QUIET and len(channel.sent) == 2
+
+
+def test_the_dedupe_survives_a_restart(held, channel, monkeypatch):
+    _held_tick()
+    fresh = _FakeChannel()
+    monkeypatch.setattr(loops, "_ops_channel", lambda: fresh)
+    monkeypatch.setattr(ops_watch, "BOOTED_AT", NOW)          # the bot just came back
+    assert _held_tick() == QUIET and fresh.sent == []
+
+
+def test_a_new_session_day_alerts_again(held, channel):
+    _held_tick()
+    assert _held_tick(NOW + dt.timedelta(days=1))["alert"] == ["AAPL", "DOCU", "NEWCO"]
+    assert "ops_held_price:NEWCO:2026-10-13" in held["shared"].rows
+
+
+def test_the_boot_grace_holds_back_all_but_no_price_at_all(held, channel, monkeypatch):
+    monkeypatch.setattr(ops_watch, "BOOTED_AT", NOW - dt.timedelta(minutes=5))
+    assert _held_tick() == {"alert": ["NEWCO"], "recover": []}
+
+
+def test_the_tick_never_enqueues_a_fetch(held, channel):
+    _held_tick()
+    assert held["enqueue"] == [False]
+
+
+def test_outside_the_session_only_the_pre_open_check_runs(held, channel):
+    pre_market = dt.datetime(2026, 10, 12, 12, 0, tzinfo=dt.timezone.utc)    # 08:00 ET
+    assert _held_tick(pre_market) == QUIET
+    assert held["enqueue"] == [] and channel.sent == []
+    pre_open = dt.datetime(2026, 10, 12, 13, 5, tzinfo=dt.timezone.utc)      # 09:05 ET
+    assert _held_tick(pre_open) == {"alert": ["NEWCO"], "recover": []}       # DOCU on prev close: normal
+    after_hours = dt.datetime(2026, 10, 12, 21, 0, tzinfo=dt.timezone.utc)   # 17:00 ET
+    assert _held_tick(after_hours) == QUIET
+
+
+def test_the_pre_open_check_is_quiet_on_an_nyse_holiday(held, channel):
+    thanksgiving = dt.datetime(2026, 11, 26, 14, 5, tzinfo=dt.timezone.utc)
+    assert _held_tick(thanksgiving) == QUIET and channel.sent == []
+
+
+@pytest.mark.parametrize("exc", [DatabaseUnavailable("side engine backing off"),
+                                 sa.exc.TimeoutError("QueuePool limit of size 1 overflow 1 reached")])
+def test_a_busy_side_pool_skips_the_tick(held, channel, monkeypatch, exc):
+    def busy():
+        raise exc
+    monkeypatch.setattr(ops_watch, "side_connection", busy)
+    assert _held_tick() == QUIET and channel.sent == []
+
+
+def test_the_tick_reads_nothing_with_the_refresher_off(held, channel, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_REFRESHER", "off")
+    assert _held_tick() == QUIET
+    assert held["enqueue"] == [] and channel.sent == []
+
+
+def test_no_held_tickers_reads_no_quotes(held, channel):
+    held["tickers"] = []
+    assert _held_tick() == QUIET and held["enqueue"] == []
+
+
+def test_no_ops_channel_posts_nothing_and_stores_nothing(held, monkeypatch):
+    monkeypatch.setattr(loops, "_ops_channel", lambda: None)
+    assert _held_tick() == QUIET and held["shared"].rows == {}
+
+
+def test_twelve_blind_tickers_share_one_message(held, channel):
+    held["tickers"] = [f"N{i:02d}" for i in range(12)]
+    assert len(_held_tick()["alert"]) == 12 and len(channel.sent) == 1
+    lines = channel.sent[0]["embed"].description.splitlines()
+    assert lines[9].startswith("• N09 ") and lines[10] == "+2 more"
+    assert len(held["shared"].rows) == 12                      # every ticker deduped, listed or not
+
+
+def test_a_failed_send_stores_nothing_and_the_next_tick_retries(held, monkeypatch):
+    monkeypatch.setattr(loops, "_ops_channel", lambda: _FakeChannel(fail=True))
+    with pytest.raises(RuntimeError, match="discord down"):
+        _held_tick()
+    assert held["shared"].rows == {}
+    good = _FakeChannel()
+    monkeypatch.setattr(loops, "_ops_channel", lambda: good)
+    assert _held_tick()["alert"] == ["AAPL", "DOCU", "NEWCO"] and len(good.sent) == 1
+
+
+def test_a_raising_held_price_tick_leaves_the_loop_running(monkeypatch, caplog):
+    async def boom(now=None):
+        raise RuntimeError("db down")
+    monkeypatch.setattr(ops_watch, "held_price_tick", boom)
+    with caplog.at_level(logging.ERROR, logger=ops_watch.log.name):
+        assert asyncio.run(ops_watch.held_price_watch.coro()) is None
+    assert swallowed_mod.snapshot()["ops.held_price_watch"]["count"] == 1
+    assert "held price watch tick failed" in caplog.text
+
+
+def test_held_tickers_are_the_open_trades_upper_cased_and_unique(monkeypatch):
+    from swingbot.core.db.repositories import trades as trades_mod
+
+    class _Repo:
+        def open_trades(self, *, conn=None):
+            return [{"ticker": "docu"}, {"ticker": "AAPL"}, {"ticker": None}, {"ticker": "aapl"}]
+
+    monkeypatch.setattr(trades_mod, "trades_repo", lambda: _Repo())
+    assert ops_watch._held_tickers() == ["AAPL", "DOCU"]
+
+
+def test_the_held_price_watch_runs_every_two_minutes_after_the_scan_watchdog():
+    order = loops._always_on_loops()
+    assert order.index(ops_watch.held_price_watch) == order.index(ops_watch.scan_watchdog) + 1
+    assert ops_watch.held_price_watch.minutes == 2

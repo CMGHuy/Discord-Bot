@@ -18,12 +18,17 @@ import logging
 from dataclasses import dataclass
 from typing import Sequence
 
+import sqlalchemy as sa
 from discord.ext import tasks
 
 from swingbot import config
 from swingbot.bot_core import SESSION_TZ, in_session
 from swingbot.core import presentation as ui
+from swingbot.core.db.engine import DatabaseUnavailable
+from swingbot.core.db.repositories.market_shared import market_shared_repo
+from swingbot.core.db.side_engine import side_connection
 from swingbot.core.infra.swallowed import swallowed
+from swingbot.core.marketdata.shared import admin_refresh
 from swingbot.core.market import session
 from swingbot.core.scanning import telemetry
 
@@ -318,4 +323,142 @@ async def check_provider_health(row: dict | None = None) -> str | None:
         return None
 
 
+# --- v248 § 5: the held-price watch loop -----------------------------------------------
+
+HELD_PRICE_KIND = "ops_held_price"
+_STORE_BUSY = (DatabaseUnavailable, sa.exc.TimeoutError)
+
+
+def held_notice_key(symbol: str, day: str) -> str:
+    return f"{HELD_PRICE_KIND}:{symbol}:{day}"
+
+
+def _held_tickers() -> list[str]:
+    from swingbot.core.db.repositories import trades as trades_mod
+    trades = trades_mod.trades_repo().open_trades()
+    return sorted({str(t["ticker"]).upper() for t in trades if t.get("ticker")})
+
+
+@dataclass(frozen=True)
+class _HeldView:
+    quotes: dict
+    closes: dict
+    marks: dict
+
+
+def _read_held_view(symbols: list[str], now: dt.datetime) -> _HeldView | None:
+    from swingbot.admin import market_values
+    day = session.session_date(now)
+    try:
+        quotes = market_values.read_quotes(symbols, enqueue=False, now=now)
+        blind = [s for s in symbols if s not in quotes or quotes[s].price is None]
+        closes = market_values.last_close_fields(blind)
+        with side_connection() as conn:
+            marks = market_shared_repo().read_entries(
+                [held_notice_key(s, day) for s in symbols], conn=conn)
+    except _STORE_BUSY as exc:
+        swallowed(log, "ops.held_price_watch.busy", exc,
+                  "held price watch: store busy, tick skipped", level=logging.INFO)
+        return None
+    return _HeldView(quotes, closes, marks)
+
+
+def _held_item(symbol: str, view: _HeldView) -> HeldPriceItem:
+    quote = view.quotes.get(symbol)
+    live = quote is not None and quote.price is not None
+    return HeldPriceItem(symbol, age_s=quote.age_s if live else None,
+                         error=quote.error if quote else None,
+                         prev_close=not live and symbol in view.closes,
+                         no_price=not live and symbol not in view.closes)
+
+
+def _judge(symbols, view: _HeldView, now, state, pre_open) -> dict[str, list[HeldPriceItem]]:
+    day = session.session_date(now)
+    uptime_s = (now - BOOTED_AT).total_seconds()
+    out: dict[str, list[HeldPriceItem]] = {"alert": [], "recover": []}
+    for symbol in symbols:
+        item = _held_item(symbol, view)
+        key = held_notice_key(symbol, day)
+        value = (view.marks.get(key) or {}).get("value") or {}
+        verdict = held_price_verdict(
+            session=state, age_s=item.age_s, has_last_close=symbol in view.closes,
+            uptime_s=uptime_s, threshold_min=int(config.HELD_PRICE_STALE_ALERT_MIN),
+            notified=key in view.marks, recovered=bool(value.get("recovered_at")),
+            pre_open=pre_open)
+        if verdict in out:
+            out[verdict].append(item)
+    return out
+
+
+def _mark_value(verdict: str, stored: dict, now: dt.datetime) -> dict:
+    if verdict == "alert":
+        return {"notified_at": now.isoformat(), "recovered_at": None}
+    return {"notified_at": stored.get("notified_at") or now.isoformat(),
+            "recovered_at": now.isoformat()}
+
+
+def _mark_held(items, verdict: str, view: _HeldView, now: dt.datetime) -> None:
+    day = session.session_date(now)
+    rows = []
+    for item in items:
+        key = held_notice_key(item.symbol, day)
+        stored = (view.marks.get(key) or {}).get("value") or {}
+        rows.append({"key": key, "kind": HELD_PRICE_KIND, "symbol": item.symbol,
+                     "fetched_at": now, "source": "ops_watch",
+                     "value": _mark_value(verdict, stored, now)})
+    try:
+        with side_connection() as conn:
+            market_shared_repo().write_entries(rows, conn=conn)
+    except Exception as exc:
+        swallowed(log, "ops.held_price_watch.write", exc,
+                  "held price watch: dedupe write failed; the next tick may repeat the notice",
+                  level=logging.WARNING)
+
+
+async def _post_verdict(verdict: str, items, view: _HeldView, now: dt.datetime) -> list[str]:
+    embed = notices.held_price_embed(held_price_lines(items), recovery=verdict == "recover")
+    if not await _post(embed):
+        log.warning("held price watch: %s verdict but no ops channel configured; not posted",
+                    verdict)
+        return []
+    await asyncio.to_thread(_mark_held, items, verdict, view, now)
+    symbols = [i.symbol for i in items]
+    log.log(logging.WARNING if verdict == "alert" else logging.INFO,
+            "held price watch: %s %s", verdict, ", ".join(symbols))
+    return symbols
+
+
+async def held_price_tick(now: dt.datetime | None = None) -> dict[str, list[str]]:
+    """v248 § 5: one pass over the held tickers' cached quotes. Read-only: never
+    enqueues a fetch. Returns the symbols actually posted, per verdict."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    out: dict[str, list[str]] = {"alert": [], "recover": []}
+    pre_open = in_pre_open_window(now)
+    state = session.session_state(now)
+    if not admin_refresh.refresher_on() or (state != _REGULAR and not pre_open):
+        return out
+    symbols = await asyncio.to_thread(_held_tickers)
+    if not symbols:
+        return out
+    view = await asyncio.to_thread(_read_held_view, symbols, now)
+    if view is None:
+        return out
+    for verdict, items in _judge(symbols, view, now, state, pre_open).items():
+        if items:
+            out[verdict] = await _post_verdict(verdict, items, view, now)
+    return out
+
+
+@tasks.loop(minutes=2)
+async def held_price_watch():
+    """v248 § 5: a held position's live price stale or missing in the regular
+    session, paged once per ticker per session day. Never raises."""
+    try:
+        await held_price_tick()
+    except Exception as exc:
+        swallowed(log, "ops.held_price_watch", exc, "held price watch tick failed",
+                  level=logging.ERROR, exc_info=True)
+
+
 loop_guard.restart_on_error(scan_watchdog, "scan_watchdog")
+loop_guard.restart_on_error(held_price_watch, "held_price_watch")
