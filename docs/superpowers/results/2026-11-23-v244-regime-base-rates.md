@@ -5,7 +5,7 @@
 **End:** 2026-11-20 (fixed) · **Labelled sessions:** 1993-12-13 → 2026-11-20 (8292)
 **Inputs:** `data/backtest_cache_regime/` · SPY sha256 `02d8dc5665a5a26122112c4b04a207b883e4048da932b7bb710f72b316a741dc` · ^VIX sha256 `6900aee90918862eabcddb84b4369e8768743d7f208f4066e5454689602c25f2`
 **Rules:** `swingbot/core/market/bear_regime.py` (frozen, v239); episodes confirmed after 2 sessions (`regime_episodes`).
-**Forward return:** percent change of SPY's adjusted close from `s` (the close the label read) to `s + h` sessions.
+**Forward return:** percent change of SPY's adjusted close over `h` sessions. Episode rows run from the close of D (the episode's first day) to D + h: D is selected only once D+1 confirms it, and D+1's label reads close D. Pullback rows run from `s` (the bar before D, the close the label read) to `s + h`: the trigger reads only bars <= s. A day whose `h` runs past the last bar is dropped for that `h` only.
 
 ## Episodes per state
 
@@ -118,18 +118,18 @@ Spells 69 · resolved 68 · converted 12 · rate 0.176 · median sessions to swi
 
 | Group | h | N | Mean % | Median % | Up % |
 | --- | --- | --- | --- | --- | --- |
-| BEAR | 5 | 31 | +0.58 | +0.45 | 58.1 |
-| BEAR | 20 | 31 | +0.54 | -0.24 | 48.4 |
-| BEAR | 60 | 31 | +4.48 | +5.70 | 71.0 |
-| CORRECTION_STRESS | 5 | 27 | +0.35 | +0.41 | 59.3 |
-| CORRECTION_STRESS | 20 | 26 | +1.91 | +2.55 | 69.2 |
-| CORRECTION_STRESS | 60 | 26 | +6.21 | +7.06 | 84.6 |
-| CORRECTION | 5 | 72 | +0.48 | +0.24 | 55.6 |
-| CORRECTION | 20 | 70 | +1.48 | +1.77 | 60.0 |
-| CORRECTION | 60 | 69 | +4.56 | +5.26 | 76.8 |
-| NORMAL | 5 | 87 | +0.56 | +0.66 | 65.5 |
-| NORMAL | 20 | 86 | +1.14 | +2.40 | 68.6 |
-| NORMAL | 60 | 86 | +3.86 | +4.79 | 75.6 |
+| BEAR | 5 | 31 | +0.60 | +1.35 | 61.3 |
+| BEAR | 20 | 31 | +1.02 | +0.96 | 61.3 |
+| BEAR | 60 | 31 | +4.61 | +6.92 | 74.2 |
+| CORRECTION_STRESS | 5 | 27 | +0.56 | +0.92 | 63.0 |
+| CORRECTION_STRESS | 20 | 26 | +2.58 | +3.37 | 73.1 |
+| CORRECTION_STRESS | 60 | 26 | +6.65 | +7.07 | 84.6 |
+| CORRECTION | 5 | 72 | +0.44 | +0.43 | 58.3 |
+| CORRECTION | 20 | 70 | +1.39 | +2.06 | 67.1 |
+| CORRECTION | 60 | 69 | +4.44 | +5.16 | 75.4 |
+| NORMAL | 5 | 87 | +0.04 | +0.18 | 58.6 |
+| NORMAL | 20 | 86 | +0.76 | +1.59 | 67.4 |
+| NORMAL | 60 | 86 | +3.53 | +4.02 | 74.4 |
 | UNKNOWN | 5 | 0 | n/a | n/a | n/a |
 | UNKNOWN | 20 | 0 | n/a | n/a | n/a |
 | UNKNOWN | 60 | 0 | n/a | n/a | n/a |
@@ -141,24 +141,24 @@ Spells 69 · resolved 68 · converted 12 · rate 0.176 · median sessions to swi
 
 | Group | h | N | Mean % | Median % | Up % |
 | --- | --- | --- | --- | --- | --- |
-| BEAR / stress False | 5 | 20 | -0.31 | +0.04 | 50.0 |
-| BEAR / stress False | 20 | 20 | -1.95 | -2.24 | 30.0 |
-| BEAR / stress False | 60 | 20 | +1.04 | +1.74 | 65.0 |
-| BEAR / stress True | 5 | 11 | +2.19 | +0.61 | 72.7 |
-| BEAR / stress True | 20 | 11 | +5.06 | +2.08 | 81.8 |
-| BEAR / stress True | 60 | 11 | +10.72 | +8.13 | 81.8 |
-| CORRECTION / stress False | 5 | 72 | +0.48 | +0.24 | 55.6 |
-| CORRECTION / stress False | 20 | 70 | +1.48 | +1.77 | 60.0 |
-| CORRECTION / stress False | 60 | 69 | +4.56 | +5.26 | 76.8 |
-| CORRECTION_STRESS / stress True | 5 | 27 | +0.35 | +0.41 | 59.3 |
-| CORRECTION_STRESS / stress True | 20 | 26 | +1.91 | +2.55 | 69.2 |
-| CORRECTION_STRESS / stress True | 60 | 26 | +6.21 | +7.06 | 84.6 |
-| NORMAL / stress False | 5 | 78 | +0.60 | +0.73 | 66.7 |
-| NORMAL / stress False | 20 | 77 | +0.99 | +2.21 | 67.5 |
-| NORMAL / stress False | 60 | 77 | +3.11 | +4.05 | 72.7 |
-| NORMAL / stress True | 5 | 9 | +0.27 | +0.24 | 55.6 |
-| NORMAL / stress True | 20 | 9 | +2.44 | +3.58 | 77.8 |
-| NORMAL / stress True | 60 | 9 | +10.32 | +11.54 | 100.0 |
+| BEAR / stress False | 5 | 20 | -0.35 | +0.15 | 50.0 |
+| BEAR / stress False | 20 | 20 | -1.73 | -2.45 | 45.0 |
+| BEAR / stress False | 60 | 20 | +1.26 | +2.97 | 70.0 |
+| BEAR / stress True | 5 | 11 | +2.33 | +2.35 | 81.8 |
+| BEAR / stress True | 20 | 11 | +6.02 | +5.31 | 90.9 |
+| BEAR / stress True | 60 | 11 | +10.70 | +11.18 | 81.8 |
+| CORRECTION / stress False | 5 | 72 | +0.44 | +0.43 | 58.3 |
+| CORRECTION / stress False | 20 | 70 | +1.39 | +2.06 | 67.1 |
+| CORRECTION / stress False | 60 | 69 | +4.44 | +5.16 | 75.4 |
+| CORRECTION_STRESS / stress True | 5 | 27 | +0.56 | +0.92 | 63.0 |
+| CORRECTION_STRESS / stress True | 20 | 26 | +2.58 | +3.37 | 73.1 |
+| CORRECTION_STRESS / stress True | 60 | 26 | +6.65 | +7.07 | 84.6 |
+| NORMAL / stress False | 5 | 78 | +0.14 | +0.40 | 61.5 |
+| NORMAL / stress False | 20 | 77 | +0.60 | +1.55 | 66.2 |
+| NORMAL / stress False | 60 | 77 | +2.88 | +3.77 | 72.7 |
+| NORMAL / stress True | 5 | 9 | -0.81 | -0.68 | 33.3 |
+| NORMAL / stress True | 20 | 9 | +2.09 | +2.05 | 77.8 |
+| NORMAL / stress True | 60 | 9 | +9.04 | +9.47 | 88.9 |
 | PULLBACK / stress False | 5 | 70 | +0.69 | +0.79 | 61.4 |
 | PULLBACK / stress False | 20 | 68 | +1.76 | +2.58 | 67.6 |
 | PULLBACK / stress False | 60 | 68 | +3.55 | +4.51 | 76.5 |
