@@ -197,6 +197,10 @@ merged first, because V244-1 and V244-2 import them.
   for this plan (`v244`), following the v239 index's What follows
   (`<date>-<vN>-regime-base-rates.md`); the spec's literal
   `2026-11-23-v239-regime-base-rates.md` predates the cut.
+- 2026-11-26: CLOSED OUT, all four tasks merged. Panel (veteran-trader,
+  quant-engineer, ux-designer) found nothing blocking; advisories are in the
+  SDD progress ledger. Study cache and work dir copied to the main tree's
+  `data/`. Finding: no confirmed CORRECTION spell leads into the 2008 BEAR.
 - 2026-11-26: V244-1 and V244-2 done. Partner moved episode-row forward returns
   to start at close `D` (Definitions). The study's cache and `hashes.json` are
   gitignored: copy them to the main tree before removing the worktree.
