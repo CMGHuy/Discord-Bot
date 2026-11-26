@@ -21,7 +21,8 @@ DOCS_CLAUDE = ("tests/hooks/test_guardrails.py", "tests/hooks/test_codex_mirror.
 LEDGER_READERS = ("tests/backtesting/test_preregistration_ledger_file.py",
                   "tests/backtesting/test_instrument_stats_ledger.py",
                   "tests/scripts/test_preregistration_ledger_cli.py",
-                  "tests/admin/test_api_v1_research.py")
+                  "tests/admin/test_api_v1_research.py",
+                  "tests/regime/test_regime_base_rates.py")
 
 CASES = {
     "scripts/reports/autopsy/exclusions.json": ("tests/scout/",),
