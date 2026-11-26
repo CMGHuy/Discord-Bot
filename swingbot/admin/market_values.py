@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Iterable, Optional
 
 from swingbot.core.db.repositories import admin_snapshots as snapshot_store
@@ -136,6 +136,27 @@ def quote_fields(quote: Optional[MarketQuote]) -> dict:
             "price_age_s": round(quote.age_s, 1) if quote.age_s is not None else None,
             "price_refreshing": quote.refreshing, "price_error": quote.error,
             "price_error_at": quote.error_at}
+
+
+def _session_day(now: datetime) -> date:
+    """v248 § 3: the ET date whose trades count as this session's -- today on an
+    NYSE trading day from the 04:00 ET tape open, else the last regular close's day."""
+    et = session.now_et(now)
+    if et.weekday() < 5 and et.date() not in session.NYSE_HOLIDAYS and et.time() >= session.TAPE_OPEN:
+        return et.date()
+    return session.now_et(session.last_regular_close(now)).date()
+
+
+def session_priced(quote: Optional[MarketQuote], now: datetime) -> bool:
+    """A live trade price stamped on this session's day. A bid/ask-only quote
+    (no trade, `price` None) is not; the midpoint is never a price."""
+    if quote is None or quote.price is None or not quote.as_of:
+        return False
+    try:
+        as_of = datetime.fromisoformat(quote.as_of)
+    except (ValueError, TypeError):
+        return False
+    return session.now_et(as_of).date() == _session_day(now)
 
 
 def last_close_fields(symbols: Iterable[str]) -> dict[str, dict]:

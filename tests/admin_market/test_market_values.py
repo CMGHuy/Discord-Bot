@@ -191,3 +191,37 @@ def test_mark_read_failure_fails_open_without_error_times(market, session_is, mo
     market.quote("MSFT", 110.0, age_s=5)
     q = mv.read_quotes(["MSFT"], enqueue=False)["MSFT"]
     assert q.price == 110.0 and q.error is None and q.error_at is None
+
+
+# -- v248 § 3: a live price this session ---------------------------------------------
+
+UTC = timezone.utc
+TUE_1000_ET = datetime(2026, 11, 24, 15, 0, tzinfo=UTC)
+
+
+def _mq(price, as_of):
+    return mv.MarketQuote(symbol="DOCU", price=price, as_of=as_of.isoformat() if as_of else None,
+                          age_s=None, refreshing=False, error=None)
+
+
+@pytest.mark.parametrize("now, price, as_of, expected", [
+    (TUE_1000_ET, 71.2, datetime(2026, 11, 24, 14, 45, tzinfo=UTC), True),    # today 09:45 ET
+    (TUE_1000_ET, 71.2, datetime(2026, 11, 24, 10, 0, tzinfo=UTC), True),     # today 05:00 ET pre-market
+    (TUE_1000_ET, 71.2, datetime(2026, 11, 24, 0, 0, tzinfo=UTC), False),     # Mon 19:00 ET after hours
+    (TUE_1000_ET, None, datetime(2026, 11, 24, 14, 59, tzinfo=UTC), False),   # bid/ask only, no trade
+    (TUE_1000_ET, 71.2, None, False),
+    (datetime(2026, 11, 24, 7, 0, tzinfo=UTC), 71.2,                          # Tue 02:00 ET: tape shut,
+     datetime(2026, 11, 24, 0, 0, tzinfo=UTC), True),                         # Monday is the session
+    (datetime(2026, 11, 28, 15, 0, tzinfo=UTC), 71.2,                         # Saturday: Friday's
+     datetime(2026, 11, 27, 17, 30, tzinfo=UTC), True),                       # half-day trade counts
+    (datetime(2026, 11, 26, 15, 0, tzinfo=UTC), 71.2,                         # Thanksgiving: Wednesday
+     datetime(2026, 11, 26, 0, 0, tzinfo=UTC), True),                         # 19:00 ET counts
+    (datetime(2026, 11, 26, 15, 0, tzinfo=UTC), 71.2,
+     datetime(2026, 11, 24, 20, 0, tzinfo=UTC), False),                       # ...Tuesday does not
+])
+def test_session_priced(now, price, as_of, expected):
+    assert mv.session_priced(_mq(price, as_of), now) is expected
+
+
+def test_no_quote_is_never_session_priced():
+    assert mv.session_priced(None, TUE_1000_ET) is False
